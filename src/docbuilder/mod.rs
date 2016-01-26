@@ -360,10 +360,12 @@ impl DocBuilder {
                            crte: &crte::Crate,
                            version_index: usize) -> Result<String, String> {
         let crate_name = format!("{}-{}", &crte.name, &crte.versions[version_index]);
+        let chroot_build_script = format!("/home/{}/.build.sh", &self.chroot_user);
         command_result(Command::new("sudo")
                        .arg("chroot")
                        .arg(&self.chroot_path)
-                       .arg("su").arg("--").arg("onur").arg("/home/onur/.build.sh").arg("build")
+                       .arg("su").arg("--").arg(&self.chroot_user)
+                       .arg(chroot_build_script).arg("build")
                        .arg(crate_name)
                        .env_clear()
                        .output()
