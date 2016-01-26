@@ -197,7 +197,6 @@ impl DocBuilder {
         try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content)
              .map_err(DocBuilderError::LocalDependencyIoError));
 
-        // FIXME: Need to handle errors here
         toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
             .and_then(|cargo_toml| cargo_toml.get("dependencies"))
             .and_then(|dependencies| dependencies.as_table())
