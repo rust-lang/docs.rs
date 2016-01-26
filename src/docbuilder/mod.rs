@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::fs;
 use std::process::{Command, Output};
 use std::collections;
-use std::error;
 
 use toml;
 
@@ -32,7 +31,11 @@ pub struct DocBuilder {
 
 
 #[derive(Debug)]
-enum DocBuilderError {
+pub enum DocBuilderError {
+    DownloadCrateError(String),
+    ExtractCrateError(String),
+    LocalDependencyDownloadError(String),
+    LocalDependencyExtractCrateError(String),
     LocalDependencyIoError(io::Error)
 }
 
@@ -132,7 +135,10 @@ impl DocBuilder {
     /// This function will try to build documentation for every version of crate
     pub fn build_doc_for_crate(&self, crte: &crte::Crate) {
         for i in 0..crte.versions.len() {
-            self.build_doc_for_crate_version(crte, i);
+            if let Err(e) = self.build_doc_for_crate_version(crte, i) {
+                println!("Failed to build docs for crate {}-{}: {:#?}",
+                         &crte.name, &crte.versions[i], e)
+            }
         }
     }
 
@@ -160,17 +166,16 @@ impl DocBuilder {
     /// Some packages have local dependencies defined in Cargo.toml
     ///
     /// This function is intentionall written verbose
-    fn download_dependencies(&self, root_dir: &PathBuf) -> Result<(), io::Error> {
+    fn download_dependencies(&self, root_dir: &PathBuf) -> Result<(), DocBuilderError> {
 
         let mut cargo_toml_path = PathBuf::from(&root_dir);
         cargo_toml_path.push("Cargo.toml");
 
-        // we are just returning on any error
-        println!("CARGO TOML PATH {:?}", cargo_toml_path);
-
-        let mut cargo_toml_fh = try!(fs::File::open(cargo_toml_path));
+        let mut cargo_toml_fh = try!(fs::File::open(cargo_toml_path)
+                                     .map_err(DocBuilderError::LocalDependencyIoError));
         let mut cargo_toml_content = String::new();
-        try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content));
+        try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content)
+             .map_err(DocBuilderError::LocalDependencyIoError));
 
         toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
             .and_then(|cargo_toml| cargo_toml.get("dependencies"))
@@ -185,7 +190,7 @@ impl DocBuilder {
     /// Handles local dependencies
     fn handle_local_dependencies(&self,
                                  local_dependencies: Vec<(crte::Crate, String)>,
-                                 root_dir: &PathBuf) -> Result<(), String> {
+                                 root_dir: &PathBuf) -> Result<(), DocBuilderError> {
         for local_dependency in local_dependencies {
             let crte = local_dependency.0;
 
@@ -194,11 +199,13 @@ impl DocBuilder {
 
             // make sure path exists
             if !path.exists() {
-                fs::create_dir_all(&path);
+                try!(fs::create_dir_all(&path).map_err(DocBuilderError::LocalDependencyIoError));
             }
 
-            try!(self.download_latest_version_of_crate(&crte));
-            try!(self.extract_crate(&crte, 0));
+            try!(self.download_latest_version_of_crate(&crte)
+                 .map_err(DocBuilderError::LocalDependencyDownloadError));
+            try!(self.extract_crate(&crte, 0)
+                 .map_err(DocBuilderError::LocalDependencyExtractCrateError));
 
             let crte_download_dir = PathBuf::from(format!("{}/{}-{}",
                                                           self.build_dir.to_str().unwrap(),
@@ -212,7 +219,7 @@ impl DocBuilder {
 
             // self.extract_crate will extract crate into build_dir
             // Copy files to proper location
-            copy_files(&crte_download_dir, &path);
+            try!(copy_files(&crte_download_dir, &path));
         }
 
         Ok(())
@@ -239,35 +246,34 @@ impl DocBuilder {
     /// * Copying crate documentation into destination path
     /// * Cleaning up build directory
     /// * Removing downloaded crate file
-    pub fn build_doc_for_crate_version(&self, crte: &crte::Crate, version_index: usize) {
+    pub fn build_doc_for_crate_version(&self, crte: &crte::Crate, version_index: usize) ->
+        Result<(), DocBuilderError> {
 
-        let package_root = self.crate_root_dir(&crte, version_index);
+            let package_root = self.crate_root_dir(&crte, version_index);
 
-        // TODO try to replace noob style logging
-        let mut log_file = self.open_log_for_crate(crte, version_index).unwrap();
+            // TODO try to replace noob style logging
+            let mut log_file = self.open_log_for_crate(crte, version_index).unwrap();
 
-        println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-        write!(&mut log_file,
-               "Building documentation for {}-{}\n",
-               crte.name, crte.versions[version_index]).unwrap();
+            println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
+            write!(&mut log_file,
+                   "Building documentation for {}-{}\n",
+                   crte.name, crte.versions[version_index]).unwrap();
 
-        // Download crate
-        write!(&mut log_file, "Downloading crate\n").unwrap();;
-        if let Err(output) = self.download_crate(&crte, version_index) {
-            write!(&mut log_file, "Failed to download crate: {}", output).unwrap();
-            return;
+            // Download crate
+            write!(&mut log_file, "Downloading crate\n").unwrap();;
+            // FIXME: Need to capture failed command outputs
+            try!(self.download_crate(&crte, version_index)
+                 .map_err(DocBuilderError::DownloadCrateError));
+
+            // Extract crate
+            write!(&mut log_file, "Extracting crate\n").unwrap();
+            try!(self.extract_crate(&crte, version_index)
+                 .map_err(DocBuilderError::ExtractCrateError));
+
+            try!(self.download_dependencies(&package_root));
+
+            Ok(())
         }
-
-        // Extract crate
-        write!(&mut log_file, "Extracting crate\n").unwrap();
-        if let Err(output) = self.extract_crate(&crte, version_index) {
-            write!(&mut log_file, "Failed to extract crate\n").unwrap();
-            write!(&mut log_file, "{}\n", output).unwrap();
-            return;
-        }
-
-        self.download_dependencies(&package_root);
-    }
 
 
 
@@ -373,11 +379,11 @@ fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderE
 
         if metadata.is_dir() {
             try!(fs::create_dir(&destination_full_path)
-                    .map_err(DocBuilderError::LocalDependencyIoError));
-            copy_files(&file.path(), &destination_full_path);
+                 .map_err(DocBuilderError::LocalDependencyIoError));
+            try!(copy_files(&file.path(), &destination_full_path));
         } else {
             try!(fs::copy(&file.path(), &destination_full_path)
-                    .map_err(DocBuilderError::LocalDependencyIoError));
+                 .map_err(DocBuilderError::LocalDependencyIoError));
         }
 
     }

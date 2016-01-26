@@ -137,5 +137,5 @@ fn main() {
                                             vec!["0.9.1".to_string()]);
 
     //sex.build_doc_for_every_crate();
-    sex.build_doc_for_crate_version(&crte, 0);
+    sex.build_doc_for_crate_version(&crte, 0).unwrap();
 }
