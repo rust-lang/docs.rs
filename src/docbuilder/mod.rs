@@ -269,38 +269,39 @@ impl DocBuilder {
     /// * Copying crate documentation into destination path
     /// * Cleaning up build directory
     /// * Removing downloaded crate file
-    pub fn build_doc_for_crate_version(&self, crte: &crte::Crate, version_index: usize) ->
-        Result<(), DocBuilderError> {
+    pub fn build_doc_for_crate_version(&self,
+                                       crte: &crte::Crate,
+                                       version_index: usize) -> Result<(), DocBuilderError> {
 
-            let package_root = self.crate_root_dir(&crte, version_index);
+        let package_root = self.crate_root_dir(&crte, version_index);
 
-            // TODO try to replace noob style logging
-            let mut log_file = self.open_log_for_crate(crte, version_index).unwrap();
+        // TODO try to replace noob style logging
+        let mut log_file = self.open_log_for_crate(crte, version_index).unwrap();
 
-            println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-            write!(&mut log_file,
-                   "Building documentation for {}-{}\n",
-                   crte.name, crte.versions[version_index]).unwrap();
+        println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
+        write!(&mut log_file,
+               "Building documentation for {}-{}\n",
+               crte.name, crte.versions[version_index]).unwrap();
 
-            // Download crate
-            write!(&mut log_file, "Downloading crate\n").unwrap();;
-            // FIXME: Need to capture failed command outputs
-            try!(self.download_crate(&crte, version_index)
-                 .map_err(DocBuilderError::DownloadCrateError));
+        // Download crate
+        write!(&mut log_file, "Downloading crate\n").unwrap();;
+        // FIXME: Need to capture failed command outputs
+        try!(self.download_crate(&crte, version_index)
+             .map_err(DocBuilderError::DownloadCrateError));
 
-            // Extract crate
-            write!(&mut log_file, "Extracting crate\n").unwrap();
-            try!(self.extract_crate(&crte, version_index)
-                 .map_err(DocBuilderError::ExtractCrateError));
+        // Extract crate
+        write!(&mut log_file, "Extracting crate\n").unwrap();
+        try!(self.extract_crate(&crte, version_index)
+             .map_err(DocBuilderError::ExtractCrateError));
 
-            try!(self.download_dependencies(&package_root));
+        try!(self.download_dependencies(&package_root));
 
-            // build docs
-            try!(self.build_doc_in_chroot(&crte, version_index)
-                 .map_err(DocBuilderError::FailedToBuildCrate));
-            
-            Ok(())
-        }
+        // build docs
+        try!(self.build_doc_in_chroot(&crte, version_index)
+             .map_err(DocBuilderError::FailedToBuildCrate));
+
+        Ok(())
+    }
 
 
 
