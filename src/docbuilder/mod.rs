@@ -36,6 +36,7 @@ pub enum DocBuilderError {
     ExtractCrateError(String),
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
+    LocalDependencyDownloadDirNotExist,
     LocalDependencyIoError(io::Error)
 }
 
@@ -212,14 +213,17 @@ impl DocBuilder {
                                                           crte.name, crte.versions[0]));
 
             if crte_download_dir.exists() {
-                println!("CRATE DOWNLOAD DIR EXISTS YUPPI {}",
-                         &crte_download_dir.to_str().unwrap());
+                return Err(DocBuilderError::LocalDependencyDownloadDirNotExist);
             }
 
 
             // self.extract_crate will extract crate into build_dir
             // Copy files to proper location
             try!(copy_files(&crte_download_dir, &path));
+
+            // Remove download_dir
+            try!(fs::remove_dir_all(&crte_download_dir)
+                 .map_err(DocBuilderError::LocalDependencyIoError));
         }
 
         Ok(())
