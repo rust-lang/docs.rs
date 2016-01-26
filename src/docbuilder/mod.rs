@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::process::{Command, Output};
 use std::collections;
-use std::convert;
+use std::error;
 
 use toml;
 
@@ -30,6 +30,11 @@ pub struct DocBuilder {
     debug: bool,
 }
 
+
+#[derive(Debug)]
+enum DocBuilderError {
+    LocalDependencyIoError(io::Error)
+}
 
 
 impl Default for DocBuilder {
@@ -355,43 +360,26 @@ Option<Vec<(crte::Crate, String)>>  {
 
 
 
-enum CopyFilesError {
-    FailedToReadSourceDir(String),
-}
+/// A simple function to copy files from source to destination
+fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderError> {
 
+    for file in try!(source.read_dir().map_err(DocBuilderError::LocalDependencyIoError)) {
 
-// My first error implementation
-impl convert::From for CopyFilesError {
-    fn from(err: io::Error) -> CopyFilesError {
-        match err {
-            EntryMissing => "entry is missing",
-            BadFileFormat => "a bad file format encountered",
-            CouldNotOpenFile => "unable to open file",
-            InternalError => "an internal error occurred",
-        }
-    }
-}
-
-
-fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), CopyFilesError> {
-
-    for file in source.read_dir().unwrap() {
-
-        // FIXME: unwrap'ing here is probably not a good idea
-        let file = file.unwrap();
+        let file = try!(file.map_err(DocBuilderError::LocalDependencyIoError));
         let mut destination_full_path = PathBuf::from(&destination);
         destination_full_path.push(file.file_name());
 
-        println!("SOURCE: {:#?}", file.path());
-        println!("DESTIN: {:#?}", destination_full_path);
+        let metadata = try!(file.metadata().map_err(DocBuilderError::LocalDependencyIoError));
 
-        if file.metadata().unwrap().is_dir() {
-            try!(fs::create_dir(&destination_full_path));
+        if metadata.is_dir() {
+            try!(fs::create_dir(&destination_full_path)
+                    .map_err(DocBuilderError::LocalDependencyIoError));
             copy_files(&file.path(), &destination_full_path);
         } else {
-            try!(fs::copy(&file.path(), &destination_full_path));
+            try!(fs::copy(&file.path(), &destination_full_path)
+                    .map_err(DocBuilderError::LocalDependencyIoError));
         }
 
     }
-
+    Ok(())
 }
