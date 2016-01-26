@@ -128,14 +128,20 @@ extern crate toml;
 pub mod docbuilder;
 
 
+
 fn main() {
 
-    let sex = docbuilder::DocBuilder::default();
-    println!("{:#?}", sex);
 
     let crte = docbuilder::crte::Crate::new("sdl2".to_string(),
                                             vec!["0.9.1".to_string()]);
 
+    let mut prefix = std::env::current_dir().unwrap();
+    prefix.push("../cratesfyi-prefix");
+
+    let sex = docbuilder::DocBuilder::from_prefix(prefix);
+    println!("{:#?}", sex);
+
     //sex.build_doc_for_every_crate();
-    sex.build_doc_for_crate_version(&crte, 0).unwrap();
+    let res = sex.build_doc_for_crate_version(&crte, 0);
+    println!("{:#?}", res);
 }

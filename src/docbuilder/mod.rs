@@ -1,6 +1,18 @@
 
 //! DocBuilder
 
+// TODO:
+// * Need to get proper version of crate when dealing with local dependencies
+//   Some crates are using * version for their local dependencies. DocBuilder
+//   or Crate must get proper version information. To do this, I am planning
+//   to find correct crate file in crates.io-index and generate a crate
+//   from it. And add a function like find_version to return correct version
+//   of local dependency.
+// * Build doc with chroot.
+// * Move docs into destination. Need to write a copy_doc function or module
+//   for this and this function must handle URL's for css and src files.
+// * Check paths if they are exist before doing any operation.
+
 pub mod crte;
 
 use std::io::prelude::*;
@@ -34,6 +46,7 @@ pub struct DocBuilder {
 pub enum DocBuilderError {
     DownloadCrateError(String),
     ExtractCrateError(String),
+    HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
     LocalDependencyDownloadDirNotExist,
@@ -46,21 +59,8 @@ impl Default for DocBuilder {
 
         let cwd = env::current_dir().unwrap();
 
-        let mut destination = PathBuf::from(&cwd);
-        destination.push("public_html/crates");
-
-        let mut chroot_path = PathBuf::from(&cwd);
-        chroot_path.push("chroot");
-
-        let mut build_dir = PathBuf::from(&cwd);
-        build_dir.push(&chroot_path);
-        build_dir.push("home/onur");
-
-        let mut crates_io_index_path = PathBuf::from(&cwd);
-        crates_io_index_path.push("crates.io-index");
-
-        let mut logs_path = PathBuf::from(&cwd);
-        logs_path.push("logs");
+        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path) =
+            generate_paths(cwd);
 
         DocBuilder {
             destination: destination,
@@ -102,6 +102,25 @@ impl fmt::Debug for DocBuilder {
 
 
 impl DocBuilder {
+
+    /// Creates new DocBuilder from prefix
+    pub fn from_prefix(prefix: PathBuf) -> DocBuilder {
+
+        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path) =
+            generate_paths(prefix);
+
+        DocBuilder {
+            destination: destination,
+            chroot_path: chroot_path,
+            build_dir: build_dir,
+            crates_io_index_path: crates_io_index_path,
+            logs_path: logs_path,
+
+            .. Default::default()
+        }
+
+    }
+
     /// This functions reads files in crates.io-index and tries to build
     /// documentation for crates.
     pub fn build_doc_for_every_crate(&self) {
@@ -178,13 +197,13 @@ impl DocBuilder {
         try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content)
              .map_err(DocBuilderError::LocalDependencyIoError));
 
+        // FIXME: Need to handle errors here
         toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
             .and_then(|cargo_toml| cargo_toml.get("dependencies"))
             .and_then(|dependencies| dependencies.as_table())
             .and_then(|dependencies_table| get_local_dependencies(dependencies_table))
-            .map(|local_dependencies| self.handle_local_dependencies(local_dependencies, &root_dir));
-
-        Ok(())
+            .map(|local_dependencies| self.handle_local_dependencies(local_dependencies, &root_dir))
+            .unwrap_or(Err(DocBuilderError::HandleLocalDependenciesError))
     }
 
 
@@ -212,7 +231,7 @@ impl DocBuilder {
                                                           self.build_dir.to_str().unwrap(),
                                                           crte.name, crte.versions[0]));
 
-            if crte_download_dir.exists() {
+            if !crte_download_dir.exists() {
                 return Err(DocBuilderError::LocalDependencyDownloadDirNotExist);
             }
 
@@ -392,4 +411,27 @@ fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderE
 
     }
     Ok(())
+}
+
+
+
+fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
+
+    let mut destination = PathBuf::from(&prefix);
+    destination.push("public_html/crates");
+
+    let mut chroot_path = PathBuf::from(&prefix);
+    chroot_path.push("chroot");
+
+    let mut build_dir = PathBuf::from(&prefix);
+    build_dir.push(&chroot_path);
+    build_dir.push("home/onur");
+
+    let mut crates_io_index_path = PathBuf::from(&prefix);
+    crates_io_index_path.push("crates.io-index");
+
+    let mut logs_path = PathBuf::from(&prefix);
+    logs_path.push("logs");
+
+    (destination, chroot_path, build_dir, crates_io_index_path, logs_path)
 }
