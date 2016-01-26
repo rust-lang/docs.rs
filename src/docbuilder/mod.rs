@@ -50,7 +50,8 @@ pub enum DocBuilderError {
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
     LocalDependencyDownloadDirNotExist,
-    LocalDependencyIoError(io::Error)
+    LocalDependencyIoError(io::Error),
+    FailedToBuildCrate(String),
 }
 
 
@@ -294,6 +295,10 @@ impl DocBuilder {
 
             try!(self.download_dependencies(&package_root));
 
+            // build docs
+            try!(self.build_doc_in_chroot(&crte, version_index)
+                 .map_err(DocBuilderError::FailedToBuildCrate));
+            
             Ok(())
         }
 
@@ -342,6 +347,24 @@ impl DocBuilder {
                        .arg(&self.build_dir)
                        .arg("-xzvf")
                        .arg(crate_name)
+                       .output()
+                       .unwrap())
+    }
+
+
+    /// Build documentation of a crate in chroot environment
+    // FIXME: This is a really naieve implementation, but it works!
+    //        I am not sure how can I do this without build.sh
+    fn build_doc_in_chroot(&self,
+                           crte: &crte::Crate,
+                           version_index: usize) -> Result<String, String> {
+        let crate_name = format!("{}-{}", &crte.name, &crte.versions[version_index]);
+        command_result(Command::new("sudo")
+                       .arg("chroot")
+                       .arg(&self.chroot_path)
+                       .arg("su").arg("--").arg("onur").arg("/home/onur/.build.sh").arg("build")
+                       .arg(crate_name)
+                       .env_clear()
                        .output()
                        .unwrap())
     }
