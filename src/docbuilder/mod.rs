@@ -47,6 +47,7 @@ pub enum DocBuilderError {
     DownloadCrateError(String),
     ExtractCrateError(String),
     LogFileError(io::Error),
+    SkipLogFileExist,
     HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
@@ -167,19 +168,24 @@ impl DocBuilder {
 
     fn open_log_for_crate(&self,
                           crte: &crte::Crate,
-                          version_index: usize) -> Result<fs::File, io::Error> {
+                          version_index: usize) -> Result<fs::File, DocBuilderError> {
         let mut log_path = PathBuf::from(&self.logs_path);
         log_path.push(&crte.name);
 
         if !log_path.exists() {
-            try!(fs::create_dir_all(&log_path));
+            try!(fs::create_dir_all(&log_path).map_err(DocBuilderError::LogFileError));
         }
 
         log_path.push(format!("{}-{}.log",
                               &crte.name,
                               &crte.versions[version_index]));
 
-        fs::OpenOptions::new().write(true).create(true).open(log_path)
+        if self.skip_if_log_exists && log_path.exists() {
+            return Err(DocBuilderError::SkipLogFileExist);
+        }
+
+        fs::OpenOptions::new().write(true).create(true)
+            .open(log_path).map_err(DocBuilderError::LogFileError)
     }
 
 
@@ -277,8 +283,7 @@ impl DocBuilder {
         let package_root = self.crate_root_dir(&crte, version_index);
 
         // TODO try to replace noob style logging
-        let mut log_file = try!(self.open_log_for_crate(&crte, version_index)
-                                .map_err(DocBuilderError::LogFileError));
+        let mut log_file = try!(self.open_log_for_crate(&crte, version_index));
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
         try!(write!(log_file, "Building documentation for {}-{}",
