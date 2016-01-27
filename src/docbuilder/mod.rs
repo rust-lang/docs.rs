@@ -25,8 +25,6 @@ use std::process::{Command, Output};
 use std::collections;
 
 use toml;
-use log4rs;
-use log;
 
 
 /// Alright
@@ -48,6 +46,7 @@ pub struct DocBuilder {
 pub enum DocBuilderError {
     DownloadCrateError(String),
     ExtractCrateError(String),
+    LogFileError(io::Error),
     HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
@@ -166,51 +165,21 @@ impl DocBuilder {
     }
 
 
-    fn open_log_for_crate(&self, crte: &crte::Crate, version_index: usize) -> Option<fs::File> {
-
-        // Create a directory in logs folder
-        let mut log_file_path = PathBuf::from(&self.logs_path);
-        log_file_path.push(&crte.name);
-        fs::create_dir(&log_file_path).unwrap();
-
-        log_file_path.push(format!("{}-{}.log",
-                                   crte.name, crte.versions[version_index]));
-
-        // FIXME: We are getting panic if file is already exist
-        match fs::File::create(log_file_path) {
-            Ok(f) => Some(f),
-            Err(e) => panic!(e)
-        }
-    }
-
-
-    fn init_log_for_crate(&self,
+    fn open_log_for_crate(&self,
                           crte: &crte::Crate,
-                          version_index: usize) -> Result<(), log::SetLoggerError> {
+                          version_index: usize) -> Result<fs::File, io::Error> {
         let mut log_path = PathBuf::from(&self.logs_path);
         log_path.push(&crte.name);
 
         if !log_path.exists() {
-            fs::create_dir_all(&log_path);
+            try!(fs::create_dir_all(&log_path));
         }
 
         log_path.push(format!("{}-{}.log",
                               &crte.name,
                               &crte.versions[version_index]));
 
-        let append = log4rs::appender::FileAppender::builder(log_path)
-            .pattern(log4rs::pattern::PatternLayout::new("%d - %m").unwrap())
-            .append(false)
-            .build();
-
-        let appender = log4rs::config::Appender::builder("root".to_string(),
-                                                         Box::new(append.unwrap())).build();
-
-        let root = log4rs::config::Root::builder(
-            log::LogLevelFilter::Info).appender("root".to_string()).build();
-        let config = log4rs::config::Config::builder(root).appender(appender).build();
-
-        log4rs::init_config(config.unwrap())
+        fs::OpenOptions::new().write(true).create(true).open(log_path)
     }
 
 
@@ -308,34 +277,39 @@ impl DocBuilder {
         let package_root = self.crate_root_dir(&crte, version_index);
 
         // TODO try to replace noob style logging
-        self.init_log_for_crate(&crte, version_index);
+        let mut log_file = try!(self.open_log_for_crate(&crte, version_index)
+                                .map_err(DocBuilderError::LogFileError));
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-        info!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-        //write!(&mut log_file,
-        //       "Building documentation for {}-{}\n",
-        //       crte.name, crte.versions[version_index]).unwrap();
+        try!(write!(log_file, "Building documentation for {}-{}",
+                    crte.name, crte.versions[version_index])
+             .map_err(DocBuilderError::LogFileError));
 
         // Download crate
         //write!(&mut log_file, "Downloading crate\n").unwrap();;
         // FIXME: Need to capture failed command outputs
-        info!("Downloading crate\n{}",
-              try!(self.download_crate(&crte, version_index)
-                   .map_err(DocBuilderError::DownloadCrateError)));
+        try!(write!(log_file, "Downloading crate\n{}",
+                    try!(self.download_crate(&crte, version_index)
+                         .map_err(DocBuilderError::DownloadCrateError)))
+             .map_err(DocBuilderError::LogFileError));
 
         // Extract crate
         //write!(&mut log_file, "Extracting crate\n").unwrap();
-        info!("Extracting crate\n{}",
-              try!(self.extract_crate(&crte, version_index)
-                   .map_err(DocBuilderError::ExtractCrateError)));
+        try!(write!(log_file, "Extracting crate\n{}",
+               try!(self.extract_crate(&crte, version_index)
+                    .map_err(DocBuilderError::ExtractCrateError)))
+             .map_err(DocBuilderError::LogFileError));
 
-        info!("Checking local dependencies");
+        try!(write!(log_file, "Checking local dependencies")
+             .map_err(DocBuilderError::LogFileError));
+        // FIXME: Need to log next function somehow
         try!(self.download_dependencies(&package_root));
 
         // build docs
-        info!("Building documentation\n{}",
-              try!(self.build_doc_in_chroot(&crte, version_index)
-                   .map_err(DocBuilderError::FailedToBuildCrate)));
+        try!(write!(log_file, "Building documentation\n{}",
+               try!(self.build_doc_in_chroot(&crte, version_index)
+                    .map_err(DocBuilderError::FailedToBuildCrate)))
+             .map_err(DocBuilderError::LogFileError));
 
         Ok(())
     }
