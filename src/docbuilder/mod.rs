@@ -49,6 +49,7 @@ pub enum DocBuilderError {
     LogFileError(io::Error),
     RemoveBuildDir(io::Error),
     RemoveCrateFile(io::Error),
+    RemoveOldDoc(io::Error),
     SkipLogFileExist,
     HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
@@ -284,9 +285,22 @@ impl DocBuilder {
                          version_index: usize) -> Result<(), DocBuilderError>{
         let path = PathBuf::from(format!("{}.crate", crte.canonical_name(version_index)));
 
-        println!("PATH IS {:#?}", path);
         if path.exists() && path.is_file() {
             try!(fs::remove_file(path).map_err(DocBuilderError::RemoveCrateFile));
+        }
+
+        Ok(())
+    }
+
+
+    fn remove_old_doc(&self,
+                      crte: &crte::Crate,
+                      version_index: usize) -> Result<(), DocBuilderError> {
+        let mut path = PathBuf::from(&self.destination);
+        path.push(format!("{}/{}", crte.name, crte.versions[version_index]));
+
+        if path.exists() {
+            try!(fs::remove_dir_all(path).map_err(DocBuilderError::RemoveOldDoc));
         }
 
         Ok(())
@@ -358,6 +372,8 @@ impl DocBuilder {
         if !self.keep_build_directory {
             try!(self.clean(&crte, version_index));
         }
+
+        try!(self.remove_old_doc(&crte, version_index));
 
         Ok(())
     }
