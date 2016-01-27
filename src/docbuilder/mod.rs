@@ -57,6 +57,10 @@ pub enum DocBuilderError {
     LocalDependencyDownloadDirNotExist,
     LocalDependencyIoError(io::Error),
     FailedToBuildCrate(String),
+
+    CopyDocumentationCargoTomlNotFound(io::Error),
+    CopyDocumentationLibNameNotFound,
+    DocumentationNotFound,
 }
 
 
@@ -314,6 +318,65 @@ impl DocBuilder {
     }
 
 
+    /// Checks Cargo.toml for [lib] and return name of lib.
+    fn find_lib_name(&self, root_dir: &PathBuf) -> Result<String, DocBuilderError> {
+
+        let mut cargo_toml_path = PathBuf::from(&root_dir);
+        cargo_toml_path.push("Cargo.toml");
+
+        let mut cargo_toml_fh = try!(fs::File::open(cargo_toml_path)
+                                     .map_err(DocBuilderError::LocalDependencyIoError));
+        let mut cargo_toml_content = String::new();
+        try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content)
+             .map_err(DocBuilderError::CopyDocumentationCargoTomlNotFound));
+
+        toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
+            .and_then(|cargo_toml| cargo_toml.get("lib"))
+            .and_then(|lib| lib.as_table())
+            .and_then(|lib_table| lib_table.get("name"))
+            .and_then(|lib_name| lib_name.as_str())
+            .and_then(|lib_name| Some(String::from(lib_name)))
+            .ok_or(DocBuilderError::HandleLocalDependenciesError)
+    }
+
+
+    fn find_doc(&self,
+                crte: &crte::Crate,
+                version_index: usize) -> Result<PathBuf, DocBuilderError> {
+        let mut path = self.crate_root_dir(crte, version_index);
+
+        // if [lib] name exist in Cargo.toml check this directory
+        // documentation will be inside this directory
+        if let Ok(lib_path) = self.find_lib_name(&path) {
+            let mut lib_full_path = PathBuf::from(&path);
+            lib_full_path.push(format!("target/doc/{}", lib_path));
+            if lib_full_path.exists() {
+                return Ok(lib_full_path);
+            }
+        }
+
+        // start looking into target/doc
+        path.push("target/doc");
+
+        // check crate name
+        let mut crate_path = PathBuf::from(&path);
+        crate_path.push(&crte.name);
+        if crate_path.exists() {
+            return Ok(crate_path);
+        }
+
+        // some crates are using '-' in their name but actual name contains '_'
+        let actual_crate_name = &crte.name.replace("-", "_");
+        // I think it's safe to push into path now
+        path.push(actual_crate_name);
+        if path.exists() {
+            return Ok(crate_path);
+        }
+
+        Err(DocBuilderError::DocumentationNotFound)
+    }
+
+
     /// Builds documentation for crate
     ///
     /// This operation involves following process:
@@ -369,11 +432,16 @@ impl DocBuilder {
                          .map_err(DocBuilderError::FailedToBuildCrate)))
              .map_err(DocBuilderError::LogFileError));
 
+        // remove old documentation just in case
+        try!(self.remove_old_doc(&crte, version_index));
+
+        let doc_path = try!(self.find_doc(&crte, version_index));
+        println!("FOUND DOC PATH: {:#?}", doc_path);
+
+        // clean at the end
         if !self.keep_build_directory {
             try!(self.clean(&crte, version_index));
         }
-
-        try!(self.remove_old_doc(&crte, version_index));
 
         Ok(())
     }
