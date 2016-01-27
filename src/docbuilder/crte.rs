@@ -124,6 +124,11 @@ impl Crate {
         None
     }
 
+
+    pub fn canonical_name(&self, version_index: usize) -> String {
+        format!("{}-{}", self.name, self.versions[version_index])
+    }
+
 }
 
 

@@ -261,7 +261,7 @@ impl DocBuilder {
     /// Returns package folder inside build directory
     fn crate_root_dir(&self, crte: &crte::Crate, version_index: usize) -> PathBuf {
         let mut package_root = PathBuf::from(&self.build_dir);
-        package_root.push(format!("{}-{}", &crte.name, &crte.versions[version_index]));
+        package_root.push(crte.canonical_name(version_index));
         package_root
     }
 
@@ -269,8 +269,7 @@ impl DocBuilder {
     fn remove_build_dir_for_crate(&self,
                                   crte: &crte::Crate,
                                   version_index: usize) -> Result<(), DocBuilderError> {
-        let mut path = PathBuf::from(&self.build_dir);
-        path.push(format!("{}-{}", &crte.name, &crte.versions[version_index]));
+        let path = self.crate_root_dir(crte, version_index);
 
         if path.exists() && path.is_dir() {
             try!(fs::remove_dir_all(&path).map_err(DocBuilderError::RemoveBuildDir));
@@ -280,10 +279,12 @@ impl DocBuilder {
     }
 
 
-    fn remove_crate_file(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError>{
-        let mut path = PathBuf::from(&self.build_dir);
-        path.push(crte.canonical_name(version_index));
+    fn remove_crate_file(&self,
+                         crte: &crte::Crate,
+                         version_index: usize) -> Result<(), DocBuilderError>{
+        let path = PathBuf::from(format!("{}.crate", crte.canonical_name(version_index)));
 
+        println!("PATH IS {:#?}", path);
         if path.exists() && path.is_file() {
             try!(fs::remove_file(path).map_err(DocBuilderError::RemoveCrateFile));
         }
@@ -339,8 +340,8 @@ impl DocBuilder {
         // Extract crate
         //write!(&mut log_file, "Extracting crate\n").unwrap();
         try!(write!(log_file, "Extracting crate\n{}",
-               try!(self.extract_crate(&crte, version_index)
-                    .map_err(DocBuilderError::ExtractCrateError)))
+                    try!(self.extract_crate(&crte, version_index)
+                         .map_err(DocBuilderError::ExtractCrateError)))
              .map_err(DocBuilderError::LogFileError));
 
         try!(write!(log_file, "Checking local dependencies")
@@ -350,8 +351,8 @@ impl DocBuilder {
 
         // build docs
         try!(write!(log_file, "Building documentation\n{}",
-               try!(self.build_doc_in_chroot(&crte, version_index)
-                    .map_err(DocBuilderError::FailedToBuildCrate)))
+                    try!(self.build_doc_in_chroot(&crte, version_index)
+                         .map_err(DocBuilderError::FailedToBuildCrate)))
              .map_err(DocBuilderError::LogFileError));
 
         if !self.keep_build_directory {
@@ -362,24 +363,16 @@ impl DocBuilder {
     }
 
 
-
-    /// Generates download url
-    ///
-    /// By default crates.io is using:
-    /// https://crates.io/api/v1/crates/$crate/$version/download
-    /// But I believe this url is increasing download count and this program is
-    /// downloading alot during development. I am using redirected url.
-    fn generate_download_url(&self, crte: &crte::Crate, version_index: usize) -> String {
-        format!("https://crates-io.s3-us-west-1.amazonaws.com/crates/{}/{}-{}.crate",
-                crte.name,
-                crte.name,
-                crte.versions[version_index])
-    }
-
-
     /// Downloads crate
     fn download_crate(&self, crte: &crte::Crate, version_index: usize) -> Result<String, String> {
-        let url = self.generate_download_url(&crte, version_index);
+        // By default crates.io is using:
+        // https://crates.io/api/v1/crates/$crate/$version/download
+        // But I believe this url is increasing download count and this program is
+        // downloading alot during development. I am using redirected url.
+        let url = format!("https://crates-io.s3-us-west-1.amazonaws.com/crates/{}/{}-{}.crate",
+                          crte.name,
+                          crte.name,
+                          crte.versions[version_index]);
         // Use wget for now
         command_result(Command::new("wget")
                        .arg("-c")
@@ -400,7 +393,7 @@ impl DocBuilder {
     /// Extracts crate into build directory
     fn extract_crate(&self, crte: &crte::Crate, version_index: usize) -> Result<String, String> {
 
-        let crate_name = format!("{}-{}.crate", &crte.name, &crte.versions[version_index]);
+        let crate_name = format!("{}.crate", crte.canonical_name(version_index));
         command_result(Command::new("tar")
                        .arg("-C")
                        .arg(&self.build_dir)
@@ -417,7 +410,7 @@ impl DocBuilder {
     fn build_doc_in_chroot(&self,
                            crte: &crte::Crate,
                            version_index: usize) -> Result<String, String> {
-        let crate_name = format!("{}-{}", &crte.name, &crte.versions[version_index]);
+        let crate_name = crte.canonical_name(version_index);
         let chroot_build_script = format!("/home/{}/.build.sh", &self.chroot_user);
         command_result(Command::new("sudo")
                        .arg("chroot")
