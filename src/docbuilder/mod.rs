@@ -48,6 +48,7 @@ pub enum DocBuilderError {
     ExtractCrateError(String),
     LogFileError(io::Error),
     RemoveBuildDir(io::Error),
+    RemoveCrateFile(io::Error),
     SkipLogFileExist,
     HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
@@ -279,6 +280,25 @@ impl DocBuilder {
     }
 
 
+    fn remove_crate_file(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError>{
+        let mut path = PathBuf::from(&self.build_dir);
+        path.push(crte.canonical_name(version_index));
+
+        if path.exists() && path.is_file() {
+            try!(fs::remove_file(path).map_err(DocBuilderError::RemoveCrateFile));
+        }
+
+        Ok(())
+    }
+
+
+    fn clean(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
+        try!(self.remove_build_dir_for_crate(&crte, version_index));
+        try!(self.remove_crate_file(&crte, version_index));
+        Ok(())
+    }
+
+
     /// Builds documentation for crate
     ///
     /// This operation involves following process:
@@ -333,6 +353,10 @@ impl DocBuilder {
                try!(self.build_doc_in_chroot(&crte, version_index)
                     .map_err(DocBuilderError::FailedToBuildCrate)))
              .map_err(DocBuilderError::LogFileError));
+
+        if !self.keep_build_directory {
+            try!(self.clean(&crte, version_index));
+        }
 
         Ok(())
     }
