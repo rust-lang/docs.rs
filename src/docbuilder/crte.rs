@@ -117,37 +117,16 @@ impl Crate {
 
 
     fn parse_cargo_index_line(line: &String) -> Result<(String, String), CrateOpenError> {
+        let data = try!(Json::from_str(line.trim()).map_err(CrateOpenError::ParseError));
+        let obj = try!(data.as_object().ok_or(CrateOpenError::NotObject));
 
-        let data = match Json::from_str(line.trim()) {
-            Ok(json) => json,
-            Err(e) => return Err(CrateOpenError::ParseError(e)),
-        };
+        let crate_name = try!(obj.get("name")
+                              .and_then(|n| n.as_string())
+                              .ok_or(CrateOpenError::NameNotFound));
 
-        let obj = match data.as_object() {
-            Some(o) => o,
-            None => return Err(CrateOpenError::NotObject),
-        };
-
-        // try to get name and vers(ion)
-        let crate_name = match obj.get("name") {
-            Some(n) => {
-                match n.as_string() {
-                    Some(s) => s,
-                    None => return Err(CrateOpenError::NameNotFound),
-                }
-            }
-            None => return Err(CrateOpenError::NameNotFound),
-        };
-
-        let vers = match obj.get("vers") {
-            Some(n) => {
-                match n.as_string() {
-                    Some(s) => s,
-                    None => return Err(CrateOpenError::VersNotFound),
-                }
-            }
-            None => return Err(CrateOpenError::VersNotFound),
-        };
+        let vers = try!(obj.get("vers")
+                        .and_then(|n| n.as_string())
+                        .ok_or(CrateOpenError::VersNotFound));
 
         Ok((String::from(crate_name), String::from(vers)))
     }
