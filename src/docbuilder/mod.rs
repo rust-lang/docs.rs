@@ -25,6 +25,7 @@ use std::process::{Command, Output};
 use std::collections;
 
 use toml;
+use regex::Regex;
 
 
 /// Alright
@@ -61,6 +62,7 @@ pub enum DocBuilderError {
     CopyDocumentationCargoTomlNotFound(io::Error),
     CopyDocumentationLibNameNotFound,
     DocumentationNotFound,
+    CopyDocumentationIoError(io::Error),
 }
 
 
@@ -252,7 +254,7 @@ impl DocBuilder {
 
             // self.extract_crate will extract crate into build_dir
             // Copy files to proper location
-            try!(copy_files(&crte_download_dir, &path));
+            try!(copy_files(&crte_download_dir, &path, false));
 
             // Remove download_dir
             try!(fs::remove_dir_all(&crte_download_dir)
@@ -342,16 +344,22 @@ impl DocBuilder {
 
     fn find_doc(&self,
                 crte: &crte::Crate,
-                version_index: usize) -> Result<PathBuf, DocBuilderError> {
+                version_index: usize) -> Result<(PathBuf, PathBuf), DocBuilderError> {
         let mut path = self.crate_root_dir(crte, version_index);
+
+        // get src directory
+        let mut src_path = self.crate_root_dir(crte, version_index);
+        src_path.push("target/doc/src");
 
         // if [lib] name exist in Cargo.toml check this directory
         // documentation will be inside this directory
         if let Ok(lib_path) = self.find_lib_name(&path) {
             let mut lib_full_path = PathBuf::from(&path);
             lib_full_path.push(format!("target/doc/{}", lib_path));
-            if lib_full_path.exists() {
-                return Ok(lib_full_path);
+            let mut src_full_path = PathBuf::from(&path);
+            src_full_path.push(format!("target/doc/src/{}", lib_path));
+            if lib_full_path.exists() && src_full_path.exists() {
+                return Ok((lib_full_path, src_full_path));
             }
         }
 
@@ -361,16 +369,18 @@ impl DocBuilder {
         // check crate name
         let mut crate_path = PathBuf::from(&path);
         crate_path.push(&crte.name);
-        if crate_path.exists() {
-            return Ok(crate_path);
+        src_path.push(&crate_path);
+        if crate_path.exists() && src_path.exists() {
+            return Ok((crate_path, src_path));
         }
 
         // some crates are using '-' in their name but actual name contains '_'
         let actual_crate_name = &crte.name.replace("-", "_");
         // I think it's safe to push into path now
         path.push(actual_crate_name);
-        if path.exists() {
-            return Ok(crate_path);
+        src_path.push(actual_crate_name);
+        if path.exists() && src_path.exists() {
+            return Ok((crate_path, src_path));
         }
 
         Err(DocBuilderError::DocumentationNotFound)
@@ -432,16 +442,44 @@ impl DocBuilder {
                          .map_err(DocBuilderError::FailedToBuildCrate)))
              .map_err(DocBuilderError::LogFileError));
 
-        // remove old documentation just in case
-        try!(self.remove_old_doc(&crte, version_index));
-
-        let doc_path = try!(self.find_doc(&crte, version_index));
-        println!("FOUND DOC PATH: {:#?}", doc_path);
+        // copy docs
+        try!(self.copy_doc(&crte, version_index));
 
         // clean at the end
+        // FIXME: This must be called outside of this function
         if !self.keep_build_directory {
             try!(self.clean(&crte, version_index));
         }
+
+        Ok(())
+    }
+
+
+    fn copy_doc(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
+
+        // remove old documentation just in case
+        try!(self.remove_old_doc(&crte, version_index));
+
+        let (doc_path, src_path) = try!(self.find_doc(&crte, version_index));
+
+        // copy documentation to destination/crate/version
+        let mut destination = PathBuf::from(&self.destination);
+        destination.push(format!("{}/{}", &crte.name, &crte.versions[version_index]));
+        try!(copy_files(&doc_path, &destination, true));
+
+        // copy search-index.js
+        let mut search_index_js_path = self.crate_root_dir(&crte, version_index);
+        search_index_js_path.push("target/doc/search-index.js");
+        let mut search_index_js_destination_path = PathBuf::from(&destination);
+        search_index_js_destination_path.push("search-index.js");
+        if search_index_js_path.exists() {
+            try!(fs::copy(search_index_js_path, search_index_js_destination_path)
+                 .map_err(DocBuilderError::CopyDocumentationIoError));
+        }
+
+        // copy source to destination/crate/version/src
+        destination.push("src");
+        try!(copy_files(&src_path, &destination, true));
 
         Ok(())
     }
@@ -550,7 +588,15 @@ Option<Vec<(crte::Crate, String)>>  {
 
 
 /// A simple function to copy files from source to destination
-fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderError> {
+fn copy_files(source: &PathBuf,
+              destination: &PathBuf,
+              handle_html: bool) -> Result<(), DocBuilderError> {
+
+    // Make sure destination directory is exists
+    if !destination.exists() {
+        try!(fs::create_dir_all(&destination)
+             .map_err(DocBuilderError::LocalDependencyIoError));
+    }
 
     for file in try!(source.read_dir().map_err(DocBuilderError::LocalDependencyIoError)) {
 
@@ -561,9 +607,11 @@ fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderE
         let metadata = try!(file.metadata().map_err(DocBuilderError::LocalDependencyIoError));
 
         if metadata.is_dir() {
-            try!(fs::create_dir(&destination_full_path)
+            try!(fs::create_dir_all(&destination_full_path)
                  .map_err(DocBuilderError::LocalDependencyIoError));
-            try!(copy_files(&file.path(), &destination_full_path));
+            try!(copy_files(&file.path(), &destination_full_path, handle_html));
+        } else if handle_html && file.file_name().into_string().unwrap().ends_with(".html") {
+            try!(copy_html(&file.path(), &destination_full_path));
         } else {
             try!(fs::copy(&file.path(), &destination_full_path)
                  .map_err(DocBuilderError::LocalDependencyIoError));
@@ -573,6 +621,67 @@ fn copy_files(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderE
     Ok(())
 }
 
+
+fn copy_html(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderError> {
+
+    let source_file = try!(fs::File::open(source)
+                           .map_err(DocBuilderError::CopyDocumentationIoError));
+    let mut destination_file = try!(fs::OpenOptions::new()
+                                    .write(true).create(true).open(destination)
+                                    .map_err(DocBuilderError::CopyDocumentationIoError));
+
+    let reader = io::BufReader::new(source_file);
+
+    for line in reader.lines() {
+        let mut line = try!(line.map_err(DocBuilderError::CopyDocumentationIoError));
+
+        // replace css links
+        if Regex::new(r#"href=".*\.css""#).unwrap().is_match(&line[..]) {
+            line = Regex::new(r#"href="(.*\.css)""#).unwrap()
+                .replace_all(&line[..], "href=\"../$1\"");
+        }
+
+        // replace search-index.js links
+        else if Regex::new(r#"<script.*src=".*search-index\.js""#).unwrap().is_match(&line[..]) {
+            line = Regex::new(r#"src="\.\./(.*\.js)""#).unwrap()
+                .replace_all(&line[..], "src=\"$1\"");
+        }
+
+        // replace javascript library links
+        else if Regex::new(r#"<script.*src=".*(jquery|main|playpen)\.js""#).unwrap()
+            .is_match(&line[..]) {
+            line = Regex::new(r#"src="(.*\.js)""#).unwrap()
+                .replace_all(&line[..], "src=\"../$1\"");
+        }
+
+        // replace source file links
+        // we are placing target/doc/src into destinaton/crate/version/src
+        else if Regex::new(r#"href='.*?\.\./src"#).unwrap().is_match(&line[..]) {
+            line = Regex::new(r#"href='(.*?)\.\./src/[\w-]+/"#).unwrap()
+                .replace_all(&line[..], "href='$1src/");
+        }
+
+        // FIXME: I actually forgot what I was replacing here. Probably crate links
+        else if Regex::new(r#"href='.*?\.\./[\w_-]+"#).unwrap().is_match(&line[..]) {
+            line = Regex::new(r#"href='(.*?)\.\./[\w_-]+/"#).unwrap()
+                .replace_all(&line[..], "href='$1");
+        }
+
+        // replace window.rootPath
+        else if Regex::new(r#"window.rootPath = "(.*?)\.\./"#).unwrap().is_match(&line[..]) {
+            line = Regex::new(r#"window.rootPath = "(.*?)\.\./"#).unwrap()
+                .replace_all(&line[..], "window.rootPath = \"$1");
+        }
+
+        try!(destination_file.write(line.as_bytes())
+             .map_err(DocBuilderError::CopyDocumentationIoError));
+        // need to write consumed newline
+        try!(destination_file.write(&['\n' as u8])
+             .map_err(DocBuilderError::CopyDocumentationIoError));
+    }
+
+    Ok(())
+}
 
 
 fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {

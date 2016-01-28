@@ -6,3 +6,4 @@ authors = ["Onur Aslan <onuraslan@gmail.com>"]
 [dependencies]
 rustc-serialize = "0.3.16"
 toml = "0.1.25"
+regex = "0.1"
