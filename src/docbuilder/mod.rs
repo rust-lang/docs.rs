@@ -3,15 +3,11 @@
 
 // TODO:
 // * Need to get proper version of crate when dealing with local dependencies
-//   Some crates are using * version for their local dependencies. DocBuilder
+//   Some crates are using '*' version for their local dependencies. DocBuilder
 //   or Crate must get proper version information. To do this, I am planning
 //   to find correct crate file in crates.io-index and generate a crate
 //   from it. And add a function like find_version to return correct version
 //   of local dependency.
-// * Build doc with chroot.
-// * Move docs into destination. Need to write a copy_doc function or module
-//   for this and this function must handle URL's for css and src files.
-// * Check paths if they are exist before doing any operation.
 
 pub mod crte;
 
