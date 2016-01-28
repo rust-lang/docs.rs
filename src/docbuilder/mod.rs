@@ -170,6 +170,14 @@ impl DocBuilder {
                 println!("Failed to build docs for crate {}-{}: {:#?}",
                          &crte.name, &crte.versions[i], e)
             }
+
+            // clean dir
+            if !self.keep_build_directory {
+                if let Err(e) = self.clean(&crte, i) {
+                    println!("Failed to clean crate dir {}-{}: {:#?}",
+                             &crte.name, &crte.versions[i], e)
+                }
+            }
         }
     }
 
@@ -349,7 +357,32 @@ impl DocBuilder {
     }
 
 
-    fn clean(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
+    /// Removes everything in build_dir except .build.sh and .cargo directories
+    fn clean_build_dir(&self) -> Result<(), DocBuilderError> {
+
+        for file in try!(self.build_dir.read_dir().map_err(DocBuilderError::RemoveBuildDir)) {
+            let file = try!(file.map_err(DocBuilderError::RemoveBuildDir));
+            let path = file.path();
+
+            if path.file_name().unwrap() == ".cargo" ||
+                path.file_name().unwrap() == ".build.sh" {
+                    continue;
+                }
+
+            if path.is_dir() {
+                try!(fs::remove_dir_all(path).map_err(DocBuilderError::RemoveBuildDir));
+            } else {
+                try!(fs::remove_file(path).map_err(DocBuilderError::RemoveBuildDir));
+            }
+
+        }
+
+        Ok(())
+    }
+
+
+    pub fn clean(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
+        try!(self.clean_build_dir());
         try!(self.remove_build_dir_for_crate(&crte, version_index));
         try!(self.remove_crate_file(&crte, version_index));
         Ok(())
@@ -501,12 +534,6 @@ impl DocBuilder {
 
         // copy docs
         try!(self.copy_doc(&crte, version_index));
-
-        // clean at the end
-        // FIXME: This must be called outside of this function
-        if !self.keep_build_directory {
-            try!(self.clean(&crte, version_index));
-        }
 
         Ok(())
     }
