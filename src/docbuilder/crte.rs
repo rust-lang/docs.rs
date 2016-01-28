@@ -142,7 +142,7 @@ impl Crate {
     }
 
 
-    pub fn version_starts_with(&self, version: String) -> Option<usize> {
+    pub fn version_starts_with(&self, version: &str) -> Option<usize> {
         // if version is "*" return latest version index which is 0
         if version == "*" {
             return Some(0);
