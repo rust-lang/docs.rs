@@ -303,6 +303,8 @@ impl DocBuilder {
             // Remove download_dir
             try!(fs::remove_dir_all(&crte_download_dir)
                  .map_err(DocBuilderError::LocalDependencyIoError));
+
+            try!(self.remove_crate_file(&crte, version_index));
         }
 
         Ok(())
