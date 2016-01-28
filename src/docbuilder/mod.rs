@@ -226,7 +226,7 @@ impl DocBuilder {
             .and_then(|dependencies| dependencies.as_table())
             .and_then(|dependencies_table| self.get_local_dependencies(dependencies_table))
             .map(|local_dependencies| self.handle_local_dependencies(local_dependencies, &root_dir))
-            .unwrap_or(Err(DocBuilderError::HandleLocalDependenciesError))
+            .unwrap_or(Ok(()))
     }
 
 
