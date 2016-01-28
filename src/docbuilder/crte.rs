@@ -209,9 +209,9 @@ mod test {
         }
 
         let crte = Crate::from_cargo_index_path("rand", &path).unwrap();
-        assert!(crte.version_starts_with("0.1".to_string()).is_some());
-        assert!(crte.version_starts_with("*".to_string()).is_some());
-        assert!(crte.version_starts_with("999.099.99".to_string()).is_none());
+        assert!(crte.version_starts_with("0.1").is_some());
+        assert!(crte.version_starts_with("*").is_some());
+        assert!(crte.version_starts_with("999.099.99").is_none());
     }
 
 }
