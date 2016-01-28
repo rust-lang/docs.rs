@@ -47,7 +47,8 @@ pub enum DocBuilderError {
     RemoveBuildDir(io::Error),
     RemoveCrateFile(io::Error),
     RemoveOldDoc(io::Error),
-    SkipLogFileExist,
+    SkipLogFileExists,
+    SkipDocumentationExists,
     HandleLocalDependenciesError,
     LocalDependencyDownloadError(String),
     LocalDependencyExtractCrateError(String),
@@ -186,7 +187,7 @@ impl DocBuilder {
                               &crte.versions[version_index]));
 
         if self.skip_if_log_exists && log_path.exists() {
-            return Err(DocBuilderError::SkipLogFileExist);
+            return Err(DocBuilderError::SkipLogFileExists);
         }
 
         fs::OpenOptions::new().write(true).create(true)
@@ -338,6 +339,26 @@ impl DocBuilder {
     }
 
 
+    /// Returns Err(DocBuilderError::SkipDocumentationExists) if self.skip_is_exist true and
+    /// documentation is already exists at destination path.
+    fn skip_if_exists(&self,
+                      crte: &crte::Crate,
+                      version_index: usize) -> Result<(), DocBuilderError> {
+        // do not skip unless it's requested
+        if !self.skip_if_exist {
+            return Ok(())
+        }
+
+        let mut destination = PathBuf::from(&self.destination);
+        destination.push(format!("{}/{}", &crte.name, &crte.versions[version_index]));
+        if destination.exists() {
+            return Err(DocBuilderError::SkipDocumentationExists)
+        }
+
+        Ok(())
+    }
+
+
     fn find_doc(&self,
                 crte: &crte::Crate,
                 version_index: usize) -> Result<(PathBuf, PathBuf), DocBuilderError> {
@@ -398,6 +419,7 @@ impl DocBuilder {
     pub fn build_doc_for_crate_version(&self,
                                        crte: &crte::Crate,
                                        version_index: usize) -> Result<(), DocBuilderError> {
+        try!(self.skip_if_exists(&crte, version_index));
 
         let package_root = self.crate_root_dir(&crte, version_index);
 
