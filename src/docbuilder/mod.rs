@@ -136,6 +136,8 @@ impl DocBuilder {
         self.build_doc_for_crate_path(&self.crates_io_index_path);
     }
 
+
+    // FIXME: Need proper error handling in this function
     fn build_doc_for_crate_path(&self, path: &PathBuf) {
         for dir in path.read_dir().unwrap() {
 
@@ -214,35 +216,72 @@ impl DocBuilder {
         toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
             .and_then(|cargo_toml| cargo_toml.get("dependencies"))
             .and_then(|dependencies| dependencies.as_table())
-            .and_then(|dependencies_table| get_local_dependencies(dependencies_table))
+            .and_then(|dependencies_table| self.get_local_dependencies(dependencies_table))
             .map(|local_dependencies| self.handle_local_dependencies(local_dependencies, &root_dir))
             .unwrap_or(Err(DocBuilderError::HandleLocalDependenciesError))
     }
 
 
+    /// Get's local_dependencies from dependencies_table
+    fn get_local_dependencies(&self,
+                              dependencies_table: &collections::BTreeMap<String, toml::Value>) -> Option<Vec<(crte::Crate, usize, String)>>  {
+
+        let mut local_dependencies: Vec<(crte::Crate, usize, String)> = Vec::new();
+
+        for key in dependencies_table.keys() {
+
+            dependencies_table.get(key)
+                .and_then(|key_val| key_val.as_table())
+                .map(|key_table| {
+                    key_table.get("path").and_then(|p| p.as_str()).map(|path| {
+                        key_table.get("version").and_then(|p| p.as_str())
+                            .map(|version| {
+                                // TODO: This kinda became a mess
+                                //       I wonder if can use more and_then's...
+                                if let Ok(dep_crate) = crte::Crate::from_cargo_index_path(&key,
+                                                            &self.crates_io_index_path) {
+                                    if let Some(version_index) =
+                                        dep_crate.version_starts_with(version) {
+                                        local_dependencies.push((dep_crate,
+                                                                 version_index,
+                                                                 path.to_string()));
+                                    }
+                                }
+                            });
+                    });
+                });
+
+        }
+        Some(local_dependencies)
+    }
+
+
+
     /// Handles local dependencies
     fn handle_local_dependencies(&self,
-                                 local_dependencies: Vec<(crte::Crate, String)>,
+                                 local_dependencies: Vec<(crte::Crate, usize, String)>,
                                  root_dir: &PathBuf) -> Result<(), DocBuilderError> {
         for local_dependency in local_dependencies {
             let crte = local_dependency.0;
+            let version_index = local_dependency.1;
 
             let mut path = PathBuf::from(&root_dir);
-            path.push(local_dependency.1);
+            path.push(local_dependency.2);
 
             // make sure path exists
             if !path.exists() {
                 try!(fs::create_dir_all(&path).map_err(DocBuilderError::LocalDependencyIoError));
             }
 
-            try!(self.download_latest_version_of_crate(&crte)
+            try!(self.download_crate(&crte, version_index)
                  .map_err(DocBuilderError::LocalDependencyDownloadError));
-            try!(self.extract_crate(&crte, 0)
+            try!(self.extract_crate(&crte, version_index)
                  .map_err(DocBuilderError::LocalDependencyExtractCrateError));
 
             let crte_download_dir = PathBuf::from(format!("{}/{}-{}",
                                                           self.build_dir.to_str().unwrap(),
-                                                          crte.name, crte.versions[0]));
+                                                          crte.name,
+                                                          crte.versions[version_index]));
 
             if !crte_download_dir.exists() {
                 return Err(DocBuilderError::LocalDependencyDownloadDirNotExist);
@@ -523,13 +562,6 @@ impl DocBuilder {
     }
 
 
-    /// Download latest version of crate
-    fn download_latest_version_of_crate(&self, crte: &crte::Crate) -> Result<String, String> {
-        // TODO: it might be better to check crte.versions len here
-        self.download_crate(&crte, 0)
-    }
-
-
     /// Extracts crate into build directory
     fn extract_crate(&self, crte: &crte::Crate, version_index: usize) -> Result<String, String> {
 
@@ -575,32 +607,6 @@ fn command_result(output: Output) -> Result<String, String> {
         true => Ok(command_out),
         false => Err(command_out)
     }
-}
-
-
-/// Get's local_dependencies from dependencies_table
-fn get_local_dependencies(dependencies_table: &collections::BTreeMap<String, toml::Value>) ->
-Option<Vec<(crte::Crate, String)>>  {
-
-    let mut local_dependencies: Vec<(crte::Crate, String)> = Vec::new();
-
-    for key in dependencies_table.keys() {
-
-        dependencies_table.get(key)
-            .and_then(|key_val| key_val.as_table())
-            .map(|key_table| {
-                key_table.get("path").and_then(|p| p.as_str()).map(|path| {
-                    key_table.get("version").and_then(|p| p.as_str())
-                        .map(|version| {
-                            let dep_crate = crte::Crate::new(key.clone(),
-                            vec![version.to_string()]);
-                            local_dependencies.push((dep_crate, path.to_string()));
-                        });
-                });
-            });
-
-    }
-    Some(local_dependencies)
 }
 
 
