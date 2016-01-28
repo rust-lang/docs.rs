@@ -124,6 +124,7 @@
 
 extern crate rustc_serialize;
 extern crate toml;
+extern crate regex;
 
 pub mod docbuilder;
 
