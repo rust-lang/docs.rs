@@ -44,7 +44,7 @@ pub enum DocBuilderError {
     LocalDependencyExtractCrateError(String),
     LocalDependencyDownloadDirNotExist,
     LocalDependencyIoError(io::Error),
-    FailedToBuildCrate(String),
+    FailedToBuildCrate,
 
     CopyDocumentationCargoTomlNotFound(io::Error),
     CopyDocumentationLibNameNotFound,
@@ -587,8 +587,8 @@ impl DocBuilder {
         let mut log_file = try!(self.open_log_for_crate(&crte, version_index));
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-        try!(write!(log_file, "Building documentation for {}-{}",
-                    crte.name, crte.versions[version_index])
+        try!(writeln!(log_file, "Building documentation for {}-{}",
+                      crte.name, crte.versions[version_index])
              .map_err(DocBuilderError::LogFileError));
 
         // removing old build directory
@@ -597,33 +597,40 @@ impl DocBuilder {
         // Download crate
         //write!(&mut log_file, "Downloading crate\n").unwrap();;
         // FIXME: Need to capture failed command outputs
-        try!(write!(log_file, "Downloading crate\n{}",
-                    try!(self.download_crate(&crte, version_index)
-                         .map_err(DocBuilderError::DownloadCrateError)))
+        try!(writeln!(log_file, "Downloading crate\n{}",
+                      try!(self.download_crate(&crte, version_index)
+                           .map_err(DocBuilderError::DownloadCrateError)))
              .map_err(DocBuilderError::LogFileError));
 
         // Extract crate
         //write!(&mut log_file, "Extracting crate\n").unwrap();
-        try!(write!(log_file, "Extracting crate\n{}",
-                    try!(self.extract_crate(&crte, version_index)
-                         .map_err(DocBuilderError::ExtractCrateError)))
+        try!(writeln!(log_file, "Extracting crate\n{}",
+                      try!(self.extract_crate(&crte, version_index)
+                           .map_err(DocBuilderError::ExtractCrateError)))
              .map_err(DocBuilderError::LogFileError));
 
-        try!(write!(log_file, "Checking local dependencies")
+        try!(writeln!(log_file, "Checking local dependencies")
              .map_err(DocBuilderError::LogFileError));
         // FIXME: Need to log next function somehow
         try!(self.download_dependencies(&package_root));
 
         // build docs
-        try!(write!(log_file, "Building documentation\n{}",
-                    try!(self.build_doc_in_chroot(&crte, version_index)
-                         .map_err(DocBuilderError::FailedToBuildCrate)))
+        try!(writeln!(log_file, "Building documentation")
+             .map_err(DocBuilderError::LogFileError));
+        let (status, message) = match self.build_doc_in_chroot(&crte, version_index) {
+            Ok(m) => (true, m),
+            Err(m) => (false, m),
+        };
+        try!(writeln!(log_file, "{}", message)
              .map_err(DocBuilderError::LogFileError));
 
-        // copy docs
-        try!(self.copy_doc(&crte, version_index));
-
-        Ok(())
+        if status {
+            // copy docs
+            try!(self.copy_doc(&crte, version_index));
+            Ok(())
+        } else {
+            Err(DocBuilderError::FailedToBuildCrate)
+        }
     }
 
 
