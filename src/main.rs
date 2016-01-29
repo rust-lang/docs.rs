@@ -7,47 +7,47 @@
 //!
 //! # DESCRIPTION
 //!
-//! This script is an attempt to make a centralized documentation repository
-//! for crates available in crates.io. Script is using chroot environment to
+//! This program is an attempt to make a centralized documentation repository
+//! for crates available in crates.io. Program is using chroot environment to
 //! build documentation and fixing links on the fly.
 //!
 //! ## PREPARING CHROOT ENVIRONMENT
 //!
-//! This script is using a chroot environment to build documentation. I don't
+//! This program is using a chroot environment to build documentation. I don't
 //! think it was necessary but I didn't wanted to add bunch of stuff to my
 //! stable server and a little bit more security doesn't hurt anyone.
 //!
-//! chroot environment must be placed in **script\_dir/chroot** directory. And
+//! chroot environment must be placed in **program\_dir/chroot** directory. And
 //! you must install desired version of rustc inside chroot environment. Don't
-//! forget to add a regular user and create a link named **build\_home** which is
+//! forget to add a regular user and create a symbolic link named **build\_home** which is
 //! pointing to chroot user's home directory.  Make sure regular user is using
 //! same uid with your current user. You can change username of chroot user in
-//! $OPTIONS variable placed on top of this script. By default it is using
+//! $OPTIONS variable placed on top of this program. By default it is using
 //! _onur_.
 //!
 //! You also need clone crates.io-index respository. You can clone repository
 //! from [crates.io-index](https://github.com/rust-lang/crates.io-index).
 //!
-//! This script is using _sudo_ to use chroot command. chroot is only command
-//! called by sudo in this script. Make sure user has rights to call chroot
+//! This program is using _sudo_ to use chroot command. chroot is only command
+//! called by sudo in this program. Make sure user has privileges to call chroot
 //! command with sudo.
 //!
-//! And lastly you need to copy build.sh script into users home directory with
+//! And lastly you need to copy build.sh program into users home directory with
 //! **.build.sh** name. Make sure chroot user has permissions to execute
-//! **.build.sh** script.
+//! **.build.sh** program.
 //!
 //! Directory structure should look like this:
 //!
 //! ```text
 //! .
-//! ├── cratesfyi                       # Main program
+//! ├── cratesfyi                       # Main program (or cwd)
 //! ├── build_home -> chroot/home/onur  # Sym link to chroot user's home
 //! ├── chroot                          # chroot environment
 //! │   ├── bin
 //! │   ├── etc
 //! │   ├── home
 //! │   │   └── onur                    # chroot user's home directory
-//! │   │       └── .build.sh           # Build script to run cargo doc
+//! │   │       └── .build.sh           # Build program to run cargo doc
 //! │   └── ...
 //! ├── crates.io-index                 # Clone of crates.io-index
 //! │   ├── 1
@@ -64,12 +64,12 @@
 //!
 //! - **-b, --build-documentation** _crate_
 //!
-//!     Build documentation of a crate. If no crate name is provided, script will
+//!     Build documentation of a crate. If no crate name is provided, program will
 //!     try to build documentation for all crates.
 //!
 //! - **-v, --version** _version_
 //!
-//!     Build documentation of a crate with given version. Otherwise script will
+//!     Build documentation of a crate with given version. Otherwise program will
 //!     try to build documentation for all versions. This option must be used with
 //!     _-b_ argument and a crate name.
 //!
@@ -89,11 +89,11 @@
 //! - **--destination** _path_
 //!
 //!     Destination path. Generated documentation directories will be moved to this
-//!     directory. Default value: **script\_dir/public\_html/crates**
+//!     directory. Default value: **program\_dir/public\_html/crates**
 //!
 //! - **--chroot** _path_
 //!
-//!     Chroot path. Default value: **script\_dir/chroot**
+//!     Chroot path. Default value: **program\_dir/chroot**
 //!
 //! - **--debug**
 //!
@@ -125,24 +125,138 @@
 extern crate rustc_serialize;
 extern crate toml;
 extern crate regex;
+extern crate clap;
 
 pub mod docbuilder;
 
+use std::path::PathBuf;
+
+use docbuilder::DocBuilderPathError;
+use docbuilder::crte::Crate;
+use clap::{Arg, App, SubCommand};
 
 
 fn main() {
 
+    let matches = App::new("cratesfyi")
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("Crate documentation builder")
+        .subcommand(SubCommand::with_name("build")
+                    .about("Builds documentation for a crate")
+                    .arg(Arg::with_name("PREFIX")
+                         .short("P")
+                         .long("prefix")
+                         .takes_value(true))
+                    .arg(Arg::with_name("DESTINATION")
+                         .short("d")
+                         .long("destination")
+                         .help("Sets destination path")
+                         .takes_value(true))
+                    .arg(Arg::with_name("CHROOT_PATH")
+                         .short("c")
+                         .long("chroot")
+                         .help("Sets chroot path")
+                         .takes_value(true))
+                    .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
+                         .long("crates-io-index-path")
+                         .help("Sets crates.io-index path")
+                         .takes_value(true))
+                    .arg(Arg::with_name("LOGS_PATH")
+                         .long("logs-path")
+                         .help("Sets logs path")
+                         .takes_value(true))
+                    .arg(Arg::with_name("SKIP_IF_EXISTS")
+                         .short("s")
+                         .long("skip")
+                         .help("Skips building documentation if documentation exists"))
+                    .arg(Arg::with_name("SKIP_IF_LOG_EXISTS")
+                         .long("skip-if-log-exists")
+                         .help("Skips building documentation if build log exists"))
+                    .arg(Arg::with_name("KEEP_BUILD_DIRECTORY")
+                         .short("-k")
+                         .long("keep-build-directory")
+                         .help("Keeps build directory after build."))
+                    .subcommand(SubCommand::with_name("world")
+                                .about("Builds documentation of every crate"))
+                    .subcommand(SubCommand::with_name("crate")
+                                .about("Builds documentation for")
+                                .arg(Arg::with_name("CRATE_NAME")
+                                     .index(1)
+                                     .required(true)
+                                     .help("Crate name"))
+                                .arg(Arg::with_name("CRATE_VERSION")
+                                     .index(2)
+                                     .required(true)
+                                     .help("Version of crate"))))
+                                     // This is what I got after rustfmt
+                                     .get_matches();
 
-    let crte = docbuilder::crte::Crate::new("sdl2".to_string(),
-                                            vec!["0.9.1".to_string()]);
 
-    let mut prefix = std::env::current_dir().unwrap();
-    prefix.push("../cratesfyi-prefix");
+    // DocBuilder
+    if let Some(matches) = matches.subcommand_matches("build") {
+        let mut dbuilder = {
+            if let Some(prefix) = matches.value_of("PREFIX") {
+                docbuilder::DocBuilder::from_prefix(PathBuf::from(prefix))
+            } else {
+                docbuilder::DocBuilder::default()
+            }
+        };
 
-    let sex = docbuilder::DocBuilder::from_prefix(prefix);
-    println!("{:#?}", sex);
+        // set destination
+        if let Some(destination) = matches.value_of("DESTINATION") {
+            dbuilder.destination(PathBuf::from(destination));
+        }
 
-    //sex.build_doc_for_every_crate();
-    let res = sex.build_doc_for_crate_version(&crte, 0);
-    println!("{:#?}", res);
+        // set chroot path
+        if let Some(chroot_path) = matches.value_of("CHROOT_PATH") {
+            dbuilder.destination(PathBuf::from(chroot_path));
+        }
+
+        // set crates.io-index path
+        if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
+            dbuilder.destination(PathBuf::from(crates_io_index_path));
+        }
+
+        // set logs path
+        if let Some(logs_path) = matches.value_of("LOGS_PATH") {
+            dbuilder.logs_path(PathBuf::from(logs_path));
+        }
+
+        dbuilder.skip_if_exists(matches.is_present("SKIP_IF_EXISTS"));
+        dbuilder.skip_if_log_exists(matches.is_present("SKIP_IF_LOG_EXISTS"));
+        dbuilder.keep_build_directory(matches.is_present("KEEP_BUILD_DIRECTORY"));
+
+        println!("{:#?}", dbuilder);
+        // check paths
+        if let Err(e) = dbuilder.check_paths() {
+            match e {
+                DocBuilderPathError::DestinationPathNotExists =>
+                    panic!("Destination path not exists"),
+                DocBuilderPathError::ChrootPathNotExists =>
+                    panic!("Chroot path not exists"),
+                DocBuilderPathError::BuildDirectoryNotExists =>
+                    panic!("Build directory path not exists"),
+                DocBuilderPathError::CratesIoIndexPathNotExists =>
+                    panic!("crates.io-index path not exists"),
+                DocBuilderPathError::LogsPathNotExists =>
+                    panic!("Logs path not exists"),
+            };
+        }
+
+        // build world
+        if let Some(_) = matches.subcommand_matches("world") {
+            dbuilder.build_doc_for_every_crate();
+        }
+
+        // build single crate
+        else if let Some(matches) = matches.subcommand_matches("crate") {
+            // Safe to call unwrap here
+            let crte_name = matches.value_of("CRATE_NAME").unwrap();
+            let version = matches.value_of("CRATE_VERSION").unwrap();
+            let crte = Crate::new(crte_name.to_string(), vec![version.to_string()]);
+
+            dbuilder.build_doc_for_crate_version(&crte, 0).unwrap();
+        }
+    }
+
 }

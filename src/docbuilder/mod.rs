@@ -33,7 +33,7 @@ pub struct DocBuilder {
     build_dir: PathBuf,
     crates_io_index_path: PathBuf,
     logs_path: PathBuf,
-    skip_if_exist: bool,
+    skip_if_exists: bool,
     skip_if_log_exists: bool,
     debug: bool,
 }
@@ -63,6 +63,17 @@ pub enum DocBuilderError {
 }
 
 
+// This error only occurs if check_dirs fails
+#[derive(Debug)]
+pub enum DocBuilderPathError {
+    DestinationPathNotExists,
+    ChrootPathNotExists,
+    BuildDirectoryNotExists,
+    CratesIoIndexPathNotExists,
+    LogsPathNotExists,
+}
+
+
 impl Default for DocBuilder {
     fn default() -> DocBuilder {
 
@@ -81,7 +92,7 @@ impl Default for DocBuilder {
             chroot_user: "onur".to_string(),
 
             keep_build_directory: false,
-            skip_if_exist: false,
+            skip_if_exists: false,
             skip_if_log_exists: false,
             debug: false,
         }
@@ -94,7 +105,7 @@ impl fmt::Debug for DocBuilder {
         write!(f,
                "DocBuilder {{ destination: {:?}, chroot_path: {:?}, chroot_user_home_dir: {:?}, \
                crates_io_index_path: {:?}, logs_path: {:?}, chroot_user: {:?}, \
-                keep_build_directory: {:?}, skip_if_exist: {:?}, skip_if_log_exists: {:?}, debug: \
+                keep_build_directory: {:?}, skip_if_exists: {:?}, skip_if_log_exists: {:?}, debug: \
                 {:?} }}",
                 self.destination,
                 self.chroot_path,
@@ -103,7 +114,7 @@ impl fmt::Debug for DocBuilder {
                 self.logs_path,
                 self.chroot_user,
                 self.keep_build_directory,
-                self.skip_if_exist,
+                self.skip_if_exists,
                 self.skip_if_log_exists,
                 self.debug)
     }
@@ -129,6 +140,63 @@ impl DocBuilder {
         }
 
     }
+
+    /// Set destination
+    pub fn destination(&mut self, path: PathBuf) {
+        self.destination = path;
+    }
+
+    /// Set chroot path
+    pub fn chroot_path(&mut self, path: PathBuf) {
+        self.chroot_path = path;
+        // build_dir must be inside chroot_path/home/chroot_username
+        let mut build_dir_path = PathBuf::from(&self.chroot_path);
+        build_dir_path.push("home/onur");
+        self.build_dir = build_dir_path;
+    }
+
+    /// Set crates.io-index path
+    pub fn crates_io_index_path(&mut self, path: PathBuf) {
+        self.crates_io_index_path = path;
+    }
+
+    /// Set logs path
+    pub fn logs_path(&mut self, path: PathBuf) {
+        self.logs_path = path;
+    }
+
+    pub fn keep_build_directory(&mut self, b: bool) {
+        self.keep_build_directory = b;
+    }
+
+    pub fn skip_if_exists(&mut self, b: bool) {
+        self.skip_if_exists = b;
+    }
+
+    pub fn skip_if_log_exists(&mut self, b: bool) {
+        self.skip_if_log_exists = b;
+    }
+
+
+    pub fn check_paths(&self) -> Result<(), DocBuilderPathError> {
+        if !self.destination.exists() {
+            return Err(DocBuilderPathError::DestinationPathNotExists)
+        }
+        if !self.chroot_path.exists() {
+            return Err(DocBuilderPathError::ChrootPathNotExists)
+        }
+        if !self.build_dir.exists() {
+            return Err(DocBuilderPathError::BuildDirectoryNotExists)
+        }
+        if !self.crates_io_index_path.exists() {
+            return Err(DocBuilderPathError::CratesIoIndexPathNotExists)
+        }
+        if !self.crates_io_index_path.exists() {
+            return Err(DocBuilderPathError::LogsPathNotExists)
+        }
+        Ok(())
+    }
+
 
     /// This functions reads files in crates.io-index and tries to build
     /// documentation for crates.
@@ -413,13 +481,13 @@ impl DocBuilder {
     }
 
 
-    /// Returns Err(DocBuilderError::SkipDocumentationExists) if self.skip_is_exist true and
+    /// Returns Err(DocBuilderError::SkipDocumentationExists) if self.skip_is_exists true and
     /// documentation is already exists at destination path.
-    fn skip_if_exists(&self,
-                      crte: &crte::Crate,
-                      version_index: usize) -> Result<(), DocBuilderError> {
+    fn is_crate_doc_exists(&self,
+                           crte: &crte::Crate,
+                           version_index: usize) -> Result<(), DocBuilderError> {
         // do not skip unless it's requested
-        if !self.skip_if_exist {
+        if !self.skip_if_exists {
             return Ok(())
         }
 
@@ -493,7 +561,7 @@ impl DocBuilder {
     pub fn build_doc_for_crate_version(&self,
                                        crte: &crte::Crate,
                                        version_index: usize) -> Result<(), DocBuilderError> {
-        try!(self.skip_if_exists(&crte, version_index));
+        try!(self.is_crate_doc_exists(&crte, version_index));
 
         let package_root = self.crate_root_dir(&crte, version_index);
 

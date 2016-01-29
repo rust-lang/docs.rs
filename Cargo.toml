@@ -7,3 +7,4 @@ authors = ["Onur Aslan <onuraslan@gmail.com>"]
 rustc-serialize = "0.3.16"
 toml = "0.1.25"
 regex = "0.1"
+clap = "1.5.5"
