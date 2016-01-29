@@ -64,13 +64,30 @@ pub enum DocBuilderError {
 
 
 // This error only occurs if check_dirs fails
-#[derive(Debug)]
 pub enum DocBuilderPathError {
     DestinationPathNotExists,
     ChrootPathNotExists,
     BuildDirectoryNotExists,
     CratesIoIndexPathNotExists,
     LogsPathNotExists,
+}
+
+
+impl fmt::Debug for DocBuilderPathError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            DocBuilderPathError::DestinationPathNotExists =>
+                write!(f, "Destination path not exists"),
+            DocBuilderPathError::ChrootPathNotExists =>
+                write!(f, "Chroot path not exists"),
+            DocBuilderPathError::BuildDirectoryNotExists =>
+                write!(f, "Build directory path not exists"),
+            DocBuilderPathError::CratesIoIndexPathNotExists =>
+                write!(f, "crates.io-index path not exists"),
+            DocBuilderPathError::LogsPathNotExists =>
+                write!(f, "Logs path not exists"),
+        }
+    }
 }
 
 

@@ -131,7 +131,7 @@ pub mod docbuilder;
 
 use std::path::PathBuf;
 
-use docbuilder::DocBuilderPathError;
+use docbuilder::DocBuilderError;
 use docbuilder::crte::Crate;
 use clap::{Arg, App, SubCommand};
 
@@ -179,7 +179,7 @@ fn main() {
                     .subcommand(SubCommand::with_name("world")
                                 .about("Builds documentation of every crate"))
                     .subcommand(SubCommand::with_name("crate")
-                                .about("Builds documentation for")
+                                .about("Builds documentation for a crate")
                                 .arg(Arg::with_name("CRATE_NAME")
                                      .index(1)
                                      .required(true)
@@ -190,7 +190,6 @@ fn main() {
                                      .help("Version of crate"))))
                                      // This is what I got after rustfmt
                                      .get_matches();
-
 
     // DocBuilder
     if let Some(matches) = matches.subcommand_matches("build") {
@@ -226,21 +225,10 @@ fn main() {
         dbuilder.skip_if_log_exists(matches.is_present("SKIP_IF_LOG_EXISTS"));
         dbuilder.keep_build_directory(matches.is_present("KEEP_BUILD_DIRECTORY"));
 
-        println!("{:#?}", dbuilder);
         // check paths
         if let Err(e) = dbuilder.check_paths() {
-            match e {
-                DocBuilderPathError::DestinationPathNotExists =>
-                    panic!("Destination path not exists"),
-                DocBuilderPathError::ChrootPathNotExists =>
-                    panic!("Chroot path not exists"),
-                DocBuilderPathError::BuildDirectoryNotExists =>
-                    panic!("Build directory path not exists"),
-                DocBuilderPathError::CratesIoIndexPathNotExists =>
-                    panic!("crates.io-index path not exists"),
-                DocBuilderPathError::LogsPathNotExists =>
-                    panic!("Logs path not exists"),
-            };
+            println!("{:?}\nUse --help to get more information", e);
+            std::process::exit(1);
         }
 
         // build world
@@ -255,7 +243,15 @@ fn main() {
             let version = matches.value_of("CRATE_VERSION").unwrap();
             let crte = Crate::new(crte_name.to_string(), vec![version.to_string()]);
 
-            dbuilder.build_doc_for_crate_version(&crte, 0).unwrap();
+            if let Err(e) = dbuilder.build_doc_for_crate_version(&crte, 0) {
+                match e {
+                    DocBuilderError::SkipDocumentationExists =>
+                        println!("Skipping {} documentation already exists",
+                                 crte.canonical_name(0)),
+                    _ => println!("Failed to build documentation for {}: {:?}",
+                                  crte.canonical_name(0), e),
+                }
+            }
         }
     }
 
