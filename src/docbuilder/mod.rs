@@ -546,18 +546,22 @@ impl DocBuilder {
         // check crate name
         let mut crate_path = PathBuf::from(&path);
         crate_path.push(&crte.name);
-        src_path.push(&crate_path);
+        src_path.push(&crte.name);
         if crate_path.exists() && src_path.exists() {
             return Ok((crate_path, src_path));
         }
 
         // some crates are using '-' in their name but actual name contains '_'
         let actual_crate_name = &crte.name.replace("-", "_");
+        // I need another fresh src_path here
+        // FIXME: This function became a mess after I introduced src_path
+        let mut src_path = self.crate_root_dir(crte, version_index);
+        src_path.push("target/doc/src");
         // I think it's safe to push into path now
         path.push(actual_crate_name);
         src_path.push(actual_crate_name);
         if path.exists() && src_path.exists() {
-            return Ok((crate_path, src_path));
+            return Ok((path, src_path));
         }
 
         Err(DocBuilderError::DocumentationNotFound)
