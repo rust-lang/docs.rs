@@ -177,7 +177,11 @@ fn main() {
                          .long("keep-build-directory")
                          .help("Keeps build directory after build."))
                     .subcommand(SubCommand::with_name("world")
-                                .about("Builds documentation of every crate"))
+                                .about("Builds documentation of every crate")
+                                .arg(Arg::with_name("BUILD_ONLY_LATEST_VERSION")
+                                     .long("build-only-latest-version")
+                                     .help("Builds only latest version of crate and \
+                                           skips oldest versions")))
                     .subcommand(SubCommand::with_name("crate")
                                 .about("Builds documentation for a crate")
                                 .arg(Arg::with_name("CRATE_NAME")
@@ -232,7 +236,8 @@ fn main() {
         }
 
         // build world
-        if let Some(_) = matches.subcommand_matches("world") {
+        if let Some(matches) = matches.subcommand_matches("world") {
+            dbuilder.build_only_latest_version(matches.is_present("BUILD_ONLY_LATEST_VERSION"));
             dbuilder.build_doc_for_every_crate();
         }
 

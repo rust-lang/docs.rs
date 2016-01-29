@@ -1,14 +1,4 @@
 
-//! DocBuilder
-
-// TODO:
-// * Need to get proper version of crate when dealing with local dependencies
-//   Some crates are using '*' version for their local dependencies. DocBuilder
-//   or Crate must get proper version information. To do this, I am planning
-//   to find correct crate file in crates.io-index and generate a crate
-//   from it. And add a function like find_version to return correct version
-//   of local dependency.
-
 pub mod crte;
 
 use std::io::prelude::*;
@@ -24,7 +14,6 @@ use toml;
 use regex::Regex;
 
 
-/// Alright
 pub struct DocBuilder {
     keep_build_directory: bool,
     destination: PathBuf,
@@ -35,6 +24,7 @@ pub struct DocBuilder {
     logs_path: PathBuf,
     skip_if_exists: bool,
     skip_if_log_exists: bool,
+    build_only_latest_version: bool,
     debug: bool,
 }
 
@@ -111,6 +101,7 @@ impl Default for DocBuilder {
             keep_build_directory: false,
             skip_if_exists: false,
             skip_if_log_exists: false,
+            build_only_latest_version: false,
             debug: false,
         }
     }
@@ -194,6 +185,10 @@ impl DocBuilder {
         self.skip_if_log_exists = b;
     }
 
+    pub fn build_only_latest_version(&mut self, b: bool) {
+        self.build_only_latest_version = b;
+    }
+
 
     pub fn check_paths(&self) -> Result<(), DocBuilderPathError> {
         if !self.destination.exists() {
@@ -262,6 +257,12 @@ impl DocBuilder {
                     println!("Failed to clean crate dir {}-{}: {:#?}",
                              &crte.name, &crte.versions[i], e)
                 }
+            }
+
+            // if self.build_only_latest_version is true
+            // we are skipping oldest versions of crate
+            if self.build_only_latest_version {
+                break;
             }
         }
     }
