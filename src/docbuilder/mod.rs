@@ -33,6 +33,7 @@ pub struct DocBuilder {
 pub enum DocBuilderError {
     DownloadCrateError(String),
     ExtractCrateError(String),
+    BuildDocForCratePath(io::Error),
     LogFileError(io::Error),
     RemoveBuildDir(io::Error),
     RemoveCrateFile(io::Error),
@@ -212,14 +213,13 @@ impl DocBuilder {
 
     /// This functions reads files in crates.io-index and tries to build
     /// documentation for crates.
-    pub fn build_doc_for_every_crate(&self) {
-        self.build_doc_for_crate_path(&self.crates_io_index_path);
+    pub fn build_doc_for_every_crate(&self) -> Result<(), DocBuilderError> {
+        self.build_doc_for_crate_path(&self.crates_io_index_path)
     }
 
 
-    // FIXME: Need proper error handling in this function
-    fn build_doc_for_crate_path(&self, path: &PathBuf) {
-        for dir in path.read_dir().unwrap() {
+    fn build_doc_for_crate_path(&self, path: &PathBuf) -> Result<(), DocBuilderError> {
+        for dir in try!(path.read_dir().map_err(DocBuilderError::BuildDocForCratePath)) {
 
             let path = dir.unwrap().path();
 
@@ -230,14 +230,16 @@ impl DocBuilder {
                 }
 
             if path.is_dir() {
-                self.build_doc_for_crate_path(&path);
-                continue
+                try!(self.build_doc_for_crate_path(&path));
+                continue;
             }
 
-            // FIXME: check errors here
-            let crte = crte::Crate::from_cargo_index_file(path);
-            self.build_doc_for_crate(&crte.unwrap());
+            if let Ok(crte) = crte::Crate::from_cargo_index_file(path) {
+                self.build_doc_for_crate(&crte);
+            }
         }
+
+        Ok(())
     }
 
 

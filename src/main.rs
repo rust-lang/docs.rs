@@ -115,7 +115,9 @@ fn main() {
         // build world
         if let Some(matches) = matches.subcommand_matches("world") {
             dbuilder.build_only_latest_version(matches.is_present("BUILD_ONLY_LATEST_VERSION"));
-            dbuilder.build_doc_for_every_crate();
+            if let Err(e) = dbuilder.build_doc_for_every_crate() {
+                println!("Failed to build world: {:#?}", e);
+            }
         }
 
         // build single crate

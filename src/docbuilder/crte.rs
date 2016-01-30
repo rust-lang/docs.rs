@@ -60,7 +60,7 @@ impl Crate {
         let mut name = String::new();
         let mut versions = Vec::new();
 
-        while file.read_line(&mut line).unwrap() > 0 {
+        while try!(file.read_line(&mut line).map_err(CrateOpenError::IoError)) > 0 {
 
             let (cname, vers) = match Crate::parse_cargo_index_line(&line) {
                 Ok((c, v)) => (c, v),
