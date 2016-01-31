@@ -34,6 +34,11 @@ fn main() {
                          .long("chroot")
                          .help("Sets chroot path")
                          .takes_value(true))
+                    .arg(Arg::with_name("CHROOT_USER")
+                         .short("u")
+                         .long("chroot-user")
+                         .help("Sets chroot user name")
+                         .takes_value(true))
                     .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
                          .long("crates-io-index-path")
                          .help("Sets crates.io-index path")
@@ -90,6 +95,11 @@ fn main() {
         // set chroot path
         if let Some(chroot_path) = matches.value_of("CHROOT_PATH") {
             dbuilder.destination(PathBuf::from(chroot_path));
+        }
+
+        // set chroot user name
+        if let Some(chroot_user) = matches.value_of("CHROOT_USER") {
+            dbuilder.chroot_user(chroot_user.to_string());
         }
 
         // set crates.io-index path

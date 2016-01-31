@@ -158,10 +158,21 @@ impl DocBuilder {
     /// Set chroot path
     pub fn chroot_path(&mut self, path: PathBuf) {
         self.chroot_path = path;
-        // build_dir must be inside chroot_path/home/chroot_username
+        self.build_dir_path();
+    }
+
+    /// Set build dir
+    pub fn build_dir_path(&mut self) {
         let mut build_dir_path = PathBuf::from(&self.chroot_path);
-        build_dir_path.push("home/onur");
+        build_dir_path.push("home");
+        build_dir_path.push(&self.chroot_user);
         self.build_dir = build_dir_path;
+    }
+
+    /// Set chroot user name
+    pub fn chroot_user(&mut self, user: String) {
+        self.chroot_user = user;
+        self.build_dir_path();
     }
 
     /// Set crates.io-index path
