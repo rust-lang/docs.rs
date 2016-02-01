@@ -594,6 +594,8 @@
                                '/' + type + '.' + name + '.html';
                     }
 
+                    href = href.replace(/[\w_-]+\//, '');
+
                     output += '<tr class="' + type + ' result"><td>' +
                               '<a href="' + href + '">' +
                               displayPath + '<span class="' + type + '">' +
@@ -816,7 +818,7 @@
                 }
                 if (rawSearchIndex[crates[i]].items[0]) {
                     var desc = rawSearchIndex[crates[i]].items[0][3];
-                    var link = $('<a>', {'href': '../' + crates[i] + '/index.html',
+                    var link = $('<a>', {'href': '../index.html',
                                          'title': plainSummaryLine(desc),
                                          'class': klass}).text(crates[i]);
                     ul.append($('<li>').append(link));
