@@ -3,7 +3,22 @@ released in [crates.io](https://crates.io)
 
 This program is an attempt to make a centralized documentation repository
 for crates available in crates.io. Program is using chroot environment to
-build documentation and swapping links on the fly.
+build documentation and replacing links on the fly.
+
+All documentation is available in <https://crates.fyi/crates/>. There is also
+an anonymous rsync server running on build machine. You can use rsync to
+download everything. i.e:
+
+```
+rsync -a rsync://build.crates.fyi/crates crates
+```
+
+This command will download every crate documentation. If you want to download
+documentation of a specific crate, you can use:
+
+```
+rsync -a rsync://build.crates.fyi/crates/<CRATE>/<VERSION> destination`
+```
 
 ## Usage
 
@@ -23,10 +38,10 @@ directory. And you must install desired version of rustc inside chroot
 environment. Don't forget to add a regular user. This program is
 using _onur_ username for chroot user for now.
 
-You also need clone crates.io-index respository. You can clone repository
+You also need to clone crates.io-index respository. You can clone repository
 from [crates.io-index](https://github.com/rust-lang/crates.io-index).
 
-This program is using _sudo_ to use chroot command. chroot is only command
+This program is using _sudo_ to use chroot. chroot is only command
 used with sudo in this program. Make sure user has privileges to run chroot
 command with sudo.
 
