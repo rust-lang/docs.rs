@@ -364,6 +364,7 @@ impl Crate {
         env::set_current_dir(target).unwrap();
         let res = command_result(Command::new("cargo")
                                  .arg("doc")
+                                 .arg("--no-deps")
                                  .arg("--verbose")
                                  .output()
                                  .unwrap());
