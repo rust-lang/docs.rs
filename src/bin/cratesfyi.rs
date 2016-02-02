@@ -1,15 +1,11 @@
 
-extern crate rustc_serialize;
-extern crate toml;
-extern crate regex;
+extern crate cratesfyi;
 extern crate clap;
-
-pub mod docbuilder;
 
 use std::path::PathBuf;
 
-use docbuilder::DocBuilderError;
-use docbuilder::crte::Crate;
+use cratesfyi::docbuilder::{DocBuilder, DocBuilderError};
+use cratesfyi::docbuilder::crte::Crate;
 use clap::{Arg, App, SubCommand};
 
 
@@ -81,9 +77,9 @@ fn main() {
     if let Some(matches) = matches.subcommand_matches("build") {
         let mut dbuilder = {
             if let Some(prefix) = matches.value_of("PREFIX") {
-                docbuilder::DocBuilder::from_prefix(PathBuf::from(prefix))
+                DocBuilder::from_prefix(PathBuf::from(prefix))
             } else {
-                docbuilder::DocBuilder::default()
+                DocBuilder::default()
             }
         };
 
@@ -104,7 +100,7 @@ fn main() {
 
         // set crates.io-index path
         if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
-            dbuilder.destination(PathBuf::from(crates_io_index_path));
+            dbuilder.crates_io_index_path(PathBuf::from(crates_io_index_path));
         }
 
         // set logs path

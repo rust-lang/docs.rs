@@ -8,7 +8,6 @@ use std::env;
 use std::path::PathBuf;
 use std::fs;
 use std::process::{Command, Output};
-use std::collections;
 
 use toml;
 use regex::Regex;
@@ -222,6 +221,13 @@ impl DocBuilder {
     }
 
 
+    pub fn check_crates_io_index_path(&self) -> Result<(), DocBuilderPathError> {
+        if !self.crates_io_index_path.exists() {
+            return Err(DocBuilderPathError::CratesIoIndexPathNotExists)
+        }
+        Ok(())
+    }
+
     /// This functions reads files in crates.io-index and tries to build
     /// documentation for crates.
     pub fn build_doc_for_every_crate(&self) -> Result<(), DocBuilderError> {
@@ -304,111 +310,6 @@ impl DocBuilder {
     }
 
 
-    /// Download local dependencies from crate root and place them into right place
-    ///
-    /// Some packages have local dependencies defined in Cargo.toml
-    ///
-    /// This function is intentionall written verbose
-    fn download_dependencies(&self, root_dir: &PathBuf) -> Result<(), DocBuilderError> {
-
-        let mut cargo_toml_path = PathBuf::from(&root_dir);
-        cargo_toml_path.push("Cargo.toml");
-
-        let mut cargo_toml_fh = try!(fs::File::open(cargo_toml_path)
-                                     .map_err(DocBuilderError::LocalDependencyIoError));
-        let mut cargo_toml_content = String::new();
-        try!(cargo_toml_fh.read_to_string(&mut cargo_toml_content)
-             .map_err(DocBuilderError::LocalDependencyIoError));
-
-        toml::Parser::new(&cargo_toml_content[..]).parse().as_ref()
-            .and_then(|cargo_toml| cargo_toml.get("dependencies"))
-            .and_then(|dependencies| dependencies.as_table())
-            .and_then(|dependencies_table| self.get_local_dependencies(dependencies_table))
-            .map(|local_dependencies| self.handle_local_dependencies(local_dependencies, &root_dir))
-            .unwrap_or(Ok(()))
-    }
-
-
-    /// Get's local_dependencies from dependencies_table
-    fn get_local_dependencies(&self,
-                              dependencies_table: &collections::BTreeMap<String, toml::Value>) -> Option<Vec<(crte::Crate, usize, String)>>  {
-
-        let mut local_dependencies: Vec<(crte::Crate, usize, String)> = Vec::new();
-
-        for key in dependencies_table.keys() {
-
-            dependencies_table.get(key)
-                .and_then(|key_val| key_val.as_table())
-                .map(|key_table| {
-                    key_table.get("path").and_then(|p| p.as_str()).map(|path| {
-                        key_table.get("version").and_then(|p| p.as_str())
-                            .map(|version| {
-                                // TODO: This kinda became a mess
-                                //       I wonder if can use more and_then's...
-                                if let Ok(dep_crate) = crte::Crate::from_cargo_index_path(&key,
-                                                            &self.crates_io_index_path) {
-                                    if let Some(version_index) =
-                                        dep_crate.version_starts_with(version) {
-                                        local_dependencies.push((dep_crate,
-                                                                 version_index,
-                                                                 path.to_string()));
-                                    }
-                                }
-                            });
-                    });
-                });
-
-        }
-        Some(local_dependencies)
-    }
-
-
-
-    /// Handles local dependencies
-    fn handle_local_dependencies(&self,
-                                 local_dependencies: Vec<(crte::Crate, usize, String)>,
-                                 root_dir: &PathBuf) -> Result<(), DocBuilderError> {
-        for local_dependency in local_dependencies {
-            let crte = local_dependency.0;
-            let version_index = local_dependency.1;
-
-            let mut path = PathBuf::from(&root_dir);
-            path.push(local_dependency.2);
-
-            // make sure path exists
-            if !path.exists() {
-                try!(fs::create_dir_all(&path).map_err(DocBuilderError::LocalDependencyIoError));
-            }
-
-            try!(self.download_crate(&crte, version_index)
-                 .map_err(DocBuilderError::LocalDependencyDownloadError));
-            try!(self.extract_crate(&crte, version_index)
-                 .map_err(DocBuilderError::LocalDependencyExtractCrateError));
-
-            let crte_download_dir = PathBuf::from(format!("{}/{}-{}",
-                                                          self.build_dir.to_str().unwrap(),
-                                                          crte.name,
-                                                          crte.versions[version_index]));
-
-            if !crte_download_dir.exists() {
-                return Err(DocBuilderError::LocalDependencyDownloadDirNotExist);
-            }
-
-
-            // self.extract_crate will extract crate into build_dir
-            // Copy files to proper location
-            try!(copy_files(&crte_download_dir, &path, false));
-
-            // Remove download_dir
-            try!(fs::remove_dir_all(&crte_download_dir)
-                 .map_err(DocBuilderError::LocalDependencyIoError));
-
-            try!(self.remove_crate_file(&crte, version_index));
-        }
-
-        Ok(())
-    }
-
 
     /// Returns package folder inside build directory
     fn crate_root_dir(&self, crte: &crte::Crate, version_index: usize) -> PathBuf {
@@ -466,7 +367,7 @@ impl DocBuilder {
             let path = file.path();
 
             if path.file_name().unwrap() == ".cargo" ||
-                path.file_name().unwrap() == ".build.sh" {
+                path.file_name().unwrap() == ".crates.io-index" {
                     continue;
                 }
 
@@ -598,38 +499,10 @@ impl DocBuilder {
                                        version_index: usize) -> Result<(), DocBuilderError> {
         try!(self.is_crate_doc_exists(&crte, version_index));
 
-        let package_root = self.crate_root_dir(&crte, version_index);
-
         // TODO try to replace noob style logging
         let mut log_file = try!(self.open_log_for_crate(&crte, version_index));
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
-        try!(writeln!(log_file, "Building documentation for {}-{}",
-                      crte.name, crte.versions[version_index])
-             .map_err(DocBuilderError::LogFileError));
-
-        // removing old build directory
-        try!(self.remove_build_dir_for_crate(&crte, version_index));
-
-        // Download crate
-        //write!(&mut log_file, "Downloading crate\n").unwrap();;
-        // FIXME: Need to capture failed command outputs
-        try!(writeln!(log_file, "Downloading crate\n{}",
-                      try!(self.download_crate(&crte, version_index)
-                           .map_err(DocBuilderError::DownloadCrateError)))
-             .map_err(DocBuilderError::LogFileError));
-
-        // Extract crate
-        //write!(&mut log_file, "Extracting crate\n").unwrap();
-        try!(writeln!(log_file, "Extracting crate\n{}",
-                      try!(self.extract_crate(&crte, version_index)
-                           .map_err(DocBuilderError::ExtractCrateError)))
-             .map_err(DocBuilderError::LogFileError));
-
-        try!(writeln!(log_file, "Checking local dependencies")
-             .map_err(DocBuilderError::LogFileError));
-        // FIXME: Need to log next function somehow
-        try!(self.download_dependencies(&package_root));
 
         // build docs
         try!(writeln!(log_file, "Building documentation")
@@ -681,55 +554,17 @@ impl DocBuilder {
     }
 
 
-    /// Downloads crate
-    fn download_crate(&self, crte: &crte::Crate, version_index: usize) -> Result<String, String> {
-        // By default crates.io is using:
-        // https://crates.io/api/v1/crates/$crate/$version/download
-        // But I believe this url is increasing download count and this program is
-        // downloading alot during development. I am using redirected url.
-        let url = format!("https://crates-io.s3-us-west-1.amazonaws.com/crates/{}/{}-{}.crate",
-                          crte.name,
-                          crte.name,
-                          crte.versions[version_index]);
-        // Use wget for now
-        command_result(Command::new("wget")
-                       .arg("-c")
-                       .arg("--content-disposition")
-                       .arg(url)
-                       .output()
-                       .unwrap())
-    }
-
-
-    /// Extracts crate into build directory
-    fn extract_crate(&self, crte: &crte::Crate, version_index: usize) -> Result<String, String> {
-
-        let crate_name = format!("{}.crate", crte.canonical_name(version_index));
-        command_result(Command::new("tar")
-                       .arg("-C")
-                       .arg(&self.build_dir)
-                       .arg("-xzvf")
-                       .arg(crate_name)
-                       .output()
-                       .unwrap())
-    }
-
-
     /// Build documentation of a crate in chroot environment
-    // FIXME: This is a really naieve implementation, but it works!
-    //        I am not sure how can I do this without build.sh
     fn build_doc_in_chroot(&self,
                            crte: &crte::Crate,
                            version_index: usize) -> Result<String, String> {
-        let crate_name = crte.canonical_name(version_index);
-        let chroot_build_script = format!("/home/{}/.build.sh", &self.chroot_user);
         command_result(Command::new("sudo")
                        .arg("chroot")
                        .arg(&self.chroot_path)
-                       .arg("su").arg("--").arg(&self.chroot_user)
-                       .arg(chroot_build_script).arg("build")
-                       .arg(crate_name)
-                       .env_clear()
+                       .arg("su").arg("-").arg(&self.chroot_user)
+                       .arg("-c")
+                       .arg(format!("crate-builder {} {}",
+                                    &crte.name, &crte.versions[version_index]))
                        .output()
                        .unwrap())
     }
@@ -739,7 +574,7 @@ impl DocBuilder {
 
 
 /// a simple function to capture command output
-fn command_result(output: Output) -> Result<String, String> {
+pub fn command_result(output: Output) -> Result<String, String> {
     let mut command_out = String::from_utf8_lossy(&output.stdout).into_owned();
     command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
     match output.status.success() {
@@ -751,7 +586,7 @@ fn command_result(output: Output) -> Result<String, String> {
 
 
 /// A simple function to copy files from source to destination
-fn copy_files(source: &PathBuf,
+pub fn copy_files(source: &PathBuf,
               destination: &PathBuf,
               handle_html: bool) -> Result<(), DocBuilderError> {
 
