@@ -6,10 +6,11 @@ extern crate log;
 extern crate clap;
 
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, exit};
 
-use cratesfyi::docbuilder::{DocBuilder, command_result};
+use cratesfyi::docbuilder::{DocBuilder, DocBuilderError, command_result};
 use cratesfyi::docbuilder::crte::Crate;
 use log::{LogLevel, LogLevelFilter, LogRecord, LogMetadata};
 use clap::{Arg, App};
@@ -51,6 +52,29 @@ fn update_crates_io_index(path: &PathBuf) -> Result<String, String> {
 }
 
 
+// This will remove everything in CWD!!!
+fn clean_build_dir() -> Result<(), DocBuilderError> {
+
+    for file in try!(env::current_dir().unwrap()
+                     .read_dir().map_err(DocBuilderError::RemoveBuildDir)) {
+        let file = try!(file.map_err(DocBuilderError::RemoveBuildDir));
+        let path = file.path();
+
+        if path.file_name().unwrap() == ".cargo" ||
+            path.file_name().unwrap() == ".crates.io-index" {
+                continue;
+            }
+
+        if path.is_dir() {
+            try!(fs::remove_dir_all(path).map_err(DocBuilderError::RemoveBuildDir));
+        } else {
+            try!(fs::remove_file(path).map_err(DocBuilderError::RemoveBuildDir));
+        }
+    }
+
+    Ok(())
+}
+
 
 fn main() {
     log::set_logger(|max_log_level| {
@@ -63,10 +87,14 @@ fn main() {
         .version(env!("CARGO_PKG_VERSION"))
         .about("Crate documentation builder")
         .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
-             .short("c")
+             .short("p")
              .long("crates-io-index-path")
              .help("Sets crates.io-index path")
              .takes_value(true))
+        .arg(Arg::with_name("CLEAN")
+             .short("c")
+             .long("clean")
+             .help("Clean build dir before building"))
         .arg(Arg::with_name("CRATE_NAME")
              .index(1)
              .required(true)
@@ -106,6 +134,10 @@ fn main() {
     let version = matches.value_of("CRATE_VERSION").unwrap();
 
     let crte = Crate::new(crte_name.to_string(), vec![version.to_string()]);
+
+    if matches.is_present("CLEAN") {
+        clean_build_dir().unwrap();
+    }
 
     if let Err(e) = crte.build_crate_doc(0, &docbuilder) {
         info!("{:?}", e);

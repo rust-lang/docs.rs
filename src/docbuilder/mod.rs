@@ -270,14 +270,6 @@ impl DocBuilder {
                          &crte.name, &crte.versions[i], e)
             }
 
-            // clean dir
-            if !self.keep_build_directory {
-                if let Err(e) = self.clean(&crte, i) {
-                    println!("Failed to clean crate dir {}-{}: {:#?}",
-                             &crte.name, &crte.versions[i], e)
-                }
-            }
-
             // if self.build_only_latest_version is true
             // we are skipping oldest versions of crate
             if self.build_only_latest_version {
@@ -319,32 +311,6 @@ impl DocBuilder {
     }
 
 
-    fn remove_build_dir_for_crate(&self,
-                                  crte: &crte::Crate,
-                                  version_index: usize) -> Result<(), DocBuilderError> {
-        let path = self.crate_root_dir(crte, version_index);
-
-        if path.exists() && path.is_dir() {
-            try!(fs::remove_dir_all(&path).map_err(DocBuilderError::RemoveBuildDir));
-        }
-
-        Ok(())
-    }
-
-
-    fn remove_crate_file(&self,
-                         crte: &crte::Crate,
-                         version_index: usize) -> Result<(), DocBuilderError>{
-        let path = PathBuf::from(format!("{}.crate", crte.canonical_name(version_index)));
-
-        if path.exists() && path.is_file() {
-            try!(fs::remove_file(path).map_err(DocBuilderError::RemoveCrateFile));
-        }
-
-        Ok(())
-    }
-
-
     fn remove_old_doc(&self,
                       crte: &crte::Crate,
                       version_index: usize) -> Result<(), DocBuilderError> {
@@ -355,38 +321,6 @@ impl DocBuilder {
             try!(fs::remove_dir_all(path).map_err(DocBuilderError::RemoveOldDoc));
         }
 
-        Ok(())
-    }
-
-
-    /// Removes everything in build_dir except .build.sh and .cargo directories
-    fn clean_build_dir(&self) -> Result<(), DocBuilderError> {
-
-        for file in try!(self.build_dir.read_dir().map_err(DocBuilderError::RemoveBuildDir)) {
-            let file = try!(file.map_err(DocBuilderError::RemoveBuildDir));
-            let path = file.path();
-
-            if path.file_name().unwrap() == ".cargo" ||
-                path.file_name().unwrap() == ".crates.io-index" {
-                    continue;
-                }
-
-            if path.is_dir() {
-                try!(fs::remove_dir_all(path).map_err(DocBuilderError::RemoveBuildDir));
-            } else {
-                try!(fs::remove_file(path).map_err(DocBuilderError::RemoveBuildDir));
-            }
-
-        }
-
-        Ok(())
-    }
-
-
-    pub fn clean(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
-        try!(self.clean_build_dir());
-        try!(self.remove_build_dir_for_crate(&crte, version_index));
-        try!(self.remove_crate_file(&crte, version_index));
         Ok(())
     }
 
@@ -563,7 +497,7 @@ impl DocBuilder {
                        .arg(&self.chroot_path)
                        .arg("su").arg("-").arg(&self.chroot_user)
                        .arg("-c")
-                       .arg(format!("crate-builder {} {}",
+                       .arg(format!("crate-builder -c {} {}",
                                     &crte.name, &crte.versions[version_index]))
                        .output()
                        .unwrap())
