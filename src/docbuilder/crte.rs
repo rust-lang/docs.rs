@@ -39,14 +39,6 @@ pub enum CrateOpenError {
 
 impl Crate {
     /// Returns a new Crate
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let crte = Crate::new("cratesfyi".to_string(),
-    ///                       vec!["0.1.0".to_string()]);
-    /// assert_eq!(crte.name, "cratesfyi");
-    /// ```
     pub fn new(name: String, versions: Vec<String>) -> Crate {
         Crate {
             name: name,
@@ -393,7 +385,6 @@ mod test {
     use std::env;
     use std::path::PathBuf;
     use std::fs;
-    use std::thread::sleep;
 
     #[test]
     fn test_get_vesion_index() {

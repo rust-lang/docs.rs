@@ -21,6 +21,7 @@ pub struct DocBuilder {
     build_dir: PathBuf,
     crates_io_index_path: PathBuf,
     logs_path: PathBuf,
+    sources_path: PathBuf,
     skip_if_exists: bool,
     skip_if_log_exists: bool,
     build_only_latest_version: bool,
@@ -86,7 +87,7 @@ impl Default for DocBuilder {
 
         let cwd = env::current_dir().unwrap();
 
-        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path) =
+        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path, sources_path) =
             generate_paths(cwd);
 
         DocBuilder {
@@ -95,6 +96,7 @@ impl Default for DocBuilder {
             build_dir: build_dir,
             crates_io_index_path: crates_io_index_path,
             logs_path: logs_path,
+            sources_path: sources_path,
 
             chroot_user: "onur".to_string(),
 
@@ -112,14 +114,16 @@ impl fmt::Debug for DocBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
                "DocBuilder {{ destination: {:?}, chroot_path: {:?}, chroot_user_home_dir: {:?}, \
-               crates_io_index_path: {:?}, logs_path: {:?}, chroot_user: {:?}, \
-                keep_build_directory: {:?}, skip_if_exists: {:?}, skip_if_log_exists: {:?}, debug: \
-                {:?} }}",
+                crates_io_index_path: {:?}, logs_path: {:?}, \
+                sources_path: {:?}, chroot_user: {:?}, \
+                keep_build_directory: {:?}, skip_if_exists: {:?}, \
+                skip_if_log_exists: {:?}, debug: {:?} }}",
                 self.destination,
                 self.chroot_path,
                 self.build_dir,
                 self.crates_io_index_path,
                 self.logs_path,
+                self.sources_path,
                 self.chroot_user,
                 self.keep_build_directory,
                 self.skip_if_exists,
@@ -134,7 +138,7 @@ impl DocBuilder {
     /// Creates new DocBuilder from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilder {
 
-        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path) =
+        let (destination, chroot_path, build_dir, crates_io_index_path, logs_path, sources_path) =
             generate_paths(prefix);
 
         DocBuilder {
@@ -143,6 +147,7 @@ impl DocBuilder {
             build_dir: build_dir,
             crates_io_index_path: crates_io_index_path,
             logs_path: logs_path,
+            sources_path: sources_path,
 
             .. Default::default()
         }
@@ -503,6 +508,71 @@ impl DocBuilder {
                        .unwrap())
     }
 
+
+    /// Download sources of every crate
+    pub fn download_sources(&self) -> Result<(), DocBuilderError> {
+        self.download_source_from_path(&self.crates_io_index_path)
+    }
+
+
+    /// Download sources from crates-io.index path
+    fn download_source_from_path(&self, path: &PathBuf) -> Result<(), DocBuilderError> {
+
+        // FIXME: I really need an iterator here, too many code repeats
+        for dir in try!(path.read_dir().map_err(DocBuilderError::BuildDocForCratePath)) {
+
+            let path = dir.unwrap().path();
+
+            // skip files under .git and config.json
+            if path.to_str().unwrap().contains(".git") ||
+                path.file_name().unwrap() == "config.json" {
+                    continue;
+                }
+
+            if path.is_dir() {
+                try!(self.download_source_from_path(&path));
+                continue;
+            }
+
+            if let Err(e) = crte::Crate::from_cargo_index_file(path)
+                .map(|c| self.download_source_of_a_crate(&c)) {
+                    println!("Failed to download crate: {:?}", e);
+                }
+        }
+
+        Ok(())
+    }
+
+    /// Downloads sources of a crate and extracts it into self.sources_path
+    // FIXME: This function is using CWD
+    fn download_source_of_a_crate(&self, crte: &crte::Crate) -> Result<(), DocBuilderError> {
+
+        for version_index in 0..crte.versions.len() {
+            let source = PathBuf::from(crte.canonical_name(version_index));
+
+            let mut destination = PathBuf::from(&self.sources_path);
+            destination.push(&crte.name);
+            destination.push(&crte.versions[version_index]);
+
+            // if destination exists do nothing
+            if destination.exists() {
+                continue;
+            }
+
+            println!("Downloading sources of {}", crte.canonical_name(version_index));
+
+            try!(crte.download_crate(version_index).map_err(DocBuilderError::DownloadCrateError));
+            try!(crte.extract_crate(version_index).map_err(DocBuilderError::DownloadCrateError));
+
+            try!(copy_files(&source, &destination, false));
+
+            try!(fs::remove_dir_all(&source).map_err(DocBuilderError::CopyDocumentationIoError));
+            try!(crte.remove_crate_file(version_index));
+        }
+
+        Ok(())
+    }
+
 }
 
 
@@ -616,7 +686,7 @@ fn copy_html(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderEr
 }
 
 
-fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
+fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
 
     let mut destination = PathBuf::from(&prefix);
     destination.push("public_html/crates");
@@ -634,5 +704,8 @@ fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathB
     let mut logs_path = PathBuf::from(&prefix);
     logs_path.push("logs");
 
-    (destination, chroot_path, build_dir, crates_io_index_path, logs_path)
+    let mut sources_path = PathBuf::from(&prefix);
+    sources_path.push("sources");
+
+    (destination, chroot_path, build_dir, crates_io_index_path, logs_path, sources_path)
 }

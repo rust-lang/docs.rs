@@ -54,6 +54,8 @@ fn main() {
                          .short("-k")
                          .long("keep-build-directory")
                          .help("Keeps build directory after build."))
+                    .subcommand(SubCommand::with_name("download-sources")
+                                .about("Downloads sources of all crates"))
                     .subcommand(SubCommand::with_name("world")
                                 .about("Builds documentation of every crate")
                                 .arg(Arg::with_name("BUILD_ONLY_LATEST_VERSION")
@@ -141,6 +143,13 @@ fn main() {
                     _ => println!("Failed to build documentation for {}: {:?}",
                                   crte.canonical_name(0), e),
                 }
+            }
+        }
+
+        // download sources
+        else if let Some(_) = matches.subcommand_matches("download-sources") {
+            if let Err(e) = dbuilder.download_sources() {
+                println!("{:?}", e);
             }
         }
     }
