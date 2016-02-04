@@ -468,26 +468,13 @@ impl DocBuilder {
         // remove old documentation just in case
         try!(self.remove_old_doc(&crte, version_index));
 
-        let (doc_path, src_path) = try!(self.find_doc(&crte, version_index));
+        let mut doc_path = self.crate_root_dir(crte, version_index);
+        doc_path.push("target/doc");
 
-        // copy documentation to destination/crate/version
+        // copy documentation into destination/crate/version
         let mut destination = PathBuf::from(&self.destination);
         destination.push(format!("{}/{}", &crte.name, &crte.versions[version_index]));
         try!(copy_files(&doc_path, &destination, true));
-
-        // copy search-index.js
-        let mut search_index_js_path = self.crate_root_dir(&crte, version_index);
-        search_index_js_path.push("target/doc/search-index.js");
-        let mut search_index_js_destination_path = PathBuf::from(&destination);
-        search_index_js_destination_path.push("search-index.js");
-        if search_index_js_path.exists() {
-            try!(fs::copy(search_index_js_path, search_index_js_destination_path)
-                 .map_err(DocBuilderError::CopyDocumentationIoError));
-        }
-
-        // copy source to destination/crate/version/src
-        destination.push("src");
-        try!(copy_files(&src_path, &destination, true));
 
         Ok(())
     }
