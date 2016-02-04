@@ -633,47 +633,13 @@ fn copy_html(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderEr
                                     .map_err(DocBuilderError::CopyDocumentationIoError));
 
     let reader = io::BufReader::new(source_file);
+    let css_replace_regex = Regex::new(r#"href="(.*\.css)""#).unwrap();
 
     for line in reader.lines() {
         let mut line = try!(line.map_err(DocBuilderError::CopyDocumentationIoError));
 
         // replace css links
-        if Regex::new(r#"href=".*\.css""#).unwrap().is_match(&line[..]) {
-            line = Regex::new(r#"href="(.*\.css)""#).unwrap()
-                .replace_all(&line[..], "href=\"../$1\"");
-        }
-
-        // replace search-index.js links
-        else if Regex::new(r#"<script.*src=".*search-index\.js""#).unwrap().is_match(&line[..]) {
-            line = Regex::new(r#"src="\.\./(.*\.js)""#).unwrap()
-                .replace_all(&line[..], "src=\"$1\"");
-        }
-
-        // replace javascript library links
-        else if Regex::new(r#"<script.*src=".*(jquery|main|playpen)\.js""#).unwrap()
-            .is_match(&line[..]) {
-            line = Regex::new(r#"src="(.*\.js)""#).unwrap()
-                .replace_all(&line[..], "src=\"../$1\"");
-        }
-
-        // replace source file links
-        // we are placing target/doc/src into destinaton/crate/version/src
-        else if Regex::new(r#"href='.*?\.\./src"#).unwrap().is_match(&line[..]) {
-            line = Regex::new(r#"href='(.*?)\.\./src/[\w-]+/"#).unwrap()
-                .replace_all(&line[..], "href='$1src/");
-        }
-
-        // FIXME: I actually forgot what I was replacing here. Probably crate links
-        else if Regex::new(r#"href='.*?\.\./[\w_-]+"#).unwrap().is_match(&line[..]) {
-            line = Regex::new(r#"href='(.*?)\.\./[\w_-]+/"#).unwrap()
-                .replace_all(&line[..], "href='$1");
-        }
-
-        // replace window.rootPath
-        else if Regex::new(r#"window.rootPath = "(.*?)\.\./"#).unwrap().is_match(&line[..]) {
-            line = Regex::new(r#"window.rootPath = "(.*?)\.\./"#).unwrap()
-                .replace_all(&line[..], "window.rootPath = \"$1");
-        }
+        line = css_replace_regex.replace_all(&line[..], "href=\"../$1\"");
 
         try!(destination_file.write(line.as_bytes())
              .map_err(DocBuilderError::CopyDocumentationIoError));
