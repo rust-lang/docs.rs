@@ -4,6 +4,7 @@ extern crate cratesfyi;
 #[macro_use]
 extern crate log;
 extern crate clap;
+extern crate time;
 
 use std::env;
 use std::fs;
@@ -14,6 +15,7 @@ use cratesfyi::docbuilder::{DocBuilder, DocBuilderError, command_result};
 use cratesfyi::docbuilder::crte::Crate;
 use log::{LogLevel, LogLevelFilter, LogRecord, LogMetadata};
 use clap::{Arg, App};
+use time::now;
 
 
 // I am using really simple Logger here
@@ -27,7 +29,8 @@ impl log::Log for Logger {
 
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
+
+            println!("{} {} - {}", now().to_utc().rfc822z(), record.level(), record.args());
         }
     }
 }
