@@ -339,7 +339,7 @@ impl Crate {
             Ok(m) => (true, m),
             Err(m) => (false, m),
         };
-        info!("{}", message);
+        info!("cargo doc --no-deps --verbose\n{}", message);
 
         if status {
             Ok(())
