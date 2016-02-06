@@ -30,7 +30,7 @@ impl log::Log for Logger {
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
 
-            println!("{} {} - {}", now().to_utc().rfc822z(), record.level(), record.args());
+            println!("{} {} - {}", now().to_utc().rfc3339(), record.level(), record.args());
         }
     }
 }
