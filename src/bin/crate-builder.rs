@@ -143,7 +143,7 @@ fn main() {
     }
 
     if let Err(e) = crte.build_crate_doc(0, &docbuilder) {
-        info!("{:?}", e);
+        error!("Failed to build crate\n{:?}", e);
         exit(1);
     } else {
         info!("Crate successfully built!");
