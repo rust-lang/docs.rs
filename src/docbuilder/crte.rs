@@ -282,7 +282,7 @@ impl Crate {
 
             // self.extract_crate will extract crate into build_dir
             // Copy files to proper location
-            try!(copy_files(&crte_download_dir, &path, false));
+            try!(copy_files(&crte_download_dir, &path));
 
             // Remove download_dir
             try!(fs::remove_dir_all(&crte_download_dir)

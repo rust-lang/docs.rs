@@ -35,6 +35,8 @@ pub enum DocBuilderError {
     ExtractCrateError(String),
     BuildDocForCratePath(io::Error),
     LogFileError(io::Error),
+    RustcNotFoundError(String),
+    RustcVersionParseError,
     RemoveBuildDir(io::Error),
     RemoveCrateFile(io::Error),
     RemoveOldDoc(io::Error),
@@ -443,19 +445,24 @@ impl DocBuilder {
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
 
-        // build docs
-        try!(writeln!(log_file, "Building documentation")
+        let (rustc_version, cargo_version) =
+            try!(self.get_versions().map_err(DocBuilderError::RustcNotFoundError));
+
+        // log versions
+        try!(write!(log_file, "{}{}", rustc_version, cargo_version)
              .map_err(DocBuilderError::LogFileError));
+
+        // build docs
         let (status, message) = match self.build_doc_in_chroot(&crte, version_index) {
             Ok(m) => (true, m),
             Err(m) => (false, m),
         };
-        try!(writeln!(log_file, "{}", message)
+        try!(write!(log_file, "{}", message)
              .map_err(DocBuilderError::LogFileError));
 
         if status {
             // copy docs
-            try!(self.copy_doc(&crte, version_index));
+            try!(self.copy_doc(&crte, version_index, rustc_version));
             Ok(())
         } else {
             Err(DocBuilderError::FailedToBuildCrate)
@@ -463,7 +470,24 @@ impl DocBuilder {
     }
 
 
-    fn copy_doc(&self, crte: &crte::Crate, version_index: usize) -> Result<(), DocBuilderError> {
+    /// This function will get rustc and cargo versions
+    fn get_versions(&self) -> Result<(String, String), String> {
+
+        let rustc_version = try!(command_result(Command::new("sudo") .arg("chroot")
+                                                .arg(&self.chroot_path)
+                                                .arg("su").arg("-").arg(&self.chroot_user)
+                                                .arg("-c") .arg("rustc --version") .output()
+                                                .unwrap()));
+        let cargo_version = try!(command_result(Command::new("sudo") .arg("chroot")
+                                                .arg(&self.chroot_path)
+                                                .arg("su").arg("-").arg(&self.chroot_user)
+                                                .arg("-c") .arg("cargo --version") .output()
+                                                .unwrap()));
+        Ok((rustc_version, cargo_version))
+    }
+
+
+    fn copy_doc(&self, crte: &crte::Crate, version_index: usize, rustc_version: String) -> Result<(), DocBuilderError> {
 
         // remove old documentation just in case
         try!(self.remove_old_doc(&crte, version_index));
@@ -471,10 +495,12 @@ impl DocBuilder {
         let mut doc_path = self.crate_root_dir(crte, version_index);
         doc_path.push("target/doc");
 
+        let rustc_version = try!(parse_rustc_version(&rustc_version[..]));
+
         // copy documentation into destination/crate/version
         let mut destination = PathBuf::from(&self.destination);
         destination.push(format!("{}/{}", &crte.name, &crte.versions[version_index]));
-        try!(copy_files(&doc_path, &destination, true));
+        try!(copy_files_and_handle_html(&doc_path, &destination, true, &rustc_version[..]));
 
         Ok(())
     }
@@ -551,7 +577,7 @@ impl DocBuilder {
             try!(crte.download_crate(version_index).map_err(DocBuilderError::DownloadCrateError));
             try!(crte.extract_crate(version_index).map_err(DocBuilderError::DownloadCrateError));
 
-            try!(copy_files(&source, &destination, false));
+            try!(copy_files(&source, &destination));
 
             try!(fs::remove_dir_all(&source).map_err(DocBuilderError::CopyDocumentationIoError));
             try!(crte.remove_crate_file(version_index));
@@ -575,17 +601,36 @@ pub fn command_result(output: Output) -> Result<String, String> {
 }
 
 
+fn parse_rustc_version(version: &str) -> Result<String, DocBuilderError> {
+    let version_regex = Regex::new(r"\((\w+) (\d+)-(\d+)-(\d+)\)").unwrap();
+    let captures =
+        try!(version_regex.captures(version).ok_or(DocBuilderError::RustcVersionParseError));
+
+    Ok(format!("{}{}{}-{}", captures.at(2).unwrap(), captures.at(3).unwrap(),
+    captures.at(4).unwrap(), captures.at(1).unwrap()))
+}
 
 /// A simple function to copy files from source to destination
-pub fn copy_files(source: &PathBuf,
+fn copy_files(source: &PathBuf,
+              destination: &PathBuf) -> Result<(), DocBuilderError> {
+    copy_files_and_handle_html(source, destination, false, "")
+}
+
+
+fn copy_files_and_handle_html(source: &PathBuf,
               destination: &PathBuf,
-              handle_html: bool) -> Result<(), DocBuilderError> {
+              handle_html: bool,
+              rustc_version: &str) -> Result<(), DocBuilderError> {
 
     // Make sure destination directory is exists
     if !destination.exists() {
         try!(fs::create_dir_all(&destination)
              .map_err(DocBuilderError::LocalDependencyIoError));
     }
+
+    // Avoid copying duplicated files
+    let dup_regex = Regex::new(r"(\.lock|\.txt|\.woff|jquery\.js|playpen\.js|main\.js|\.css)$")
+        .unwrap();
 
     for file in try!(source.read_dir().map_err(DocBuilderError::LocalDependencyIoError)) {
 
@@ -598,9 +643,12 @@ pub fn copy_files(source: &PathBuf,
         if metadata.is_dir() {
             try!(fs::create_dir_all(&destination_full_path)
                  .map_err(DocBuilderError::LocalDependencyIoError));
-            try!(copy_files(&file.path(), &destination_full_path, handle_html));
+            try!(copy_files_and_handle_html(&file.path(), &destination_full_path, handle_html,
+            &rustc_version));
         } else if handle_html && file.file_name().into_string().unwrap().ends_with(".html") {
-            try!(copy_html(&file.path(), &destination_full_path));
+            try!(copy_html(&file.path(), &destination_full_path, rustc_version));
+        } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
+            continue;
         } else {
             try!(fs::copy(&file.path(), &destination_full_path)
                  .map_err(DocBuilderError::LocalDependencyIoError));
@@ -611,7 +659,9 @@ pub fn copy_files(source: &PathBuf,
 }
 
 
-fn copy_html(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderError> {
+fn copy_html(source: &PathBuf,
+             destination: &PathBuf,
+             rustc_version: &str) -> Result<(), DocBuilderError> {
 
     let source_file = try!(fs::File::open(source)
                            .map_err(DocBuilderError::CopyDocumentationIoError));
@@ -620,13 +670,15 @@ fn copy_html(source: &PathBuf, destination: &PathBuf) -> Result<(), DocBuilderEr
                                     .map_err(DocBuilderError::CopyDocumentationIoError));
 
     let reader = io::BufReader::new(source_file);
-    let css_replace_regex = Regex::new(r#"href="(.*\.css)""#).unwrap();
+
+    let replace_regex = Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc)\.(css|js)""#).unwrap();
+    let replace_str = format!("$1=\"../../$2$3-{}.$4\"", rustc_version);
 
     for line in reader.lines() {
         let mut line = try!(line.map_err(DocBuilderError::CopyDocumentationIoError));
 
         // replace css links
-        line = css_replace_regex.replace_all(&line[..], "href=\"../$1\"");
+        line = replace_regex.replace_all(&line[..], &replace_str[..]);
 
         try!(destination_file.write(line.as_bytes())
              .map_err(DocBuilderError::CopyDocumentationIoError));
