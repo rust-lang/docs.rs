@@ -304,6 +304,11 @@ impl DocBuilder {
             return Err(DocBuilderError::SkipLogFileExists);
         }
 
+        // remove old log file
+        if log_path.exists() {
+            try!(fs::remove_file(&log_path).map_err(DocBuilderError::LogFileError));
+        }
+
         fs::OpenOptions::new().write(true).create(true)
             .open(log_path).map_err(DocBuilderError::LogFileError)
     }
