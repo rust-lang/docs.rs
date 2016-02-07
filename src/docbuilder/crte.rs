@@ -46,6 +46,7 @@ impl Crate {
         }
     }
 
+    /// Creates a new crate from crates.io-index path file
     pub fn from_cargo_index_file(path: PathBuf) -> Result<Crate, CrateOpenError> {
 
         let mut file = match fs::File::open(path) {
@@ -130,6 +131,7 @@ impl Crate {
     }
 
 
+    /// Returns index of requested_version
     pub fn get_version_index(&self, requested_version: &str) -> Option<usize> {
         for i in 0..self.versions.len() {
             if self.versions[i] == requested_version {
@@ -140,6 +142,7 @@ impl Crate {
     }
 
 
+    /// Returns index of version if it starts with it
     pub fn version_starts_with(&self, version: &str) -> Option<usize> {
         // if version is "*" return latest version index which is 0
         if version == "*" {
@@ -154,11 +157,13 @@ impl Crate {
     }
 
 
+    /// Returns canonical name of crate, i.e: "rand-0.1.13"
     pub fn canonical_name(&self, version_index: usize) -> String {
         format!("{}-{}", self.name, self.versions[version_index])
     }
 
 
+    /// Extracts crate into CWD
     pub fn extract_crate(&self, version_index: usize) -> Result<String, String> {
         let crate_name = format!("{}.crate", self.canonical_name(version_index));
         command_result(Command::new("tar")
@@ -169,7 +174,7 @@ impl Crate {
     }
 
 
-    /// Downloads crate
+    /// Downloads crate into CWD
     pub fn download_crate(&self, version_index: usize) -> Result<String, String> {
         // By default crates.io is using:
         // https://crates.io/api/v1/crates/$crate/$version/download
@@ -307,6 +312,7 @@ impl Crate {
     }
 
 
+    /// Builds crate documentation
     pub fn build_crate_doc(&self,
                            version_index: usize,
                            docbuilder: &DocBuilder) -> Result<(), DocBuilderError> {
@@ -365,6 +371,7 @@ impl Crate {
     }
 
 
+    /// Removes crate file if it's exists in CWD
     pub fn remove_crate_file(&self,
                              version_index: usize) -> Result<(), DocBuilderError>{
         let path = PathBuf::from(format!("{}.crate", self.canonical_name(version_index)));
