@@ -338,6 +338,8 @@ impl DocBuilder {
 
 
     /// Checks Cargo.toml for [lib] and return name of lib.
+    // FIXME: I will use this function in future
+    #[allow(dead_code)]
     fn find_lib_name(&self, root_dir: &PathBuf) -> Result<String, DocBuilderError> {
 
         let mut cargo_toml_path = PathBuf::from(&root_dir);
@@ -379,6 +381,8 @@ impl DocBuilder {
     }
 
 
+    // FIXME: I will use this function in future
+    #[allow(dead_code)]
     fn find_doc(&self,
                 crte: &crte::Crate,
                 version_index: usize) -> Result<(PathBuf, PathBuf), DocBuilderError> {
