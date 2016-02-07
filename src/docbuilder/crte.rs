@@ -4,11 +4,12 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::Error;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::collections;
 use std::env;
 
+use cargo;
 use toml;
 use rustc_serialize::json::Json;
 use rustc_serialize::json::ParserError;
@@ -383,6 +384,27 @@ impl Crate {
         Ok(())
     }
 
+}
+
+
+
+/// Generates cargo::core::manifest::Manifest from a crate path
+pub fn path_to_manifest(root_dir: &Path) ->
+cargo::util::errors::CargoResult<(cargo::core::manifest::Manifest, Vec<PathBuf>)> {
+    let cargo_config = try!(cargo::util::config::Config::default());
+    let source_id = try!(cargo::core::source::SourceId::for_path(&root_dir));
+
+    // read Cargo.toml
+    let mut cargo_toml_path = PathBuf::from(&root_dir);
+    cargo_toml_path.push("Cargo.toml");
+
+    let mut cargo_toml_fh = try!(fs::File::open(cargo_toml_path));
+    let mut cargo_toml_content = Vec::new();
+    try!(cargo_toml_fh.read_to_end(&mut cargo_toml_content));
+
+    let layout = cargo::util::toml::project_layout(root_dir);
+
+    cargo::util::toml::to_manifest(&cargo_toml_content[..], &source_id, layout, &cargo_config)
 }
 
 
