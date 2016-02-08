@@ -32,6 +32,7 @@ pub enum CrateOpenError {
     FileNotFound,
     ParseError(ParserError),
     IoError(Error),
+    ManifestError(Box<cargo::util::errors::CargoError>),
     NotObject,
     NameNotFound,
     VersNotFound,
@@ -382,6 +383,18 @@ impl Crate {
         }
 
         Ok(())
+    }
+
+
+    /// Get manifest of a crate. This function assumes crate downloaded and exracted.
+    pub fn manifest(&self,
+                    version_index: usize)
+    -> Result<cargo::core::manifest::Manifest, CrateOpenError> {
+        let package_root = PathBuf::from(self.canonical_name(version_index));
+        let (manifest, _) = try!(path_to_manifest(package_root.as_path()).
+                                 map_err(CrateOpenError::ManifestError));
+
+        Ok(manifest)
     }
 
 }
