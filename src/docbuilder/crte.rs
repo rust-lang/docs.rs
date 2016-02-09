@@ -61,27 +61,17 @@ impl Crate {
     /// Creates a new crate from crates.io-index path file
     pub fn from_cargo_index_file(path: PathBuf) -> Result<Crate, CrateOpenError> {
 
-        let mut file = match fs::File::open(path) {
-            Ok(f) => BufReader::new(f),
-            Err(_) => return Err(CrateOpenError::FileNotFound),
-        };
-
-        let mut line = String::new();
+        let reader = try!(fs::File::open(path).map(|f| BufReader::new(f))
+                          .map_err(CrateOpenError::IoError));
 
         let mut name = String::new();
         let mut versions = Vec::new();
 
-        while try!(file.read_line(&mut line).map_err(CrateOpenError::IoError)) > 0 {
-
-            let (cname, vers) = match Crate::parse_cargo_index_line(&line) {
-                Ok((c, v)) => (c, v),
-                Err(e) => return Err(e)
-            };
-
+        for line in reader.lines() {
+            let line = try!(line.map_err(CrateOpenError::IoError));
+            let (cname, vers) = try!(Crate::parse_cargo_index_line(&line));
             name = cname;
             versions.push(vers);
-
-            line.clear();
         }
 
         versions.reverse();
