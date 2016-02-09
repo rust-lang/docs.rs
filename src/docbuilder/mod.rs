@@ -602,7 +602,7 @@ impl DocBuilder {
                        .arg(&self.chroot_path)
                        .arg("su").arg("-").arg(&self.chroot_user)
                        .arg("-c")
-                       .arg(format!("crate-builder -c {} {}",
+                       .arg(format!("cratesfyi build-doc -c {} {}",
                                     &crte.name, &crte.versions[version_index]))
                        .output()
                        .unwrap())
