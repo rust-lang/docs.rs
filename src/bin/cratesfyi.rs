@@ -261,17 +261,19 @@ fn main() {
     // build-doc
     else if let Some(matches) = matches.subcommand_matches("build-doc") {
         let mut docbuilder = DocBuilder::default();
-        let mut crates_io_index_path;
 
         // set crates.io-index path
-        if let Some(crates_io_index_path_conf) = matches.value_of("CRATES_IO_INDEX_PATH") {
-            crates_io_index_path = PathBuf::from(crates_io_index_path_conf);
-            docbuilder.crates_io_index_path(PathBuf::from(&crates_io_index_path));
-        } else {
-            crates_io_index_path = env::home_dir().unwrap();
-            crates_io_index_path.push(".crates.io-index");
-            docbuilder.crates_io_index_path(PathBuf::from(&crates_io_index_path));
-        }
+        let crates_io_index_path = {
+            if let Some(crates_io_index_path_conf) = matches.value_of("CRATES_IO_INDEX_PATH") {
+                PathBuf::from(crates_io_index_path_conf)
+            } else {
+                let mut path = env::home_dir().unwrap();
+                path.push(".crates.io-index");
+                path
+            }
+        };
+
+        docbuilder.crates_io_index_path(PathBuf::from(&crates_io_index_path));
 
 
         // update crates.io-index path
