@@ -127,10 +127,6 @@ fn main() {
                                                .long("skip-if-log-exists")
                                                .help("Skips building documentation if build \
                                                       log exists"))
-                                      .arg(Arg::with_name("SKIP_OLDEST_VERSIONS")
-                                               .long("skip-oldest-versions")
-                                               .help("Skips trying to build oldest versions \
-                                                      if build fails"))
                                       .arg(Arg::with_name("KEEP_BUILD_DIRECTORY")
                                                .short("-k")
                                                .long("keep-build-directory")
@@ -140,6 +136,11 @@ fn main() {
                                       .subcommand(SubCommand::with_name("world")
                                                       .about("Builds documentation of every \
                                                               crate")
+                                                      .arg(Arg::with_name("SKIP_OLDEST_VERSIONS")
+                                                               .long("skip-oldest-versions")
+                                                               .help("Skips trying to build \
+                                                                      oldest versions \
+                                                                      if build fails"))
                                                       .arg(Arg::with_name("BUILD_ONLY_LATEST_V\
                                                                            ERSION")
                                                                .long("build-only-latest-versio\
@@ -215,7 +216,6 @@ fn main() {
 
         dbuilder.skip_if_exists(matches.is_present("SKIP_IF_EXISTS"));
         dbuilder.skip_if_log_exists(matches.is_present("SKIP_IF_LOG_EXISTS"));
-        dbuilder.skip_oldest_versions(matches.is_present("SKIP_OLDEST_VERSIONS"));
         dbuilder.keep_build_directory(matches.is_present("KEEP_BUILD_DIRECTORY"));
 
         // check paths
@@ -227,6 +227,7 @@ fn main() {
         // build world
         if let Some(matches) = matches.subcommand_matches("world") {
             dbuilder.build_only_latest_version(matches.is_present("BUILD_ONLY_LATEST_VERSION"));
+            dbuilder.skip_oldest_versions(matches.is_present("SKIP_OLDEST_VERSIONS"));
             if let Err(e) = dbuilder.build_doc_for_every_crate() {
                 println!("Failed to build world: {:#?}", e);
             }
