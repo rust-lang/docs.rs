@@ -400,41 +400,12 @@ impl Crate {
     }
 
 
+    /// Gets CrateInfo. This function assumes crate downloaded and exracted.
     pub fn info(&self, version_index: usize) -> Result<CrateInfo, CrateOpenError> {
-        let manifest = try!(self.manifest(version_index));
-        let rustdoc = try!(self.read_rust_doc(manifest.targets()[0].src_path()));
-
-        Ok(CrateInfo {
-            name: manifest.name().to_string(),
-            rustdoc: rustdoc,
-            readme: None,
-            metadata: manifest.metadata().clone()
-        })
-    }
-
-
-    /// Gets rustdoc from file
-    fn read_rust_doc(&self, file_path: &Path) -> Result<Option<String>, CrateOpenError> {
-        let reader = try!(fs::File::open(file_path).map(|f| BufReader::new(f))
-                          .map_err(CrateOpenError::IoError));
-        let mut rustdoc = String::new();
-
-        for line in reader.lines() {
-            let line = try!(line.map_err(CrateOpenError::IoError));
-            if line.starts_with("//!") {
-                if line.len() > 3 {
-                    rustdoc.push_str(line.split_at(4).1);
-                }
-                rustdoc.push('\n');
-            }
-        }
-
-        if rustdoc.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(rustdoc))
-        }
-
+        let cwd = env::current_dir().unwrap();
+        let mut package_root = PathBuf::from(&cwd);
+        package_root.push(self.canonical_name(version_index));
+        info_from_path(package_root.as_path())
     }
 
 }
@@ -461,13 +432,68 @@ cargo::util::errors::CargoResult<(cargo::core::manifest::Manifest, Vec<PathBuf>)
 }
 
 
+
+/// Gets crate info from path
+pub fn info_from_path(path: &Path) -> Result<CrateInfo, CrateOpenError> {
+    let (manifest, _) = try!(path_to_manifest(path).
+                             map_err(CrateOpenError::ManifestError));
+    let rustdoc = try!(read_rust_doc(manifest.targets()[0].src_path()));
+
+    let readme = {
+        if manifest.metadata().readme.is_some() {
+            let mut readme_path = PathBuf::from(path);
+            readme_path.push(manifest.metadata().readme.clone().unwrap());
+
+            let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f))
+                                  .map_err(CrateOpenError::IoError));
+            let mut readme = String::new();
+            reader.read_to_string(&mut readme).unwrap();
+            Some(readme)
+        } else {
+            None
+        }
+    };
+
+    Ok(CrateInfo {
+        name: manifest.name().to_string(),
+        rustdoc: rustdoc,
+        readme: readme,
+        metadata: manifest.metadata().clone()
+    })
+}
+
+
+/// Gets rustdoc from file
+fn read_rust_doc(file_path: &Path) -> Result<Option<String>, CrateOpenError> {
+    let reader = try!(fs::File::open(file_path).map(|f| BufReader::new(f))
+                      .map_err(CrateOpenError::IoError));
+    let mut rustdoc = String::new();
+
+    for line in reader.lines() {
+        let line = try!(line.map_err(CrateOpenError::IoError));
+        if line.starts_with("//!") {
+            if line.len() > 3 {
+                rustdoc.push_str(line.split_at(4).1);
+            }
+            rustdoc.push('\n');
+        }
+    }
+
+    if rustdoc.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(rustdoc))
+    }
+
+}
+
+
 #[cfg(test)]
 mod test {
     extern crate env_logger;
     use super::*;
     use std::env;
     use std::path::PathBuf;
-    use std::fs;
 
     #[test]
     fn test_get_vesion_index() {
@@ -516,33 +542,17 @@ mod test {
 
 
     #[test]
-    fn test_download_crate() {
+    fn test_download_extract_remove_crate() {
         let crte = Crate::new("rand".to_string(),
                               vec!["0.3.13".to_string()]);
-        assert!(crte.download_crate(0).is_ok());
-        // remove downloaded file
-        fs::remove_file(format!("{}.crate", crte.canonical_name(0))).unwrap();
-    }
-
-
-    #[test]
-    fn test_extract_crate() {
-        let crte = Crate::new("rand".to_string(),
-                              vec!["0.3.12".to_string()]);
         assert!(crte.download_crate(0).is_ok());
         assert!(crte.extract_crate(0).is_ok());
 
         let path = PathBuf::from(crte.canonical_name(0));
         assert!(path.exists());
-        fs::remove_dir_all(crte.canonical_name(0)).unwrap();
-    }
 
-    #[test]
-    fn test_remove_crate_file() {
-        let crte = Crate::new("rand".to_string(),
-                              vec!["0.3.11".to_string()]);
-        assert!(crte.download_crate(0).is_ok());
         assert!(crte.remove_crate_file(0).is_ok());
+        assert!(crte.remove_build_dir_for_crate(0).is_ok());
     }
 
 
@@ -558,18 +568,19 @@ mod test {
         let mut package_root = PathBuf::from(&cwd);
         package_root.push(crte.canonical_name(0));
 
-        let package_root = PathBuf::from("/tmp/DENEME");
-
         let res = path_to_manifest(package_root.as_path());
 
         info!("MANIFEST:\n{:#?}", res);
         assert!(res.is_ok());
+
+        // remove downloaded stuff
+        assert!(crte.remove_crate_file(0).is_ok());
+        assert!(crte.remove_build_dir_for_crate(0).is_ok());
     }
 
 
 
     #[test]
-    #[ignore]
     fn test_crate_info() {
         let _ = env_logger::init();
         let crte = Crate::new("rand".to_string(), vec!["0.3.9".to_string()]);
@@ -577,7 +588,22 @@ mod test {
         crte.download_crate(0).unwrap();
         crte.extract_crate(0).unwrap();
         let info = crte.info(0);
+
+        info!("CRATE INFO: {:#?}", info);
+
         assert!(info.is_ok());
+
+        let info = info.unwrap();
+
+        assert!(info.rustdoc.is_some());
+        assert!(!info.rustdoc.unwrap().is_empty());
+
+        assert!(info.readme.is_some());
+        assert!(!info.readme.unwrap().is_empty());
+
+        // remove downloaded stuff
+        assert!(crte.remove_crate_file(0).is_ok());
+        assert!(crte.remove_build_dir_for_crate(0).is_ok());
     }
 
 }
