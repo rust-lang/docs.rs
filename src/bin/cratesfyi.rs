@@ -127,6 +127,10 @@ fn main() {
                                                .long("skip-if-log-exists")
                                                .help("Skips building documentation if build \
                                                       log exists"))
+                                      .arg(Arg::with_name("SKIP_OLDEST_VERSIONS")
+                                               .long("skip-oldest-versions")
+                                               .help("Skips trying to build oldest versions \
+                                                      if build fails"))
                                       .arg(Arg::with_name("KEEP_BUILD_DIRECTORY")
                                                .short("-k")
                                                .long("keep-build-directory")
@@ -211,6 +215,7 @@ fn main() {
 
         dbuilder.skip_if_exists(matches.is_present("SKIP_IF_EXISTS"));
         dbuilder.skip_if_log_exists(matches.is_present("SKIP_IF_LOG_EXISTS"));
+        dbuilder.skip_oldest_versions(matches.is_present("SKIP_OLDEST_VERSIONS"));
         dbuilder.keep_build_directory(matches.is_present("KEEP_BUILD_DIRECTORY"));
 
         // check paths

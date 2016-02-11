@@ -102,6 +102,7 @@ pub struct DocBuilder {
     sources_path: PathBuf,
     skip_if_exists: bool,
     skip_if_log_exists: bool,
+    skip_oldest_versions: bool,
     build_only_latest_version: bool,
     debug: bool,
 }
@@ -183,6 +184,7 @@ impl Default for DocBuilder {
             keep_build_directory: false,
             skip_if_exists: false,
             skip_if_log_exists: false,
+            skip_oldest_versions: false,
             build_only_latest_version: false,
             debug: false,
         }
@@ -281,6 +283,10 @@ impl DocBuilder {
         self.skip_if_log_exists = b;
     }
 
+    pub fn skip_oldest_versions(&mut self, b: bool) {
+        self.skip_oldest_versions = b;
+    }
+
     pub fn build_only_latest_version(&mut self, b: bool) {
         self.build_only_latest_version = b;
     }
@@ -352,7 +358,13 @@ impl DocBuilder {
         for i in 0..crte.versions.len() {
             if let Err(e) = self.build_doc_for_crate_version(crte, i) {
                 println!("Failed to build docs for crate {}-{}: {:#?}",
-                         &crte.name, &crte.versions[i], e)
+                         &crte.name, &crte.versions[i], e);
+
+                // Skip oldest versions if its set
+                if self.skip_oldest_versions {
+                    println!("Skipping building oldest versions of {}", crte.name);
+                    break;
+                }
             }
 
             // if self.build_only_latest_version is true
