@@ -88,6 +88,7 @@ use std::fs;
 use std::process::{Command, Output};
 
 use toml;
+use postgres;
 use regex::Regex;
 
 
@@ -683,6 +684,42 @@ impl DocBuilder {
         }
 
         Ok(())
+    }
+
+
+    /// Adds all crates into database. This functions is designed to run only once
+    pub fn add_all_crates_into_database(&self, conn: &postgres::Connection) {
+        let _ = self.add_all_crates_into_database_from_path(&conn, &self.crates_io_index_path);
+    }
+
+
+    // FIXME: This is so similar to build_doc_for_crate_path
+    //        I can use a function like crates_from_path and a closure
+    fn add_all_crates_into_database_from_path(&self,
+                                              conn: &postgres::Connection,
+                                              path: &PathBuf) -> Result<(), DocBuilderError> {
+
+        for dir in try!(path.read_dir().map_err(DocBuilderError::BuildDocForCratePath)) {
+            let path = dir.unwrap().path();
+
+            // skip files under .git and config.json
+            if path.to_str().unwrap().contains(".git") ||
+                path.file_name().unwrap() == "config.json" {
+                    continue;
+                }
+
+            if path.is_dir() {
+                try!(self.add_all_crates_into_database_from_path(&conn, &path));
+                continue;
+            }
+
+            if let Ok(crte) = crte::Crate::from_cargo_index_file(path) {
+                //self.build_doc_for_crate(&crte);
+                crte.add_crate_into_database(0, &conn, &self).unwrap();
+            }
+        }
+        Ok(())
+
     }
 
 }

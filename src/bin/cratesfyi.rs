@@ -13,6 +13,7 @@ use std::path::PathBuf;
 
 use cratesfyi::docbuilder::{DocBuilder, DocBuilderError, command_result};
 use cratesfyi::docbuilder::crte::Crate;
+use cratesfyi::db;
 use clap::{Arg, App, SubCommand};
 use log::{LogLevel, LogLevelFilter, LogRecord, LogMetadata};
 use time::now;
@@ -177,6 +178,11 @@ fn main() {
                                                .index(2)
                                                .required(true)
                                                .help("Version of crate")))
+                      .subcommand(SubCommand::with_name("database")
+                                      .about("Database operations")
+                                      .subcommand(SubCommand::with_name("init")
+                                                      .about("Initialize database. Currently \
+                                                             only creates tables in database.")))
                       .get_matches();
 
     // DocBuilder
@@ -300,6 +306,15 @@ fn main() {
             exit(1);
         } else {
             info!("Crate successfully built!");
+        }
+    }
+
+
+    // database operations
+    if let Some(matches) = matches.subcommand_matches("database") {
+        if let Some(_) = matches.subcommand_matches("init") {
+            let conn = db::connect_db().unwrap();
+            db::create_tables(&conn);
         }
     }
 

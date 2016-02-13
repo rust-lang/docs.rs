@@ -13,6 +13,7 @@ use cargo;
 use toml;
 use rustc_serialize::json::Json;
 use rustc_serialize::json::ParserError;
+use postgres;
 
 use super::{DocBuilder, DocBuilderError, copy_files, command_result};
 
@@ -36,12 +37,17 @@ pub enum CrateOpenError {
     NotObject,
     NameNotFound,
     VersNotFound,
+    DbError(postgres::error::Error),
+    CommandError(String),
+    DocBuilderError(DocBuilderError),
 }
 
 
 #[derive(Debug)]
 pub struct CrateInfo {
     pub name: String,
+    pub version: String,
+    pub dependencies: Vec<(String, String)>,
     pub rustdoc: Option<String>,
     pub readme: Option<String>,
     pub metadata: cargo::core::manifest::ManifestMetadata,
@@ -408,6 +414,47 @@ impl Crate {
         info_from_path(package_root.as_path())
     }
 
+
+    pub fn add_crate_into_database(&self,
+                                   version_index: usize,
+                                   conn: &postgres::Connection,
+                                   docbuilder: &DocBuilder) -> Result<(), CrateOpenError> {
+
+        // first get crate version id
+        let crate_id: i32 = {
+            let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
+                                           &[&self.name]).map_err(CrateOpenError::DbError));
+            // if crate not exists in database insert it
+            if rows.len() == 0 {
+                rows = try!(conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
+                                       &[&self.name]).map_err(CrateOpenError::DbError));
+            }
+            rows.get(0).get(0)
+        };
+
+        let crate_info = {
+            // check source directory
+            let mut path = PathBuf::from(&docbuilder.sources_path);
+            path.push(format!("{}/{}", &self.name, &self.versions[version_index]));
+            if !path.exists() {
+                info_from_path(&path)
+            } else {
+                try!(self.download_crate(version_index).map_err(CrateOpenError::CommandError));
+                try!(self.extract_crate(version_index).map_err(CrateOpenError::CommandError));
+                let mut path = PathBuf::from(env::current_dir().unwrap());
+                path.push(self.canonical_name(version_index));
+                let info = info_from_path(&path);
+                try!(self.remove_crate_file(version_index)
+                     .map_err(CrateOpenError::DocBuilderError));
+                try!(self.remove_build_dir_for_crate(version_index)
+                     .map_err(CrateOpenError::DocBuilderError));
+                info
+            }
+        };
+
+        Ok(())
+    }
+
 }
 
 
@@ -454,8 +501,18 @@ pub fn info_from_path(path: &Path) -> Result<CrateInfo, CrateOpenError> {
         }
     };
 
+    let mut dependencies: Vec<(String, String)> = Vec::new();
+
+    for dependency in manifest.dependencies() {
+        let name = dependency.name().to_string();
+        let version = format!("{}", dependency.version_req());
+        dependencies.push((name, version));
+    }
+
     Ok(CrateInfo {
         name: manifest.name().to_string(),
+        version: format!("{}", manifest.summary().version()),
+        dependencies: dependencies,
         rustdoc: rustdoc,
         readme: readme,
         metadata: manifest.metadata().clone()
@@ -606,4 +663,16 @@ mod test {
         assert!(crte.remove_build_dir_for_crate(0).is_ok());
     }
 
+
+    #[test]
+    #[ignore]
+    fn test_add_crate_into_database() {
+        use ::db;
+        use docbuilder::DocBuilder;
+        let conn = db::connect_db().unwrap();
+        let docbuilder = DocBuilder::default();
+        let crte = Crate::new("rand".to_string(), vec!["0.3.8".to_string()]);
+
+        assert!(crte.add_crate_into_database(0, &conn, &docbuilder).is_ok());
+    }
 }
