@@ -43,7 +43,8 @@ pub fn create_tables(conn: &Connection) {
             readme TEXT, \
             authors JSON, \
             keywords JSON, \
-            downloads INT DEFAULT 0 \
+            downloads INT DEFAULT 0, \
+            UNIQUE (crate_id, version) \
         )",
         "CREATE TABLE authors ( \
             id SERIAL, \
