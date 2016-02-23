@@ -15,7 +15,7 @@ pub fn connect_db() -> Result<Connection, ConnectError> {
 
 /// Creates database tables
 pub fn create_tables(conn: &Connection) {
-    let tables = [
+    let queries = [
         "CREATE TABLE crates ( \
             id SERIAL, \
             name text UNIQUE NOT NULL, \
@@ -43,6 +43,7 @@ pub fn create_tables(conn: &Connection) {
             readme TEXT, \
             authors JSON, \
             keywords JSON, \
+            have_examples BOOL DEFAULT FALSE, \
             downloads INT DEFAULT 0, \
             UNIQUE (crate_id, version) \
         )",
@@ -50,14 +51,12 @@ pub fn create_tables(conn: &Connection) {
             id SERIAL, \
             name TEXT NOT NULL, \
             email TEXT, \
-            slug TEXT UNIQUE NOT NULL, \
-            github_url TEXT, \
-            github_profile_picture_url TEXT \
+            slug TEXT UNIQUE NOT NULL \
         )",
         "CREATE TABLE author_rels ( \
-            cid INT, \
+            rid INT, \
             aid INT, \
-            UNIQUE(cid, aid) \
+            UNIQUE(rid, aid) \
         )",
         "CREATE TABLE keywords ( \
             id SERIAL, \
@@ -65,14 +64,27 @@ pub fn create_tables(conn: &Connection) {
             slug TEXT NOT NULL UNIQUE \
         )",
         "CREATE TABLE keyword_rels ( \
-            cid INT, \
+            rid INT, \
             kid INT, \
-            UNIQUE(cid, kid) \
+            UNIQUE(rid, kid) \
+        )",
+        "CREATE TABLE owners ( \
+            id SERIAL, \
+            login TEXT NOT NULL UNIQUE, \
+            slug TEXT NOT NULL UNIQUE, \
+            avatar TEXT, \
+            name TEXT, \
+            email TEXT \
+        )",
+        "CREATE TABLE owner_rels ( \
+            cid INT, \
+            oid INT, \
+            UNIQUE(cid, oid) \
         )"
     ];
 
-    for table in tables.into_iter() {
-        if let Err(e) = conn.execute(table, &[]) {
+    for query in queries.into_iter() {
+        if let Err(e) = conn.execute(query, &[]) {
             println!("{}", e);
         }
     }
