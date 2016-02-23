@@ -11,9 +11,12 @@ use std::env;
 
 use cargo;
 use toml;
-use rustc_serialize::json::Json;
-use rustc_serialize::json::ParserError;
+use rustc_serialize::json::{encode, Json, ParserError, EncoderError};
 use postgres;
+use hyper::client::Client;
+use time;
+use regex::Regex;
+use slug::slugify;
 
 use super::{DocBuilder, DocBuilderError, copy_files, command_result};
 
@@ -31,6 +34,7 @@ pub struct Crate {
 #[derive(Debug)]
 pub enum CrateOpenError {
     FileNotFound,
+    EncoderError(EncoderError),
     ParseError(ParserError),
     IoError(Error),
     ManifestError(Box<cargo::util::errors::CargoError>),
@@ -46,6 +50,7 @@ pub enum CrateOpenError {
 #[derive(Debug)]
 pub struct CrateInfo {
     pub name: String,
+    pub target_name: String,
     pub version: String,
     pub dependencies: Vec<(String, String)>,
     pub rustdoc: Option<String>,
@@ -67,14 +72,13 @@ impl Crate {
     /// Creates a new crate from crates.io-index path file
     pub fn from_cargo_index_file(path: PathBuf) -> Result<Crate, CrateOpenError> {
 
-        let reader = try!(fs::File::open(path).map(|f| BufReader::new(f))
-                          .map_err(CrateOpenError::IoError));
+        let reader = try!(fs::File::open(path).map(|f| BufReader::new(f)));
 
         let mut name = String::new();
         let mut versions = Vec::new();
 
         for line in reader.lines() {
-            let line = try!(line.map_err(CrateOpenError::IoError));
+            let line = try!(line);
             let (cname, vers) = try!(Crate::parse_cargo_index_line(&line));
             name = cname;
             versions.push(vers);
@@ -97,9 +101,9 @@ impl Crate {
             return Err(CrateOpenError::FileNotFound);
         }
 
-        for file in try!(path.read_dir().map_err(CrateOpenError::IoError)) {
+        for file in try!(path.read_dir()) {
 
-            let file = try!(file.map_err(CrateOpenError::IoError));
+            let file = try!(file);
 
             let path = file.path();
 
@@ -415,42 +419,322 @@ impl Crate {
     }
 
 
+    /// Adds crate into database
     pub fn add_crate_into_database(&self,
                                    version_index: usize,
                                    conn: &postgres::Connection,
                                    docbuilder: &DocBuilder) -> Result<(), CrateOpenError> {
 
-        // first get crate version id
         let crate_id: i32 = {
             let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
-                                           &[&self.name]).map_err(CrateOpenError::DbError));
-            // if crate not exists in database insert it
+                                           &[&self.name]));
+            // insert crate into database if it is not exists
             if rows.len() == 0 {
                 rows = try!(conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
-                                       &[&self.name]).map_err(CrateOpenError::DbError));
+                                       &[&self.name]));
             }
             rows.get(0).get(0)
         };
 
-        let crate_info = {
+        let (crate_info, have_examples) = {
+
+            fn have_examples(path: &PathBuf) -> bool {
+                let path = PathBuf::from(path).join("examples");
+                path.exists() && path.is_dir()
+            }
+
             // check source directory
             let mut path = PathBuf::from(&docbuilder.sources_path);
-            path.push(format!("{}/{}", &self.name, &self.versions[version_index]));
-            if !path.exists() {
-                info_from_path(&path)
+            path.push(&self.name);
+            path.push(&self.versions[version_index]);
+            if path.exists() {
+                (try!(info_from_path(&path)), have_examples(&path))
             } else {
                 try!(self.download_crate(version_index).map_err(CrateOpenError::CommandError));
                 try!(self.extract_crate(version_index).map_err(CrateOpenError::CommandError));
                 let mut path = PathBuf::from(env::current_dir().unwrap());
                 path.push(self.canonical_name(version_index));
-                let info = info_from_path(&path);
+                let info = try!(info_from_path(&path));
                 try!(self.remove_crate_file(version_index)
                      .map_err(CrateOpenError::DocBuilderError));
                 try!(self.remove_build_dir_for_crate(version_index)
                      .map_err(CrateOpenError::DocBuilderError));
-                info
+                (info, have_examples(&path))
             }
         };
+
+
+        let dependencies = try!(encode(&crate_info.dependencies)
+                                .map_err(CrateOpenError::EncoderError));
+
+        let (release_time, yanked, downloads) = {
+            let url = format!("https://crates.io/api/v1/crates/{}/versions", self.name);
+            // FIXME: There is probably better way to do this
+            //        and so many unwraps...
+            let client = Client::new();
+            let mut res = client.get(&url[..]).send().unwrap();
+            let mut body = String::new();
+            res.read_to_string(&mut body).unwrap();
+            let json = Json::from_str(&body[..]).unwrap();
+            let versions = try!(json.as_object()
+                .and_then(|o| o.get("versions"))
+                .and_then(|v| v.as_array())
+                .ok_or(CrateOpenError::NotObject));
+
+            let (mut release_time, mut yanked, mut downloads) = (None, None, None);
+
+            for version in versions {
+                let version = try!(version.as_object().ok_or(CrateOpenError::NotObject));
+                let version_num = try!(version.get("num").and_then(|v| v.as_string())
+                    .ok_or(CrateOpenError::NotObject));
+
+                if version_num == self.versions[version_index] {
+                    let release_time_raw = try!(version.get("created_at")
+                                                .and_then(|c| c.as_string())
+                                                .ok_or(CrateOpenError::NotObject));
+                    release_time = Some(time::strptime(release_time_raw,
+                                                       "%Y-%m-%dT%H:%M:%S").unwrap()
+                                        .to_timespec());
+
+                    yanked = Some(try!(version.get("yanked").and_then(|c| c.as_boolean())
+                        .ok_or(CrateOpenError::NotObject)));
+
+                    downloads = Some(try!(version.get("downloads").and_then(|c| c.as_i64())
+                        .ok_or(CrateOpenError::NotObject)) as i32);
+
+                    break;
+                }
+            }
+
+            (release_time, yanked, downloads)
+        };
+
+
+        let (build_status, rustdoc_status) = {
+            let mut build_log_path = PathBuf::from(&docbuilder.logs_path);
+            build_log_path.push(format!("{}/{}-{}.log",
+                                        self.name,
+                                        self.name,
+                                        self.versions[version_index]));
+
+            let mut crate_doc_path = PathBuf::from(&docbuilder.destination);
+            crate_doc_path.push(&self.name);
+            crate_doc_path.push(&self.versions[version_index]);
+
+            // Build is _most likely successfully_ if build log
+            // and crate doc directory exists
+            let build_status = if build_log_path.exists() && crate_doc_path.exists() {
+                1
+            }
+            // Build is most likely failed if crate build log is exists
+            // but documentation directory isn't
+            else if build_log_path.exists() && !crate_doc_path.exists() {
+                -1
+            }
+            // cratesfyi not tried to build this crate if build log is not exists
+            else {
+                0
+            };
+
+
+            // check existence of first target in manifest
+            // in destination directory to find out rustdoc status
+            crate_doc_path.push(crate_info.target_name);
+            let rustdoc_status = if crate_doc_path.exists() { 1 } else { 0 };
+
+            (build_status, rustdoc_status)
+        };
+
+
+        // TODO: Add test status
+        let test_status = 0;
+
+        let release_id: i32 = {
+            let rows = try!(conn.query("SELECT id FROM releases \
+                                       WHERE crate_id = $1 AND version = $2",
+                                       &[&crate_id, &crate_info.version]));
+
+            // Add release into database if it's not exists
+            if rows.len() == 0 {
+                let rows = try!(conn.query("INSERT INTO releases ( \
+                                               crate_id,         version,        release_time, \
+                                               dependencies,     yanked,         build_status, \
+                                               rustdoc_status,   test_status,    license, \
+                                               repository_url,   homepage_url,   description, \
+                                               description_long, readme,         authors, \
+                                               keywords,         have_examples,  downloads \
+                                           ) \
+                                           VALUES ( \
+                                               $1,  $2,  $3,  $4,  $5,  $6,  $7, $8, $9, $10, \
+                                               $11, $12, $13, $14, $15, $16, $17, $18 \
+                                           ) RETURNING id",
+                                           &[
+                                               &crate_id,
+                                               &crate_info.version,
+                                               &release_time,
+                                               &Json::from_str(&dependencies[..]).unwrap(),
+                                               &yanked,
+                                               &build_status,
+                                               &rustdoc_status,
+                                               &test_status,
+                                               &crate_info.metadata.license,
+                                               &crate_info.metadata.repository,
+                                               &crate_info.metadata.homepage,
+                                               &crate_info.metadata.description,
+                                               &crate_info.rustdoc,
+                                               &crate_info.readme,
+                                               &Json::from_str(
+                                                   &encode(&crate_info.metadata.authors).unwrap())
+                                                   .unwrap(),
+                                               &Json::from_str(
+                                                   &encode(&crate_info.metadata.keywords).unwrap())
+                                                   .unwrap(),
+                                               &have_examples,
+                                               &downloads,
+                                           ]));
+                // return id
+                rows.get(0).get(0)
+            } else {
+                try!(conn.query("UPDATE releases \
+                                 SET release_time = $3, \
+                                     dependencies = $4,      yanked = $5, \
+                                     build_status = $6,      rustdoc_status = $7, \
+                                     test_status = $8,       license = $9, \
+                                     repository_url = $10,   homepage_url = $11, \
+                                     description = $12,      description_long = $13, \
+                                     readme = $14,           authors = $15, \
+                                     keywords = $16,         have_examples = $17, \
+                                     downloads = $18 \
+                                 WHERE crate_id = $1 AND version = $2",
+                                 &[
+                                     &crate_id,
+                                     &crate_info.version,
+                                     &release_time,
+                                     &Json::from_str(&dependencies[..]).unwrap(),
+                                     &yanked,
+                                     &build_status,
+                                     &rustdoc_status,
+                                     &test_status,
+                                     &crate_info.metadata.license,
+                                     &crate_info.metadata.repository,
+                                     &crate_info.metadata.homepage,
+                                     &crate_info.metadata.description,
+                                     &crate_info.rustdoc,
+                                     &crate_info.readme,
+                                     &Json::from_str(
+                                         &encode(&crate_info.metadata.authors).unwrap())
+                                         .unwrap(),
+                                     &Json::from_str(
+                                         &encode(&crate_info.metadata.keywords).unwrap())
+                                         .unwrap(),
+                                     &have_examples,
+                                     &downloads,
+                                 ]));
+                rows.get(0).get(0)
+            }
+        };
+
+
+
+        // Add keywords into database
+        for keyword in crate_info.metadata.keywords {
+            let slug = slugify(&keyword);
+            let keyword_id: i32 = {
+                let rows = try!(conn.query("SELECT id FROM keywords WHERE slug = $1",
+                                           &[&slug]));
+                if rows.len() > 0 {
+                    rows.get(0).get(0)
+                } else {
+                    try!(conn.query("INSERT INTO keywords (name, slug) \
+                                    VALUES ($1, $2) RETURNING id",
+                                    &[&keyword, &slug])).get(0).get(0)
+                }
+            };
+            // add releationship
+            let _ = conn.query("INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
+                               &[&release_id, &keyword_id]);
+        }
+
+        // Add authors into database
+        let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
+        for author in crate_info.metadata.authors {
+            if let Some(author_captures) = author_capture_re.captures(&author[..]) {
+                let author = author_captures.at(1).unwrap_or("").trim();
+                let email = author_captures.at(2).unwrap_or("").trim();
+                let slug = slugify(&author);
+
+                let author_id: i32 = {
+                    let rows = try!(conn.query("SELECT id FROM authors WHERE slug = $1",
+                                               &[&slug]));
+                    if rows.len() > 0 {
+                        rows.get(0).get(0)
+                    } else {
+                        try!(conn.query("INSERT INTO authors (name, email, slug) \
+                                        VALUES ($1, $2, $3) RETURNING id",
+                                        &[&author, &email, &slug])).get(0).get(0)
+                    }
+                };
+
+                // add relationship
+                let _ = conn.query("INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
+                                   &[&release_id, &author_id]);
+            }
+        }
+
+
+        // Add owners into database
+        // owners available in: https://crates.io/api/v1/crates/rand/owners
+        {
+            let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", self.name);
+            let client = Client::new();
+            let mut res = client.get(&owners_url[..]).send().unwrap();
+            // FIXME: There is probably better way to do this
+            //        and so many unwraps...
+            let mut body = String::new();
+            res.read_to_string(&mut body).unwrap();
+            let json = try!(Json::from_str(&body[..]).map_err(CrateOpenError::ParseError));
+
+            if let Some(owners) = json.as_object().and_then(|j| j.get("users"))
+                                                  .and_then(|j| j.as_array()) {
+                for owner in owners {
+                    let avatar = owner.as_object().and_then(|o| o.get("avatar"))
+                                      .and_then(|o| o.as_string()).unwrap_or("");
+                    let email = owner.as_object().and_then(|o| o.get("email"))
+                                     .and_then(|o| o.as_string()).unwrap_or("");
+                    let login = owner.as_object().and_then(|o| o.get("login"))
+                                     .and_then(|o| o.as_string()).unwrap_or("");
+                    let name = owner.as_object().and_then(|o| o.get("name"))
+                                    .and_then(|o| o.as_string()).unwrap_or("");
+                    let slug = slugify(&name);
+
+                    if login.is_empty() {
+                        continue;
+                    }
+
+                    let owner_id: i32 = {
+                        let rows = try!(conn.query("SELECT id FROM owners WHERE login = $1",
+                                                   &[&login]));
+                        if rows.len() > 0 {
+                            rows.get(0).get(0)
+                        } else {
+                            try!(conn.query("INSERT INTO owners (login, slug, avatar, name, email) \
+                                            VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                                            &[&login, &slug, &avatar, &name, &email]))
+                                .get(0).get(0)
+                        }
+                    };
+
+                    // add relationship
+                    let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
+                                       &[&crate_id, &owner_id]);
+                }
+
+            }
+        }
+
+
+        // TODO:
+        // * Update crate row (with what?)
 
         Ok(())
     }
@@ -482,17 +766,24 @@ cargo::util::errors::CargoResult<(cargo::core::manifest::Manifest, Vec<PathBuf>)
 
 /// Gets crate info from path
 pub fn info_from_path(path: &Path) -> Result<CrateInfo, CrateOpenError> {
+    debug!("Getting info from path: {:?}", path);
     let (manifest, _) = try!(path_to_manifest(path).
                              map_err(CrateOpenError::ManifestError));
-    let rustdoc = try!(read_rust_doc(manifest.targets()[0].src_path()));
+
+    let rustdoc = if manifest.targets()[0].src_path().is_absolute() {
+        try!(read_rust_doc(manifest.targets()[0].src_path()))
+    } else {
+        let mut path = PathBuf::from(&path);
+        path.push(manifest.targets()[0].src_path());
+        try!(read_rust_doc(path.as_path()))
+    };
 
     let readme = {
         if manifest.metadata().readme.is_some() {
             let mut readme_path = PathBuf::from(path);
             readme_path.push(manifest.metadata().readme.clone().unwrap());
 
-            let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f))
-                                  .map_err(CrateOpenError::IoError));
+            let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
             let mut readme = String::new();
             reader.read_to_string(&mut readme).unwrap();
             Some(readme)
@@ -511,6 +802,7 @@ pub fn info_from_path(path: &Path) -> Result<CrateInfo, CrateOpenError> {
 
     Ok(CrateInfo {
         name: manifest.name().to_string(),
+        target_name: manifest.targets()[0].name().to_string(),
         version: format!("{}", manifest.summary().version()),
         dependencies: dependencies,
         rustdoc: rustdoc,
@@ -522,12 +814,12 @@ pub fn info_from_path(path: &Path) -> Result<CrateInfo, CrateOpenError> {
 
 /// Gets rustdoc from file
 fn read_rust_doc(file_path: &Path) -> Result<Option<String>, CrateOpenError> {
-    let reader = try!(fs::File::open(file_path).map(|f| BufReader::new(f))
-                      .map_err(CrateOpenError::IoError));
+    debug!("Reading rustdoc from: {:?}", file_path);
+    let reader = try!(fs::File::open(file_path).map(|f| BufReader::new(f)));
     let mut rustdoc = String::new();
 
     for line in reader.lines() {
-        let line = try!(line.map_err(CrateOpenError::IoError));
+        let line = try!(line);
         if line.starts_with("//!") {
             if line.len() > 3 {
                 rustdoc.push_str(line.split_at(4).1);
@@ -543,6 +835,21 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>, CrateOpenError> {
     }
 
 }
+
+
+
+impl From<postgres::error::Error> for CrateOpenError {
+    fn from(err: postgres::error::Error) -> CrateOpenError {
+        CrateOpenError::DbError(err)
+    }
+}
+
+impl From<Error> for CrateOpenError {
+    fn from(err: Error) -> CrateOpenError {
+        CrateOpenError::IoError(err)
+    }
+}
+
 
 
 #[cfg(test)]
@@ -616,7 +923,7 @@ mod test {
     #[test]
     fn test_path_to_manifest() {
         let _ = env_logger::init();
-        let crte = Crate::new("rustfmt".to_string(), vec!["0.2.1".to_string()]);
+        let crte = Crate::new("calculator".to_string(), vec!["0.0.1".to_string()]);
 
         assert!(crte.download_crate(0).is_ok());
         assert!(crte.extract_crate(0).is_ok());
@@ -669,10 +976,14 @@ mod test {
     fn test_add_crate_into_database() {
         use ::db;
         use docbuilder::DocBuilder;
+        let _ = env_logger::init();
         let conn = db::connect_db().unwrap();
         let docbuilder = DocBuilder::default();
         let crte = Crate::new("rand".to_string(), vec!["0.3.8".to_string()]);
+        let res = crte.add_crate_into_database(0, &conn, &docbuilder);
 
-        assert!(crte.add_crate_into_database(0, &conn, &docbuilder).is_ok());
+        info!("Result: {:?}", res);
+
+        assert!(res.is_ok());
     }
 }
