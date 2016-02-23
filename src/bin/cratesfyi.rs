@@ -88,7 +88,7 @@ fn main() {
     }).unwrap();
 
     let matches = App::new("cratesfyi")
-                      .version(env!("CARGO_PKG_VERSION"))
+                      .version(cratesfyi::BUILD_VERSION)
                       .about("Crates for your info!")
                       .subcommand(SubCommand::with_name("build")
                                       .about("Builds documentation in a chroot environment")
