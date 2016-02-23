@@ -10,6 +10,7 @@ dependencies = [
  "postgres 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.1.48 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slug 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.34 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.1.26 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -577,6 +578,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "slug"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "unidecode 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "solicit"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,6 +678,11 @@ dependencies = [
 [[package]]
 name = "unicode-normalization"
 version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "unidecode"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]

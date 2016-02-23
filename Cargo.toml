@@ -2,6 +2,7 @@
 name = "cratesfyi"
 version = "0.1.0"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 rustc-serialize = "0.3.16"
@@ -12,6 +13,7 @@ log = "0.3.5"
 time = "0.1.34"
 postgres = { version = "0.11.1", features = [ "time", "rustc-serialize" ] }
 hyper = "0.7.2"
+slug = "0.1.1"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
@@ -19,6 +21,9 @@ rev = "3e285ce32317f79439b939df1d7b7b3e4268cbd8"
 
 [dev-dependencies]
 env_logger = "0.3"
+
+[build-dependencies]
+time = "0.1.34"
 
 [[bin]]
 name = "cratesfyi"
