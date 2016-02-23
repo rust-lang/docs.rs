@@ -363,8 +363,14 @@ impl DocBuilder {
 
                 // Skip oldest versions if its set
                 if self.skip_oldest_versions {
-                    println!("Skipping building oldest versions of {}", crte.name);
-                    break;
+                    match e {
+                        DocBuilderError::SkipDocumentationExists |
+                            DocBuilderError::SkipLogFileExists => {},
+                        _ => {
+                            println!("Skipping building oldest versions of {}", crte.name);
+                            break
+                        }
+                    }
                 }
             }
 
@@ -545,11 +551,11 @@ impl DocBuilder {
 
         println!("Building documentation for {}-{}", crte.name, crte.versions[version_index]);
 
-        let (rustc_version, cargo_version) =
+        let (rustc_version, cargo_version, cratesfyi_version) =
             try!(self.get_versions().map_err(DocBuilderError::RustcNotFoundError));
 
         // log versions
-        try!(write!(log_file, "{}{}", rustc_version, cargo_version)
+        try!(writeln!(log_file, "{}{}{}", rustc_version, cargo_version, cratesfyi_version.trim())
              .map_err(DocBuilderError::LogFileError));
 
         // build docs
@@ -571,19 +577,24 @@ impl DocBuilder {
 
 
     /// This function will get rustc and cargo versions
-    fn get_versions(&self) -> Result<(String, String), String> {
+    fn get_versions(&self) -> Result<(String, String, String), String> {
 
         let rustc_version = try!(command_result(Command::new("sudo") .arg("chroot")
                                                 .arg(&self.chroot_path)
                                                 .arg("su").arg("-").arg(&self.chroot_user)
-                                                .arg("-c") .arg("rustc --version") .output()
+                                                .arg("-c").arg("rustc --version").output()
                                                 .unwrap()));
         let cargo_version = try!(command_result(Command::new("sudo") .arg("chroot")
                                                 .arg(&self.chroot_path)
                                                 .arg("su").arg("-").arg(&self.chroot_user)
-                                                .arg("-c") .arg("cargo --version") .output()
+                                                .arg("-c").arg("cargo --version").output()
                                                 .unwrap()));
-        Ok((rustc_version, cargo_version))
+        let cratesfyi_version = try!(command_result(Command::new("sudo") .arg("chroot")
+                                                    .arg(&self.chroot_path)
+                                                    .arg("su").arg("-").arg(&self.chroot_user)
+                                                    .arg("-c") .arg("cratesfyi --version").output()
+                                                    .unwrap()));
+        Ok((rustc_version, cargo_version, cratesfyi_version))
     }
 
 
