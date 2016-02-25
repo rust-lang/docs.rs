@@ -11,7 +11,7 @@ use std::env;
 
 use cargo;
 use toml;
-use rustc_serialize::json::{encode, Json, ParserError, EncoderError};
+use rustc_serialize::json::{encode, Json, ParserError, EncoderError, ToJson};
 use postgres;
 use hyper::client::Client;
 use time;
@@ -733,8 +733,26 @@ impl Crate {
         }
 
 
-        // TODO:
-        // * Update crate row (with what?)
+        // Update versions
+        {
+            let mut versions: Json = try!(conn.query("SELECT versions FROM crates \
+                                                     WHERE id = $1",
+                                                     &[&crate_id])).get(0).get(0);
+            if let Some(versions_array) = versions.as_array_mut() {
+                let mut found = false;
+                for version in versions_array.clone() {
+                    if version.as_string().unwrap() == self.versions[version_index] {
+                        found = true;
+                    }
+                }
+
+                if !found {
+                    versions_array.push(self.versions[version_index].to_json());
+                    let _ = conn.query("UPDATE crates SET versions = $1 WHERE id = $2",
+                                       &[&versions, &crate_id]);
+                }
+            }
+        }
 
         Ok(())
     }

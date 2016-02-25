@@ -20,10 +20,11 @@ pub fn create_tables(conn: &Connection) {
             id SERIAL, \
             name text UNIQUE NOT NULL, \
             latest_version_id INT DEFAULT 0, \
-            github_stars INT DEFAULT 0, \
-            badges JSON, \
+            stars INT DEFAULT 0, \
             issues JSON, \
-            downloads_total INT DEFAULT 0 \
+            versions JSON DEFAULT '[]', \
+            downloads_total INT DEFAULT 0, \
+            github_last_update TIMESTAMP \
         )",
         "CREATE TABLE releases ( \
             id SERIAL, \
