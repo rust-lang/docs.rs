@@ -748,10 +748,11 @@ impl Crate {
 
                 if !found {
                     versions_array.push(self.versions[version_index].to_json());
-                    let _ = conn.query("UPDATE crates SET versions = $1 WHERE id = $2",
-                                       &[&versions, &crate_id]);
                 }
             }
+
+            let _ = conn.query("UPDATE crates SET versions = $1 WHERE id = $2",
+                               &[&versions, &crate_id]);
         }
 
         Ok(())
