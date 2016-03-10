@@ -998,7 +998,7 @@ mod test {
         let _ = env_logger::init();
         let conn = db::connect_db().unwrap();
         let docbuilder = DocBuilder::default();
-        let crte = Crate::new("rand".to_string(), vec!["0.3.8".to_string()]);
+        let crte = Crate::new("rand".to_string(), vec!["0.3.14".to_string()]);
         let res = crte.add_crate_into_database(0, &conn, &docbuilder);
 
         info!("Result: {:?}", res);

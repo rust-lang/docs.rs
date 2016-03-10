@@ -15,6 +15,13 @@ postgres = { version = "0.11.1", features = [ "time", "rustc-serialize" ] }
 hyper = "0.7.2"
 slug = "0.1.1"
 
+# Web interface dependencies
+iron = "0.2.6"
+router = "0.1.0"
+handlebars-iron = "0.12.0"
+staticfile = "0.1.0"
+mount = "0.0.10"
+
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
 rev = "3e285ce32317f79439b939df1d7b7b3e4268cbd8"

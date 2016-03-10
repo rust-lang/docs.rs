@@ -10,8 +10,16 @@ extern crate hyper;
 extern crate time;
 extern crate slug;
 
+// Web interface dependencies
+extern crate iron;
+extern crate router;
+extern crate handlebars_iron;
+extern crate staticfile;
+extern crate mount;
+
 pub mod docbuilder;
 pub mod db;
+pub mod web;
 
 
 /// Version string generated at build time contains last git

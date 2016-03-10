@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use cratesfyi::docbuilder::{DocBuilder, DocBuilderError, command_result};
 use cratesfyi::docbuilder::crte::Crate;
-use cratesfyi::db;
+use cratesfyi::{db, web};
 use clap::{Arg, App, SubCommand};
 use log::{LogLevel, LogLevelFilter, LogRecord, LogMetadata};
 use time::now;
@@ -183,6 +183,10 @@ fn main() {
                                       .subcommand(SubCommand::with_name("init")
                                                       .about("Initialize database. Currently \
                                                              only creates tables in database.")))
+                      .subcommand(SubCommand::with_name("web")
+                                      .about("Web application")
+                                      .subcommand(SubCommand::with_name("cratesfyi")
+                                                      .about("Starts cratesfyi server")))
                       .get_matches();
 
     // DocBuilder
@@ -311,10 +315,17 @@ fn main() {
 
 
     // database operations
-    if let Some(matches) = matches.subcommand_matches("database") {
+    else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(_) = matches.subcommand_matches("init") {
             let conn = db::connect_db().unwrap();
             db::create_tables(&conn);
+        }
+    }
+
+    // web operations
+    else if let Some(matches) = matches.subcommand_matches("web") {
+        if let Some(_) = matches.subcommand_matches("cratesfyi") {
+            web::start_cratesfyi_server();
         }
     }
 
