@@ -1,0 +1,35 @@
+[package]
+name = "cratesfyi"
+version = "0.2.0"
+authors = ["Onur Aslan <onuraslan@gmail.com>"]
+build = "build.rs"
+
+[dependencies]
+log = "0.3"
+rustc-serialize = "0.3"
+regex = "0.1"
+postgres = { version = "0.11.7", features = [ "time", "rustc-serialize" ] }
+clap = "2.5.1"
+time = "0.1.35"
+hyper = "0.9.6"
+semver = "0.2.2"
+slug = "0.1.1"
+env_logger = "0.3"
+
+[dependencies.cargo]
+git = "https://github.com/rust-lang/cargo.git"
+rev = "259324cd8f9bb6e1068a3a2b77685e90fda3e3b6"
+
+[dev-dependencies]
+tempdir = "0.3"
+
+[build-dependencies]
+time = "0.1.35"
+
+[features]
+default=[]
+
+[[bin]]
+name = "cratesfyi"
+test = false
+doc = false
