@@ -5,7 +5,6 @@ use db::{connect_db, add_package_into_database, add_build_into_database};
 use cargo::core::Package;
 use std::process::{Command, Output};
 use std::path::PathBuf;
-use std::fs;
 
 use regex::Regex;
 
@@ -57,7 +56,7 @@ impl DocBuilder {
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove source and build directory after we are done
-        try!(self.remove_source_and_build_dirs(&pkg));
+        try!(self.remove_build_dir(&pkg));
 
         Ok(())
     }
@@ -123,10 +122,7 @@ impl DocBuilder {
 
 
     /// Removes build directory of a package
-    fn remove_source_and_build_dirs(&self, package: &Package) -> Result<(), DocBuilderError> {
-        let source_path = PathBuf::from(&self.options.sources_path).join(canonical_name(&package));
-        try!(fs::remove_dir_all(source_path));
-        // TODO: Should I care about removing build directory?
+    fn remove_build_dir(&self, package: &Package) -> Result<(), DocBuilderError> {
         let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
         Ok(())
     }
