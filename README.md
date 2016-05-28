@@ -1,21 +1,21 @@
 
-# Crates.fyi
+# cratesfyi
 
-Centralized crate documentation builder and explorer for Rust programming
+Centralized crate documentation builder and explorer for the Rust programming
 language. This program is using `lxc` containers to build documentation.
 
 
 ## Installation
 
-Crates.fyi needs `cratesfyi-prefix` directory and a postgresql server to run.
+cratesfyi needs `cratesfyi-prefix` directory and a postgresql server to run.
 This directory must have:
 
 * Clone of `crates.io-index` repository.
-* `sources` directory for crate source files.
+* `sources` directory for crate sources.
 * `cratesfyi-container`, a lxc container for building crates. This container
   must use exact same operating system as host machine to avoid conflicts
   (or you can build cratesfyi in guest system).
-* `public_html/crates` directory for crate documentations.
+* `documentations` directory for crate documentations.
 
 
 An example script to create cratesfyi-prefix directory. Make sure you have
@@ -36,7 +36,7 @@ DIST_RELEASE=jessie
 DIST_MIRROR=http://httpredir.debian.org/debian
 
 mkdir $PREFIX
-mkdir -p $PREFIX/sources $PREFIX/public_html/crates
+mkdir -p $PREFIX/sources $PREFIX/documentations
 git clone https://github.com/rust-lang/crates.io-index.git $PREFIX/crates.io-index
 
 # Create debian8 lxc container into cratesfyi-container directory
@@ -74,7 +74,7 @@ sudo sed -i 's/lxc.network.type.*/lxc.network.type = veth\nlxc.network.link = lx
 sudo lxc-start -n cratesfyi-container
 
 # Add user accounts into container
-# Cratesfyi is using multiple user accounts to run cargo simultaneously
+# cratesfyi is using multiple user accounts to run cargo simultaneously
 for user in $(whoami) cratesfyi updater; do
     sudo lxc-attach -n cratesfyi-container -- \
         adduser --disabled-login --disabled-password --gecos "" $user
@@ -90,17 +90,17 @@ sudo lxc-attach -n cratesfyi-container -- \
 ```
 
 
-And for the last you only need to install cratesfyi into guest machine (or build in guest
-machine) to complete installation. If your host and guest operating system is
-same simply build cratesfyi in release mode and copy into `/usr/local/bin`
-directory of guest system:
+The last step is to install cratesfyi into the guest machine
+(or build in guest machine). If your host and guest
+operating system is same simply build cratesfyi in release mode and copy into
+`/usr/local/bin` directory of guest system:
 
 ```sh
 cargo build --release
-cp target/release/cratesfyi cratesfyi-prefix/rootfs/usr/local/bin/
+cp target/release/cratesfyi CRATESFYI_PREFIX_DIR/rootfs/usr/local/bin/
 ```
 
-Cratesfyi is only using `lxd-attach` command with sudo. Make sure your user
+cratesfyi is only using `lxd-attach` command with sudo. Make sure your user
 account can use this command without root password. Example `sudoers` entry:
 
 ```text
