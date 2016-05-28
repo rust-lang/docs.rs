@@ -93,7 +93,9 @@ impl DocBuilder {
 
     /// Copies source files of a package into source_path
     fn copy_sources(&self, package: &Package) -> Result<(), DocBuilderError> {
-        let destination = PathBuf::from(&self.options.sources_path).join(canonical_name(&package));
+        let destination = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
+                          package.manifest().name(),
+                          package.manifest().version()));
         // unwrap is safe here, this function will be always called after get_package
         match copy_dir(source_path(&package).unwrap(), &destination) {
             Ok(_) => Ok(()),
