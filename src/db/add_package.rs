@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 
 use cargo::core::Package;
-use rustc_serialize::json::{Json, encode, ToJson};
+use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use hyper::client::Client;
 use semver;
@@ -37,16 +37,17 @@ pub fn add_package_into_database(conn: &Connection,
 
         if rows.len() == 0 {
             let rows = try!(conn.query("INSERT INTO releases ( crate_id, version, release_time, \
-                                        dependencies, yanked, build_status, rustdoc_status, \
-                                        test_status, license, repository_url, homepage_url, \
-                                        description, description_long, readme, authors, \
-                                        keywords, have_examples, downloads ) VALUES ( $1,  $2,  \
-                                        $3,  $4, $5, $6,  $7, $8, $9, $10, $11, $12, $13, $14, \
-                                        $15, $16, $17, $18 ) RETURNING id",
+                                        dependencies, target_name, yanked, build_status, \
+                                        rustdoc_status, test_status, license, repository_url, \
+                                        homepage_url, description, description_long, readme, \
+                                        authors, keywords, have_examples, downloads ) VALUES ( \
+                                        $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, $11, $12, \
+                                        $13, $14, $15, $16, $17, $18, $19 ) RETURNING id",
                                        &[&crate_id,
                                          &format!("{}", pkg.manifest().version()),
                                          &release_time,
                                          &dependencies.to_json(),
+                                         &pkg.targets()[0].name(),
                                          &yanked,
                                          &res.build_success,
                                          &res.have_doc,
@@ -65,16 +66,17 @@ pub fn add_package_into_database(conn: &Connection,
             rows.get(0).get(0)
 
         } else {
-            try!(conn.query("UPDATE releases SET release_time = $3, dependencies = $4, yanked = \
-                             $5, build_status = $6, rustdoc_status = $7, test_status = $8, \
-                             license = $9, repository_url = $10, homepage_url = $11, \
-                             description = $12, description_long = $13, readme = $14, authors = \
-                             $15, keywords = $16, have_examples = $17, downloads = $18 WHERE \
-                             crate_id = $1 AND version = $2",
+            try!(conn.query("UPDATE releases SET release_time = $3, dependencies = $4, \
+                             target_name = $5, yanked = $5, build_status = $6, rustdoc_status = \
+                             $7, test_status = $8, license = $9, repository_url = $10, \
+                             homepage_url = $11, description = $12, description_long = $13, \
+                             readme = $14, authors = $15, keywords = $16, have_examples = $17, \
+                             downloads = $18 WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
                               &release_time,
-                              &Json::from_str(&encode(&dependencies).unwrap()).unwrap(),
+                              &dependencies.to_json(),
+                              &pkg.targets()[0].name(),
                               &yanked,
                               &res.build_success,
                               &res.have_doc,
@@ -136,8 +138,8 @@ pub fn add_build_into_database(conn: &Connection,
     if rows.len() == 0 {
         rows = try!(conn.query("INSERT INTO builds (rid, rustc_version, cratesfyi_version, \
                                 build_status, output)
-                                VALUES ($1, $2, \
-                                $3, $4, $5) RETURNING id",
+                                VALUES \
+                                ($1, $2, $3, $4, $5) RETURNING id",
                                &[release_id,
                                  &res.rustc_version,
                                  &res.cratesfyi_version,

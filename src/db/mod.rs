@@ -38,6 +38,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             version VARCHAR(100), \
             release_time TIMESTAMP, \
             dependencies JSON, \
+            target_name VARCHAR(255), \
             yanked BOOL DEFAULT FALSE, \
             build_status BOOL DEFAULT FALSE, \
             rustdoc_status BOOL DEFAULT FALSE, \
@@ -45,7 +46,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             license VARCHAR(100), \
             repository_url VARCHAR(255), \
             homepage_url VARCHAR(255), \
-            description VARCHAR(255), \
+            description VARCHAR(1024), \
             description_long VARCHAR(51200), \
             readme VARCHAR(51200), \
             authors JSON, \
