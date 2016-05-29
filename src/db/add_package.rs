@@ -27,8 +27,8 @@ pub fn add_package_into_database(conn: &Connection,
 
     let crate_id = try!(initialize_package_in_database(&conn, &pkg));
     let dependencies = convert_dependencies(&pkg);
-    let rustdoc = try!(get_rustdoc(&pkg));
-    let readme = try!(get_readme(&pkg));
+    let rustdoc = get_rustdoc(&pkg).unwrap_or(None);
+    let readme = get_readme(&pkg).unwrap_or(None);
     let (release_time, yanked, downloads) = try!(get_release_time_yanked_downloads(&pkg));
 
     let release_id: i32 = {
