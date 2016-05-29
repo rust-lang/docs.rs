@@ -1,8 +1,11 @@
 
 # cratesfyi
 
+[![Build Status](https://secure.travis-ci.org/onur/cratesfyi.svg?branch=master)](https://travis-ci.org/onur/cratesfyi)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/onur/cratesfyi/master/LICENSE)
+
 Centralized crate documentation builder and explorer for the Rust programming
-language. This program is using `lxc` containers to build documentation.
+language.
 
 
 ## Installation
