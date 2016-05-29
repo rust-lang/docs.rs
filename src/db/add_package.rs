@@ -67,11 +67,11 @@ pub fn add_package_into_database(conn: &Connection,
 
         } else {
             try!(conn.query("UPDATE releases SET release_time = $3, dependencies = $4, \
-                             target_name = $5, yanked = $5, build_status = $6, rustdoc_status = \
-                             $7, test_status = $8, license = $9, repository_url = $10, \
-                             homepage_url = $11, description = $12, description_long = $13, \
-                             readme = $14, authors = $15, keywords = $16, have_examples = $17, \
-                             downloads = $18 WHERE crate_id = $1 AND version = $2",
+                             target_name = $5, yanked = $6, build_status = $7, rustdoc_status = \
+                             $8, test_status = $9, license = $10, repository_url = $11, \
+                             homepage_url = $12, description = $13, description_long = $14, \
+                             readme = $15, authors = $16, keywords = $17, have_examples = $18, \
+                             downloads = $19 WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
                               &release_time,
