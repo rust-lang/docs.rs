@@ -9,6 +9,8 @@ extern crate hyper;
 extern crate time;
 extern crate semver;
 extern crate slug;
+extern crate iron;
+extern crate staticfile;
 
 pub use self::build_doc::{build_doc, get_package, source_path, update_sources};
 pub use self::copy::{copy_dir, copy_doc_dir};
@@ -19,6 +21,7 @@ pub use self::docbuilder::options::DocBuilderOptions;
 
 pub mod db;
 pub mod utils;
+pub mod web;
 mod build_doc;
 mod copy;
 mod docbuilder;
