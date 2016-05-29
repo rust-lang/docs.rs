@@ -18,5 +18,5 @@ fn main() {
     let build_date = time::strftime("%Y-%m-%d", &time::now_utc()).unwrap();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("git_version");
     let mut file = File::create(&dest_path).unwrap();
-    write!(file, "\" ({} {})\"", git_hash, build_date).unwrap();
+    write!(file, "({} {})", git_hash, build_date).unwrap();
 }
