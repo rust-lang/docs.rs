@@ -79,7 +79,6 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
         "CREATE TABLE owners ( \
             id SERIAL PRIMARY KEY, \
             login VARCHAR(255) NOT NULL UNIQUE, \
-            slug VARCHAR(255) NOT NULL UNIQUE, \
             avatar VARCHAR(255), \
             name VARCHAR(255), \
             email VARCHAR(255) \

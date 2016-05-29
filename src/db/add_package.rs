@@ -387,7 +387,6 @@ fn add_owners_into_database(conn: &Connection,
                             .and_then(|o| o.get("name"))
                             .and_then(|o| o.as_string())
                             .unwrap_or("");
-            let slug = slugify(&name);
 
             if login.is_empty() {
                 continue;
@@ -398,9 +397,9 @@ fn add_owners_into_database(conn: &Connection,
                 if rows.len() > 0 {
                     rows.get(0).get(0)
                 } else {
-                    try!(conn.query("INSERT INTO owners (login, slug, avatar, name, email) \
-                                     VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                                    &[&login, &slug, &avatar, &name, &email]))
+                    try!(conn.query("INSERT INTO owners (login, avatar, name, email) \
+                                     VALUES ($1, $2, $3, $4) RETURNING id",
+                                    &[&login, &avatar, &name, &email]))
                         .get(0)
                         .get(0)
                 }
