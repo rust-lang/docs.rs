@@ -12,7 +12,7 @@ This directory must have:
 
 * Clone of `crates.io-index` repository.
 * `sources` directory for crate sources.
-* `cratesfyi-container`, a lxc container for building crates. This container
+* `cratesfyi-container` lxc container for building crates. This container
   must use exact same operating system as host machine to avoid conflicts
   (or you can build cratesfyi in guest system).
 * `documentations` directory for crate documentations.
@@ -106,6 +106,26 @@ account can use this command without root password. Example `sudoers` entry:
 ```text
 yourusername	ALL=(ALL) NOPASSWD: /usr/sbin/chroot
 ```
+
+
+### Seting up database
+
+cratesfyi is using postgresql database to store crate and build
+information. You need to set up database before using chroot builder. To do
+this:
+
+```sh
+$ sudo su - postgres -c psql
+# First create a user
+postgres=# CREATE USER cratesfyi WITH PASSWORD 'password';
+postgres=# CREATE DATABASE cratesfyi OWNER cratesfyi;
+postgres=# \q
+# Initialize database with cratesfyi
+CRATESFYI_DATABASE_URL=postgresql://cratesfyi:password@localhost ./cratesfyi database init
+```
+
+Make sure to export `CRATESFYI_DATABASE_URL` environment variable before
+using cratesfyi.
 
 
 ## Environment variables
