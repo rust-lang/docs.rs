@@ -10,7 +10,7 @@ extern crate time;
 extern crate semver;
 extern crate slug;
 
-pub use self::build_doc::{build_doc, get_package, source_path};
+pub use self::build_doc::{build_doc, get_package, source_path, update_sources};
 pub use self::copy::{copy_dir, copy_doc_dir};
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;

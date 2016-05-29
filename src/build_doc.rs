@@ -75,9 +75,6 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
     let mut source = RegistrySource::new(&source_id, &config);
 
-    // update crates.io-index repository
-    try!(source.update());
-
     let dep = try!(Dependency::parse(name, vers, &source_id));
     let deps = try!(source.query(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
@@ -87,6 +84,17 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
                    .unwrap_or(Err(human("PKG download error"))));
 
     Ok(pkg)
+}
+
+
+/// Updates central crates-io.index repository
+pub fn update_sources() -> CargoResult<()> {
+    let config = try!(Config::default());
+    let source_id = try!(SourceId::for_central(&config));
+
+    let mut source = RegistrySource::new(&source_id, &config);
+
+    source.update()
 }
 
 

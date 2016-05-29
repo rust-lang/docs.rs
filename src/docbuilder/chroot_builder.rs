@@ -1,6 +1,6 @@
 
 use super::DocBuilder;
-use {DocBuilderError, get_package, source_path, copy_dir, copy_doc_dir};
+use {DocBuilderError, get_package, source_path, copy_dir, copy_doc_dir, update_sources};
 use db::{connect_db, add_package_into_database, add_build_into_database};
 use cargo::core::Package;
 use std::process::{Command, Output};
@@ -24,6 +24,7 @@ pub struct ChrootBuilderResult {
 impl DocBuilder {
     /// Builds every package documentation in chroot environment
     pub fn build_world(&self) -> Result<(), DocBuilderError> {
+        try!(update_sources());
         self.crates(|name, version| {
             if let Err(err) = self.build_package(name, version) {
                 info!("Failed to build package {}-{}: {}", name, version, err);
@@ -41,21 +42,30 @@ impl DocBuilder {
         info!("Building package {}-{}", name, version);
 
         // get_package (and cargo) is using semver, add '=' in front of version.
+        debug!("Getting package with cargo");
         let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
+
+        debug!("Building package in chroot");
         let res = self.build_package_in_chroot(&pkg);
 
         // copy sources and documentation
+        debug!("Copying sources");
         try!(self.copy_sources(&pkg));
         if res.have_doc {
+            debug!("Copying codumentation");
             try!(self.copy_documentation(&pkg, &res.rustc_version));
         }
 
         // Database connection
         let conn = try!(connect_db());
+
+        debug!("Adding package into database");
         let release_id = try!(add_package_into_database(&conn, &pkg, &res));
+        debug!("Adding build into database");
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove source and build directory after we are done
+        debug!("Removing build directory");
         try!(self.remove_build_dir(&pkg));
 
         Ok(())
