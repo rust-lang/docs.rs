@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use rustc_serialize::json::Json;
 
 
-fn crates_from_file<F>(path: &PathBuf, func: &F) -> Result<(), DocBuilderError>
-    where F: Fn(&str, &str) -> () {
+fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderError>
+    where F: FnMut(&str, &str) -> () {
 
     let reader = try!(fs::File::open(path)
                       .map(|f| BufReader::new(f)));
@@ -53,8 +53,8 @@ fn crates_from_file<F>(path: &PathBuf, func: &F) -> Result<(), DocBuilderError>
 
 
 
-pub fn crates_from_path<F>(path: &PathBuf, func: &F) -> Result<(), DocBuilderError>
-    where F: Fn(&str, &str) -> () {
+pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderError>
+    where F: FnMut(&str, &str) -> () {
 
     if !path.is_dir() {
         return Err(DocBuilderError::FileNotFound);

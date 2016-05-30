@@ -70,6 +70,7 @@ pub fn build_doc(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
 /// Downloads a crate and returns Cargo Package.
 pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
+    debug!("Getting package with cargo");
     let config = try!(Config::default());
     let source_id = try!(SourceId::for_central(&config));
 

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
+    pub prefix: PathBuf,
     pub destination: PathBuf,
     pub chroot_path: PathBuf,
     pub chroot_user: String,
@@ -55,10 +56,11 @@ impl Default for DocBuilderOptions {
 
         let cwd = env::current_dir().unwrap();
 
-        let (destination, chroot_path, crates_io_index_path, sources_path) =
+        let (prefix, destination, chroot_path, crates_io_index_path, sources_path) =
             generate_paths(cwd);
 
         DocBuilderOptions {
+            prefix: prefix,
             destination: destination,
             chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
@@ -103,9 +105,10 @@ impl DocBuilderOptions {
 
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (destination, chroot_path, crates_io_index_path, sources_path) =
+        let (prefix, destination, chroot_path, crates_io_index_path, sources_path) =
             generate_paths(prefix);
         DocBuilderOptions {
+            prefix: prefix,
             destination: destination,
             chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
@@ -136,12 +139,12 @@ impl DocBuilderOptions {
 
 
 
-fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
 
     let destination = PathBuf::from(&prefix).join("documentations");
     let chroot_path = PathBuf::from(&prefix).join("cratesfyi-container/rootfs");
     let crates_io_index_path = PathBuf::from(&prefix).join("crates.io-index");
     let sources_path = PathBuf::from(&prefix).join("sources");
 
-    (destination, chroot_path, crates_io_index_path, sources_path)
+    (prefix, destination, chroot_path, crates_io_index_path, sources_path)
 }

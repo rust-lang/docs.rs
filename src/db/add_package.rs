@@ -24,7 +24,7 @@ pub fn add_package_into_database(conn: &Connection,
                                  pkg: &Package,
                                  res: &ChrootBuilderResult)
                                  -> Result<i32, DocBuilderError> {
-
+    debug!("Adding package into database");
     let crate_id = try!(initialize_package_in_database(&conn, &pkg));
     let dependencies = convert_dependencies(&pkg);
     let rustdoc = get_rustdoc(&pkg).unwrap_or(None);
@@ -132,6 +132,7 @@ pub fn add_build_into_database(conn: &Connection,
                                release_id: &i32,
                                res: &ChrootBuilderResult)
                                -> Result<i32, DocBuilderError> {
+    debug!("Adding build into database");
     let mut rows = try!(conn.query("SELECT id FROM builds WHERE rid = $1 AND rustc_version = $2",
                                    &[release_id, &res.rustc_version]));
     // insert crate into database if it is not exists

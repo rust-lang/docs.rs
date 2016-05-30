@@ -135,7 +135,9 @@ pub fn main() {
             docbuilder_opts
         };
 
-        let docbuilder = DocBuilder::new(docbuilder_opts);
+        let mut docbuilder = DocBuilder::new(docbuilder_opts);
+
+        docbuilder.load_cache().expect("Failed to load cache");
 
         if let Some(_) = matches.subcommand_matches("world") {
             docbuilder.build_world().expect("Failed to build world");
@@ -145,6 +147,7 @@ pub fn main() {
                       .expect("Building documentation failed");
         }
 
+        docbuilder.save_cache().expect("Failed to save cache");
     } else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(_) = matches.subcommand_matches("init") {
             use std::io::Write;

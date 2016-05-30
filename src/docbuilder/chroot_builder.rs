@@ -1,5 +1,6 @@
 
 use super::DocBuilder;
+use super::crates::crates_from_path;
 use {DocBuilderError, get_package, source_path, copy_dir, copy_doc_dir, update_sources};
 use db::{connect_db, add_package_into_database, add_build_into_database};
 use cargo::core::Package;
@@ -23,57 +24,70 @@ pub struct ChrootBuilderResult {
 
 impl DocBuilder {
     /// Builds every package documentation in chroot environment
-    pub fn build_world(&self) -> Result<(), DocBuilderError> {
+    pub fn build_world(&mut self) -> Result<(), DocBuilderError> {
         try!(update_sources());
-        self.crates(|name, version| {
-            if let Err(err) = self.build_package(name, version) {
-                info!("Failed to build package {}-{}: {}", name, version, err);
+
+        let mut count = 0;
+
+        crates(self.options.crates_io_index_path.clone(), |name, version| {
+            match self.build_package(name, version) {
+                Ok(status) => {
+                    if status && count % 10 == 0 {
+                        let _ = self.save_cache();
+                    }
+                },
+                Err(err) => info!("Failed to build package {}-{}: {}", name, version, err)
             }
+
+            self.cache.insert(format!("{}-{}", name, version));
+            count += 1;
         })
     }
 
 
     /// Builds package documentation in chroot environment and adds into cratesfyi database
-    pub fn build_package(&self, name: &str, version: &str) -> Result<(), DocBuilderError> {
-
-        // TODO: Add skip option to check if we need to
-        // skip package according to DocBuilderOptions
-
+    pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool, DocBuilderError> {
         info!("Building package {}-{}", name, version);
-
-        // get_package (and cargo) is using semver, add '=' in front of version.
-        debug!("Getting package with cargo");
-        let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
-
-        debug!("Building package in chroot");
-        let res = self.build_package_in_chroot(&pkg);
-
-        // copy sources and documentation
-        debug!("Copying sources");
-        try!(self.copy_sources(&pkg));
-        if res.have_doc {
-            debug!("Copying codumentation");
-            try!(self.copy_documentation(&pkg, &res.rustc_version));
-        }
 
         // Database connection
         let conn = try!(connect_db());
 
-        debug!("Adding package into database");
+        // Skip crates according to options
+        if (self.options.skip_if_log_exists &&
+            self.cache.contains(&format!("{}-{}", name, version)[..])) ||
+           (self.options.skip_if_exists &&
+            self.db_cache.contains(&format!("{}-{}", name, version)[..])) {
+            info!("Skipping");
+            return Ok(false);
+        }
+
+
+        // get_package (and cargo) is using semver, add '=' in front of version.
+        let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
+        let res = self.build_package_in_chroot(&pkg);
+
+        // copy sources and documentation
+        try!(self.copy_sources(&pkg));
+        if res.have_doc {
+            try!(self.copy_documentation(&pkg, &res.rustc_version));
+        }
+
         let release_id = try!(add_package_into_database(&conn, &pkg, &res));
-        debug!("Adding build into database");
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove source and build directory after we are done
-        debug!("Removing build directory");
         try!(self.remove_build_dir(&pkg));
 
-        Ok(())
+        // add package into build cache
+        self.cache.insert(format!("{}-{}", name, version));
+
+        Ok(res.build_success)
     }
 
 
     /// Builds documentation of a package with cratesfyi in chroot environment
     fn build_package_in_chroot(&self, package: &Package) -> ChrootBuilderResult {
+        debug!("Building package in chroot");
         let (rustc_version, cratesfyi_version) = self.get_versions();
         let cmd = format!("cratesfyi doc {} ={}",
                           package.manifest().name(),
@@ -103,6 +117,7 @@ impl DocBuilder {
 
     /// Copies source files of a package into source_path
     fn copy_sources(&self, package: &Package) -> Result<(), DocBuilderError> {
+        debug!("Copying sources");
         let destination = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
                           package.manifest().name(),
                           package.manifest().version()));
@@ -119,6 +134,7 @@ impl DocBuilder {
                           package: &Package,
                           rustc_version: &str)
                           -> Result<(), DocBuilderError> {
+        debug!("Copying codumentation");
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
                                  .join("home")
                                  .join(&self.options.chroot_user)
@@ -135,6 +151,7 @@ impl DocBuilder {
 
     /// Removes build directory of a package
     fn remove_build_dir(&self, package: &Package) -> Result<(), DocBuilderError> {
+        debug!("Removing build directory");
         let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
         Ok(())
     }
@@ -222,6 +239,16 @@ fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
             captures.at(2).unwrap())
 }
 
+
+/// Runs `func` with the all crates from crates-io.index repository path.
+///
+/// First argument of func is the name of crate and
+/// second argument is the version of crate. Func will be run for every crate.
+fn crates<F>(path: PathBuf, mut func: F) -> Result<(), DocBuilderError>
+    where F: FnMut(&str, &str) -> ()
+{
+    crates_from_path(&path, &mut func)
+}
 
 
 #[cfg(test)]
