@@ -138,6 +138,7 @@ mod test {
 
 
     #[test]
+    #[ignore]
     fn test_get_github_fields() {
         let _ = env_logger::init();
         let fields = get_github_fields("onur/cratesfyi");
