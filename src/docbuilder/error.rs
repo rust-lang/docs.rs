@@ -5,6 +5,7 @@ use std::error::Error;
 use rustc_serialize::json::BuilderError;
 use postgres;
 use cargo;
+use hyper;
 
 #[derive(Debug)]
 pub enum DocBuilderError {
@@ -17,6 +18,8 @@ pub enum DocBuilderError {
     CargoError(Box<cargo::CargoError>),
     DatabaseConnectError(postgres::error::ConnectError),
     DatabaseError(postgres::error::Error),
+    HyperError(hyper::Error),
+    GenericError(String),
 }
 
 
@@ -34,6 +37,8 @@ impl fmt::Display for DocBuilderError {
                 write!(f, "Database connection error: {}", err)
             }
             DocBuilderError::DatabaseError(ref err) => write!(f, "Database error: {}", err),
+            DocBuilderError::HyperError(ref err) => write!(f, "hyper error: {}", err),
+            DocBuilderError::GenericError(ref err) => write!(f, "Generic error: {}", err),
         }
     }
 }
@@ -51,6 +56,8 @@ impl Error for DocBuilderError {
             DocBuilderError::CargoError(ref err) => err.description(),
             DocBuilderError::DatabaseConnectError(ref err) => err.description(),
             DocBuilderError::DatabaseError(ref err) => err.description(),
+            DocBuilderError::HyperError(ref err) => err.description(),
+            DocBuilderError::GenericError(ref err) => err,
         }
     }
 
@@ -65,6 +72,8 @@ impl Error for DocBuilderError {
             DocBuilderError::CargoError(ref err) => Some(err),
             DocBuilderError::DatabaseConnectError(ref err) => Some(err),
             DocBuilderError::DatabaseError(ref err) => Some(err),
+            DocBuilderError::HyperError(ref err) => Some(err),
+            DocBuilderError::GenericError(_) => None,
         }
     }
 }
@@ -99,5 +108,12 @@ impl From<postgres::error::ConnectError> for DocBuilderError {
 impl From<postgres::error::Error> for DocBuilderError {
     fn from(err: postgres::error::Error) -> DocBuilderError {
         DocBuilderError::DatabaseError(err)
+    }
+}
+
+
+impl From<hyper::Error> for DocBuilderError {
+    fn from(err: hyper::Error) -> DocBuilderError {
+        DocBuilderError::HyperError(err)
     }
 }

@@ -18,6 +18,7 @@ pub use self::docbuilder::error::DocBuilderError;
 pub use self::docbuilder::options::DocBuilderOptions;
 
 pub mod db;
+pub mod utils;
 mod build_doc;
 mod copy;
 mod docbuilder;

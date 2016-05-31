@@ -81,23 +81,3 @@ impl DocBuilder {
         Ok(())
     }
 }
-
-
-
-#[cfg(test)]
-mod test {
-    extern crate env_logger;
-    use ::DocBuilderOptions;
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    #[ignore]
-    fn test_docbuilder_crates() {
-        let _ = env_logger::init();
-        let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let docbuilder = DocBuilder::new(options);
-        let res = docbuilder.crates(|_, _| {});
-        assert!(res.is_ok());
-    }
-}

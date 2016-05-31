@@ -40,7 +40,6 @@ impl DocBuilder {
                 Err(err) => info!("Failed to build package {}-{}: {}", name, version, err)
             }
             self.cache.insert(format!("{}-{}", name, version));
-            count += 1;
         })
     }
 
@@ -263,7 +262,7 @@ mod test {
     fn test_build_world() {
         let _ = env_logger::init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let docbuilder = DocBuilder::new(options);
+        let mut docbuilder = DocBuilder::new(options);
         // This test is building WHOLE WORLD and may take forever
         assert!(docbuilder.build_world().is_ok());
     }
@@ -273,7 +272,7 @@ mod test {
     fn test_build_package() {
         let _ = env_logger::init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let docbuilder = DocBuilder::new(options);
+        let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.build_package("rand", "0.3.14");
         assert!(res.is_ok());
     }
