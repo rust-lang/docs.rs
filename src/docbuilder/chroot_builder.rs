@@ -32,13 +32,13 @@ impl DocBuilder {
         crates(self.options.crates_io_index_path.clone(), |name, version| {
             match self.build_package(name, version) {
                 Ok(status) => {
+                    count += 1;
                     if status && count % 10 == 0 {
                         let _ = self.save_cache();
                     }
                 },
                 Err(err) => info!("Failed to build package {}-{}: {}", name, version, err)
             }
-
             self.cache.insert(format!("{}-{}", name, version));
             count += 1;
         })
