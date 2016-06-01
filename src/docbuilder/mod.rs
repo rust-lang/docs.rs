@@ -3,6 +3,7 @@ pub mod error;
 pub mod options;
 mod chroot_builder;
 mod crates;
+mod queue;
 
 pub use self::chroot_builder::ChrootBuilderResult;
 

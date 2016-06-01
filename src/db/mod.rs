@@ -99,7 +99,13 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             build_status BOOL NOT NULL, \
             build_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             output TEXT \
-        )"
+        )",
+        "CREATE TABLE queue ( \
+            id SERIAL, \
+            name VARCHAR(255), \
+            version VARCHAR(100), \
+            UNIQUE(name, version) \
+        )",
     ];
 
     for query in queries.into_iter() {

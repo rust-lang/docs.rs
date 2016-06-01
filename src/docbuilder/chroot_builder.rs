@@ -37,7 +37,7 @@ impl DocBuilder {
                         let _ = self.save_cache();
                     }
                 },
-                Err(err) => info!("Failed to build package {}-{}: {}", name, version, err)
+                Err(err) => warn!("Failed to build package {}-{}: {}", name, version, err)
             }
             self.cache.insert(format!("{}-{}", name, version));
         })

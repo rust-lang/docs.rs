@@ -6,6 +6,7 @@ use rustc_serialize::json::BuilderError;
 use postgres;
 use cargo;
 use hyper;
+use git2;
 
 #[derive(Debug)]
 pub enum DocBuilderError {
@@ -20,6 +21,7 @@ pub enum DocBuilderError {
     DatabaseError(postgres::error::Error),
     HyperError(hyper::Error),
     GenericError(String),
+    GitError(git2::Error),
 }
 
 
@@ -39,6 +41,7 @@ impl fmt::Display for DocBuilderError {
             DocBuilderError::DatabaseError(ref err) => write!(f, "Database error: {}", err),
             DocBuilderError::HyperError(ref err) => write!(f, "hyper error: {}", err),
             DocBuilderError::GenericError(ref err) => write!(f, "Generic error: {}", err),
+            DocBuilderError::GitError(ref err) => write!(f, "Git error: {}", err),
         }
     }
 }
@@ -58,6 +61,7 @@ impl Error for DocBuilderError {
             DocBuilderError::DatabaseError(ref err) => err.description(),
             DocBuilderError::HyperError(ref err) => err.description(),
             DocBuilderError::GenericError(ref err) => err,
+            DocBuilderError::GitError(ref err) => err.description(),
         }
     }
 
@@ -74,6 +78,7 @@ impl Error for DocBuilderError {
             DocBuilderError::DatabaseError(ref err) => Some(err),
             DocBuilderError::HyperError(ref err) => Some(err),
             DocBuilderError::GenericError(_) => None,
+            DocBuilderError::GitError(ref err) => Some(err),
         }
     }
 }
@@ -115,5 +120,12 @@ impl From<postgres::error::Error> for DocBuilderError {
 impl From<hyper::Error> for DocBuilderError {
     fn from(err: hyper::Error) -> DocBuilderError {
         DocBuilderError::HyperError(err)
+    }
+}
+
+
+impl From<git2::Error> for DocBuilderError {
+    fn from(err: git2::Error) -> DocBuilderError {
+        DocBuilderError::GitError(err)
     }
 }
