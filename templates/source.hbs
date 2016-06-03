@@ -1,0 +1,38 @@
+{{> header}}
+
+
+{{#with content}}
+<div class="container package-page-container">
+  <div class="pure-g">
+    <div class="{{#if ../varss.file_content}}pure-u-5-24{{else}}pure-u-1{{/if}}">
+      <div class="pure-menu package-menu">
+        <ul class="pure-menu-list">
+          {{#if ../varsb.show_parent_link}}
+          <li class="pure-menu-item">
+            <a href="../" class="pure-menu-link"><i class="fa fa-fw fa-folder-open-o"></i> ..</a>
+          </li>
+          {{/if}}
+          {{#each files}}
+          <li class="pure-menu-item">
+            <a href="./{{name}}{{#if file_type_dir }}/{{/if}}" class="pure-menu-link">
+              {{log this}}
+              {{#if file_type_dir }}<i class="fa fa-fw fa-folder-open-o"></i>{{/if}}
+              {{#if file_type_text }}<i class="fa fa-fw fa-file-text-o"></i>{{/if}}
+              {{#if file_type_rust_source }}<i class="fa fa-fw fa-file-code-o"></i>{{/if}}
+              {{#if file_type_binary }}<i class="fa fa-fw fa-file-archive-o"></i>{{/if}}
+              {{name}}</a>
+          </li>
+          {{/each}}
+        </ul>
+      </div>
+    </div>
+    {{#if ../varss.file_content}}
+    <div class="pure-u-19-24">
+      <pre>{{ ../varss.file_content }}</pre>
+    </div>
+    {{/if}}
+  </div>
+</div>
+{{/with}}
+
+{{> footer}}

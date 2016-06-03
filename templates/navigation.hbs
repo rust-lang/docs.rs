@@ -1,0 +1,40 @@
+    <div class="nav-container">
+      <div class="container">
+        <div class="pure-menu pure-menu-horizontal">
+          <form action="/search" method="GET" class="landing-search-form-nav">
+            {{#unless varsb.show_search_form}}
+            <input class="search-input" name="query" type="text" placeholder="Search"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
+            {{/unless}}
+          <a href="/" class="pure-menu-heading pure-menu-link"><i class="fa fa-cubes fa-fw"></i> Cratesfyi</a>
+          <ul class="pure-menu-list">
+            <li class="pure-menu-item"><a href="/releases" class="pure-menu-link"><i class="fa fa-fw fa-history"></i> Releases</a></li>
+          </ul>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    {{#unless varsb.hide_package_navigation}}
+    {{#with content}}
+    <div class="cratesfyi-package-container">
+      <div class="container">
+        <h1>{{#if ../title}}{{../title}}{{else}}{{metadata.name}} {{metadata.version}}{{/if}}</h1>
+        <div class="description">{{#if metadata.description }}{{metadata.description}}{{else}}{{../varss.description}}{{/if}}</div>
+        {{#if ../varsb.show_package_navigation}}
+        {{#with metadata}}
+        <div class="pure-menu pure-menu-horizontal">
+          <ul class="pure-menu-list">
+            {{#if rustdoc_status}}
+            <li class="pure-menu-item"><a href="/rustdoc/{{name}}/{{version}}/{{target_name}}/" class="pure-menu-link{{#if ../../varsb.package_navigation_documentation_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-book"></i> Documentation</a></li>
+            {{/if}}
+            <li class="pure-menu-item"><a href="/crates/{{name}}/{{version}}" class="pure-menu-link{{#if ../../varsb.package_navigation_crate_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-cube"></i> Crate</a></li>
+            <li class="pure-menu-item"><a href="/source/{{name}}/{{version}}/" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i> Source</a></li>
+            <li class="pure-menu-item"><a href="/crates/{{name}}/{{version}}/builds" class="pure-menu-link{{#if ../../varsb.package_navigation_builds_tab}} pure-menu-active{{/if}}"><i class="fa fa-cogs"></i> Builds</a></li>
+          </ul>
+        </div>
+        {{/with}}
+        {{/if}}
+      </div>
+    </div>
+    {{/with}}
+    {{/unless}}

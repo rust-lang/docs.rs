@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::build_doc;
+use cratesfyi::start_web_server;
 
 
 pub fn main() {
@@ -88,6 +89,8 @@ pub fn main() {
                                       .subcommand(SubCommand::with_name("init")
                                                       .about("Initialize database. Currently \
                                                              only creates tables in database.")))
+                      .subcommand(SubCommand::with_name("start-web-server")
+                                  .about("Starts web server"))
                       .get_matches();
 
 
@@ -158,6 +161,8 @@ pub fn main() {
                 process::exit(1);
             }
         }
+    } else if let Some(_) = matches.subcommand_matches("start-web-server") {
+        start_web_server();
     } else {
         println!("{}", matches.usage());
     }

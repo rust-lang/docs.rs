@@ -1,0 +1,50 @@
+{{> header}}
+
+{{#if varsb.show_search_form}}
+<div class="container landing">
+  <h1 class="brand"><i class="fa fa-cubes fa-fw"></i> Cratesfyi</h1>
+
+  <form action="/search" method="GET" class="landing-search-form">
+    <div><input class="search-input" name="query" type="text" placeholder="Search"></div>
+    <div class="buttons">
+      <button type="submit" class="pure-button pure-button-normal">Search</button>
+      <button type="submit" class="pure-button pure-button-normal">I'm Feeling Lucky</button>
+    </div>
+  </form>
+</div>
+{{/if}}
+
+<div class="container">
+  <div class="recent-releases-container">
+    {{#if varsb.show_search_form}}
+    <div class="release">
+      <strong>Recent Releases</strong>
+    </div>
+    {{/if}}
+
+    <ul>
+    {{#each content}}
+    <li>
+    <a href="{{#if rustdoc_status}}/rustdoc/{{name}}/{{version}}/{{target_name}}/{{else}}/crates/{{name}}/{{version}}{{/if}}" class="release">
+      <div class="pure-g">
+        <div class="pure-u-1 pure-u-sm-5-24 pure-u-md-4-24 name">{{name}}-{{version}}</div>
+        <div class="pure-u-1 pure-u-sm-15-24 pure-u-md-17-24 description">{{description}}</div>
+        <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">{{release_time}}</div>
+      </div>
+    </a>
+    </li>
+    {{/each}}
+    </ul>
+    <!-- TODO: Add next and previous page buttons -->
+    {{#if varsi.previous_page}}
+    <a class="pure-button pure-button-normal" href="/releases/{{varsi.previous_page}}">Newest Releases</a>
+    {{/if}}
+    {{#unless varsb.show_search_form}}
+    {{#if varsi.next_page}}
+    <a class="pure-button pure-button-normal" href="/releases/{{varsi.next_page}}">Oldest Releases</a>
+    {{/if}}
+    {{/unless}}
+  </div>
+</div>
+
+{{> footer}}

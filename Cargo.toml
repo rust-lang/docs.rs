@@ -11,7 +11,7 @@ build = "build.rs"
 log = "0.3"
 rustc-serialize = "0.3"
 regex = "0.1"
-postgres = { version = "0.11.7", features = [ "time", "rustc-serialize" ] }
+postgres = { version = "^0.11", features = [ "time", "rustc-serialize" ] }
 clap = "2.5.2"
 time = "0.1"
 hyper = "0.9.7"
@@ -20,6 +20,15 @@ slug = "^0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
 magic = "^0.10.0"
+iron = "0.3.0"
+router = "0.1.1"
+staticfile = { version = "0.2.0", features = [ "cache" ] }
+handlebars-iron = "0.15.2"
+pulldown-cmark = "0.0.8"
+r2d2 = "0.7.0"
+r2d2_postgres = "0.10.1"
+url = "1.1.1"
+params = "0.2.2"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
