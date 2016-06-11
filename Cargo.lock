@@ -8,6 +8,7 @@ dependencies = [
  "git2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "magic 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "postgres 0.11.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.1.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -42,6 +43,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "bitflags"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "bitflags"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -332,6 +338,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "libc"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "libc"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
@@ -383,6 +394,24 @@ dependencies = [
 name = "log"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "magic"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "bitflags 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "magic-sys 0.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "magic-sys"
+version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "matches"

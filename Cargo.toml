@@ -19,6 +19,7 @@ semver = "0.2.2"
 slug = "0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
+magic = "0.10.0"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
