@@ -11,8 +11,6 @@ extern crate semver;
 extern crate slug;
 extern crate git2;
 
-pub use self::build_doc::{build_doc, get_package, source_path, update_sources};
-pub use self::copy::{copy_dir, copy_doc_dir};
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
 pub use self::docbuilder::error::DocBuilderError;
@@ -20,8 +18,6 @@ pub use self::docbuilder::options::DocBuilderOptions;
 
 pub mod db;
 pub mod utils;
-mod build_doc;
-mod copy;
 mod docbuilder;
 
 

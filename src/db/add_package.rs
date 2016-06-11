@@ -1,5 +1,6 @@
 
-use {DocBuilderError, ChrootBuilderResult, source_path};
+use {DocBuilderError, ChrootBuilderResult};
+use utils::source_path;
 use regex::Regex;
 
 use std::io::prelude::*;

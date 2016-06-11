@@ -12,7 +12,8 @@ use std::process;
 use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
-use cratesfyi::{build_doc, DocBuilder, DocBuilderOptions, db};
+use cratesfyi::{DocBuilder, DocBuilderOptions, db};
+use cratesfyi::utils::build_doc;
 
 
 pub fn main() {

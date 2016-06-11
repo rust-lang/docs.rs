@@ -1,7 +1,8 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
-use {DocBuilderError, get_package, source_path, copy_dir, copy_doc_dir, update_sources};
+use DocBuilderError;
+use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
 use db::{connect_db, add_package_into_database, add_build_into_database};
 use cargo::core::Package;
 use std::process::{Command, Output};
