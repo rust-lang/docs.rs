@@ -135,7 +135,7 @@ mod test {
     #[ignore]
     fn test_copy_doc_dir() {
         // lets build documentation of rand crate
-        use build_doc;
+        use utils::build_doc;
         let pkg = build_doc("rand", None).unwrap();
 
         let pkg_dir = format!("rand-{}", pkg.manifest().version());
