@@ -157,7 +157,6 @@ impl DocBuilder {
 
     /// Removes build directory of a package in chroot
     fn remove_build_dir(&self, package: &Package) -> Result<(), DocBuilderError> {
-        debug!("Removing build directory");
         let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
         Ok(())
     }
@@ -165,14 +164,16 @@ impl DocBuilder {
 
     /// Remove documentation, build directory and sources directory of a package
     fn clean(&self, package: &Package) -> Result<(), DocBuilderError> {
+        debug!("Cleaning package");
         use std::fs::remove_dir_all;
-        try!(self.remove_build_dir(&package));
         let documentation_path = PathBuf::from(&self.options.destination).join(format!("{}/{}",
                           package.manifest().name(),
                           package.manifest().version()));
         let source_path = source_path(&package).unwrap();
-        try!(remove_dir_all(documentation_path));
-        try!(remove_dir_all(source_path));
+        // Some crates don't have documentation, so we don't care if removing_dir_all fails
+        let _ = self.remove_build_dir(&package);
+        let _ = remove_dir_all(documentation_path);
+        let _ = remove_dir_all(source_path);
         Ok(())
     }
 
