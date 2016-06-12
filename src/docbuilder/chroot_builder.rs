@@ -170,9 +170,7 @@ impl DocBuilder {
         let documentation_path = PathBuf::from(&self.options.destination).join(format!("{}/{}",
                           package.manifest().name(),
                           package.manifest().version()));
-        let source_path = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
-                          package.manifest().name(),
-                          package.manifest().version()));
+        let source_path = source_path(&package).unwrap();
         try!(remove_dir_all(documentation_path));
         try!(remove_dir_all(source_path));
         Ok(())
