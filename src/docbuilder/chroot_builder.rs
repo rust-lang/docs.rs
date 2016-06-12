@@ -18,6 +18,7 @@ pub struct ChrootBuilderResult {
     pub output: String,
     pub build_success: bool,
     pub have_doc: bool,
+    pub have_examples: bool,
     pub rustc_version: String,
     pub cratesfyi_version: String,
 }
@@ -98,6 +99,7 @@ impl DocBuilder {
                     output: o,
                     build_success: true,
                     have_doc: self.have_documentation(&package),
+                    have_examples: self.have_examples(&package),
                     rustc_version: rustc_version,
                     cratesfyi_version: cratesfyi_version,
                 }
@@ -107,6 +109,7 @@ impl DocBuilder {
                     output: e,
                     build_success: false,
                     have_doc: false,
+                    have_examples: self.have_examples(&package),
                     rustc_version: rustc_version,
                     cratesfyi_version: cratesfyi_version,
                 }
@@ -186,6 +189,13 @@ impl DocBuilder {
                                  .join("doc")
                                  .join(package.targets()[0].name().to_string());
         crate_doc_path.exists()
+    }
+
+
+    /// Checks if package have examples
+    fn have_examples(&self, package: &Package) -> bool {
+        let path = source_path(&package).unwrap().join("examples");
+        path.exists() && path.is_dir()
     }
 
 
