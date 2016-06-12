@@ -12,24 +12,24 @@ log = "0.3"
 rustc-serialize = "0.3"
 regex = "0.1"
 postgres = { version = "0.11.7", features = [ "time", "rustc-serialize" ] }
-clap = "2.5.1"
-time = "0.1.35"
-hyper = "0.9.6"
+clap = "2.5.2"
+time = "0.1"
+hyper = "0.9.7"
 semver = "0.2.2"
-slug = "0.1.1"
+slug = "^0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
-magic = "0.10.0"
+magic = "^0.10.0"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "259324cd8f9bb6e1068a3a2b77685e90fda3e3b6"
+rev = "ffa147d393037fd5632cd8c9d048b5521d70ab4c"
 
 [dev-dependencies]
 tempdir = "0.3"
 
 [build-dependencies]
-time = "0.1.35"
+time = "0.1"
 
 [[bin]]
 name = "cratesfyi"
