@@ -61,7 +61,7 @@ pub fn add_package_into_database(conn: &Connection,
                                          &readme,
                                          &pkg.manifest().metadata().authors.to_json(),
                                          &pkg.manifest().metadata().keywords.to_json(),
-                                         &false, // TODO: Check if its have examples
+                                         &res.have_examples,
                                          &downloads]));
             // return id
             rows.get(0).get(0)
@@ -90,7 +90,7 @@ pub fn add_package_into_database(conn: &Connection,
                               &readme,
                               &pkg.manifest().metadata().authors.to_json(),
                               &pkg.manifest().metadata().keywords.to_json(),
-                              &false, // TODO: Check if its have examples
+                              &res.have_examples,
                               &downloads]));
             rows.get(0).get(0)
         }

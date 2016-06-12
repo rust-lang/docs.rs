@@ -7,6 +7,7 @@ use postgres;
 use cargo;
 use hyper;
 use git2;
+use magic::MagicError;
 
 #[derive(Debug)]
 pub enum DocBuilderError {
@@ -22,6 +23,7 @@ pub enum DocBuilderError {
     HyperError(hyper::Error),
     GenericError(String),
     GitError(git2::Error),
+    MagicError(MagicError),
 }
 
 
@@ -42,6 +44,7 @@ impl fmt::Display for DocBuilderError {
             DocBuilderError::HyperError(ref err) => write!(f, "hyper error: {}", err),
             DocBuilderError::GenericError(ref err) => write!(f, "Generic error: {}", err),
             DocBuilderError::GitError(ref err) => write!(f, "Git error: {}", err),
+            DocBuilderError::MagicError(ref err) => write!(f, "Magic error: {}", err),
         }
     }
 }
@@ -62,6 +65,7 @@ impl Error for DocBuilderError {
             DocBuilderError::HyperError(ref err) => err.description(),
             DocBuilderError::GenericError(ref err) => err,
             DocBuilderError::GitError(ref err) => err.description(),
+            DocBuilderError::MagicError(ref err) => err.description(),
         }
     }
 
@@ -79,6 +83,7 @@ impl Error for DocBuilderError {
             DocBuilderError::HyperError(ref err) => Some(err),
             DocBuilderError::GenericError(_) => None,
             DocBuilderError::GitError(ref err) => Some(err),
+            DocBuilderError::MagicError(ref err) => Some(err),
         }
     }
 }
@@ -127,5 +132,12 @@ impl From<hyper::Error> for DocBuilderError {
 impl From<git2::Error> for DocBuilderError {
     fn from(err: git2::Error) -> DocBuilderError {
         DocBuilderError::GitError(err)
+    }
+}
+
+
+impl From<MagicError> for DocBuilderError {
+    fn from(err: MagicError) -> DocBuilderError {
+        DocBuilderError::MagicError(err)
     }
 }

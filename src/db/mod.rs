@@ -2,12 +2,14 @@
 
 pub use self::add_package::add_package_into_database;
 pub use self::add_package::add_build_into_database;
+pub use self::file::add_path_into_database;
 
 use postgres::{Connection, SslMode};
 use postgres::error::{Error, ConnectError};
 use std::env;
 
 mod add_package;
+mod file;
 
 
 /// Connects to database
@@ -105,6 +107,13 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             name VARCHAR(255), \
             version VARCHAR(100), \
             UNIQUE(name, version) \
+        )",
+        "CREATE TABLE files ( \
+            path VARCHAR(255) NOT NULL PRIMARY KEY, \
+            mime VARCHAR(100) NOT NULL, \
+            date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
+            date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
+            content BYTEA \
         )",
     ];
 

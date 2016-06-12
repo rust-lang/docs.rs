@@ -3,10 +3,11 @@ use super::DocBuilder;
 use super::crates::crates_from_path;
 use DocBuilderError;
 use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
-use db::{connect_db, add_package_into_database, add_build_into_database};
+use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
 use std::process::{Command, Output};
 use std::path::PathBuf;
+use postgres::Connection;
 
 use regex::Regex;
 
@@ -18,6 +19,7 @@ pub struct ChrootBuilderResult {
     pub output: String,
     pub build_success: bool,
     pub have_doc: bool,
+    pub have_examples: bool,
     pub rustc_version: String,
     pub cratesfyi_version: String,
 }
@@ -37,8 +39,8 @@ impl DocBuilder {
                     if status && count % 10 == 0 {
                         let _ = self.save_cache();
                     }
-                },
-                Err(err) => warn!("Failed to build package {}-{}: {}", name, version, err)
+                }
+                Err(err) => warn!("Failed to build package {}-{}: {}", name, version, err),
             }
             self.cache.insert(format!("{}-{}", name, version));
         })
@@ -67,16 +69,17 @@ impl DocBuilder {
         let res = self.build_package_in_chroot(&pkg);
 
         // copy sources and documentation
-        try!(self.copy_sources(&pkg));
+        try!(self.add_sources_into_database(&conn, &pkg));
         if res.have_doc {
             try!(self.copy_documentation(&pkg, &res.rustc_version));
+            try!(self.add_documentation_into_database(&conn, &pkg));
         }
 
         let release_id = try!(add_package_into_database(&conn, &pkg, &res));
         try!(add_build_into_database(&conn, &release_id, &res));
 
-        // remove source and build directory after we are done
-        try!(self.remove_build_dir(&pkg));
+        // remove documentation, source and build directory after we are done
+        try!(self.clean(&pkg));
 
         // add package into build cache
         self.cache.insert(format!("{}-{}", name, version));
@@ -98,6 +101,7 @@ impl DocBuilder {
                     output: o,
                     build_success: true,
                     have_doc: self.have_documentation(&package),
+                    have_examples: self.have_examples(&package),
                     rustc_version: rustc_version,
                     cratesfyi_version: cratesfyi_version,
                 }
@@ -107,6 +111,7 @@ impl DocBuilder {
                     output: e,
                     build_success: false,
                     have_doc: false,
+                    have_examples: self.have_examples(&package),
                     rustc_version: rustc_version,
                     cratesfyi_version: cratesfyi_version,
                 }
@@ -116,6 +121,7 @@ impl DocBuilder {
 
 
     /// Copies source files of a package into source_path
+    #[allow(dead_code)]  // I've been using this function before storing files in database
     fn copy_sources(&self, package: &Package) -> Result<(), DocBuilderError> {
         debug!("Copying sources");
         let destination = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
@@ -149,10 +155,26 @@ impl DocBuilder {
     }
 
 
-    /// Removes build directory of a package
+    /// Removes build directory of a package in chroot
     fn remove_build_dir(&self, package: &Package) -> Result<(), DocBuilderError> {
         debug!("Removing build directory");
         let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
+        Ok(())
+    }
+
+
+    /// Remove documentation, build directory and sources directory of a package
+    fn clean(&self, package: &Package) -> Result<(), DocBuilderError> {
+        use std::fs::remove_dir_all;
+        try!(self.remove_build_dir(&package));
+        let documentation_path = PathBuf::from(&self.options.destination).join(format!("{}/{}",
+                          package.manifest().name(),
+                          package.manifest().version()));
+        let source_path = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
+                          package.manifest().name(),
+                          package.manifest().version()));
+        try!(remove_dir_all(documentation_path));
+        try!(remove_dir_all(source_path));
         Ok(())
     }
 
@@ -189,6 +211,13 @@ impl DocBuilder {
     }
 
 
+    /// Checks if package have examples
+    fn have_examples(&self, package: &Package) -> bool {
+        let path = source_path(&package).unwrap().join("examples");
+        path.exists() && path.is_dir()
+    }
+
+
     /// Gets rustc and cratesfyi version from chroot environment
     fn get_versions(&self) -> (String, String) {
         // It is safe to use expect here
@@ -199,6 +228,36 @@ impl DocBuilder {
          String::from(self.chroot_command("cratesfyi --version")
                           .expect("Failed to get cratesfyi version")
                           .trim()))
+    }
+
+
+    /// Adds sources into database
+    fn add_sources_into_database(&self,
+                                 conn: &Connection,
+                                 package: &Package)
+                                 -> Result<(), DocBuilderError> {
+        debug!("Adding sources into database");
+        let prefix = format!("sources/{}/{}",
+                             package.manifest().name(),
+                             package.manifest().version());
+        add_path_into_database(conn, &prefix, source_path(&package).unwrap())
+    }
+
+
+    /// Adds documentations into database
+    fn add_documentation_into_database(&self,
+                                       conn: &Connection,
+                                       package: &Package)
+                                       -> Result<(), DocBuilderError> {
+        debug!("Adding documentation into database");
+        let prefix = format!("rustdoc/{}/{}",
+                             package.manifest().name(),
+                             package.manifest().version());
+        let crate_doc_path = PathBuf::from(&self.options.chroot_path)
+                                 .join("home")
+                                 .join(&self.options.chroot_user)
+                                 .join(canonical_name(&package));
+        add_path_into_database(conn, &prefix, crate_doc_path)
     }
 }
 
