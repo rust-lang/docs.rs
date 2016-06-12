@@ -97,8 +97,7 @@ pub fn main() {
         let name = matches.value_of("CRATE_NAME").unwrap();
         let version = matches.value_of("CRATE_VERSION");
         if let Err(e) = build_doc(name, version) {
-            error!("{:#?}", e);
-            process::exit(121);
+            panic!("{:#?}", e);
         }
     } else if let Some(matches) = matches.subcommand_matches("build") {
         let docbuilder_opts = {
