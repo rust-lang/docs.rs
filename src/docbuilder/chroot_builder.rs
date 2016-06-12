@@ -166,9 +166,8 @@ impl DocBuilder {
     fn clean(&self, package: &Package) -> Result<(), DocBuilderError> {
         debug!("Cleaning package");
         use std::fs::remove_dir_all;
-        let documentation_path = PathBuf::from(&self.options.destination).join(format!("{}/{}",
-                          package.manifest().name(),
-                          package.manifest().version()));
+        let documentation_path = PathBuf::from(&self.options.destination)
+                                     .join(package.manifest().name());
         let source_path = source_path(&package).unwrap();
         // Some crates don't have documentation, so we don't care if removing_dir_all fails
         let _ = self.remove_build_dir(&package);
