@@ -5,3 +5,6 @@ addons:
       - kalakris-cmake
     packages:
       - cmake
+before_install:
+- sudo apt-get update -qq
+- sudo apt-get install -qq libmagic1 libmagic-dev
