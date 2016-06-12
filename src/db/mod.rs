@@ -30,11 +30,11 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             latest_version_id INT DEFAULT 0, \
             versions JSON DEFAULT '[]', \
             downloads_total INT DEFAULT 0, \
-            github_description VARCHAR(1024) \
+            github_description VARCHAR(1024), \
             github_stars INT DEFAULT 0, \
             github_forks INT DEFAULT 0, \
             github_issues INT DEFAULT 0, \
-            github_last_commit TIMESTAMP \
+            github_last_commit TIMESTAMP, \
             github_last_update TIMESTAMP \
         )",
         "CREATE TABLE releases ( \
