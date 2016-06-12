@@ -76,7 +76,12 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     for file_path_str in try!(get_file_list(&path)) {
         let (path, content, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path_str);
-            let mut file = try!(File::open(path));
+            // Some files have insufficient permissions (like .lock file created by cargo in
+            // documentation directory). We are skipping this files.
+            let mut file = match File::open(path) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
             let mime = try!(cookie.buffer(&content));
