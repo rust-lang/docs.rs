@@ -140,7 +140,7 @@ impl DocBuilder {
                           package: &Package,
                           rustc_version: &str)
                           -> Result<(), DocBuilderError> {
-        debug!("Copying codumentation");
+        debug!("Copying documentation");
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
                                  .join("home")
                                  .join(&self.options.chroot_user)
@@ -252,10 +252,9 @@ impl DocBuilder {
         let prefix = format!("rustdoc/{}/{}",
                              package.manifest().name(),
                              package.manifest().version());
-        let crate_doc_path = PathBuf::from(&self.options.chroot_path)
-                                 .join("home")
-                                 .join(&self.options.chroot_user)
-                                 .join(canonical_name(&package));
+        let crate_doc_path = PathBuf::from(&self.options.destination).join(format!("{}/{}",
+                          package.manifest().name(),
+                          package.manifest().version()));
         add_path_into_database(conn, &prefix, crate_doc_path)
     }
 }
