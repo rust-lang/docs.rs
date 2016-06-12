@@ -112,7 +112,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             path VARCHAR(255) NOT NULL PRIMARY KEY, \
             mime VARCHAR(100) NOT NULL, \
             date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
-            content BYTEA
+            date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
+            content BYTEA \
         )",
     ];
 

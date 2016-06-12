@@ -74,17 +74,26 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     let trans = try!(conn.transaction());
 
     for file_path_str in try!(get_file_list(&path)) {
-        let (content, mime) = {
+        let (path, content, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path_str);
             let mut file = try!(File::open(path));
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
             let mime = try!(cookie.buffer(&content));
-            (content, mime)
+            (file_path(prefix, &file_path_str), content, mime)
         };
 
-        try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                         &[&file_path(prefix, &file_path_str), &mime, &content]));
+        // check if file already exists in database
+        let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
+
+        if rows.get(0).get::<usize, i64>(0) == 0 {
+            try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                             &[&path, &mime, &content]));
+        } else {
+            try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+                              WHERE path = $1",
+                             &[&path, &mime, &content]));
+        }
     }
 
     try!(trans.commit());
@@ -106,7 +115,6 @@ mod test {
         let _ = env_logger::init();
 
         let files = get_file_list(env::current_dir().unwrap());
-        debug!("{:#?}", files);
         assert!(files.is_ok());
         assert!(files.unwrap().len() > 0);
 
@@ -120,6 +128,7 @@ mod test {
         let _ = env_logger::init();
 
         let conn = connect_db().unwrap();
-        add_path_into_database(&conn, "example", env::current_dir().unwrap().join("src")).unwrap();
+        let res = add_path_into_database(&conn, "example", env::current_dir().unwrap().join("src"));
+        assert!(res.is_ok());
     }
 }
