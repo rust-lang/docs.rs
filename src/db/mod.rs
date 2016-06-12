@@ -109,7 +109,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             UNIQUE(name, version) \
         )",
         "CREATE TABLE files ( \
-            path VARCHAR(255) NOT NULL PRIMARY KEY, \
+            path VARCHAR(4096) NOT NULL PRIMARY KEY, \
             mime VARCHAR(100) NOT NULL, \
             date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
