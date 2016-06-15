@@ -23,7 +23,8 @@ use time;
 /// Package must be built first.
 pub fn add_package_into_database(conn: &Connection,
                                  pkg: &Package,
-                                 res: &ChrootBuilderResult)
+                                 res: &ChrootBuilderResult,
+                                 files: Option<Json>)
                                  -> Result<i32, DocBuilderError> {
     debug!("Adding package into database");
     let crate_id = try!(initialize_package_in_database(&conn, &pkg));
@@ -41,9 +42,10 @@ pub fn add_package_into_database(conn: &Connection,
                                         dependencies, target_name, yanked, build_status, \
                                         rustdoc_status, test_status, license, repository_url, \
                                         homepage_url, description, description_long, readme, \
-                                        authors, keywords, have_examples, downloads ) VALUES ( \
-                                        $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, $11, $12, \
-                                        $13, $14, $15, $16, $17, $18, $19 ) RETURNING id",
+                                        authors, keywords, have_examples, downloads, files ) \
+                                        VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, \
+                                        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20 ) \
+                                        RETURNING id",
                                        &[&crate_id,
                                          &format!("{}", pkg.manifest().version()),
                                          &release_time,
@@ -62,7 +64,8 @@ pub fn add_package_into_database(conn: &Connection,
                                          &pkg.manifest().metadata().authors.to_json(),
                                          &pkg.manifest().metadata().keywords.to_json(),
                                          &res.have_examples,
-                                         &downloads]));
+                                         &downloads,
+                                         &files]));
             // return id
             rows.get(0).get(0)
 
@@ -72,7 +75,7 @@ pub fn add_package_into_database(conn: &Connection,
                              $8, test_status = $9, license = $10, repository_url = $11, \
                              homepage_url = $12, description = $13, description_long = $14, \
                              readme = $15, authors = $16, keywords = $17, have_examples = $18, \
-                             downloads = $19 WHERE crate_id = $1 AND version = $2",
+                             downloads = $19, files = $20 WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
                               &release_time,
@@ -91,7 +94,8 @@ pub fn add_package_into_database(conn: &Connection,
                               &pkg.manifest().metadata().authors.to_json(),
                               &pkg.manifest().metadata().keywords.to_json(),
                               &res.have_examples,
-                              &downloads]));
+                              &downloads,
+                              &files]));
             rows.get(0).get(0)
         }
     };
@@ -399,8 +403,8 @@ fn add_owners_into_database(conn: &Connection,
                 if rows.len() > 0 {
                     rows.get(0).get(0)
                 } else {
-                    try!(conn.query("INSERT INTO owners (login, avatar, name, email) \
-                                     VALUES ($1, $2, $3, $4) RETURNING id",
+                    try!(conn.query("INSERT INTO owners (login, avatar, name, email) VALUES ($1, \
+                                     $2, $3, $4) RETURNING id",
                                     &[&login, &avatar, &name, &email]))
                         .get(0)
                         .get(0)

@@ -58,6 +58,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             keywords JSON, \
             have_examples BOOL DEFAULT FALSE, \
             downloads INT DEFAULT 0, \
+            files JSON, \
             UNIQUE (crate_id, version) \
         )",
         "CREATE TABLE authors ( \

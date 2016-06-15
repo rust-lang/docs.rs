@@ -8,6 +8,7 @@
 use std::path::Path;
 use DocBuilderError;
 use postgres::Connection;
+use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
 use std::io::Read;
 
@@ -43,7 +44,7 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 }
 
 
-fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>, DocBuilderError> {
+pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>, DocBuilderError> {
     let path = path.as_ref();
     let mut files: Vec<String> = Vec::new();
 
@@ -61,17 +62,19 @@ fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>, DocBuilderError
 }
 
 
-/// Adds files into database
+/// Adds files into database and returns list of files with their mime type in Json
 pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               prefix: &str,
                                               path: P)
-                                              -> Result<(), DocBuilderError> {
+                                              -> Result<Json, DocBuilderError> {
     use magic::{Cookie, flags};
     let cookie = try!(Cookie::open(flags::MIME_TYPE));
     // FIXME: This is linux specific but idk any alternative
     try!(cookie.load(&vec!["/usr/share/misc/magic.mgc"]));
 
     let trans = try!(conn.transaction());
+
+    let mut file_list_with_mimes: Vec<(String, String)> = Vec::new();
 
     for file_path_str in try!(get_file_list(&path)) {
         let (path, content, mime) = {
@@ -85,6 +88,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
             let mime = try!(cookie.buffer(&content));
+
+            file_list_with_mimes.push((mime.clone(), file_path_str.clone()));
+
             (file_path(prefix, &file_path_str), content, mime)
         };
 
@@ -103,7 +109,23 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
     try!(trans.commit());
 
-    Ok(())
+    file_list_to_json(file_list_with_mimes)
+}
+
+
+
+fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json, DocBuilderError> {
+
+    let mut file_list_json: Vec<Json> = Vec::new();
+
+    for file in file_list {
+        let mut v: Vec<String> = Vec::new();
+        v.push(file.0.clone());
+        v.push(file.1.clone());
+        file_list_json.push(v.to_json());
+    }
+
+    Ok(file_list_json.to_json())
 }
 
 

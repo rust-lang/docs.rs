@@ -8,6 +8,7 @@ use cargo::core::Package;
 use std::process::{Command, Output};
 use std::path::PathBuf;
 use postgres::Connection;
+use rustc_serialize::json::Json;
 
 use regex::Regex;
 
@@ -69,13 +70,13 @@ impl DocBuilder {
         let res = self.build_package_in_chroot(&pkg);
 
         // copy sources and documentation
-        try!(self.add_sources_into_database(&conn, &pkg));
+        let file_list = try!(self.add_sources_into_database(&conn, &pkg));
         if res.have_doc {
             try!(self.copy_documentation(&pkg, &res.rustc_version));
             try!(self.add_documentation_into_database(&conn, &pkg));
         }
 
-        let release_id = try!(add_package_into_database(&conn, &pkg, &res));
+        let release_id = try!(add_package_into_database(&conn, &pkg, &res, Some(file_list)));
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove documentation, source and build directory after we are done
@@ -233,7 +234,7 @@ impl DocBuilder {
     fn add_sources_into_database(&self,
                                  conn: &Connection,
                                  package: &Package)
-                                 -> Result<(), DocBuilderError> {
+                                 -> Result<Json, DocBuilderError> {
         debug!("Adding sources into database");
         let prefix = format!("sources/{}/{}",
                              package.manifest().name(),
@@ -246,7 +247,7 @@ impl DocBuilder {
     fn add_documentation_into_database(&self,
                                        conn: &Connection,
                                        package: &Package)
-                                       -> Result<(), DocBuilderError> {
+                                       -> Result<Json, DocBuilderError> {
         debug!("Adding documentation into database");
         let prefix = format!("rustdoc/{}/{}",
                              package.manifest().name(),
