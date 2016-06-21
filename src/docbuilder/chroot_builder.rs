@@ -52,9 +52,6 @@ impl DocBuilder {
     pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool, DocBuilderError> {
         info!("Building package {}-{}", name, version);
 
-        // Database connection
-        let conn = try!(connect_db());
-
         // Skip crates according to options
         if (self.options.skip_if_log_exists &&
             self.cache.contains(&format!("{}-{}", name, version)[..])) ||
@@ -64,6 +61,9 @@ impl DocBuilder {
             return Ok(false);
         }
 
+
+        // Database connection
+        let conn = try!(connect_db());
 
         // get_package (and cargo) is using semver, add '=' in front of version.
         let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
