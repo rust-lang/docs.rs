@@ -96,7 +96,7 @@ div.nav-container {
     }
 
     form.landing-search-form-nav {
-        input.search-input {
+        input.search-input-nav {
             float: right;
             max-width: 200px;
             border: none;
@@ -105,6 +105,9 @@ div.nav-container {
             text-align: right;
             box-shadow: none;
             height: 38px;
+        }
+        input.search-input-nav:focus {
+            outline: unset;
         }
     }
 }
