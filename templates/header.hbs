@@ -10,6 +10,11 @@
     <link rel="stylesheet" href="/rustdoc/rustdoc-20160526-1.10.0-nightly-97e3a2401.css" type="text/css" media="all" />
     <link rel="stylesheet" href="/rustdoc/main-20160526-1.10.0-nightly-97e3a2401.css" type="text/css" media="all" />
     <link rel="stylesheet" href="/style.css" type="text/css" media="all" />
+    {{#if varsb.javascript_highlightjs}}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/github.min.css" type="text/css" media="all" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/highlight.min.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/languages/rust.min.js" type="text/javascript" charset="utf-8"></script>
+    {{/if}}
     <title>{{#if title}}{{title}} - {{/if}}{{#if content.metadata.name}}{{content.metadata.name}} {{content.metadata.version}} - {{/if}}Cratesfyi</title>
   </head>
   <body>

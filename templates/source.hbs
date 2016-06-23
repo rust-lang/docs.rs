@@ -28,7 +28,7 @@
     </div>
     {{#if ../varss.file_content}}
     <div class="pure-u-19-24">
-      <pre>{{ ../varss.file_content }}</pre>
+      <pre><code{{#if ../varsb.file_content_rust_source}} class="rust"{{/if}}>{{ ../varss.file_content }}</code></pre>
     </div>
     {{/if}}
   </div>

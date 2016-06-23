@@ -41,11 +41,6 @@ strong {
     font-weight: 500;
 }
 
-pre {
-    background-color: $color-background-code;
-    padding: 14px;
-}
-
 .pure-button-normal {
     background-color: #fff;
     box-sizing: border-box !important;
@@ -149,7 +144,7 @@ div.recent-releases-container {
         display: block;
         border-bottom: 1px solid $color-border;
         padding: .4em 1em;
-        
+
         @media #{$media-lg} {
             padding: .4em 0;
             margin: 0 1em;
@@ -168,7 +163,7 @@ div.recent-releases-container {
     .description {
         font-family: $font-family-serif;
         font-weight: normal;
-        @media #{$media-sm} { 
+        @media #{$media-sm} {
             font-size: 1em;
             white-space: nowrap;
             overflow: hidden;
@@ -177,7 +172,7 @@ div.recent-releases-container {
     }
 
     .description:hover {
-        @media #{$media-sm} { 
+        @media #{$media-sm} {
             overflow: visible;
             white-space: normal;
         }
@@ -304,8 +299,29 @@ div.package-page-container {
         }
     }
 
-    div.package-details p {
-        font-family: $font-family-serif;
+    div.package-details {
+        p {
+            font-family: $font-family-serif;
+        }
+
+        h1:first-child,
+        h2:first-child,
+        h3:first-child,
+        h4:first-child,
+        h5:first-child,
+        h6:first-child {
+            margin-top: 0;
+        }
+    }
+
+    pre {
+        background-color: inherit;
+        margin: 0;
+        padding: 0;
+
+        code {
+            white-space: pre;
+        }
     }
 }
 
@@ -326,7 +342,7 @@ div.cratesfyi-package-container {
         margin: 0;
         padding: 0 0 20px 16px;
 
-        @media #{$media-sm} { 
+        @media #{$media-sm} {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -388,6 +404,6 @@ div.search-page-search-form {
         max-width: 300px;
         padding: .4em 1em;
     }
-    
+
 
 }

@@ -217,28 +217,31 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
 
-    let content = if let Some(file) = file {
+    let (content, is_rust_source) = if let Some(file) = file {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !file.mime.starts_with("text") && !file.is_empty() {
             return Ok(file.serve());
         } else if file.mime.starts_with("text") && !file.is_empty() {
-            String::from_utf8(file.content).ok()
+            (String::from_utf8(file.content).ok(), file.path.ends_with(".rs"))
         } else {
-            None
+            (None, false)
         }
     } else {
-        None
+        (None, false)
     };
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
 
     let page = Page::new(list)
                    .set_bool("show_parent_link", !req_path.is_empty())
+                   .set_true("javascript_highlightjs")
                    .set_true("show_package_navigation")
                    .set_true("package_source_tab");
 
     if let Some(content) = content {
-        page.set("file_content", &content).to_resp("source")
+        page.set("file_content", &content)
+            .set_bool("file_content_rust_source", is_rust_source)
+            .to_resp("source")
     } else {
         page.to_resp("source")
     }

@@ -178,6 +178,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
         .and_then(|details| {
             Page::new(details)
                 .set_true("show_package_navigation")
+                .set_true("javascript_highlightjs")
                 .set_true("package_navigation_crate_tab")
                 .to_resp("crate_details")
         })
