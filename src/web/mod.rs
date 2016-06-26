@@ -59,7 +59,9 @@ impl CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page);
         router.get("/releases", releases::releases_handler);
-        router.get("/releases/:page", releases::releases_handler);
+        router.get("/releases/recent/:page", releases::releases_handler);
+        router.get("/releases/stars", releases::stars_handler);
+        router.get("/releases/stars/:page", releases::stars_handler);
         router.get("/rustdoc/:crate", rustdoc::rustdoc_redirector_handler);
         router.get("/rustdoc/:crate/", rustdoc::rustdoc_redirector_handler);
         router.get("/rustdoc/:crate/:version", rustdoc::rustdoc_redirector_handler);

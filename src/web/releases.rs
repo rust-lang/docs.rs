@@ -26,6 +26,22 @@ struct Release {
     target_name: Option<String>,
     rustdoc_status: bool,
     release_time: time::Timespec,
+    stars: i32,
+}
+
+
+impl Default for Release {
+    fn default() -> Release {
+        Release {
+            name: String::new(),
+            version: String::new(),
+            description: None,
+            target_name: None,
+            rustdoc_status: false,
+            release_time: time::get_time(),
+            stars: 0,
+        }
+    }
 }
 
 
@@ -39,29 +55,51 @@ impl ToJson for Release {
         m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
         m.insert("release_time".to_string(),
                  duration_to_str(self.release_time).to_json());
+        m.insert("stars".to_string(), self.stars.to_json());
         m.to_json()
     }
 }
 
 
-fn get_releases(conn: &Connection, page: i64, limit: i64) -> Vec<Release> {
-    let mut packages = Vec::new();
+enum Order {
+    ReleaseTime, // this is default order
+    GithubStars,
+}
+
+
+fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
 
     let offset = (page - 1) * limit;
 
-    for row in &conn.query("SELECT crates.name, \
-                                   releases.version, \
-                                   releases.description, \
-                                   releases.target_name, \
-                                   releases.release_time, \
-                                   releases.rustdoc_status \
-                            FROM crates \
-                            INNER JOIN releases ON crates.id = releases.crate_id \
-                            ORDER BY releases.release_time DESC \
-                            LIMIT $1 OFFSET $2",
-                           &[&limit, &offset])
-                    .unwrap() {
+    // TODO: This function changed so much during development and current version have code
+    //       repeats for queries. There is definitely room for improvements.
+    let query = match order {
+        Order::ReleaseTime => "SELECT crates.name, \
+                                      releases.version, \
+                                      releases.description, \
+                                      releases.target_name, \
+                                      releases.release_time, \
+                                      releases.rustdoc_status, \
+                                      crates.github_stars \
+                               FROM crates \
+                               INNER JOIN releases ON crates.id = releases.crate_id \
+                               ORDER BY releases.release_time DESC \
+                               LIMIT $1 OFFSET $2",
+        Order::GithubStars => "SELECT crates.name, \
+                                      releases.version, \
+                                      releases.description, \
+                                      releases.target_name, \
+                                      releases.release_time, \
+                                      releases.rustdoc_status, \
+                                      crates.github_stars \
+                               FROM crates \
+                               INNER JOIN releases ON releases.id = crates.latest_version_id \
+                               ORDER BY crates.github_stars DESC \
+                               LIMIT $1 OFFSET $2",
+    };
 
+    let mut packages = Vec::new();
+    for row in &conn.query(&query, &[&limit, &offset]).unwrap() {
         let package = Release {
             name: row.get(0),
             version: row.get(1),
@@ -69,6 +107,7 @@ fn get_releases(conn: &Connection, page: i64, limit: i64) -> Vec<Release> {
             target_name: row.get(3),
             release_time: row.get(4),
             rustdoc_status: row.get(5),
+            stars: row.get(6),
         };
 
         packages.push(package);
@@ -110,6 +149,7 @@ fn get_search_results(conn: &Connection,
             target_name: row.get(3),
             release_time: row.get(4),
             rustdoc_status: row.get(5),
+            ..Release::default()
         };
 
         packages.push(package);
@@ -131,7 +171,7 @@ fn get_search_results(conn: &Connection,
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let conn = req.extensions.get::<Pool>().unwrap();
-    let packages = get_releases(conn, 1, RELEASES_IN_HOME);
+    let packages = get_releases(conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
     Page::new(packages)
         .set_true("show_search_form")
         .set_true("hide_package_navigation")
@@ -140,7 +180,6 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
-
     // page number of releases
     let page_number: i64 = req.extensions
                               .get::<Router>()
@@ -151,30 +190,67 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
                               .unwrap_or(1);
 
     let conn = req.extensions.get::<Pool>().unwrap();
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES);
-    let page = {
-        let page = Page::new(packages)
-                       .title("Recent Releases")
-                       .set_int("next_page", page_number + 1);
+    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
 
-        // Set previous page if we are not in first page
-        // TODO: Currently, there is no way to know we are on the last page.
-        //       TBH I kinda don't care. COUNT(*) is expensive, and there is more than
-        //       25k release anyway, I don't think people will check last page. I can cache
-        //       result and use this value for approximation. But since I don't know how to
-        //       do it yet, I will just skip page checking. I can also assume if Package count
-        //       is less than RELEASES_IN_RELEASES, we are on last page.
-        if page_number == 1 {
-            page
-        } else {
-            page.set_int("previous_page", page_number - 1)
-        }
-    };
+    if packages.is_empty() {
+        return Err(IronError::new(NoCrate, status::NotFound));
+    }
 
+    // Show next and previous page buttons
+    // This is a temporary solution to avoid expensive COUNT(*)
+    let (show_next_page, show_previous_page) = (packages.len() == RELEASES_IN_RELEASES as usize,
+                                                page_number != 1);
 
-    page.set_int("next_page", page_number + 1).to_resp("releases")
+    Page::new(packages)
+        .title("Releases")
+        .set("description", "Recently uploaded crates")
+        .set("release_type", "recent")
+        .set_true("show_releases_navigation")
+        .set_true("releases_navigation_recent_tab")
+        .set_bool("show_next_page_button", show_next_page)
+        .set_int("next_page", page_number + 1)
+        .set_bool("show_previous_page_button", show_previous_page)
+        .set_int("previous_page", page_number - 1)
+        .to_resp("releases")
 }
 
+
+// TODO: This function is almost identical to previous one
+pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
+    // page number of releases
+    let page_number: i64 = req.extensions
+                              .get::<Router>()
+                              .unwrap()
+                              .find("page")
+                              .unwrap_or("1")
+                              .parse()
+                              .unwrap_or(1);
+
+    let conn = req.extensions.get::<Pool>().unwrap();
+    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
+
+    if packages.is_empty() {
+        return Err(IronError::new(NoCrate, status::NotFound));
+    }
+
+    // Show next and previous page buttons
+    // This is a temporary solution to avoid expensive COUNT(*)
+    let (show_next_page, show_previous_page) = (packages.len() == RELEASES_IN_RELEASES as usize,
+                                                page_number != 1);
+
+    Page::new(packages)
+        .title("Releases")
+        .set("description", "Most starred crates")
+        .set("release_type", "stars")
+        .set_true("show_releases_navigation")
+        .set_true("releases_navigation_stars_tab")
+        .set_true("show_stars")
+        .set_bool("show_next_page_button", show_next_page)
+        .set_int("next_page", page_number + 1)
+        .set_bool("show_previous_page_button", show_previous_page)
+        .set_int("previous_page", page_number - 1)
+        .to_resp("releases")
+}
 
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {

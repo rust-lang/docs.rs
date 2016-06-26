@@ -155,6 +155,10 @@ div.recent-releases-container {
         background-color: $color-background-code;
     }
 
+    li:last-child .release {
+        border-bottom: none;
+    }
+
     .name {
         color: $color-url;
         font-weight: 500;
@@ -185,8 +189,13 @@ div.recent-releases-container {
         }
     }
 
-    .pure-button {
-        margin: .4em 1em;
+    div.pagination {
+        text-align: center;
+        margin: 1em;
+
+        .pure-button {
+            margin: 0;
+        }
     }
 }
 
