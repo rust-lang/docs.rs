@@ -87,7 +87,9 @@ pub fn main() {
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
                                                       .about("Initialize database. Currently \
-                                                             only creates tables in database.")))
+                                                             only creates tables in database."))
+                                      .subcommand(SubCommand::with_name("update-github-fields")
+                                                      .about("Updates github stats for crates.")))
                       .get_matches();
 
 
@@ -157,6 +159,8 @@ pub fn main() {
                 writeln!(&mut io::stderr(), "Failed to initialize database: {}", err).unwrap();
                 process::exit(1);
             }
+        } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
+            cratesfyi::utils::github_updater().expect("Failed to update github fields");
         }
     } else {
         println!("{}", matches.usage());
