@@ -62,6 +62,8 @@ impl CratesfyiHandler {
         router.get("/releases/recent/:page", releases::releases_handler);
         router.get("/releases/stars", releases::stars_handler);
         router.get("/releases/stars/:page", releases::stars_handler);
+        router.get("/releases/:author", releases::author_handler);
+        router.get("/releases/:author/:page", releases::author_handler);
         router.get("/rustdoc/:crate", rustdoc::rustdoc_redirector_handler);
         router.get("/rustdoc/:crate/", rustdoc::rustdoc_redirector_handler);
         router.get("/rustdoc/:crate/:version", rustdoc::rustdoc_redirector_handler);

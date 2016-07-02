@@ -74,7 +74,8 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
     // TODO: This function changed so much during development and current version have code
     //       repeats for queries. There is definitely room for improvements.
     let query = match order {
-        Order::ReleaseTime => "SELECT crates.name, \
+        Order::ReleaseTime => {
+            "SELECT crates.name, \
                                       releases.version, \
                                       releases.description, \
                                       releases.target_name, \
@@ -84,8 +85,10 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
                                FROM crates \
                                INNER JOIN releases ON crates.id = releases.crate_id \
                                ORDER BY releases.release_time DESC \
-                               LIMIT $1 OFFSET $2",
-        Order::GithubStars => "SELECT crates.name, \
+                               LIMIT $1 OFFSET $2"
+        }
+        Order::GithubStars => {
+            "SELECT crates.name, \
                                       releases.version, \
                                       releases.description, \
                                       releases.target_name, \
@@ -95,7 +98,8 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
                                FROM crates \
                                INNER JOIN releases ON releases.id = crates.latest_version_id \
                                ORDER BY crates.github_stars DESC \
-                               LIMIT $1 OFFSET $2",
+                               LIMIT $1 OFFSET $2"
+        }
     };
 
     let mut packages = Vec::new();
@@ -114,6 +118,52 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
     }
 
     packages
+}
+
+
+
+fn get_releases_by_author(conn: &Connection,
+                          page: i64,
+                          limit: i64,
+                          author: &str)
+                          -> (String, Vec<Release>) {
+
+    let offset = (page - 1) * limit;
+
+    let query = "SELECT crates.name,
+                        releases.version,
+                        releases.description,
+                        releases.target_name,
+                        releases.release_time,
+                        releases.rustdoc_status,
+                        crates.github_stars,
+                        authors.name
+                 FROM crates
+                 INNER JOIN releases ON releases.id = crates.latest_version_id
+                 INNER JOIN author_rels ON releases.id = author_rels.rid
+                 INNER JOIN authors ON authors.id = author_rels.aid
+                 WHERE authors.slug = $1
+                 ORDER BY crates.github_stars DESC
+                 LIMIT $2 OFFSET $3";
+
+    let mut author_name = String::new();
+    let mut packages = Vec::new();
+    for row in &conn.query(&query, &[&author, &limit, &offset]).unwrap() {
+        let package = Release {
+            name: row.get(0),
+            version: row.get(1),
+            description: row.get(2),
+            target_name: row.get(3),
+            release_time: row.get(4),
+            rustdoc_status: row.get(5),
+            stars: row.get(6),
+        };
+
+        author_name = row.get(7);
+        packages.push(package);
+    }
+
+    (author_name, packages)
 }
 
 
@@ -244,6 +294,52 @@ pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
         .set("release_type", "stars")
         .set_true("show_releases_navigation")
         .set_true("releases_navigation_stars_tab")
+        .set_true("show_stars")
+        .set_bool("show_next_page_button", show_next_page)
+        .set_int("next_page", page_number + 1)
+        .set_bool("show_previous_page_button", show_previous_page)
+        .set_int("previous_page", page_number - 1)
+        .to_resp("releases")
+}
+
+
+pub fn author_handler(req: &mut Request) -> IronResult<Response> {
+    // page number of releases
+    let page_number: i64 = req.extensions
+                              .get::<Router>()
+                              .unwrap()
+                              .find("page")
+                              .unwrap_or("1")
+                              .parse()
+                              .unwrap_or(1);
+
+    let conn = req.extensions.get::<Pool>().unwrap();
+    let author = req.extensions.get::<Router>().unwrap().find("author");
+
+    if author.is_none() {
+        return Err(IronError::new(NoCrate, status::NotFound));
+    }
+
+    let (author_name, packages) = get_releases_by_author(conn,
+                                                         page_number,
+                                                         RELEASES_IN_RELEASES,
+                                                         author.unwrap());
+
+    if packages.is_empty() {
+        return Err(IronError::new(NoCrate, status::NotFound));
+    }
+
+    // Show next and previous page buttons
+    // This is a temporary solution to avoid expensive COUNT(*)
+    let (show_next_page, show_previous_page) = (packages.len() == RELEASES_IN_RELEASES as usize,
+                                                page_number != 1);
+
+    Page::new(packages)
+        .title("Releases")
+        .set("description", &format!("Crates from {}", author_name))
+        .set("author", &author_name)
+        .set("release_type", &author.unwrap())
+        .set_true("show_releases_navigation")
         .set_true("show_stars")
         .set_bool("show_next_page_button", show_next_page)
         .set_int("next_page", page_number + 1)
