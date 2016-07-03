@@ -54,11 +54,15 @@ strong {
 // rustdoc overrides
 div.rustdoc {
     font-family: $font-family-serif;
-    padding-right: 15px;
+    padding: 0 1em;
+
+    @media #{$media-sm} {
+        padding-left: 0;
+    }
 }
 
 .sidebar {
-    top: 150px;
+    top: 160px;
     left: auto;
 }
 
@@ -309,8 +313,12 @@ div.package-page-container {
     }
 
     div.package-details {
-        p {
-            font-family: $font-family-serif;
+        padding: 0 1em;
+
+        font-family: $font-family-serif;
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: $font-family-sans;
         }
 
         h1:first-child,

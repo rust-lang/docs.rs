@@ -4,7 +4,7 @@
 {{#with content}}
 <div class="container package-page-container">
   <div class="pure-g">
-    <div class="{{#if ../varss.file_content}}pure-u-5-24{{else}}pure-u-1{{/if}}">
+    <div class="pure-u-1 {{#if ../varss.file_content}}pure-u-sm-7-24 pure-u-md-5-24{{/if}}">
       <div class="pure-menu package-menu">
         <ul class="pure-menu-list">
           {{#if ../varsb.show_parent_link}}
@@ -27,7 +27,7 @@
       </div>
     </div>
     {{#if ../varss.file_content}}
-    <div class="pure-u-19-24">
+    <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
       <pre><code{{#if ../varsb.file_content_rust_source}} class="rust"{{/if}}>{{ ../varss.file_content }}</code></pre>
     </div>
     {{/if}}
