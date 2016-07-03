@@ -36,6 +36,10 @@ struct CrateDetails {
     have_examples: bool, // need to check this manually
     target_name: Option<String>,
     versions: Vec<String>,
+    github: bool, // is crate hosted in github
+    github_stars: Option<i32>,
+    github_forks: Option<i32>,
+    github_issues: Option<i32>,
     metadata: MetaData,
 }
 
@@ -65,6 +69,10 @@ impl ToJson for CrateDetails {
         m.insert("have_examples".to_string(), self.have_examples.to_json());
         m.insert("target_name".to_string(), self.target_name.to_json());
         m.insert("versions".to_string(), self.versions.to_json());
+        m.insert("github".to_string(), self.github.to_json());
+        m.insert("github_stars".to_string(), self.github_stars.to_json());
+        m.insert("github_forks".to_string(), self.github_forks.to_json());
+        m.insert("github_issues".to_string(), self.github_forks.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.to_json()
     }
@@ -92,7 +100,10 @@ impl CrateDetails {
                             releases.target_name, \
                             crates.versions, \
                             authors.name, \
-                            authors.slug \
+                            authors.slug, \
+                            crates.github_stars, \
+                            crates.github_forks, \
+                            crates.github_issues \
                      FROM author_rels \
                      LEFT OUTER JOIN authors ON authors.id = author_rels.aid \
                      LEFT OUTER JOIN releases ON releases.id = author_rels.rid \
@@ -151,8 +162,17 @@ impl CrateDetails {
             have_examples: rows.get(0).get(13),
             target_name: rows.get(0).get(14),
             versions: versions,
+            github: false,
+            github_stars: rows.get(0).get(18),
+            github_forks: rows.get(0).get(19),
+            github_issues: rows.get(0).get(20),
             metadata: metadata,
         };
+
+        if let Some(repository_url) = crate_details.repository_url.clone() {
+            crate_details.github = repository_url.starts_with("http://github.com") ||
+                                   repository_url.starts_with("https://github.com");
+        }
 
         // Insert authors with name and slug
         for row in &rows {

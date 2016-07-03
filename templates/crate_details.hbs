@@ -11,6 +11,15 @@
           {{#each authors}}
           <li class="pure-menu-item"><a href="/releases/{{this.[1]}}" class="pure-menu-link">{{this.[0]}}</a></li>
           {{/each}}
+          <li class="pure-menu-heading">Links</li>
+          {{#if homepage_url}}<li class="pure-menu-item"><a href="{{homepage_url}}" class="pure-menu-link">Homepage</a></li>{{/if}}
+          {{#if github}}
+          <li class="pure-menu-item">
+            <a href="{{repository_url}}" class="pure-menu-link"><i class="fa fa-github-alt fa-fw"></i> <i class="fa fa-star-o fa-fw"></i> {{github_stars}} <i class="fa fa-code-fork fa-fw"></i> {{github_forks}} <i class="fa fa-exclamation-circle fa-fw"></i> {{github_issues}}</a>
+          </li>
+          {{else}}
+          {{#if repository_url}}<li class="pure-menu-item"><a href="{{repository_url}}" class="pure-menu-link">Repository</a></li>{{/if}}
+          {{/if}}
           <li class="pure-menu-heading">Dependencies</li>
           <li class="pure-menu-item">
             <div class="pure-menu pure-menu-scrollable sub-menu">
