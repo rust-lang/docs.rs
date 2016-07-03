@@ -72,7 +72,7 @@ impl ToJson for CrateDetails {
         m.insert("github".to_string(), self.github.to_json());
         m.insert("github_stars".to_string(), self.github_stars.to_json());
         m.insert("github_forks".to_string(), self.github_forks.to_json());
-        m.insert("github_issues".to_string(), self.github_forks.to_json());
+        m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.to_json()
     }
