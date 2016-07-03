@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::build_doc;
+use cratesfyi::db::add_path_into_database;
 
 
 pub fn main() {
@@ -87,9 +88,20 @@ pub fn main() {
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
                                                       .about("Initialize database. Currently \
-                                                             only creates tables in database."))
+                                                              only creates tables in database."))
                                       .subcommand(SubCommand::with_name("update-github-fields")
-                                                      .about("Updates github stats for crates.")))
+                                                      .about("Updates github stats for crates."))
+                                      .subcommand(SubCommand::with_name("add-directory")
+                                                      .about("Adds a directory into database")
+                                                      .arg(Arg::with_name("DIRECTORY")
+                                                               .index(1)
+                                                               .required(true)
+                                                               .help("Path of file or \
+                                                                      directory"))
+                                                      .arg(Arg::with_name("PREFIX")
+                                                               .index(2)
+                                                               .help("Prefix of files in \
+                                                                      database"))))
                       .get_matches();
 
 
@@ -161,6 +173,11 @@ pub fn main() {
             }
         } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
+        } else if let Some(matches) = matches.subcommand_matches("add-directory") {
+            add_path_into_database(&db::connect_db().unwrap(),
+                                   matches.value_of("PREFIX").unwrap_or(""),
+                                   matches.value_of("DIRECTORY").unwrap())
+                .unwrap();
         }
     } else {
         println!("{}", matches.usage());
