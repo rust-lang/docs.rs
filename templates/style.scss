@@ -168,6 +168,17 @@ div.recent-releases-container {
         font-weight: 500;
     }
 
+    .build {
+        font-weight: 500;
+        i.fa-check {
+            color: $color-macro;
+        }
+        i.fa-close {
+            color: $color-struct;
+
+        }
+    }
+
     .description {
         font-family: $font-family-serif;
         font-weight: normal;
