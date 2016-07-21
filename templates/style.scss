@@ -435,3 +435,14 @@ div.search-page-search-form {
 
 
 }
+
+.menu-item-divided {
+    border-bottom: 1px solid $color-border;
+}
+
+.rust-navigation-item {
+    background: url(/rust-logo.png) no-repeat;
+    background-position: 15px 45%;
+    background-size: 14px;
+    padding-left: 35px;
+}
