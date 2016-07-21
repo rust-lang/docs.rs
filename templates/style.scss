@@ -412,6 +412,7 @@ div.cratesfyi-package-container {
 
 
 div.warning {
+    font-family: $font-family-sans;
     border-radius: 4px;
     background-color: lighten($color-type, 45%);
     padding: .4em 1em;
