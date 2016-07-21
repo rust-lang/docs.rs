@@ -1,7 +1,7 @@
 //! Releases web handlers
 
 
-use super::{NoCrate, duration_to_str};
+use super::{NoCrate, duration_to_str, match_version};
 use super::page::Page;
 use super::pool::Pool;
 use iron::prelude::*;
@@ -357,6 +357,30 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = req.extensions.get::<Pool>().unwrap();
     if let Some(&Value::String(ref query)) = query {
+
+        // check if I am feeling lucky button pressed and redirect user to crate page
+        // if there is a match
+        // TODO: Redirecting to latest doc might be more useful
+        if params.find(&["i-am-feeling-lucky"]).is_some() {
+            if let Some(version) = match_version(&conn, &query, None) {
+                use iron::Url;
+                use iron::modifiers::Redirect;
+                let url = Url::parse(&format!("{}://{}:{}/crates/{}/{}",
+                                              req.url.scheme,
+                                              req.url.host,
+                                              req.url.port,
+                                              query,
+                                              version)[..]).unwrap();
+                let mut resp = Response::with((status::Found, Redirect(url)));
+
+                use iron::headers::{Expires, HttpDate};
+                use time;
+                resp.headers.set(Expires(HttpDate(time::now())));
+                return Ok(resp);
+            }
+        }
+
+
         let search_query = query.replace(" ", " & ");
         get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
             .ok_or(IronError::new(NoCrate, status::NotFound))

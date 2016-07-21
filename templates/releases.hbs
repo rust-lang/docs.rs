@@ -8,9 +8,20 @@
     <div><input class="search-input" name="query" type="text" placeholder="Search"></div>
     <div class="buttons">
       <button type="submit" class="pure-button pure-button-normal">Search</button>
-      <button type="submit" class="pure-button pure-button-normal">I'm Feeling Lucky</button>
+      <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button">I'm Feeling Lucky</button>
     </div>
   </form>
+  <script type="text/javascript" charset="utf-8">
+    document.getElementById("i-am-feeling-lucky-button").onclick = function() {
+      var form = document.getElementsByClassName("landing-search-form");
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'i-am-feeling-lucky';
+      input.value = 1;
+      document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+      return true;
+    };
+  </script>
 </div>
 {{/if}}
 
