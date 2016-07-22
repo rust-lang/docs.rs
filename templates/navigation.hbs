@@ -30,13 +30,13 @@
     </div>
 
     {{#unless varsb.hide_package_navigation}}
-    {{#with content}}
     <div class="cratesfyi-package-container">
       <div class="container">
-        <h1>{{#if ../title}}{{../title}}{{else}}{{metadata.name}} {{metadata.version}}{{/if}}</h1>
-        <div class="description">{{#if metadata.description }}{{metadata.description}}{{else}}{{../varss.description}}{{/if}}</div>
+        <h1>{{#if title}}{{title}}{{else}}{{content.metadata.name}} {{content.metadata.version}}{{/if}}</h1>
+        <div class="description">{{#if content.metadata.description }}{{content.metadata.description}}{{else}}{{varss.description}}{{/if}}</div>
+
         {{#if ../varsb.show_package_navigation}}
-        {{#with metadata}}
+        {{#with content.metadata}}
         <div class="pure-menu pure-menu-horizontal">
           <ul class="pure-menu-list">
             {{#if rustdoc_status}}
@@ -49,18 +49,18 @@
         </div>
         {{/with}}
         {{/if}}
-        {{#if ../varsb.show_releases_navigation}}
+
+        {{#if varsb.show_releases_navigation}}
         <div class="pure-menu pure-menu-horizontal">
           <ul class="pure-menu-list">
-            <li class="pure-menu-item"><a href="/releases" class="pure-menu-link{{#if ../../varsb.releases_navigation_recent_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-leaf"></i> Recent</a></li>
-            <li class="pure-menu-item"><a href="/releases/stars" class="pure-menu-link{{#if ../../varsb.releases_navigation_stars_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-star"></i> Stars</a></li>
-            {{#if ../varss.author}}
-            <li class="pure-menu-item"><a href="/releases/authors" class="pure-menu-link pure-menu-active"><i class="fa fa-fw fa-user"></i> {{../varss.author}}</a></li>
+            <li class="pure-menu-item"><a href="/releases" class="pure-menu-link{{#if varsb.releases_navigation_recent_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-leaf"></i> Recent</a></li>
+            <li class="pure-menu-item"><a href="/releases/stars" class="pure-menu-link{{#if varsb.releases_navigation_stars_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-star"></i> Stars</a></li>
+            {{#if varss.author}}
+            <li class="pure-menu-item"><a href="/releases/authors" class="pure-menu-link pure-menu-active"><i class="fa fa-fw fa-user"></i> {{varss.author}}</a></li>
             {{/if}}
           </ul>
         </div>
         {{/if}}
       </div>
     </div>
-    {{/with}}
     {{/unless}}
