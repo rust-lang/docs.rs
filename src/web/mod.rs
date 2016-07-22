@@ -10,10 +10,10 @@ mod pool;
 mod file;
 mod builds;
 
-use std::fmt;
+use std::{env, fmt};
 use std::error::Error;
 use std::time::Duration;
-use std::path::Path;
+use std::path::PathBuf;
 use iron::prelude::*;
 use iron::{status, Handler};
 use router::Router;
@@ -92,8 +92,8 @@ impl CratesfyiHandler {
         router_chain.link_before(pool::Pool::new());
         router_chain.link_after(hbse);
 
-        // FIXME: URGENT use correct path
-        let static_handler = Static::new(Path::new("../cratesfyi-prefix/public_html"))
+        let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
+        let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
         CratesfyiHandler {
