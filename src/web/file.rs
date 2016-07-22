@@ -81,7 +81,7 @@ impl Handler for DatabaseFileHandler {
         if let Some(file) = File::from_path(&conn, &path) {
             Ok(file.serve())
         } else {
-            Err(IronError::new(super::NoCrate, status::NotFound))
+            Err(IronError::new(super::error::Nope::CrateNotFound, status::NotFound))
         }
     }
 }

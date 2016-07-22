@@ -9,13 +9,14 @@ mod source;
 mod pool;
 mod file;
 mod builds;
+mod error;
 
-use std::{env, fmt};
+use std::env;
 use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
-use iron::{status, Handler};
+use iron::Handler;
 use router::Router;
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
@@ -29,22 +30,6 @@ use std::collections::BTreeMap;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 3;   // 3 days
-
-
-// This is a generic error used in routes
-#[derive(Debug)]
-struct NoCrate;
-
-impl fmt::Display for NoCrate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Crate not found.")
-    }
-}
-
-impl Error for NoCrate {
-    fn description(&self) -> &str { "No Crate" }
-}
-
 
 
 struct CratesfyiHandler {
@@ -107,23 +92,25 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        // try router first then staticfile handler
+        // try router first then db/static file handler
         // return 404 if none of them return Ok
-        match self.router_handler.handle(req) {
-            Ok(res) => return Ok(res),
-            Err(e) => debug!("{}", e.description())
-        };
-
-        // if router fails try to serve files from database first
-        // and then try static handler. if all of them fails, return 404
-        // TODO: Add a custom 404 page
-        if let Ok(res) = self.database_file_handler.handle(req) {
-            Ok(res)
-        } else if let Ok(res) = self.static_handler.handle(req) {
-            Ok(res)
-        } else {
-            Ok(Response::with((status::NotFound, "404 FAILED IN CRATESFYIHANDLER")))
-        }
+        self.router_handler
+            .handle(req)
+            .or_else(|e| {
+                // if router fails try to serve files from database first
+                self.database_file_handler.handle(req).or(Err(e))
+            })
+            .or_else(|e| {
+                // and then try static handler. if all of them fails, return 404
+                self.static_handler.handle(req).or(Err(e))
+            })
+            .or_else(|e| {
+                debug!("{}", e.description());
+                let err: &error::Nope = e.error
+                    .downcast::<error::Nope>()
+                    .expect("all cratesfyi errors should be of type Nope");
+                err.handle(req)
+            })
     }
 }
 

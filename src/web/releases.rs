@@ -1,7 +1,8 @@
 //! Releases web handlers
 
 
-use super::{NoCrate, duration_to_str, match_version};
+use super::{duration_to_str, match_version};
+use super::error::Nope;
 use super::page::Page;
 use super::pool::Pool;
 use iron::prelude::*;
@@ -19,7 +20,7 @@ const RELEASES_IN_HOME: i64 = 15;
 const RELEASES_IN_RELEASES: i64 = 30;
 
 
-struct Release {
+pub struct Release {
     name: String,
     version: String,
     description: Option<String>,
@@ -243,7 +244,7 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
 
     if packages.is_empty() {
-        return Err(IronError::new(NoCrate, status::NotFound));
+        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     // Show next and previous page buttons
@@ -280,7 +281,7 @@ pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
 
     if packages.is_empty() {
-        return Err(IronError::new(NoCrate, status::NotFound));
+        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     // Show next and previous page buttons
@@ -317,7 +318,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     let author = req.extensions.get::<Router>().unwrap().find("author");
 
     if author.is_none() {
-        return Err(IronError::new(NoCrate, status::NotFound));
+        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     let (author_name, packages) = get_releases_by_author(conn,
@@ -326,7 +327,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
                                                          author.unwrap());
 
     if packages.is_empty() {
-        return Err(IronError::new(NoCrate, status::NotFound));
+        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     // Show next and previous page buttons
@@ -383,7 +384,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
         let search_query = query.replace(" ", " & ");
         get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
-            .ok_or(IronError::new(NoCrate, status::NotFound))
+            .ok_or(IronError::new(Nope::NoResults, status::NotFound))
             .and_then(|(_, results)| {
                 // FIXME: There is no pagination
                 Page::new(results)
@@ -392,6 +393,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                     .to_resp("releases")
             })
     } else {
-        Err(IronError::new(NoCrate, status::NotFound))
+        Err(IronError::new(Nope::NoResults, status::NotFound))
     }
 }

@@ -8,7 +8,8 @@ use iron::prelude::*;
 use iron::{status, Url};
 use iron::modifiers::Redirect;
 use router::Router;
-use super::{NoCrate, match_version};
+use super::match_version;
+use super::error::Nope;
 use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
@@ -88,7 +89,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     let version = match match_version(&conn, &crate_name, req_version) {
         Some(v) => v,
-        None => return Err(IronError::new(NoCrate, status::NotFound)),
+        None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     };
 
     // get target name
@@ -119,14 +120,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // don't touch anything other than html files
     if !path.ends_with(".html") {
-        return Err(IronError::new(NoCrate, status::NotFound));
+        return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
     }
 
     let conn = req.extensions.get::<Pool>().unwrap();
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
-        None => return Err(IronError::new(NoCrate, status::NotFound)),
+        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
 
     let (mut in_head, mut in_body) = (false, false);
