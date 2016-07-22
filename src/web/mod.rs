@@ -40,6 +40,22 @@ struct CratesfyiHandler {
 
 
 impl CratesfyiHandler {
+    fn chain<H: Handler>(base: H) -> Chain {
+        // TODO: Use DocBuilderOptions for paths
+        let mut hbse = HandlebarsEngine::new();
+        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+        // load templates
+        if let Err(e) = hbse.reload() {
+            panic!("Failed to load handlebar templates: {}", e.description());
+        }
+
+        let mut chain = Chain::new(base);
+        chain.link_before(pool::Pool::new());
+        chain.link_after(hbse);
+        chain
+    }
+
     pub fn new() -> CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page);
@@ -64,19 +80,7 @@ impl CratesfyiHandler {
         router.get("/source/:name/:version/*", source::source_browser_handler);
         router.get("/search", releases::search_handler);
 
-        // TODO: Use DocBuilderOptions for paths
-        let mut hbse = HandlebarsEngine::new();
-        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-        // load templates
-        if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e.description());
-        }
-
-        let mut router_chain = Chain::new(router);
-        router_chain.link_before(pool::Pool::new());
-        router_chain.link_after(hbse);
-
+        let router_chain = Self::chain(router);
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
@@ -106,10 +110,10 @@ impl Handler for CratesfyiHandler {
             })
             .or_else(|e| {
                 debug!("{}", e.description());
-                let err: &error::Nope = e.error
+                let err: error::Nope = *e.error
                     .downcast::<error::Nope>()
                     .expect("all cratesfyi errors should be of type Nope");
-                err.handle(req)
+                Self::chain(err).handle(req)
             })
     }
 }
