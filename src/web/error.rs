@@ -56,7 +56,11 @@ impl Handler for Nope {
                         .title(&format!("No crates found matching '{}'", query))
                         .to_resp("releases")
                 } else {
-                    unimplemented!();
+                    // user did a search with no search terms
+                    Page::new(Vec::<super::releases::Release>::new())
+                        .set_status(status::NotFound)
+                        .title("No results given for empty search query")
+                        .to_resp("releases")
                 }
             }
         }
