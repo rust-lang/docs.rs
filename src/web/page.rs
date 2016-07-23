@@ -10,6 +10,7 @@ use handlebars_iron::Template;
 pub struct Page<T: ToJson> {
     title: Option<String>,
     content: T,
+    status: status::Status,
     varss: BTreeMap<String, String>,
     varsb: BTreeMap<String, bool>,
     varsi: BTreeMap<String, i64>,
@@ -21,6 +22,7 @@ impl<T: ToJson> Page<T> {
         Page {
             title: None,
             content: content,
+            status: status::Ok,
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),
             varsi: BTreeMap::new(),
@@ -62,10 +64,18 @@ impl<T: ToJson> Page<T> {
     }
 
 
-    pub fn to_resp(self, template: &str) -> IronResult<Response> { 
+    /// Sets status code for response
+    pub fn set_status(mut self, s: status::Status) -> Page<T> {
+        self.status = s;
+        self
+    }
+
+
+    pub fn to_resp(self, template: &str) -> IronResult<Response> {
         let mut resp = Response::new();
+        let status = self.status;
         let temp = Template::new(template, self);
-        resp.set_mut(temp).set_mut(status::Ok);
+        resp.set_mut(temp).set_mut(status);
         Ok(resp)
     }
 }
