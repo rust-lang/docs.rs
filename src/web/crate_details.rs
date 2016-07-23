@@ -1,7 +1,8 @@
 
 
 
-use super::{NoCrate, MetaData, duration_to_str, match_version, render_markdown};
+use super::{MetaData, duration_to_str, match_version, render_markdown};
+use super::error::Nope;
 use super::page::Page;
 use db::connect_db;
 use iron::prelude::*;
@@ -194,7 +195,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     match_version(&conn, &name, req_version)
         .and_then(|version| CrateDetails::new(&conn, &name, &version))
-        .ok_or(IronError::new(NoCrate, status::NotFound))
+        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound))
         .and_then(|details| {
             Page::new(details)
                 .set_true("show_package_navigation")

@@ -9,13 +9,14 @@ mod source;
 mod pool;
 mod file;
 mod builds;
+mod error;
 
-use std::{env, fmt};
+use std::env;
 use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
-use iron::{status, Handler};
+use iron::Handler;
 use router::Router;
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
@@ -31,22 +32,6 @@ use std::collections::BTreeMap;
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 3;   // 3 days
 
 
-// This is a generic error used in routes
-#[derive(Debug)]
-struct NoCrate;
-
-impl fmt::Display for NoCrate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Crate not found.")
-    }
-}
-
-impl Error for NoCrate {
-    fn description(&self) -> &str { "No Crate" }
-}
-
-
-
 struct CratesfyiHandler {
     router_handler: Box<Handler>,
     database_file_handler: Box<Handler>,
@@ -55,6 +40,22 @@ struct CratesfyiHandler {
 
 
 impl CratesfyiHandler {
+    fn chain<H: Handler>(base: H) -> Chain {
+        // TODO: Use DocBuilderOptions for paths
+        let mut hbse = HandlebarsEngine::new();
+        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+        // load templates
+        if let Err(e) = hbse.reload() {
+            panic!("Failed to load handlebar templates: {}", e.description());
+        }
+
+        let mut chain = Chain::new(base);
+        chain.link_before(pool::Pool::new());
+        chain.link_after(hbse);
+        chain
+    }
+
     pub fn new() -> CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page);
@@ -79,19 +80,7 @@ impl CratesfyiHandler {
         router.get("/source/:name/:version/*", source::source_browser_handler);
         router.get("/search", releases::search_handler);
 
-        // TODO: Use DocBuilderOptions for paths
-        let mut hbse = HandlebarsEngine::new();
-        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-        // load templates
-        if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e.description());
-        }
-
-        let mut router_chain = Chain::new(router);
-        router_chain.link_before(pool::Pool::new());
-        router_chain.link_after(hbse);
-
+        let router_chain = Self::chain(router);
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
@@ -107,23 +96,25 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        // try router first then staticfile handler
+        // try router first then db/static file handler
         // return 404 if none of them return Ok
-        match self.router_handler.handle(req) {
-            Ok(res) => return Ok(res),
-            Err(e) => debug!("{}", e.description())
-        };
-
-        // if router fails try to serve files from database first
-        // and then try static handler. if all of them fails, return 404
-        // TODO: Add a custom 404 page
-        if let Ok(res) = self.database_file_handler.handle(req) {
-            Ok(res)
-        } else if let Ok(res) = self.static_handler.handle(req) {
-            Ok(res)
-        } else {
-            Ok(Response::with((status::NotFound, "404 FAILED IN CRATESFYIHANDLER")))
-        }
+        self.router_handler
+            .handle(req)
+            .or_else(|e| {
+                // if router fails try to serve files from database first
+                self.database_file_handler.handle(req).or(Err(e))
+            })
+            .or_else(|e| {
+                // and then try static handler. if all of them fails, return 404
+                self.static_handler.handle(req).or(Err(e))
+            })
+            .or_else(|e| {
+                debug!("{}", e.description());
+                let err: error::Nope = *e.error
+                    .downcast::<error::Nope>()
+                    .expect("all cratesfyi errors should be of type Nope");
+                Self::chain(err).handle(req)
+            })
     }
 }
 
