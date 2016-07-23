@@ -1,0 +1,38 @@
+{{> header}}
+{{#with content}}
+
+<div class="container">
+  <div id="releases-activity-chart"></div>
+</div>
+
+<script type="text/javascript" charset="utf-8">
+new Highcharts.Chart({
+  chart: {
+    renderTo: 'releases-activity-chart',
+    type: 'line'
+  },
+  title: {
+    text: 'Monthly release activity',
+    x: -20 //center
+  },
+  xAxis: {
+    categories: [{{#each dates}}'{{this}}',{{/each}}]
+  },
+  yAxis: {
+    title: {
+      text: 'Crates'
+    },
+    plotLines: [{
+      value: 0,
+      width: 1,
+      color: '#808080'
+    }]
+  },
+  series: [{
+    name: 'Releases',
+    data: [{{#each counts}}{{this}},{{/each}}]
+  }]
+});
+</script>
+{{/with}}
+{{> footer}}
