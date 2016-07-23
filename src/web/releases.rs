@@ -190,8 +190,8 @@ fn get_search_results(conn: &Connection,
                             WHERE crates.content @@ to_tsquery($1) \
                             ORDER BY rank DESC \
                             LIMIT $2 OFFSET $3",
-                           &[&query, &limit, &offset])
-                    .unwrap() {
+               &[&query, &limit, &offset])
+        .unwrap() {
 
         let package = Release {
             name: row.get(0),
@@ -209,8 +209,8 @@ fn get_search_results(conn: &Connection,
     if !packages.is_empty() {
         // get count of total results
         let rows = conn.query("SELECT COUNT(*) FROM crates WHERE content @@ to_tsquery($1)",
-                              &[&query])
-                       .unwrap();
+                   &[&query])
+            .unwrap();
 
         Some((rows.get(0).get(0), packages))
     } else {
@@ -233,12 +233,12 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
     let page_number: i64 = req.extensions
-                              .get::<Router>()
-                              .unwrap()
-                              .find("page")
-                              .unwrap_or("1")
-                              .parse()
-                              .unwrap_or(1);
+        .get::<Router>()
+        .unwrap()
+        .find("page")
+        .unwrap_or("1")
+        .parse()
+        .unwrap_or(1);
 
     let conn = req.extensions.get::<Pool>().unwrap();
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
@@ -270,12 +270,12 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
 pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
     let page_number: i64 = req.extensions
-                              .get::<Router>()
-                              .unwrap()
-                              .find("page")
-                              .unwrap_or("1")
-                              .parse()
-                              .unwrap_or(1);
+        .get::<Router>()
+        .unwrap()
+        .find("page")
+        .unwrap_or("1")
+        .parse()
+        .unwrap_or(1);
 
     let conn = req.extensions.get::<Pool>().unwrap();
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
@@ -307,12 +307,12 @@ pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
 pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
     let page_number: i64 = req.extensions
-                              .get::<Router>()
-                              .unwrap()
-                              .find("page")
-                              .unwrap_or("1")
-                              .parse()
-                              .unwrap_or(1);
+        .get::<Router>()
+        .unwrap()
+        .find("page")
+        .unwrap_or("1")
+        .parse()
+        .unwrap_or(1);
 
     let conn = req.extensions.get::<Pool>().unwrap();
     let author = req.extensions.get::<Router>().unwrap().find("author");
@@ -321,10 +321,8 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
-    let (author_name, packages) = get_releases_by_author(conn,
-                                                         page_number,
-                                                         RELEASES_IN_RELEASES,
-                                                         author.unwrap());
+    let (author_name, packages) =
+        get_releases_by_author(conn, page_number, RELEASES_IN_RELEASES, author.unwrap());
 
     if packages.is_empty() {
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
@@ -371,7 +369,8 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                                               req.url.host,
                                               req.url.port,
                                               query,
-                                              version)[..]).unwrap();
+                                              version)[..])
+                    .unwrap();
                 let mut resp = Response::with((status::Found, Redirect(url)));
 
                 use iron::headers::{Expires, HttpDate};
@@ -395,4 +394,22 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))
     }
+}
+
+
+pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
+    let conn = req.extensions.get::<Pool>().unwrap();
+    let release_activity_data: Json =
+        conn.query("SELECT value FROM config WHERE name = 'release_activity'",
+                   &[])
+            .unwrap()
+            .get(0)
+            .get(0);
+    Page::new(release_activity_data)
+        .title("Releases")
+        .set("description", "Monthly release activity")
+        .set_true("show_releases_navigation")
+        .set_true("releases_navigation_activity_tab")
+        .set_true("javascript_highchartjs")
+        .to_resp("releases_activity")
 }
