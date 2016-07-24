@@ -71,12 +71,23 @@ impl DocBuilder {
 
         // copy sources and documentation
         let file_list = try!(self.add_sources_into_database(&conn, &pkg));
-        if res.have_doc {
-            try!(self.copy_documentation(&pkg, &res.rustc_version));
+        let successfully_targets = if res.have_doc {
+            try!(self.copy_documentation(&pkg, &res.rustc_version, None));
+            let successfully_targets = self.build_package_for_all_targets(&pkg);
+            for target in &successfully_targets {
+                try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target)));
+            }
             try!(self.add_documentation_into_database(&conn, &pkg));
-        }
+            successfully_targets
+        } else {
+            Vec::new()
+        };
 
-        let release_id = try!(add_package_into_database(&conn, &pkg, &res, Some(file_list)));
+        let release_id = try!(add_package_into_database(&conn,
+                                                        &pkg,
+                                                        &res,
+                                                        Some(file_list),
+                                                        successfully_targets));
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove documentation, source and build directory after we are done
@@ -121,13 +132,70 @@ impl DocBuilder {
     }
 
 
+
+    /// Builds documentation of crate for every target and returns Vec of successfully targets
+    fn build_package_for_all_targets(&self, package: &Package) -> Vec<String> {
+        let targets = ["aarch64-apple-ios",
+                       "aarch64-linux-android",
+                       "aarch64-unknown-linux-gnu",
+                       "arm-linux-androideabi",
+                       "arm-unknown-linux-gnueabi",
+                       "arm-unknown-linux-gnueabihf",
+                       "armv7-apple-ios",
+                       "armv7-linux-androideabi",
+                       "armv7-unknown-linux-gnueabihf",
+                       "armv7s-apple-ios",
+                       "i386-apple-ios",
+                       "i586-pc-windows-msvc",
+                       "i586-unknown-linux-gnu",
+                       "i686-apple-darwin",
+                       "i686-linux-android",
+                       "i686-pc-windows-gnu",
+                       "i686-pc-windows-msvc",
+                       "i686-unknown-freebsd",
+                       "i686-unknown-linux-gnu",
+                       "i686-unknown-linux-musl",
+                       "mips-unknown-linux-gnu",
+                       "mips-unknown-linux-musl",
+                       "mipsel-unknown-linux-gnu",
+                       "mipsel-unknown-linux-musl",
+                       "powerpc-unknown-linux-gnu",
+                       "powerpc64-unknown-linux-gnu",
+                       "powerpc64le-unknown-linux-gnu",
+                       "x86_64-apple-darwin",
+                       "x86_64-apple-ios",
+                       "x86_64-pc-windows-gnu",
+                       "x86_64-pc-windows-msvc",
+                       "x86_64-rumprun-netbsd",
+                       "x86_64-unknown-freebsd",
+                       "x86_64-unknown-linux-gnu",
+                       "x86_64-unknown-linux-musl",
+                       "x86_64-unknown-netbsd"];
+
+        let mut successfuly_targets = Vec::new();
+
+        for target in targets.iter() {
+            debug!("Building {} for {}", canonical_name(&package), target);
+            let cmd = format!("cratesfyi doc {} ={} {}",
+                              package.manifest().name(),
+                              package.manifest().version(),
+                              target);
+            if let Ok(_) = self.chroot_command(cmd) {
+                successfuly_targets.push(target.to_string());
+            }
+        }
+        successfuly_targets
+    }
+
+
     /// Copies source files of a package into source_path
     #[allow(dead_code)]  // I've been using this function before storing files in database
     fn copy_sources(&self, package: &Package) -> Result<(), DocBuilderError> {
         debug!("Copying sources");
-        let destination = PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
-                          package.manifest().name(),
-                          package.manifest().version()));
+        let destination =
+            PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
+                                                                   package.manifest().name(),
+                                                                   package.manifest().version()));
         // unwrap is safe here, this function will be always called after get_package
         match copy_dir(source_path(&package).unwrap(), &destination) {
             Ok(_) => Ok(()),
@@ -139,19 +207,23 @@ impl DocBuilder {
     /// Copies documentation to destination directory
     fn copy_documentation(&self,
                           package: &Package,
-                          rustc_version: &str)
+                          rustc_version: &str,
+                          target: Option<&str>)
                           -> Result<(), DocBuilderError> {
-        debug!("Copying documentation");
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
-                                 .join("home")
-                                 .join(&self.options.chroot_user)
-                                 .join(canonical_name(&package));
-        let destination = PathBuf::from(&self.options.destination).join(format!("{}/{}",
+            .join("home")
+            .join(&self.options.chroot_user)
+            .join(canonical_name(&package))
+            .join(target.unwrap_or(""));
+        let destination = PathBuf::from(&self.options.destination)
+            .join(format!("{}/{}",
                           package.manifest().name(),
-                          package.manifest().version()));
+                          package.manifest().version()))
+            .join(target.unwrap_or(""));
         copy_doc_dir(crate_doc_path,
                      destination,
-                     parse_rustc_version(rustc_version).trim())
+                     parse_rustc_version(rustc_version).trim(),
+                     target.is_some())
             .map_err(DocBuilderError::Io)
     }
 
@@ -168,7 +240,7 @@ impl DocBuilder {
         debug!("Cleaning package");
         use std::fs::remove_dir_all;
         let documentation_path = PathBuf::from(&self.options.destination)
-                                     .join(package.manifest().name());
+            .join(package.manifest().name());
         let source_path = source_path(&package).unwrap();
         // Some crates don't have documentation, so we don't care if removing_dir_all fails
         let _ = self.remove_build_dir(&package);
@@ -181,17 +253,17 @@ impl DocBuilder {
     /// Runs a command in a chroot environment
     fn chroot_command<T: AsRef<str>>(&self, cmd: T) -> CommandResult {
         command_result(Command::new("sudo")
-                           .arg("lxc-attach")
-                           .arg("-n")
-                           .arg(&self.options.container_name)
-                           .arg("--")
-                           .arg("su")
-                           .arg("-")
-                           .arg(&self.options.chroot_user)
-                           .arg("-c")
-                           .arg(cmd.as_ref())
-                           .output()
-                           .unwrap())
+            .arg("lxc-attach")
+            .arg("-n")
+            .arg(&self.options.container_name)
+            .arg("--")
+            .arg("su")
+            .arg("-")
+            .arg(&self.options.chroot_user)
+            .arg("-c")
+            .arg(cmd.as_ref())
+            .output()
+            .unwrap())
     }
 
 
@@ -201,11 +273,11 @@ impl DocBuilder {
     /// crate. Package must be successfully built in chroot environment first.
     fn have_documentation(&self, package: &Package) -> bool {
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
-                                 .join("home")
-                                 .join(&self.options.chroot_user)
-                                 .join(canonical_name(&package))
-                                 .join("doc")
-                                 .join(package.targets()[0].name().to_string());
+            .join("home")
+            .join(&self.options.chroot_user)
+            .join(canonical_name(&package))
+            .join("doc")
+            .join(package.targets()[0].name().to_string());
         crate_doc_path.exists()
     }
 
@@ -222,11 +294,11 @@ impl DocBuilder {
         // It is safe to use expect here
         // chroot environment must always have rustc and cratesfyi installed
         (String::from(self.chroot_command("rustc --version")
-                          .expect("Failed to get rustc version")
-                          .trim()),
+            .expect("Failed to get rustc version")
+            .trim()),
          String::from(self.chroot_command("cratesfyi --version")
-                          .expect("Failed to get cratesfyi version")
-                          .trim()))
+            .expect("Failed to get cratesfyi version")
+            .trim()))
     }
 
 

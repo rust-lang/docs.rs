@@ -32,7 +32,11 @@ pub fn main() {
                                       .arg(Arg::with_name("CRATE_VERSION")
                                                .index(2)
                                                .required(false)
-                                               .help("Crate version")))
+                                               .help("Crate version"))
+                                      .arg(Arg::with_name("TARGET")
+                                               .index(3)
+                                               .required(false)
+                                               .help("The target platform to compile for")))
                       .subcommand(SubCommand::with_name("build")
                                       .about("Builds documentation in a chroot environment")
                                       .arg(Arg::with_name("PREFIX")
@@ -110,7 +114,8 @@ pub fn main() {
     if let Some(matches) = matches.subcommand_matches("doc") {
         let name = matches.value_of("CRATE_NAME").unwrap();
         let version = matches.value_of("CRATE_VERSION");
-        if let Err(e) = build_doc(name, version) {
+        let target = matches.value_of("TARGET");
+        if let Err(e) = build_doc(name, version, target) {
             panic!("{:#?}", e);
         }
     } else if let Some(matches) = matches.subcommand_matches("build") {

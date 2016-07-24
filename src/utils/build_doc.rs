@@ -20,7 +20,7 @@ use cargo::{ops, ChainError};
 // idea is to make cargo to download
 // and build a crate and its documentation
 // instead of doing it manually like in the previous version of cratesfyi
-pub fn build_doc(name: &str, vers: Option<&str>) -> CargoResult<Package> {
+pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoResult<Package> {
     let config = try!(Config::default());
     let source_id = try!(SourceId::for_central(&config));
 
@@ -46,7 +46,7 @@ pub fn build_doc(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let opts = ops::CompileOptions {
         config: &config,
         jobs: None,
-        target: None,
+        target: target,
         features: &[],
         no_default_features: false,
         spec: &[],
@@ -117,10 +117,10 @@ mod test {
     #[ignore]
     fn test_build_doc() {
         // FIXME: Need to remove directory after we are finished
-        let doc = build_doc("rand", None);
+        let doc = build_doc("rand", None, None);
         assert!(doc.is_ok());
 
-        let doc = build_doc("SOMECRATEWICHWILLBENVEREXISTS", None);
+        let doc = build_doc("SOMECRATEWICHWILLBENVEREXISTS", None, None);
         assert!(doc.is_err());
     }
 

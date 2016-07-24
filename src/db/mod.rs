@@ -59,6 +59,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             have_examples BOOL DEFAULT FALSE, \
             downloads INT DEFAULT 0, \
             files JSON, \
+            doc_targets JSON DEFAULT '[]', \
             UNIQUE (crate_id, version) \
         )",
         "CREATE TABLE authors ( \
@@ -116,6 +117,11 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             content BYTEA \
         )",
+        "CREATE TABLE config ( \
+            name VARCHAR(100) NOT NULL PRIMARY KEY, \
+            value JSON NOT NULL \
+        )",
+        "INSERT INTO config VALUES ('database_version', '1'::json)",
     ];
 
     for query in queries.into_iter() {
