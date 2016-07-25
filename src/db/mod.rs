@@ -45,6 +45,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             dependencies JSON, \
             target_name VARCHAR(255), \
             yanked BOOL DEFAULT FALSE, \
+            is_library BOOL DEFAULT TRUE, \
             build_status BOOL DEFAULT FALSE, \
             rustdoc_status BOOL DEFAULT FALSE, \
             test_status BOOL DEFAULT FALSE, \
