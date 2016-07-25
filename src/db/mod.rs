@@ -84,7 +84,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             github_issues INT DEFAULT 0, \
             github_last_commit TIMESTAMP, \
             github_last_update TIMESTAMP, \
-            content tsvector, \
+            content tsvector \
         )",
         "CREATE TABLE releases ( \
             id SERIAL PRIMARY KEY, \
