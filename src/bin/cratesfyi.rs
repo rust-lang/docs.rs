@@ -89,6 +89,12 @@ pub fn main() {
                                                                .index(2)
                                                                .required(true)
                                                                .help("Version of crate"))))
+                      .subcommand(SubCommand::with_name("start-web-server")
+                                      .about("Starts web server")
+                                      .arg(Arg::with_name("SOCKET_ADDR")
+                                               .index(1)
+                                               .required(false)
+                                               .help("Socket address to listen to")))
                       .subcommand(SubCommand::with_name("database")
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
@@ -185,8 +191,8 @@ pub fn main() {
                                    matches.value_of("DIRECTORY").unwrap())
                 .unwrap();
         }
-    } else if let Some(_) = matches.subcommand_matches("start-web-server") {
-        start_web_server();
+    } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
+        start_web_server(matches.value_of("SOCKET_ADDR"));
     } else {
         println!("{}", matches.usage());
     }
