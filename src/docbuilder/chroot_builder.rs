@@ -277,7 +277,7 @@ impl DocBuilder {
             .join(&self.options.chroot_user)
             .join(canonical_name(&package))
             .join("doc")
-            .join(package.targets()[0].name().to_string());
+            .join(package.targets()[0].name().replace("-", "_").to_string());
         crate_doc_path.exists()
     }
 
