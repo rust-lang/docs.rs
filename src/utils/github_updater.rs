@@ -23,10 +23,15 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
 
     // TODO: This query assumes repository field in Cargo.toml is
     //       always the same across all versions of a crate
-    for row in &try!(conn.query("SELECT DISTINCT ON (crates.name) crate.name, crates.id, \
-                                 repository_url FROM crates, releases WHERE releases.crate_id \
-                                 = crates.id AND repository_url ~ '^https*://github.com' AND \
-                                 github_last_update < NOW() + INTERVAL '1 day'",
+    for row in &try!(conn.query("SELECT DISTINCT ON (crates.name) \
+                                        crates.name, \
+                                        crates.id, \
+                                        releases.repository_url \
+                                 FROM crates \
+                                 INNER JOIN releases ON releases.crate_id = crates.id \
+                                 WHERE releases.repository_url ~ '^https*://github.com' AND \
+                                       (crates.github_last_update < NOW() - INTERVAL '1 day' OR \
+                                        crates.github_last_update IS NULL)",
                                 &[])) {
         let crate_name: String = row.get(0);
         let crate_id: i32 = row.get(1);
@@ -51,6 +56,11 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
                               }) {
             error!("Failed to update github fields of: {} {}", crate_name, err);
         }
+
+        // sleep for rate limits
+        use std::thread;
+        use std::time::Duration;
+        thread::sleep(Duration::from_secs(2));
     }
 
     Ok(())

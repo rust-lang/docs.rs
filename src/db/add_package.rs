@@ -8,7 +8,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::fs;
 
-use cargo::core::Package;
+use cargo::core::{Package, TargetKind};
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use hyper::client::Client;
@@ -24,7 +24,8 @@ use time;
 pub fn add_package_into_database(conn: &Connection,
                                  pkg: &Package,
                                  res: &ChrootBuilderResult,
-                                 files: Option<Json>)
+                                 files: Option<Json>,
+                                 doc_targets: Vec<String>)
                                  -> Result<i32, DocBuilderError> {
     debug!("Adding package into database");
     let crate_id = try!(initialize_package_in_database(&conn, &pkg));
@@ -32,25 +33,34 @@ pub fn add_package_into_database(conn: &Connection,
     let rustdoc = get_rustdoc(&pkg).unwrap_or(None);
     let readme = get_readme(&pkg).unwrap_or(None);
     let (release_time, yanked, downloads) = try!(get_release_time_yanked_downloads(&pkg));
+    let is_library = match pkg.targets()[0].kind() {
+        &TargetKind::Lib(_) => true,
+        _ => false,
+    };
 
     let release_id: i32 = {
         let rows = try!(conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
                                    &[&crate_id, &format!("{}", pkg.manifest().version())]));
 
         if rows.len() == 0 {
-            let rows = try!(conn.query("INSERT INTO releases ( crate_id, version, release_time, \
-                                        dependencies, target_name, yanked, build_status, \
-                                        rustdoc_status, test_status, license, repository_url, \
-                                        homepage_url, description, description_long, readme, \
-                                        authors, keywords, have_examples, downloads, files ) \
+            let rows = try!(conn.query("INSERT INTO releases (
+                                            crate_id, version, release_time, \
+                                            dependencies, target_name, yanked, build_status, \
+                                            rustdoc_status, test_status, license, repository_url, \
+                                            homepage_url, description, description_long, readme, \
+                                            authors, keywords, have_examples, downloads, files, \
+                                            doc_targets, is_library \
+                                        ) \
                                         VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, \
-                                        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20 ) \
+                                                 $11, $12, $13, $14, $15, $16, $17, $18, $19, \
+                                                 $20, $21, $22 \
+                                        ) \
                                         RETURNING id",
                                        &[&crate_id,
                                          &format!("{}", pkg.manifest().version()),
                                          &release_time,
                                          &dependencies.to_json(),
-                                         &pkg.targets()[0].name(),
+                                         &pkg.targets()[0].name().replace("-", "_"),
                                          &yanked,
                                          &res.build_success,
                                          &res.have_doc,
@@ -65,7 +75,9 @@ pub fn add_package_into_database(conn: &Connection,
                                          &pkg.manifest().metadata().keywords.to_json(),
                                          &res.have_examples,
                                          &downloads,
-                                         &files]));
+                                         &files,
+                                         &doc_targets.to_json(),
+                                         &is_library]));
             // return id
             rows.get(0).get(0)
 
@@ -75,7 +87,8 @@ pub fn add_package_into_database(conn: &Connection,
                              $8, test_status = $9, license = $10, repository_url = $11, \
                              homepage_url = $12, description = $13, description_long = $14, \
                              readme = $15, authors = $16, keywords = $17, have_examples = $18, \
-                             downloads = $19, files = $20 WHERE crate_id = $1 AND version = $2",
+                             downloads = $19, files = $20, doc_targets = $21, is_library = $22 \
+                             WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
                               &release_time,
@@ -95,7 +108,9 @@ pub fn add_package_into_database(conn: &Connection,
                               &pkg.manifest().metadata().keywords.to_json(),
                               &res.have_examples,
                               &downloads,
-                              &files]));
+                              &files,
+                              &doc_targets.to_json(),
+                              &is_library]));
             rows.get(0).get(0)
         }
     };

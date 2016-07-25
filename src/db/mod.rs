@@ -94,6 +94,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             dependencies JSON, \
             target_name VARCHAR(255), \
             yanked BOOL DEFAULT FALSE, \
+            is_library BOOL DEFAULT TRUE, \
             build_status BOOL DEFAULT FALSE, \
             rustdoc_status BOOL DEFAULT FALSE, \
             test_status BOOL DEFAULT FALSE, \
@@ -108,6 +109,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             have_examples BOOL DEFAULT FALSE, \
             downloads INT DEFAULT 0, \
             files JSON, \
+            doc_targets JSON DEFAULT '[]', \
             UNIQUE (crate_id, version) \
         )",
         "CREATE TABLE authors ( \
@@ -166,6 +168,11 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             content BYTEA \
         )",
         "CREATE INDEX content_idx ON crates USING gin(content)",
+        "CREATE TABLE config ( \
+            name VARCHAR(100) NOT NULL PRIMARY KEY, \
+            value JSON NOT NULL \
+        )",
+        "INSERT INTO config VALUES ('database_version', '1'::json)",
     ];
 
     for query in queries.into_iter() {
