@@ -205,9 +205,9 @@ fn render_markdown(text: &str) -> String {
 
 
 /// Starts cratesfyi web server
-pub fn start_web_server() {
+pub fn start_web_server(sock_addr: Option<&str>) {
     let cratesfyi = CratesfyiHandler::new();
-    Iron::new(cratesfyi).http("localhost:3000").unwrap();
+    Iron::new(cratesfyi).http(sock_addr.unwrap_or("localhost:3000")).unwrap();
 }
 
 
@@ -302,6 +302,6 @@ mod test {
     fn test_start_web_server() {
         // FIXME: This test is doing nothing
         let _ = env_logger::init();
-        start_web_server();
+        start_web_server(None);
     }
 }
