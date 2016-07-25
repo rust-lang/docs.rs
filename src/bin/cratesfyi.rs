@@ -15,6 +15,7 @@ use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::build_doc;
 use cratesfyi::start_web_server;
+use cratesfyi::db::add_path_into_database;
 
 
 pub fn main() {
@@ -32,7 +33,11 @@ pub fn main() {
                                       .arg(Arg::with_name("CRATE_VERSION")
                                                .index(2)
                                                .required(false)
-                                               .help("Crate version")))
+                                               .help("Crate version"))
+                                      .arg(Arg::with_name("TARGET")
+                                               .index(3)
+                                               .required(false)
+                                               .help("The target platform to compile for")))
                       .subcommand(SubCommand::with_name("build")
                                       .about("Builds documentation in a chroot environment")
                                       .arg(Arg::with_name("PREFIX")
@@ -88,9 +93,20 @@ pub fn main() {
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
                                                       .about("Initialize database. Currently \
-                                                             only creates tables in database.")))
-                      .subcommand(SubCommand::with_name("start-web-server")
-                                  .about("Starts web server"))
+                                                              only creates tables in database."))
+                                      .subcommand(SubCommand::with_name("update-github-fields")
+                                                      .about("Updates github stats for crates."))
+                                      .subcommand(SubCommand::with_name("add-directory")
+                                                      .about("Adds a directory into database")
+                                                      .arg(Arg::with_name("DIRECTORY")
+                                                               .index(1)
+                                                               .required(true)
+                                                               .help("Path of file or \
+                                                                      directory"))
+                                                      .arg(Arg::with_name("PREFIX")
+                                                               .index(2)
+                                                               .help("Prefix of files in \
+                                                                      database"))))
                       .get_matches();
 
 
@@ -99,7 +115,8 @@ pub fn main() {
     if let Some(matches) = matches.subcommand_matches("doc") {
         let name = matches.value_of("CRATE_NAME").unwrap();
         let version = matches.value_of("CRATE_VERSION");
-        if let Err(e) = build_doc(name, version) {
+        let target = matches.value_of("TARGET");
+        if let Err(e) = build_doc(name, version, target) {
             panic!("{:#?}", e);
         }
     } else if let Some(matches) = matches.subcommand_matches("build") {
@@ -160,6 +177,13 @@ pub fn main() {
                 writeln!(&mut io::stderr(), "Failed to initialize database: {}", err).unwrap();
                 process::exit(1);
             }
+        } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
+            cratesfyi::utils::github_updater().expect("Failed to update github fields");
+        } else if let Some(matches) = matches.subcommand_matches("add-directory") {
+            add_path_into_database(&db::connect_db().unwrap(),
+                                   matches.value_of("PREFIX").unwrap_or(""),
+                                   matches.value_of("DIRECTORY").unwrap())
+                .unwrap();
         }
     } else if let Some(_) = matches.subcommand_matches("start-web-server") {
         start_web_server();

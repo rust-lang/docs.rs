@@ -15,7 +15,8 @@ pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> io::Result<()> {
     copy_files_and_handle_html(source.as_ref().to_path_buf(),
                                destination.as_ref().to_path_buf(),
                                false,
-                               "")
+                               "",
+                               false)
 }
 
 
@@ -27,20 +28,24 @@ pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> io::Result<()> {
 /// to rename common files (css files, jquery.js, playpen.js, main.js etc.) in a standard rustdoc.
 pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
                                     destination: P,
-                                    rustc_version: &str)
+                                    rustc_version: &str,
+                                    target_platform: bool)
                                     -> io::Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
+    debug!("Copying documentation from: {}", source.display());
     copy_files_and_handle_html(source,
                                destination.as_ref().to_path_buf(),
                                true,
-                               rustc_version)
+                               rustc_version,
+                               target_platform)
 }
 
 
 fn copy_files_and_handle_html(source: PathBuf,
                               destination: PathBuf,
                               handle_html: bool,
-                              rustc_version: &str)
+                              rustc_version: &str,
+                              target: bool)
                               -> io::Result<()> {
 
     // Make sure destination directory is exists
@@ -50,7 +55,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
     // Avoid copying duplicated files
     let dup_regex = Regex::new(r"(\.lock|\.txt|\.woff|jquery\.js|playpen\.js|main\.js|\.css)$")
-                        .unwrap();
+        .unwrap();
 
     for file in try!(source.read_dir()) {
 
@@ -65,9 +70,10 @@ fn copy_files_and_handle_html(source: PathBuf,
             try!(copy_files_and_handle_html(file.path(),
                                             destination_full_path,
                                             handle_html,
-                                            &rustc_version));
+                                            &rustc_version,
+                                            target));
         } else if handle_html && file.file_name().into_string().unwrap().ends_with(".html") {
-            try!(copy_html(&file.path(), &destination_full_path, rustc_version));
+            try!(copy_html(&file.path(), &destination_full_path, rustc_version, target));
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
@@ -79,19 +85,29 @@ fn copy_files_and_handle_html(source: PathBuf,
 }
 
 
-fn copy_html(source: &PathBuf, destination: &PathBuf, rustc_version: &str) -> io::Result<()> {
+fn copy_html(source: &PathBuf,
+             destination: &PathBuf,
+             rustc_version: &str,
+             target: bool)
+             -> io::Result<()> {
 
     let source_file = try!(fs::File::open(source));
     let mut destination_file = try!(fs::OpenOptions::new()
-                                        .write(true)
-                                        .create(true)
-                                        .open(destination));
+        .write(true)
+        .create(true)
+        .open(destination));
 
     let reader = io::BufReader::new(source_file);
 
     let replace_regex = Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc|playpen)\.(css|js)""#)
-                            .unwrap();
-    let replace_str = format!("$1=\"../../$2$3-{}.$4\"", rustc_version);
+        .unwrap();
+    let replace_str = format!("$1=\"{}../../$2$3-{}.$4\"",
+                              if target {
+                                  "../"
+                              } else {
+                                  ""
+                              },
+                              rustc_version);
 
     for line in reader.lines() {
         let mut line = try!(line);
@@ -136,12 +152,12 @@ mod test {
     fn test_copy_doc_dir() {
         // lets build documentation of rand crate
         use utils::build_doc;
-        let pkg = build_doc("rand", None).unwrap();
+        let pkg = build_doc("rand", None, None).unwrap();
 
         let pkg_dir = format!("rand-{}", pkg.manifest().version());
         let target = Path::new(&pkg_dir);
         let destination = tempdir::TempDir::new("cratesfyi").unwrap();
-        let res = copy_doc_dir(target, destination.path(), "UNKNOWN");
+        let res = copy_doc_dir(target, destination.path(), "UNKNOWN", false);
 
         // remove build and temp dir
         fs::remove_dir_all(target).unwrap();
