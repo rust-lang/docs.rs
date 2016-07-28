@@ -17,7 +17,7 @@ use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
 use iron::Handler;
-use router::Router;
+use router::{Router, NoRoute};
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
 use time;
@@ -110,9 +110,13 @@ impl Handler for CratesfyiHandler {
             })
             .or_else(|e| {
                 debug!("{}", e.description());
-                let err: error::Nope = *e.error
-                    .downcast::<error::Nope>()
-                    .expect("all cratesfyi errors should be of type Nope");
+                let err = if let Some(err) = e.error.downcast::<error::Nope>() {
+                    *err
+                } else if e.error.downcast::<NoRoute>().is_some() {
+                    error::Nope::ResourceNotFound
+                } else {
+                    panic!("all cratesfyi errors should be of type Nope");
+                };
                 Self::chain(err).handle(req)
             })
     }
