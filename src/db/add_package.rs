@@ -49,11 +49,11 @@ pub fn add_package_into_database(conn: &Connection,
                                             rustdoc_status, test_status, license, repository_url, \
                                             homepage_url, description, description_long, readme, \
                                             authors, keywords, have_examples, downloads, files, \
-                                            doc_targets, is_library \
+                                            doc_targets, is_library, doc_rustc_version \
                                         ) \
                                         VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, \
                                                  $11, $12, $13, $14, $15, $16, $17, $18, $19, \
-                                                 $20, $21, $22 \
+                                                 $20, $21, $22, $23 \
                                         ) \
                                         RETURNING id",
                                        &[&crate_id,
@@ -77,7 +77,8 @@ pub fn add_package_into_database(conn: &Connection,
                                          &downloads,
                                          &files,
                                          &doc_targets.to_json(),
-                                         &is_library]));
+                                         &is_library,
+                                         &res.rustc_version]));
             // return id
             rows.get(0).get(0)
 
@@ -88,6 +89,7 @@ pub fn add_package_into_database(conn: &Connection,
                              homepage_url = $12, description = $13, description_long = $14, \
                              readme = $15, authors = $16, keywords = $17, have_examples = $18, \
                              downloads = $19, files = $20, doc_targets = $21, is_library = $22 \
+                             doc_rustc_version = $23 \
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
@@ -110,7 +112,7 @@ pub fn add_package_into_database(conn: &Connection,
                               &downloads,
                               &files,
                               &doc_targets.to_json(),
-                              &is_library]));
+                              &res.rustc_version]));
             rows.get(0).get(0)
         }
     };

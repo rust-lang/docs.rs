@@ -110,6 +110,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             downloads INT DEFAULT 0, \
             files JSON, \
             doc_targets JSON DEFAULT '[]', \
+            doc_rustc_version VARCHAR(100) NOT NULL, \
             UNIQUE (crate_id, version) \
         )",
         "CREATE TABLE authors ( \
