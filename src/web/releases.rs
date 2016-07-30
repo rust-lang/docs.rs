@@ -364,7 +364,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             if let Some(version) = match_version(&conn, &query, None) {
                 use iron::Url;
                 use iron::modifiers::Redirect;
-                let url = Url::parse(&format!("{}://{}:{}/crates/{}/{}",
+                let url = Url::parse(&format!("{}://{}:{}/crate/{}/{}",
                                               req.url.scheme,
                                               req.url.host,
                                               req.url.port,

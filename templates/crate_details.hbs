@@ -25,7 +25,7 @@
             <div class="pure-menu pure-menu-scrollable sub-menu">
               <ul class="pure-menu-list">
                 {{#each dependencies}}
-                <li class="pure-menu-item"><a href="/crates/{{this.[0]}}/{{this.[1]}}" class="pure-menu-link">{{this.[0]}} {{this.[1]}}</a></li>
+                <li class="pure-menu-item"><a href="/crate/{{this.[0]}}/{{this.[1]}}" class="pure-menu-link">{{this.[0]}} {{this.[1]}}</a></li>
                 {{/each}}
               </ul>
             </div>
@@ -35,7 +35,7 @@
             <div class="pure-menu pure-menu-scrollable sub-menu">
               <ul class="pure-menu-list">
                 {{#each versions}}
-                <li class="pure-menu-item"><a href="/crates/{{../../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
+                <li class="pure-menu-item"><a href="/crate/{{../../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
                 {{/each}}
               </ul>
             </div>
@@ -45,7 +45,7 @@
     </div>
     <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
       {{#unless build_status}}
-      <div class="warning">cratesfyi failed to build {{name}}-{{version}}<br>Please check <a href="/crates/{{name}}/{{version}}/builds">build logs</a> and if you believe this is cratesfyi's fault, report into <a href="https://github.com/onur/cratesfyi/issues/TODO">this issue report</a>.</div>
+      <div class="warning">cratesfyi failed to build {{name}}-{{version}}<br>Please check <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and if you believe this is cratesfyi's fault, report into <a href="https://github.com/onur/cratesfyi/issues/TODO">this issue report</a>.</div>
       {{else}}
       {{#unless rustdoc_status}}
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>

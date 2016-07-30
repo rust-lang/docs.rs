@@ -187,9 +187,11 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     // get path (req_path) for FileList::from_path and actual path for super::file::File::from_path
     let (req_path, file_path) = {
         let mut req_path = req.url.path.clone();
-        // remove first element from path which is /source
-        req_path.remove(0);
-        let file_path = format!("sources/{}", req_path.join("/"));
+        // remove first elements from path which is /crate/:name/:version/source
+        for _ in 0..4 {
+            req_path.remove(0);
+        }
+        let file_path = format!("sources/{}/{}/{}", name, version, req_path.join("/"));
 
         // FileList::from_path is only working for directories
         // remove file name if it's not a directory
