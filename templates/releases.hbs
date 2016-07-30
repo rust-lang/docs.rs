@@ -4,7 +4,7 @@
 <div class="container landing">
   <h1 class="brand"><i class="fa fa-cubes fa-fw"></i> Cratesfyi</h1>
 
-  <form action="/search" method="GET" class="landing-search-form">
+  <form action="/releases/search" method="GET" class="landing-search-form">
     <div><input class="search-input" name="query" type="text" placeholder="Search"></div>
     <div class="buttons">
       <button type="submit" class="pure-button pure-button-normal">Search</button>
@@ -36,7 +36,7 @@
     <ul>
     {{#each content}}
     <li>
-    <a href="{{#if rustdoc_status}}/rustdoc/{{name}}/{{version}}/{{target_name}}/{{else}}/crates/{{name}}/{{version}}{{/if}}" class="release">
+    <a href="{{#if rustdoc_status}}/{{name}}/{{version}}/{{target_name}}/{{else}}/crate/{{name}}/{{version}}{{/if}}" class="release">
       <div class="pure-g">
         <div class="pure-u-1 pure-u-sm-5-24 pure-u-md-4-24 name">{{name}}-{{version}}</div>
         <div class="pure-u-1 pure-u-sm-15-24 pure-u-md-17-24 description">{{description}}</div>

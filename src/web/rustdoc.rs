@@ -64,7 +64,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        vers: &str,
                        target_name: &str)
                        -> IronResult<Response> {
-        let url = Url::parse(&format!("{}://{}:{}/rustdoc/{}/{}/{}/",
+        let url = Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
                                       req.url.scheme,
                                       req.url.host,
                                       req.url.port,
@@ -109,8 +109,11 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let path = {
-        let mut path = req.url.path.clone().join("/");
+        let mut path = req.url.path.clone();
+        // documentations have "rustdoc" prefix in database
+        path.insert(0, "rustdoc".to_owned());
 
+        let mut path = path.join("/");
         if path.ends_with("/") {
             path.push_str("index.html")
         }

@@ -74,7 +74,13 @@ impl Handler for DatabaseFileHandler {
             if path.ends_with("/") {
                 path.push_str("index.html");
             }
-            path
+            // rustdoc javascripts have rustdoc prefix in database
+            // FIXME: this is kinda lame I have to save all javascripts with rustdoc prefix
+            if path.ends_with(".js") {
+                format!("rustdoc/{}", path)
+            } else {
+                path
+            }
         };
 
         let conn = req.extensions.get::<Pool>().unwrap();
