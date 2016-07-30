@@ -28,6 +28,9 @@ pub fn update_release_activity() -> Result<(), DocBuilderError> {
         crate_counts.push(release_count);
     }
 
+    dates.reverse();
+    crate_counts.reverse();
+
     let map = {
         let mut map = BTreeMap::new();
         map.insert("dates".to_owned(), dates.to_json());
