@@ -438,6 +438,19 @@ div.cratesfyi-package-container {
             background-color: inherit;
         }
     }
+
+    ul.platforms-menu {
+        float: right;
+        display: none;
+        ul.pure-menu-children {
+            left: auto;
+            right: 0;
+        }
+
+        @media #{$media-sm} {
+            display: inline-block;
+        }
+    }
 }
 
 
