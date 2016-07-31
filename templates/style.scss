@@ -90,8 +90,22 @@ div.container {
 div.nav-container {
     border-bottom: 1px solid $color-border;
 
+    li {
+        border-left: 1px solid $color-border;
+    }
+
+    .pure-menu-has-children>.pure-menu-link:after {
+        font-size: 14px;
+    }
+
     a {
+        font-size: 14px;
         font-weight: 400;
+    }
+
+    .pure-menu-link:hover {
+        color: $color-standard;
+        background-color: inherit;
     }
 
     form.landing-search-form-nav {
@@ -100,13 +114,21 @@ div.nav-container {
             max-width: 200px;
             border: none;
             margin: 0 1em 0 0;
-            font-size: 1em;
+            font-size: 14px;
             text-align: right;
             box-shadow: none;
-            height: 38px;
+            height: 33px;
         }
         input.search-input-nav:focus {
             outline: unset;
+        }
+    }
+
+    .pure-menu-children {
+        border: 1px solid $color-border;
+        margin-left: -1px;
+        li {
+            border-left: none;
         }
     }
 }
@@ -452,7 +474,7 @@ div.search-page-search-form {
 .rust-navigation-item {
     background: url(/rust-logo.png) no-repeat;
     background-position: 15px 45%;
-    background-size: 14px;
+    background-size: 12px;
     padding-left: 35px;
 }
 
