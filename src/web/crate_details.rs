@@ -42,6 +42,7 @@ struct CrateDetails {
     github_forks: Option<i32>,
     github_issues: Option<i32>,
     metadata: MetaData,
+    is_library: bool,
 }
 
 
@@ -75,6 +76,7 @@ impl ToJson for CrateDetails {
         m.insert("github_forks".to_string(), self.github_forks.to_json());
         m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
+        m.insert("is_library".to_string(), self.is_library.to_json());
         m.to_json()
     }
 }
@@ -104,7 +106,8 @@ impl CrateDetails {
                             authors.slug, \
                             crates.github_stars, \
                             crates.github_forks, \
-                            crates.github_issues \
+                            crates.github_issues, \
+                            releases.is_library \
                      FROM author_rels \
                      LEFT OUTER JOIN authors ON authors.id = author_rels.aid \
                      LEFT OUTER JOIN releases ON releases.id = author_rels.rid \
@@ -168,6 +171,7 @@ impl CrateDetails {
             github_forks: rows.get(0).get(19),
             github_issues: rows.get(0).get(20),
             metadata: metadata,
+            is_library: rows.get(0).get(21),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
