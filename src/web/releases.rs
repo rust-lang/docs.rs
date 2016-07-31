@@ -223,9 +223,15 @@ fn get_search_results(conn: &Connection,
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let conn = req.extensions.get::<Pool>().unwrap();
     let packages = get_releases(conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+
+    // TODO: Remove this after beta
+    let compiled_releases: i64 = conn.query("SELECT COUNT(*) FROM releases", &[]).unwrap().get(0).get(0);
+    let percentage = compiled_releases * 100 / 30432;
+
     Page::new(packages)
         .set_true("show_search_form")
         .set_true("hide_package_navigation")
+        .set_int("beta_percentage_complete", percentage)
         .to_resp("releases")
 }
 
