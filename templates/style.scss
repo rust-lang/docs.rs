@@ -126,6 +126,7 @@ div.nav-container {
 
     .pure-menu-children {
         border: 1px solid $color-border;
+        border-radius: 0 0 2px 2px;
         margin-left: -1px;
         li {
             border-left: none;
@@ -445,6 +446,12 @@ div.cratesfyi-package-container {
         ul.pure-menu-children {
             left: auto;
             right: 0;
+            border: 1px solid $color-border;
+            border-radius: 2px;
+        }
+
+        .pure-menu-has-children>.pure-menu-link:after {
+            font-size: 14px;
         }
 
         @media #{$media-sm} {
