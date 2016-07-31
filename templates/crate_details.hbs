@@ -44,11 +44,15 @@
       </div>
     </div>
     <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
+      {{#unless is_library}}
+      <div class="warning">{{name}}-{{version}} is not a library.</div>
+      {{else}}
       {{#unless build_status}}
       <div class="warning">cratesfyi failed to build {{name}}-{{version}}<br>Please check <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and if you believe this is cratesfyi's fault, report into <a href="https://github.com/onur/cratesfyi/issues/TODO">this issue report</a>.</div>
       {{else}}
       {{#unless rustdoc_status}}
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>
+      {{/unless}}
       {{/unless}}
       {{/unless}}
       {{#if readme}}
