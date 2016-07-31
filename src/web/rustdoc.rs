@@ -24,6 +24,7 @@ struct RustdocPage {
     pub version: String,
     pub description: Option<String>,
     pub metadata: Option<MetaData>,
+    pub platforms: Option<Json>
 }
 
 
@@ -36,6 +37,7 @@ impl Default for RustdocPage {
             version: String::new(),
             description: None,
             metadata: None,
+            platforms: None,
         }
     }
 }
@@ -51,6 +53,7 @@ impl ToJson for RustdocPage {
         m.insert("version".to_string(), self.version.to_json());
         m.insert("description".to_string(), self.description.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
+        m.insert("platforms".to_string(), self.platforms.to_json());
         m.to_json()
     }
 }
@@ -71,7 +74,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                                       name,
                                       vers,
                                       target_name)[..])
-                      .unwrap();
+            .unwrap();
         let mut resp = Response::with((status::Found, Redirect(url)));
 
         use iron::headers::{Expires, HttpDate};
@@ -97,10 +100,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let target_name: String = conn.query("SELECT target_name FROM releases INNER JOIN crates ON \
                                           crates.id = releases.crate_id WHERE crates.name = $1 \
                                           AND releases.version = $2",
-                                         &[&crate_name, &version])
-                                  .unwrap()
-                                  .get(0)
-                                  .get(0);
+               &[&crate_name, &version])
+        .unwrap()
+        .get(0)
+        .get(0);
 
     redirect_to_doc(req, &crate_name, &version, &target_name)
 }
@@ -165,16 +168,42 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap_or("").to_string();
     let version = req.extensions
-                         .get::<Router>()
-                         .unwrap()
-                         .find("version")
-                         .unwrap_or("")
-                         .to_string();
+        .get::<Router>()
+        .unwrap()
+        .find("version")
+        .unwrap_or("")
+        .to_string();
 
-    content.metadata = MetaData::from_crate(&conn, &name, &version);
+    // content.metadata = MetaData::from_crate(&conn, &name, &version);
+    let (metadata, platforms) = {
+        let rows = conn.query("SELECT crates.name,
+                                      releases.version,
+                                      releases.description,
+                                      releases.target_name,
+                                      releases.rustdoc_status,
+                                      doc_targets
+                               FROM releases
+                               INNER JOIN crates ON crates.id = releases.crate_id
+                               WHERE crates.name = $1 AND releases.version = $2",
+                              &[&name, &version]).unwrap();
+
+        let metadata = MetaData {
+            name: rows.get(0).get(0),
+            version: rows.get(0).get(1),
+            description: rows.get(0).get(2),
+            target_name: rows.get(0).get(3),
+            rustdoc_status: rows.get(0).get(4),
+        };
+        let platforms: Json = rows.get(0).get(5);
+        (Some(metadata), platforms)
+    };
+
+    content.metadata = metadata;
+    content.platforms = Some(platforms);
 
     Page::new(content)
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
+        .set_true("package_navigation_show_platforms_tab")
         .to_resp("rustdoc")
 }
