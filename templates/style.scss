@@ -467,6 +467,7 @@ div.warning {
     background-color: lighten($color-type, 45%);
     padding: .4em 1em;
     text-align: center;
+    margin-bottom: 10px;
     a {
         color: $color-url;
         text-decoration: underline;
