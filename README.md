@@ -1,11 +1,10 @@
 
-# cratesfyi
+# docs.rs
 
-[![Build Status](https://secure.travis-ci.org/onur/cratesfyi.svg?branch=master)](https://travis-ci.org/onur/cratesfyi)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/onur/cratesfyi/master/LICENSE)
+[![Build Status](https://secure.travis-ci.org/onur/docs.rs.svg?branch=master)](https://travis-ci.org/onur/docs.rs)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/onur/docs.rs/master/LICENSE)
 
-Centralized crate documentation builder and explorer for the Rust programming
-language.
+Documentation host for the Rust Programming Language crates.
 
 
 ## Installation
@@ -111,7 +110,7 @@ yourusername	ALL=(ALL) NOPASSWD: /usr/sbin/chroot
 ```
 
 
-### Seting up database
+### Setting up database
 
 cratesfyi is using postgresql database to store crate and build
 information. You need to set up database before using chroot builder. To do
