@@ -532,3 +532,22 @@ footer {
         }
     }
 }
+
+
+.about {
+    font-family: $font-family-serif;
+    padding: .4em 1em;
+    a {
+        color: $color-url;
+    }
+    table {
+        margin-bottom: 10px;
+    }
+    thead tr th {
+        font-family: $font-family-sans;
+        font-weight: 500;
+    }
+    strong {
+        font-weight: bold;
+    }
+}
