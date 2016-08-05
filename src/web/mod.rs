@@ -59,6 +59,9 @@ impl CratesfyiHandler {
     pub fn new() -> CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page);
+        router.get("/about", |_: &mut Request| {
+            page::Page::new(false).title("About docs.rs").to_resp("about")
+        });
         router.get("/releases", releases::releases_handler);
         router.get("/releases/recent/:page", releases::releases_handler);
         router.get("/releases/stars", releases::stars_handler);
