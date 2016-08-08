@@ -118,6 +118,10 @@ div.nav-container {
             text-align: right;
             box-shadow: none;
             height: 33px;
+            display: none;
+            @media #{$media-sm} {
+                display: block;
+            }
         }
         input.search-input-nav:focus {
             outline: unset;
