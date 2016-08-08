@@ -420,6 +420,13 @@ div.cratesfyi-package-container {
             color: #666;
             font-size: 14px;
             padding: .4em 1em .3em 1em;
+
+            .title {
+                display: none;
+                @media #{$media-sm} {
+                    display: inline;
+                }
+            }
         }
 
         .pure-menu-active {
