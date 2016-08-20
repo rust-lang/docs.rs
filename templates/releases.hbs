@@ -10,13 +10,6 @@
       <button type="submit" class="pure-button pure-button-normal">Search</button>
       <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button">I'm Feeling Lucky</button>
     </div>
-    {{#if varsi.beta_percentage_complete}}
-    <br><br>
-    <div class="warning">
-      Initial build is in progress, completion: {{varsi.beta_percentage_complete}}%<br>
-      Search and github stats may not work!
-    </div>
-    {{/if}}
   </form>
   <script type="text/javascript" charset="utf-8">
     document.getElementById("i-am-feeling-lucky-button").onclick = function() {
