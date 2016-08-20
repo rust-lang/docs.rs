@@ -36,17 +36,7 @@
         <div class="description">{{#if content.metadata.description }}{{content.metadata.description}}{{else}}{{varss.description}}{{/if}}</div>
 
         {{#if ../varsb.show_package_navigation}}
-        {{#with content.metadata}}
         <div class="pure-menu pure-menu-horizontal">
-          <ul class="pure-menu-list">
-            {{#if rustdoc_status}}
-            <li class="pure-menu-item"><a href="/{{name}}/{{version}}/{{target_name}}/" class="pure-menu-link{{#if ../../varsb.package_navigation_documentation_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-book"></i><span class="title"> Documentation</span></a></li>
-            {{/if}}
-            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}" class="pure-menu-link{{#if ../../varsb.package_navigation_crate_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-cube"></i><span class="title"> Crate</span></a></li>
-            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}/source/" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a></li>
-            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}/builds" class="pure-menu-link{{#if ../../varsb.package_navigation_builds_tab}} pure-menu-active{{/if}}"><i class="fa fa-cogs"></i><span class="title"> Builds</span></a></li>
-          </ul>
-          {{/with}}
           {{#if ../varsb.package_navigation_show_platforms_tab}}
           <ul class="pure-menu-list platforms-menu">
             <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
@@ -59,6 +49,16 @@
             </li>
           </ul>
           {{/if}}
+          {{#with content.metadata}}
+          <ul class="pure-menu-list">
+            {{#if rustdoc_status}}
+            <li class="pure-menu-item"><a href="/{{name}}/{{version}}/{{target_name}}/" class="pure-menu-link{{#if ../../varsb.package_navigation_documentation_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-book"></i><span class="title"> Documentation</span></a></li>
+            {{/if}}
+            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}" class="pure-menu-link{{#if ../../varsb.package_navigation_crate_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-cube"></i><span class="title"> Crate</span></a></li>
+            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}/source/" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a></li>
+            <li class="pure-menu-item"><a href="/crate/{{name}}/{{version}}/builds" class="pure-menu-link{{#if ../../varsb.package_navigation_builds_tab}} pure-menu-active{{/if}}"><i class="fa fa-cogs"></i><span class="title"> Builds</span></a></li>
+          </ul>
+          {{/with}}
         </div>
         {{/if}}
 
