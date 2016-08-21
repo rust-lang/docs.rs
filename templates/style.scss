@@ -536,6 +536,9 @@ footer {
     a {
         color: $color-url;
     }
+    a:hover {
+        text-decoration: underline;
+    }
     table {
         margin-bottom: 10px;
     }
