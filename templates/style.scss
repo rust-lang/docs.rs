@@ -397,12 +397,12 @@ div.cratesfyi-package-container {
 
     h1 {
         margin: 0;
-        padding: 20px 0 0 14px;
+        padding: 15px 0 0 14px;
     }
     div.description {
         font-family: $font-family-serif;
         margin: 0;
-        padding: 0 0 20px 14px;
+        padding: 0 0 15px 14px;
 
         @media #{$media-sm} {
             white-space: nowrap;
