@@ -311,7 +311,7 @@ div.package-page-container {
             border-bottom: 1px solid lighten($color-border, 5%);
             text-transform: none;
             padding-bottom: 6px;
-            margin: 20px 0 15px 0;
+            margin: 20px 5px 15px 5px;
         }
 
         li.pure-menu-heading:first-child {
@@ -329,7 +329,7 @@ div.package-page-container {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding: 7px 5px;
+            padding: 7px 8px;
         }
 
         a.pure-menu-link:hover {
