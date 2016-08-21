@@ -7,29 +7,29 @@
   </p>
 
   <p>
-  Docs.rs automatically checks crates released into
-  <a href="https://crates.io/">crates.io</a> and builds documentations. It
-  uses nightly release of Rust compiler.
+  Docs.rs automatically builds crates' documentation released on
+  <a href="https://crates.io/">crates.io</a>
+  using the nightly release of the Rust compiler.
   </p>
 
   <p>
   The source code of Docs.rs is available on
     <a href="https://github.com/onur/docs.rs" target="_blank">Github</a>. If
-  you ever come to encounter an issue, don't hesitate to report it! (And
+  you ever encounter an issue, don't hesitate to report it! (And
   thanks in advance!)
   </p>
 
   <p>
-  README of a crate is taken from <code>readme</code> field defined in
+  README of a crate is taken from the <code>readme</code> field defined in
   <code>Cargo.toml</code>. If a crate doesn't have this field,
-  it won't display any README for this crate.
+  no README will be displayed.
   </p>
 
   <h4>Redirections</h4>
 
   <p>
   Docs.rs is using semver to parse URLs. You can use this feature to access
-  documentations easily. Example of URL redirections for
+  crates' documentation easily. Example of URL redirections for
   <code>clap</code> crate:
   </p>
 
@@ -60,9 +60,9 @@
     </tbody>
   </table>
 
-  <p>You can still use <a href="https://crates.fyi/">crates.fyi</a> domain name for
-  redirections. <a href="https://crates.fyi/crates/clap"><code>https://crates.fyi/crates/clap</code></a> will
-  redirect to documentation of latest version of clap crate.</p>
+  <p>The <a href="https://crates.fyi/">crates.fyi</a> domain will redirect to
+  <a href="https://docs.rs/">docs.rs</a>, supporting all of the redirects discussed
+  above</p>
 
   <h4>Version</h4>
   <p>Currently running Docs.rs version is: <strong>{{cratesfyi_version}}</strong>
