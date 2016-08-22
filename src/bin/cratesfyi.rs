@@ -87,7 +87,9 @@ pub fn main() {
                                                       .arg(Arg::with_name("CRATE_VERSION")
                                                                .index(2)
                                                                .required(true)
-                                                               .help("Version of crate"))))
+                                                               .help("Version of crate")))
+                                      .subcommand(SubCommand::with_name("add-essential-files")
+                                                      .about("Adds essential files for rustc")))
                       .subcommand(SubCommand::with_name("database")
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
@@ -164,6 +166,8 @@ pub fn main() {
             docbuilder.build_package(matches.value_of("CRATE_NAME").unwrap(),
                                      matches.value_of("CRATE_VERSION").unwrap())
                       .expect("Building documentation failed");
+        } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
+            docbuilder.add_essential_files().expect("Failed to add essential files");
         }
 
         docbuilder.save_cache().expect("Failed to save cache");
