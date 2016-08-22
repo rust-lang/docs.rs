@@ -112,7 +112,8 @@ pub fn main() {
                                                       .arg(Arg::with_name("PREFIX")
                                                                .index(2)
                                                                .help("Prefix of files in \
-                                                                      database"))))
+                                                                      database")))
+                                      .subcommand(SubCommand::with_name("update-release-activity")))
                       .get_matches();
 
 
@@ -190,6 +191,9 @@ pub fn main() {
                                    matches.value_of("PREFIX").unwrap_or(""),
                                    matches.value_of("DIRECTORY").unwrap())
                 .unwrap();
+        } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
+            // FIXME: This is actually util command not database
+            cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(matches.value_of("SOCKET_ADDR"));
