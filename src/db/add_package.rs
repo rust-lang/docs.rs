@@ -88,7 +88,7 @@ pub fn add_package_into_database(conn: &Connection,
                              $8, test_status = $9, license = $10, repository_url = $11, \
                              homepage_url = $12, description = $13, description_long = $14, \
                              readme = $15, authors = $16, keywords = $17, have_examples = $18, \
-                             downloads = $19, files = $20, doc_targets = $21, is_library = $22 \
+                             downloads = $19, files = $20, doc_targets = $21, is_library = $22, \
                              doc_rustc_version = $23 \
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
@@ -112,6 +112,7 @@ pub fn add_package_into_database(conn: &Connection,
                               &downloads,
                               &files,
                               &doc_targets.to_json(),
+                              &is_library,
                               &res.rustc_version]));
             rows.get(0).get(0)
         }
