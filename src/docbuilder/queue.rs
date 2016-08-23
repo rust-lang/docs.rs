@@ -93,11 +93,9 @@ impl DocBuilder {
             let name: String = row.get(1);
             let version: String = row.get(2);
 
-            if let Ok(_) = self.build_package(&name[..], &version[..]) {
-                // remove package from que
-                let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-            } else {
-                warn!("Failed to build package {}-{} from queue", name, version);
+            match self.build_package(&name[..], &version[..]) {
+                Ok(_) => { let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]); },
+                Err(e) => error!("Failed to build package {}-{} from queue: {}", name, version, e),
             }
         }
 
