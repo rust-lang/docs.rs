@@ -331,6 +331,100 @@ impl DocBuilder {
                           package.manifest().version()));
         add_path_into_database(conn, &prefix, crate_doc_path)
     }
+
+
+    /// This function will build an empty crate and will add essential documentation files.
+    ///
+    /// It is required to run after every rustc update. cratesfyi is not keeping this files
+    /// for every crate to avoid duplications.
+    ///
+    /// List of the files:
+    ///
+    /// * rustdoc.css (with rustc version)
+    /// * main.css (with rustc version)
+    /// * main.js (with rustc version)
+    /// * jquery.js (with rustc version)
+    /// * playpen.js (with rustc version)
+    /// * normalize.css
+    /// * FiraSans-Medium.woff
+    /// * FiraSans-Regular.woff
+    /// * Heuristica-Italic.woff
+    /// * SourceCodePro-Regular.woff
+    /// * SourceCodePro-Semibold.woff
+    /// * SourceSerifPro-Bold.woff
+    /// * SourceSerifPro-Regular.woff
+    pub fn add_essential_files(&self) -> Result<(), DocBuilderError> {
+        use std::fs::{copy, create_dir_all};
+
+        // acme-client-0.0.0 is an empty library crate and it will always build
+        let pkg = try!(get_package("acme-client", Some("=0.0.0")));
+        let res = self.build_package_in_chroot(&pkg);
+        let rustc_version = parse_rustc_version(&res.rustc_version);
+
+        if !res.build_success {
+            return Err(DocBuilderError::GenericError(format!("Failed to build empty crate for: {}",
+                                                             res.rustc_version)));
+        }
+
+        info!("Copying essential files for: {}", res.rustc_version);
+
+        let files = (
+            // files require rustc version subfix
+            ["rustdoc.css",
+             "main.css",
+             "main.js",
+             "jquery.js",
+             "playpen.js"],
+            // files doesn't require rustc version subfix
+            ["normalize.css",
+             "FiraSans-Medium.woff",
+             "normalize.css",
+             "FiraSans-Medium.woff",
+             "FiraSans-Regular.woff",
+             "Heuristica-Italic.woff",
+             "SourceCodePro-Regular.woff",
+             "SourceCodePro-Semibold.woff",
+             "SourceSerifPro-Bold.woff",
+             "SourceSerifPro-Regular.woff",
+            ],
+        );
+
+        let source = PathBuf::from(&self.options.chroot_path)
+            .join("home")
+            .join(&self.options.chroot_user)
+            .join(canonical_name(&pkg))
+            .join("doc");
+
+        // use copy_documentation destination directory so self.clean can remove it when
+        // we are done
+        let destination = PathBuf::from(&self.options.destination)
+            .join(format!("{}/{}",
+                          pkg.manifest().name(),
+                          pkg.manifest().version()));
+        try!(create_dir_all(&destination));
+
+        for file in files.0.iter() {
+            let source_path = source.join(file);
+            let destination_path = {
+                let spl: Vec<&str> = file.split('.').collect();
+                destination.join(format!("{}-{}.{}", spl[0], rustc_version, spl[1]))
+            };
+            try!(copy(source_path, destination_path));
+        }
+
+        for file in files.1.iter() {
+            let source_path = source.join(file);
+            let destination_path = destination.join(file);
+            try!(copy(source_path, destination_path));
+        }
+
+        let conn = try!(connect_db());
+        try!(add_path_into_database(&conn, "", destination));
+
+        try!(self.clean(&pkg));
+
+        Ok(())
+    }
 }
 
 
@@ -415,5 +509,15 @@ mod test {
                    "20160523-1.10.0-nightly-57ef01513");
         assert_eq!(parse_rustc_version("cratesfyi 0.2.0 (ba9ae23 2016-05-26)"),
                    "20160526-0.2.0-ba9ae23");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_add_essential_files() {
+        let _ = env_logger::init();
+        let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
+        let docbuilder = DocBuilder::new(options);
+
+        docbuilder.add_essential_files().unwrap();
     }
 }
