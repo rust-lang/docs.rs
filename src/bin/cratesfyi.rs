@@ -5,6 +5,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate time;
 
 
 use std::env;
@@ -19,7 +20,7 @@ use cratesfyi::db::add_path_into_database;
 
 
 pub fn main() {
-    let _ = env_logger::init();
+    logger_init();
 
     let matches = App::new("cratesfyi")
                       .version(cratesfyi::BUILD_VERSION)
@@ -95,6 +96,8 @@ pub fn main() {
                                                .index(1)
                                                .required(false)
                                                .help("Socket address to listen to")))
+                      .subcommand(SubCommand::with_name("daemon")
+                                      .about("Starts cratesfyi daemon"))
                       .subcommand(SubCommand::with_name("database")
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
@@ -197,7 +200,24 @@ pub fn main() {
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(matches.value_of("SOCKET_ADDR"));
+    } else if let Some(_) = matches.subcommand_matches("daemon") {
+        cratesfyi::utils::start_daemon();
     } else {
         println!("{}", matches.usage());
     }
+}
+
+
+
+fn logger_init() {
+    let format = |record: &log::LogRecord| {
+        format!("{} [{}] {}: {}",
+                time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
+                record.level(), record.target(), record.args())
+    };
+
+    let mut builder = env_logger::LogBuilder::new();
+    builder.format(format);
+    builder.parse(&env::var("RUST_LOG").unwrap_or("cratesfyi=info".to_owned()));
+    builder.init().unwrap();
 }
