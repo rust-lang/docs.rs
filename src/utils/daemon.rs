@@ -14,6 +14,7 @@ use time;
 use DocBuilderOptions;
 use DocBuilder;
 use utils::{update_sources, update_release_activity};
+use db::{connect_db, update_search_index};
 
 
 const DAEMON_PID_FILE_PATH: &'static str = "/var/run/cratesfyi.pid";
@@ -104,6 +105,18 @@ pub fn start_daemon() {
                 if let Err(e) = update_release_activity() {
                     error!("Failed to update release activity: {}", e);
                 }
+            }
+        }
+    });
+
+
+    // update search index every 3 hours
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(60*60*3));
+            let conn = connect_db().expect("Failed to connect database");
+            if let Err(e) = update_search_index(&conn) {
+                error!("Failed to update search index: {}", e);
             }
         }
     });
