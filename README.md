@@ -29,12 +29,12 @@ redirects discussed above
 
 #### Contributors
 
-* [https://github.com/onur](Onur Aslan)
-* [https://github.com/frewsxcv](Corey Farwell)
-* [https://github.com/jonhoo](Jon Gjengset)
-* [https://github.com/mattyhall](Matthew Hall)
-* [https://github.com/GuillaumeGomez](Guillaume Gomez)
-* [https://github.com/Mark-Simulacrum](Mark Simulacrum)
+* [Onur Aslan](https://github.com/onur])
+* [Corey Farwell](https://github.com/frewsxcv)
+* [Jon Gjengset](https://github.com/jonhoo)
+* [Matthew Hall](https://github.com/mattyhall)
+* [Guillaume Gomez](https://github.com/GuillaumeGomez)
+* [Mark Simulacrum](https://github.com/Mark-Simulacrum)
 
 #### Sponsors
 
