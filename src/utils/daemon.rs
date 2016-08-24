@@ -13,7 +13,7 @@ use libc::fork;
 use time;
 use DocBuilderOptions;
 use DocBuilder;
-use utils::{update_sources, update_release_activity};
+use utils::{update_sources, update_release_activity, github_updater};
 use db::{connect_db, update_search_index};
 
 
@@ -118,6 +118,17 @@ pub fn start_daemon() {
             let conn = connect_db().expect("Failed to connect database");
             if let Err(e) = update_search_index(&conn) {
                 error!("Failed to update search index: {}", e);
+            }
+        }
+    });
+
+
+    // update github stats every 6 hours
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(60 * 60 * 6));
+            if let Err(e) = github_updater() {
+                error!("Failed to update github fields: {}", e);
             }
         }
     });

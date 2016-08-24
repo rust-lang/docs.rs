@@ -54,7 +54,7 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
                                                  &crate_id])
                                       .map_err(DocBuilderError::DatabaseError)
                               }) {
-            error!("Failed to update github fields of: {} {}", crate_name, err);
+            debug!("Failed to update github fields of: {} {}", crate_name, err);
         }
 
         // sleep for rate limits
