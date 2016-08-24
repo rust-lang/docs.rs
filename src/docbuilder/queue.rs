@@ -20,14 +20,26 @@ impl DocBuilder {
 
         let diff = try!(repo.diff_tree_to_tree(Some(&old_tree), Some(&new_tree), None));
         let conn = try!(connect_db());
+        let mut line_n = 0;
 
-        try!(diff.print(git2::DiffFormat::Patch, |_, _, diffline| -> bool {
+        try!(diff.print(git2::DiffFormat::Patch, |_, hunk, diffline| -> bool {
             let line = String::from_utf8_lossy(diffline.content()).into_owned();
             // crate strings starts with '{'
             // skip if line is not a crate string
             if line.chars().nth(0) != Some('{') {
+                line_n = 0;
                 return true;
             }
+
+            line_n += 1;
+
+            if match hunk {
+                Some(hunk) => hunk.new_lines() != line_n,
+                None => true,
+            } {
+                return true;
+            }
+
             let json = match Json::from_str(&line[..]) {
                 Ok(j) => j,
                 Err(err) => {
@@ -37,13 +49,21 @@ impl DocBuilder {
                 }
             };
 
+            // check if a crate is yanked just in case
+            if json.as_object()
+                .and_then(|obj| obj.get("yanked"))
+                .and_then(|y| y.as_boolean())
+                .unwrap_or(true) {
+                return true;
+            }
+
             if let Some((krate, version)) = json.as_object()
-                                                .map(|obj| {
-                                                    (obj.get("name")
-                                                        .and_then(|n| n.as_string()),
-                                                     obj.get("vers")
-                                                        .and_then(|n| n.as_string()))
-                                                }) {
+                .map(|obj| {
+                    (obj.get("name")
+                        .and_then(|n| n.as_string()),
+                     obj.get("vers")
+                        .and_then(|n| n.as_string()))
+                }) {
 
                 // Skip again if we can't get crate name and version
                 if krate.is_none() || version.is_none() {
@@ -67,8 +87,8 @@ impl DocBuilder {
 
         // checkout master
         try!(repo.refname_to_id("refs/remotes/origin/master")
-                 .and_then(|oid| repo.find_object(oid, None))
-                 .and_then(|object| repo.reset(&object, git2::ResetType::Hard, None)));
+            .and_then(|oid| repo.find_object(oid, None))
+            .and_then(|object| repo.reset(&object, git2::ResetType::Hard, None)));
 
         Ok(())
     }
@@ -94,8 +114,15 @@ impl DocBuilder {
             let version: String = row.get(2);
 
             match self.build_package(&name[..], &version[..]) {
-                Ok(_) => { let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]); },
-                Err(e) => error!("Failed to build package {}-{} from queue: {}", name, version, e),
+                Ok(_) => {
+                    let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
+                }
+                Err(e) => {
+                    error!("Failed to build package {}-{} from queue: {}",
+                           name,
+                           version,
+                           e)
+                }
             }
         }
 
