@@ -116,7 +116,7 @@ impl DocBuilder {
             match self.build_package(&name[..], &version[..]) {
                 Ok(_) => {
                     let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-                }
+                },
                 Err(e) => {
                     error!("Failed to build package {}-{} from queue: {}",
                            name,
