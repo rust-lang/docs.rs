@@ -17,8 +17,6 @@ use utils::{update_sources, update_release_activity};
 use db::{connect_db, update_search_index};
 
 
-const DAEMON_PID_FILE_PATH: &'static str = "/var/run/cratesfyi.pid";
-
 
 pub fn start_daemon() {
     // first check required environment variables
@@ -30,13 +28,16 @@ pub fn start_daemon() {
         env::var(v).expect("Environment variable not found");
     }
 
+    let dbopts = opts();
+
     // check paths once
-    opts().check_paths().unwrap();
+    dbopts.check_paths().unwrap();
 
     // fork the process
     let pid = unsafe { fork() };
     if pid > 0 {
-        let mut file = File::create(DAEMON_PID_FILE_PATH).expect("Failed to create pid file");
+        let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
+            .expect("Failed to create pid file");
         writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
         info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
@@ -113,7 +114,7 @@ pub fn start_daemon() {
     // update search index every 3 hours
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(60*60*3));
+            thread::sleep(Duration::from_secs(60 * 60 * 3));
             let conn = connect_db().expect("Failed to connect database");
             if let Err(e) = update_search_index(&conn) {
                 error!("Failed to update search index: {}", e);
@@ -132,6 +133,6 @@ pub fn start_daemon() {
 
 fn opts() -> DocBuilderOptions {
     let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX")
-                               .expect("CRATESFYI_PREFIX environment variable not found"));
+        .expect("CRATESFYI_PREFIX environment variable not found"));
     DocBuilderOptions::from_prefix(prefix)
 }
