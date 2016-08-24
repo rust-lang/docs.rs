@@ -13,6 +13,7 @@ use libc::fork;
 use time;
 use DocBuilderOptions;
 use DocBuilder;
+use utils::{update_sources, update_release_activity};
 
 
 const DAEMON_PID_FILE_PATH: &'static str = "/var/run/cratesfyi.pid";
@@ -66,6 +67,13 @@ pub fn start_daemon() {
             // check lock file
             if opts.prefix.join("cratesfyi.lock").exists() {
                 warn!("Lock file exits, skipping building new crates");
+                continue;
+            }
+
+            // update index
+            if let Err(e) = update_sources() {
+                error!("Failed to update sources: {}", e);
+                continue;
             }
 
             let mut doc_builder = DocBuilder::new(opts);
@@ -93,7 +101,7 @@ pub fn start_daemon() {
             let now = time::now();
             if now.tm_hour == 2 && now.tm_min == 0 {
                 info!("Updating release activity");
-                if let Err(e) = ::utils::update_release_activity() {
+                if let Err(e) = update_release_activity() {
                     error!("Failed to update release activity: {}", e);
                 }
             }
