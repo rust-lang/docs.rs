@@ -1,3 +1,5 @@
+//! [Docs.rs](https://docs.rs) (formerly cratesfyi) is an open source project to host
+//! documentation of crates for the Rust Programming Language.
 
 #[macro_use]
 extern crate log;
