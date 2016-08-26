@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
-const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 3;   // 3 days
+const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 
 
 struct CratesfyiHandler {
