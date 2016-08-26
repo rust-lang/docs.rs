@@ -87,7 +87,17 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             };
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
-            let mime = try!(cookie.buffer(&content));
+            let mime = {
+                let mime = try!(cookie.buffer(&content));
+                // css's are causing some problem in browsers
+                // magic will return text/plain for css file types
+                // convert them to text/css
+                if mime == "text/plain" && file_path_str.ends_with(".css") {
+                    "text/css".to_owned()
+                } else {
+                    mime.to_owned()
+                }
+            };
 
             file_list_with_mimes.push((mime.clone(), file_path_str.clone()));
 
