@@ -7,6 +7,8 @@ pub use self::file::add_path_into_database;
 use postgres::{Connection, SslMode};
 use postgres::error::{Error, ConnectError};
 use std::env;
+use r2d2;
+use r2d2_postgres;
 
 mod add_package;
 mod file;
@@ -18,6 +20,52 @@ pub fn connect_db() -> Result<Connection, ConnectError> {
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
     Connection::connect(&db_url[..], SslMode::None)
+}
+
+
+pub fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
+    let db_url = env::var("CRATESFYI_DATABASE_URL")
+        .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
+    let config = r2d2::Config::default();
+    let manager = r2d2_postgres::PostgresConnectionManager::new(&db_url[..],
+                                                                r2d2_postgres::SslMode::None)
+        .expect("Failed to create PostgresConnectionManager");
+    r2d2::Pool::new(config, manager).expect("Failed to create r2d2 pool")
+}
+
+
+/// Updates content column in crates table.
+///
+/// This column will be used for searches and always contains `tsvector` of:
+///
+///   * crate name (rank A-weight)
+///   * latest release description (rank B-weight)
+///   * latest release keywords (rank B-weight)
+///   * latest release readme (rank C-weight)
+///   * latest release root rustdoc (rank C-weight)
+pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
+    conn.execute("
+        WITH doc as (
+            SELECT DISTINCT ON(releases.crate_id)
+                   releases.id,
+                   releases.crate_id,
+                   setweight(to_tsvector(crates.name), 'A')                                   ||
+                   setweight(to_tsvector(coalesce(releases.description, '')), 'B')            ||
+                   setweight(to_tsvector(coalesce((
+                                SELECT string_agg(value, ' ')
+                                FROM json_array_elements_text(releases.keywords)), '')), 'B') ||
+                   setweight(to_tsvector(coalesce(releases.readme, '')), 'C')                 ||
+                   setweight(to_tsvector(coalesce(releases.description_long, '')), 'C') as content
+            FROM releases
+            INNER JOIN crates ON crates.id = releases.crate_id
+            ORDER BY releases.crate_id, releases.release_time DESC
+        )
+        UPDATE crates
+        SET latest_version_id = doc.id,
+            content = doc.content
+        FROM doc
+        WHERE crates.id = doc.crate_id AND
+            (crates.latest_version_id = 0 OR crates.latest_version_id != doc.id);", &[])
 }
 
 
@@ -35,7 +83,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             github_forks INT DEFAULT 0, \
             github_issues INT DEFAULT 0, \
             github_last_commit TIMESTAMP, \
-            github_last_update TIMESTAMP \
+            github_last_update TIMESTAMP, \
+            content tsvector \
         )",
         "CREATE TABLE releases ( \
             id SERIAL PRIMARY KEY, \
@@ -119,6 +168,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             content BYTEA \
         )",
+        "CREATE INDEX content_idx ON crates USING gin(content)",
         "CREATE TABLE config ( \
             name VARCHAR(100) NOT NULL PRIMARY KEY, \
             value JSON NOT NULL \
