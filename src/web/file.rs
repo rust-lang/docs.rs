@@ -76,7 +76,9 @@ impl Handler for DatabaseFileHandler {
             }
             // rustdoc javascripts have rustdoc prefix in database
             // FIXME: this is kinda lame I have to save all javascripts with rustdoc prefix
-            if path.ends_with(".js") {
+            // FIXME: this code became more retarded than before
+            if path.ends_with(".js") && !path.starts_with("main-") &&
+               !path.starts_with("jquery-") && !path.starts_with("playpen-") {
                 format!("rustdoc/{}", path)
             } else {
                 path
