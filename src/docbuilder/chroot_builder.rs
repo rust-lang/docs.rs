@@ -378,8 +378,6 @@ impl DocBuilder {
             // files doesn't require rustc version subfix
             ["normalize.css",
              "FiraSans-Medium.woff",
-             "normalize.css",
-             "FiraSans-Medium.woff",
              "FiraSans-Regular.woff",
              "Heuristica-Italic.woff",
              "SourceCodePro-Regular.woff",
