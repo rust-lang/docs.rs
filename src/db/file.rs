@@ -92,8 +92,15 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 // css's are causing some problem in browsers
                 // magic will return text/plain for css file types
                 // convert them to text/css
-                if mime == "text/plain" && file_path_str.ends_with(".css") {
-                    "text/css".to_owned()
+                // do the same for javascript files
+                if mime == "text/plain" {
+                    if file_path_str.ends_with(".css") {
+                        "text/css".to_owned()
+                    } else if file_path_str.ends_with(".js") {
+                        "application/javascript".to_owned()
+                    } else {
+                        mime.to_owned()
+                    }
                 } else {
                     mime.to_owned()
                 }
