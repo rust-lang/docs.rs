@@ -5,6 +5,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate time;
 
 
 use std::env;
@@ -14,11 +15,12 @@ use std::path::PathBuf;
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::build_doc;
+use cratesfyi::start_web_server;
 use cratesfyi::db::add_path_into_database;
 
 
 pub fn main() {
-    let _ = env_logger::init();
+    logger_init();
 
     let matches = App::new("cratesfyi")
                       .version(cratesfyi::BUILD_VERSION)
@@ -90,6 +92,14 @@ pub fn main() {
                                                                .help("Version of crate")))
                                       .subcommand(SubCommand::with_name("add-essential-files")
                                                       .about("Adds essential files for rustc")))
+                      .subcommand(SubCommand::with_name("start-web-server")
+                                      .about("Starts web server")
+                                      .arg(Arg::with_name("SOCKET_ADDR")
+                                               .index(1)
+                                               .required(false)
+                                               .help("Socket address to listen to")))
+                      .subcommand(SubCommand::with_name("daemon")
+                                      .about("Starts cratesfyi daemon"))
                       .subcommand(SubCommand::with_name("database")
                                       .about("Database operations")
                                       .subcommand(SubCommand::with_name("init")
@@ -107,7 +117,8 @@ pub fn main() {
                                                       .arg(Arg::with_name("PREFIX")
                                                                .index(2)
                                                                .help("Prefix of files in \
-                                                                      database"))))
+                                                                      database")))
+                                      .subcommand(SubCommand::with_name("update-release-activity")))
                       .get_matches();
 
 
@@ -187,8 +198,30 @@ pub fn main() {
                                    matches.value_of("PREFIX").unwrap_or(""),
                                    matches.value_of("DIRECTORY").unwrap())
                 .unwrap();
+        } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
+            // FIXME: This is actually util command not database
+            cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
         }
+    } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
+        start_web_server(matches.value_of("SOCKET_ADDR"));
+    } else if let Some(_) = matches.subcommand_matches("daemon") {
+        cratesfyi::utils::start_daemon();
     } else {
         println!("{}", matches.usage());
     }
+}
+
+
+
+fn logger_init() {
+    let format = |record: &log::LogRecord| {
+        format!("{} [{}] {}: {}",
+                time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
+                record.level(), record.target(), record.args())
+    };
+
+    let mut builder = env_logger::LogBuilder::new();
+    builder.format(format);
+    builder.parse(&env::var("RUST_LOG").unwrap_or("cratesfyi=info".to_owned()));
+    builder.init().unwrap();
 }

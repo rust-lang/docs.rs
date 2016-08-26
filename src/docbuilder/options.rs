@@ -4,6 +4,7 @@ use std::{env, fmt};
 use std::path::PathBuf;
 
 
+#[derive(Clone)]
 pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
     pub prefix: PathBuf,

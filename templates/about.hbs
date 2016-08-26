@@ -1,0 +1,86 @@
+{{> header}}
+
+<div class="container about">
+  <p>
+  Docs.rs (formerly cratesfyi) is an open source project to host
+  documentation of crates for the Rust Programming Language.
+  </p>
+
+  <p>
+  Docs.rs automatically builds crates' documentation released on
+  <a href="https://crates.io/">crates.io</a>
+  using the nightly release of the Rust compiler.
+  </p>
+
+  <p>
+  The source code of Docs.rs is available on
+    <a href="https://github.com/onur/docs.rs" target="_blank">Github</a>. If
+  you ever encounter an issue, don't hesitate to report it! (And
+  thanks in advance!)
+  </p>
+
+  <p>
+  The README of a crate is taken from the <code>readme</code> field defined in
+  <code>Cargo.toml</code>. If a crate doesn't have this field,
+  no README will be displayed.
+  </p>
+
+  <h4>Redirections</h4>
+
+  <p>
+  Docs.rs is using semver to parse URLs. You can use this feature to access
+  crates' documentation easily. Example of URL redirections for
+  <code>clap</code> crate:
+  </p>
+
+  <table class="pure-table pure-table-horizontal">
+    <thead>
+      <tr>
+        <th>URL</th>
+        <th>Redirects to documentation of</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="https://docs.rs/clap">docs.rs/clap</a></td>
+        <td>Latest version of clap</td>
+      </tr>
+      <tr>
+        <td><a href="https://docs.rs/clap/%5E2">docs.rs/clap/^2</a></td>
+        <td>2.* version</td>
+      </tr>
+      <tr>
+        <td><a href="https://docs.rs/clap/%5E2.9">docs.rs/clap/^2.9</a></td>
+        <td>2.9.* version</td>
+      </tr>
+      <tr>
+        <td><a href="https://docs.rs/clap/2.9.3">docs.rs/clap/2.9.3</a></td>
+        <td>2.9.3 version (you don't need <code>=</code> unlike semver)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>The <a href="https://crates.fyi/">crates.fyi</a> domain will redirect to
+  <a href="https://docs.rs/">docs.rs</a>, supporting all of the redirects discussed
+  above</p>
+
+  <h4>Version</h4>
+  <p>Currently running Docs.rs version is: <strong>{{cratesfyi_version}}</strong>
+
+  <h4>Contributors</h4>
+  <ul>
+    <li><a href="https://github.com/onur" target="_blank">Onur Aslan</a></li>
+    <li><a href="https://github.com/frewsxcv" target="_blank">Corey Farwell</a></li>
+    <li><a href="https://github.com/jonhoo" target="_blank">Jon Gjengset</a></li>
+    <li><a href="https://github.com/mattyhall" target="_blank">Matthew Hall</a></li>
+    <li><a href="https://github.com/GuillaumeGomez" target="_blank">Guillaume Gomez</a></li>
+    <li><a href="https://github.com/Mark-Simulacrum" target="_blank">Mark Simulacrum</a></li>
+  </ul>
+
+  <h4>Sponsors</h4>
+  <p>Hosting generously provided by:</p>
+  <p><a href="http://www.leaseweb.com" title="LeaseWeb offers hosted infrastructure solutions, including Cloud, CDN, Bare Metal Servers, Managed Hosting, Colocation, and Hybrid hosting" target="_blank"><img src="/leaseweb.gif" alt="Powered by LeaseWeb" width="150" height="40"/></a></p>
+  <p>If you are interested in sponsoring Docs.rs, please don't hesitate to contact us at <a href="&#109;&#97;&#105;&#x6c;&#x74;&#111;&#x3a;&#x6f;&#110;&#117;&#114;&#64;&#x6f;&#110;&#117;&#114;&#x2e;&#105;&#109;">&#x6f;&#110;&#117;&#114;&#64;&#x6f;&#110;&#117;&#114;&#x2e;&#105;&#109;</p>
+</div>
+
+{{> footer}}

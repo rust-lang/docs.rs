@@ -1,0 +1,70 @@
+{{> header}}
+
+
+{{#with content}}
+<div class="container package-page-container">
+  <div class="pure-g">
+    <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
+      <div class="pure-menu package-menu">
+        <ul class="pure-menu-list">
+          <li class="pure-menu-heading">Authors</li>
+          {{#each authors}}
+          <li class="pure-menu-item"><a href="/releases/{{this.[1]}}" class="pure-menu-link">{{this.[0]}}</a></li>
+          {{/each}}
+          <li class="pure-menu-heading">Links</li>
+          {{#if homepage_url}}<li class="pure-menu-item"><a href="{{homepage_url}}" class="pure-menu-link"><i class="fa fa-home fa-fw"></i> Homepage</a></li>{{/if}}
+          {{#if github}}
+          <li class="pure-menu-item">
+            <a href="{{repository_url}}" class="pure-menu-link"><i class="fa fa-github-alt fa-fw"></i> <i class="fa fa-star-o fa-fw"></i> {{github_stars}} <i class="fa fa-code-fork fa-fw"></i> {{github_forks}} <i class="fa fa-exclamation-circle fa-fw"></i> {{github_issues}}</a>
+          </li>
+          {{else}}
+          {{#if repository_url}}<li class="pure-menu-item"><a href="{{repository_url}}" class="pure-menu-link">Repository</a></li>{{/if}}
+          {{/if}}
+          <li class="pure-menu-heading">Dependencies</li>
+          <li class="pure-menu-item">
+            <div class="pure-menu pure-menu-scrollable sub-menu">
+              <ul class="pure-menu-list">
+                {{#each dependencies}}
+                <li class="pure-menu-item"><a href="/crate/{{this.[0]}}/{{this.[1]}}" class="pure-menu-link">{{this.[0]}} {{this.[1]}}</a></li>
+                {{/each}}
+              </ul>
+            </div>
+          </li>
+          <li class="pure-menu-heading">Versions</li>
+          <li class="pure-menu-item">
+            <div class="pure-menu pure-menu-scrollable sub-menu">
+              <ul class="pure-menu-list">
+                {{#each versions}}
+                <li class="pure-menu-item"><a href="/crate/{{../../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
+                {{/each}}
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
+      {{#unless is_library}}
+      <div class="warning">{{name}}-{{version}} is not a library.</div>
+      {{else}}
+      {{#unless build_status}}
+      <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and if you believe this is docs.rs' fault, report into <a href="https://github.com/onur/docs.rs/issues/23">this issue report</a>.</div>
+      {{else}}
+      {{#unless rustdoc_status}}
+      <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>
+      {{/unless}}
+      {{/unless}}
+      {{/unless}}
+      {{#if readme}}
+        {{{readme}}}
+      {{else}}
+        {{{rustdoc}}}
+      {{/if}}
+    </div>
+  </div>
+
+</div>
+{{/with}}
+
+
+{{> footer}}
