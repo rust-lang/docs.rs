@@ -183,7 +183,19 @@ impl DocBuilder {
                               package.manifest().version(),
                               target);
             if let Ok(_) = self.chroot_command(cmd) {
-                successfuly_targets.push(target.to_string());
+                // Cargo is not giving any error and not generating documentation of some crates
+                // when we use a target compile options. Check documentation exists before
+                // adding target to successfully_targets.
+                // FIXME: Need to figure out why some docs are not generated with target option
+                let target_doc_path = PathBuf::from(&self.options.chroot_path)
+                    .join("home")
+                    .join(&self.options.chroot_user)
+                    .join(canonical_name(&package))
+                    .join(&target)
+                    .join("doc");
+                if target_doc_path.exists() {
+                    successfuly_targets.push(target.to_string());
+                }
             }
         }
         successfuly_targets
