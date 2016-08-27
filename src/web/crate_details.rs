@@ -1,10 +1,10 @@
 
 
 
+use super::pool::Pool;
 use super::{MetaData, duration_to_str, match_version, render_markdown};
 use super::error::Nope;
 use super::page::Page;
-use db::connect_db;
 use iron::prelude::*;
 use iron::status;
 use std::collections::BTreeMap;
@@ -195,7 +195,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let name = req.extensions.get::<Router>().unwrap().find("name").unwrap();
     let req_version = req.extensions.get::<Router>().unwrap().find("version");
 
-    let conn = connect_db().unwrap();
+    let conn = req.extensions.get::<Pool>().unwrap();
 
     match_version(&conn, &name, req_version)
         .and_then(|version| CrateDetails::new(&conn, &name, &version))
