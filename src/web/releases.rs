@@ -361,9 +361,45 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         // if there is a match
         // TODO: Redirecting to latest doc might be more useful
         if params.find(&["i-am-feeling-lucky"]).is_some() {
+
+            use iron::Url;
+            use iron::modifiers::Redirect;
+
+            // redirect to a random crate if query is empty
+            if query.is_empty() {
+                let rows =  conn.query("SELECT crates.name, \
+                                               releases.version, \
+                                               releases.target_name \
+                                        FROM crates \
+                                        INNER JOIN releases
+                                              ON crates.latest_version_id = releases.id \
+                                        WHERE github_stars >= 100 AND rustdoc_status = true \
+                                        OFFSET FLOOR(RANDOM() * 280) LIMIT 1", &[]).unwrap();
+                                        //                ~~~~~~^
+                                        // FIXME: This is a fast query but using a constant
+                                        //        There are currently 280 crates with docs and 100+
+                                        //        starts. This should be fine for a while.
+                let name: String = rows.get(0).get(0);
+                let version: String = rows.get(0).get(1);
+                let target_name: String = rows.get(0).get(2);
+                let url = Url::parse(&format!("{}://{}:{}/{}/{}/{}",
+                                              req.url.scheme,
+                                              req.url.host,
+                                              req.url.port,
+                                              name,
+                                              version,
+                                              target_name))
+                    .unwrap();
+
+                let mut resp = Response::with((status::Found, Redirect(url)));
+                use iron::headers::{Expires, HttpDate};
+                use time;
+                resp.headers.set(Expires(HttpDate(time::now())));
+                return Ok(resp);
+            }
+
+
             if let Some(version) = match_version(&conn, &query, None) {
-                use iron::Url;
-                use iron::modifiers::Redirect;
                 let url = Url::parse(&format!("{}://{}:{}/crate/{}/{}",
                                               req.url.scheme,
                                               req.url.host,
