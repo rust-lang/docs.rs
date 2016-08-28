@@ -27,9 +27,29 @@ crates' documentation easily. Example of URL redirections for `clap` crate:
 The crates.fyi domain will redirect to docs.rs, supporting all of the
 redirects discussed above
 
+
+### Badges
+
+You can use badges to show state of your documentation to your users.
+The default badge will be pointed at the latest version of a crate.
+You can use `version` parameter to show status of documentation for
+any version you want.
+
+Badge will display in blue if docs.rs is successfully hosting your crate
+documentation, and red if building documentation failing.
+
+Example badges for `mio` crate:
+
+| URL   | Badge |
+|-------|-------|
+| Latest version: <https://docs.rs/mio/badge.svg> | ![mio](https://docs.rs/mio/badge.svg) |
+| Version 0.4.4: <https://docs.rs/mio/badge.svg?version=0.4.4> | ![mio](https://docs.rs/mio/badge.svg?version=0.4.4) |
+| Version 0.1.0: <https://docs.rs/mio/badge.svg?version=0.1.0> | ![mio](https://docs.rs/mio/badge.svg?version=0.1.0) |
+
+
 #### Contributors
 
-* [Onur Aslan](https://github.com/onur])
+* [Onur Aslan](https://github.com/onur)
 * [Corey Farwell](https://github.com/frewsxcv)
 * [Jon Gjengset](https://github.com/jonhoo)
 * [Matthew Hall](https://github.com/mattyhall)
