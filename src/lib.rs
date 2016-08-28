@@ -23,6 +23,7 @@ extern crate r2d2_postgres;
 extern crate url;
 extern crate params;
 extern crate libc;
+extern crate badge;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;

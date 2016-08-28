@@ -207,3 +207,56 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_show_platforms_tab")
         .to_resp("rustdoc")
 }
+
+
+
+pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
+    use iron::headers::ContentType;
+    use params::{Params, Value};
+    use badge::{Badge, BadgeOptions};
+
+    let version = {
+        let params = req.get_ref::<Params>().unwrap();
+        match params.find(&["version"]) {
+            Some(&Value::String(ref version)) => version.clone(),
+            _ => "*".to_owned(),
+        }
+    };
+
+    let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap();
+    let conn = req.extensions.get::<Pool>().unwrap();
+
+    let options = match match_version(&conn, &name, Some(&version)) {
+        Some(version) => {
+            let rows = conn.query("SELECT rustdoc_status
+                                   FROM releases
+                                   INNER JOIN crates ON crates.id = releases.crate_id
+                                   WHERE crates.name = $1 AND releases.version = $2",
+                                  &[&name, &version]).unwrap();
+            if rows.len() > 0 && rows.get(0).get(0) {
+                BadgeOptions {
+                    subject: "docs".to_owned(),
+                    status: version,
+                    color: "#4d76ae".to_owned(),
+                }
+            } else {
+                BadgeOptions {
+                    subject: "docs".to_owned(),
+                    status: version,
+                    color: "#e05d44".to_owned(),
+                }
+            }
+        },
+        None => {
+            BadgeOptions {
+                subject: "docs".to_owned(),
+                status: "no builds".to_owned(),
+                color: "#e05d44".to_owned(),
+            }
+        },
+    };
+
+    let mut resp = Response::with((status::Ok, Badge::new(options).unwrap().to_svg()));
+    resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
+    Ok(resp)
+}
