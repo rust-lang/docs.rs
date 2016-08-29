@@ -120,9 +120,17 @@ fn get_github_fields(path: &str) -> Result<GitHubFields, DocBuilderError> {
 
 
 fn get_github_path(url: &str) -> Option<String> {
-    let re = Regex::new(r"https*://github.com/([\w_-]+)/([\w_-]+)(.git)*").unwrap();
+    let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
     match re.captures(url) {
-        Some(cap) => Some(format!("{}/{}", cap.at(1).unwrap(), cap.at(2).unwrap())),
+        Some(cap) => {
+            let username = cap.at(1).unwrap();
+            let reponame = cap.at(2).unwrap();
+            Some(format!("{}/{}", username, if reponame.ends_with(".git") {
+                reponame.split(".git").nth(0).unwrap()
+            } else {
+                reponame
+            }))
+        },
         None => None,
     }
 }
@@ -144,6 +152,8 @@ mod test {
                    Some("onur/cratesfyi".to_string()));
         assert_eq!(get_github_path("https://github.com/onur23cmD_M_R_L_/crates_fy-i"),
                    Some("onur23cmD_M_R_L_/crates_fy-i".to_string()));
+        assert_eq!(get_github_path("https://github.com/docopt/docopt.rs"),
+                   Some("docopt/docopt.rs".to_string()));
     }
 
 
