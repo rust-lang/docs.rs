@@ -303,6 +303,7 @@ div.package-sheet-container {
 div.package-page-container {
     div.package-menu {
         padding: 0 10px;
+        margin-bottom: 50px;
 
         li.pure-menu-heading {
             font-size: 1.3em;
@@ -348,6 +349,12 @@ div.package-page-container {
             li.pure-menu-item:last-child {
                 border-bottom: none;
             }
+        }
+
+        img.owner {
+            max-width: 32px;
+            max-height: 32px;
+            border-radius: 2px;
         }
     }
 
