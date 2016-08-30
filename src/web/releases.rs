@@ -184,6 +184,7 @@ fn get_releases_by_owner(conn: &Connection,
                         releases.release_time,
                         releases.rustdoc_status,
                         crates.github_stars,
+                        owners.name,
                         owners.login
                  FROM crates
                  INNER JOIN releases ON releases.id = crates.latest_version_id
@@ -206,7 +207,11 @@ fn get_releases_by_owner(conn: &Connection,
             stars: row.get(6),
         };
 
-        author_name = row.get(7);
+        author_name = if !row.get::<usize, String>(7).is_empty() {
+            row.get(7)
+        } else {
+            row.get(8)
+        };
         packages.push(package);
     }
 
