@@ -169,6 +169,52 @@ fn get_releases_by_author(conn: &Connection,
 
 
 
+fn get_releases_by_owner(conn: &Connection,
+                         page: i64,
+                         limit: i64,
+                         author: &str)
+                         -> (String, Vec<Release>) {
+
+    let offset = (page - 1) * limit;
+
+    let query = "SELECT crates.name,
+                        releases.version,
+                        releases.description,
+                        releases.target_name,
+                        releases.release_time,
+                        releases.rustdoc_status,
+                        crates.github_stars,
+                        owners.login
+                 FROM crates
+                 INNER JOIN releases ON releases.id = crates.latest_version_id
+                 INNER JOIN owner_rels ON owner_rels.cid = crates.id
+                 INNER JOIN owners ON owners.id = owner_rels.oid
+                 WHERE owners.login = $1
+                 ORDER BY crates.github_stars DESC
+                 LIMIT $2 OFFSET $3";
+
+    let mut author_name = String::new();
+    let mut packages = Vec::new();
+    for row in &conn.query(&query, &[&author, &limit, &offset]).unwrap() {
+        let package = Release {
+            name: row.get(0),
+            version: row.get(1),
+            description: row.get(2),
+            target_name: row.get(3),
+            release_time: row.get(4),
+            rustdoc_status: row.get(5),
+            stars: row.get(6),
+        };
+
+        author_name = row.get(7);
+        packages.push(package);
+    }
+
+    (author_name, packages)
+}
+
+
+
 fn get_search_results(conn: &Connection,
                       query: &str,
                       page: i64,
@@ -315,14 +361,18 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or(1);
 
     let conn = req.extensions.get::<Pool>().unwrap();
-    let author = req.extensions.get::<Router>().unwrap().find("author");
+    let author = try!(req.extensions
+        .get::<Router>()
+        .unwrap()
+        .find("author")
+        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
-    if author.is_none() {
-        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
-    }
-
-    let (author_name, packages) =
-        get_releases_by_author(conn, page_number, RELEASES_IN_RELEASES, author.unwrap());
+    let (author_name, packages) = if author.starts_with("@") {
+        let mut author = author.clone().split("@");
+        get_releases_by_owner(conn, page_number, RELEASES_IN_RELEASES, author.nth(1).unwrap())
+    } else {
+        get_releases_by_author(conn, page_number, RELEASES_IN_RELEASES, author)
+    };
 
     if packages.is_empty() {
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
@@ -332,12 +382,11 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     // This is a temporary solution to avoid expensive COUNT(*)
     let (show_next_page, show_previous_page) = (packages.len() == RELEASES_IN_RELEASES as usize,
                                                 page_number != 1);
-
     Page::new(packages)
         .title("Releases")
         .set("description", &format!("Crates from {}", author_name))
         .set("author", &author_name)
-        .set("release_type", &author.unwrap())
+        .set("release_type", author)
         .set_true("show_releases_navigation")
         .set_true("show_stars")
         .set_bool("show_next_page_button", show_next_page)
