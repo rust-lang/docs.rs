@@ -208,17 +208,24 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
 
 /// Wrapper around the pulldown-cmark parser and renderer to render markdown
 fn render_markdown(text: &str) -> String {
-    // I got this from mdBook::src::utils
-    use pulldown_cmark::{Parser, html, Options, OPTION_ENABLE_TABLES, OPTION_ENABLE_FOOTNOTES};
-    let mut s = String::with_capacity(text.len() * 3 / 2);
+    use hoedown::{Markdown, Html, Render, Extension};
+    use hoedown::renderer::html;
 
-    let mut opts = Options::empty();
-    opts.insert(OPTION_ENABLE_TABLES);
-    opts.insert(OPTION_ENABLE_FOOTNOTES);
+    let extensions = {
+        use hoedown::{FENCED_CODE, FOOTNOTES, SUPERSCRIPT, TABLES};
 
-    let p = Parser::new_ext(&text, opts);
-    html::push_html(&mut s, p);
-    s
+        let mut extensions = Extension::empty();
+        extensions.insert(FENCED_CODE);
+        extensions.insert(FOOTNOTES);
+        extensions.insert(SUPERSCRIPT);
+        extensions.insert(TABLES);
+
+        extensions
+    };
+
+    let doc = Markdown::new(text).extensions(extensions);
+    let mut html = Html::new(html::Flags::empty(), 0);
+    html.render(&doc).to_str().unwrap().to_owned()
 }
 
 
