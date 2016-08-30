@@ -144,20 +144,17 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     }).unwrap_or("*".to_string());
 
     let versions = {
-
         let mut versions = Vec::new();
-        // get every version of a crate
-        for row in &conn.query("SELECT version  \
-                                FROM releases \
-                                INNER JOIN crates ON crates.id = releases.crate_id \
-                                WHERE crates.name = $1",
-                                &[&name])
-            .unwrap() {
-                let version: String = row.get(0);
-                versions.push(version);
-            }
+        let rows = conn.query("SELECT versions FROM crates WHERE name = $1", &[&name]).unwrap();
+        if rows.len() == 0 {
+            return None;
+        }
+        let versions_json: Json = rows.get(0).get(0);
+        for version in versions_json.as_array().unwrap() {
+            let version: String = version.as_string().unwrap().to_owned();
+            versions.push(version);
+        }
 
-        // FIXME: Need to sort versions with semver, database is not keeping them sorted
         versions
     };
 
