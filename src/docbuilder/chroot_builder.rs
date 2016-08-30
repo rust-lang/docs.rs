@@ -1,7 +1,6 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
-use DocBuilderError;
 use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
@@ -9,11 +8,9 @@ use std::process::{Command, Output};
 use std::path::PathBuf;
 use postgres::Connection;
 use rustc_serialize::json::Json;
-
+use errors::*;
 use regex::Regex;
 
-
-type CommandResult = Result<String, String>;
 
 #[derive(Debug)]
 pub struct ChrootBuilderResult {
@@ -28,7 +25,7 @@ pub struct ChrootBuilderResult {
 
 impl DocBuilder {
     /// Builds every package documentation in chroot environment
-    pub fn build_world(&mut self) -> Result<(), DocBuilderError> {
+    pub fn build_world(&mut self) -> Result<()> {
         try!(update_sources());
 
         let mut count = 0;
@@ -49,7 +46,7 @@ impl DocBuilder {
 
 
     /// Builds package documentation in chroot environment and adds into cratesfyi database
-    pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool, DocBuilderError> {
+    pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool> {
         info!("Building package {}-{}", name, version);
 
         // Skip crates according to options
@@ -102,6 +99,7 @@ impl DocBuilder {
 
     /// Builds documentation of a package with cratesfyi in chroot environment
     fn build_package_in_chroot(&self, package: &Package) -> ChrootBuilderResult {
+        use std::error::Error as StdError;
         debug!("Building package in chroot");
         let (rustc_version, cratesfyi_version) = self.get_versions();
         let cmd = format!("cratesfyi doc {} ={}",
@@ -120,7 +118,7 @@ impl DocBuilder {
             }
             Err(e) => {
                 ChrootBuilderResult {
-                    output: e,
+                    output: e.description().to_owned(),
                     build_success: false,
                     have_doc: false,
                     have_examples: self.have_examples(&package),
@@ -204,17 +202,14 @@ impl DocBuilder {
 
     /// Copies source files of a package into source_path
     #[allow(dead_code)]  // I've been using this function before storing files in database
-    fn copy_sources(&self, package: &Package) -> Result<(), DocBuilderError> {
+    fn copy_sources(&self, package: &Package) -> Result<()> {
         debug!("Copying sources");
         let destination =
             PathBuf::from(&self.options.sources_path).join(format!("{}/{}",
                                                                    package.manifest().name(),
                                                                    package.manifest().version()));
         // unwrap is safe here, this function will be always called after get_package
-        match copy_dir(source_path(&package).unwrap(), &destination) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(DocBuilderError::Io(e)),
-        }
+        copy_dir(source_path(&package).unwrap(), &destination)
     }
 
 
@@ -223,7 +218,7 @@ impl DocBuilder {
                           package: &Package,
                           rustc_version: &str,
                           target: Option<&str>)
-                          -> Result<(), DocBuilderError> {
+                          -> Result<()> {
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
@@ -238,19 +233,18 @@ impl DocBuilder {
                      destination,
                      parse_rustc_version(rustc_version).trim(),
                      target.is_some())
-            .map_err(DocBuilderError::Io)
     }
 
 
     /// Removes build directory of a package in chroot
-    fn remove_build_dir(&self, package: &Package) -> Result<(), DocBuilderError> {
+    fn remove_build_dir(&self, package: &Package) -> Result<()> {
         let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
         Ok(())
     }
 
 
     /// Remove documentation, build directory and sources directory of a package
-    fn clean(&self, package: &Package) -> Result<(), DocBuilderError> {
+    fn clean(&self, package: &Package) -> Result<()> {
         debug!("Cleaning package");
         use std::fs::remove_dir_all;
         let documentation_path = PathBuf::from(&self.options.destination)
@@ -265,7 +259,7 @@ impl DocBuilder {
 
 
     /// Runs a command in a chroot environment
-    fn chroot_command<T: AsRef<str>>(&self, cmd: T) -> CommandResult {
+    fn chroot_command<T: AsRef<str>>(&self, cmd: T) -> Result<String> {
         command_result(Command::new("sudo")
             .arg("lxc-attach")
             .arg("-n")
@@ -320,7 +314,7 @@ impl DocBuilder {
     fn add_sources_into_database(&self,
                                  conn: &Connection,
                                  package: &Package)
-                                 -> Result<Json, DocBuilderError> {
+                                 -> Result<Json> {
         debug!("Adding sources into database");
         let prefix = format!("sources/{}/{}",
                              package.manifest().name(),
@@ -333,7 +327,7 @@ impl DocBuilder {
     fn add_documentation_into_database(&self,
                                        conn: &Connection,
                                        package: &Package)
-                                       -> Result<Json, DocBuilderError> {
+                                       -> Result<Json> {
         debug!("Adding documentation into database");
         let prefix = format!("rustdoc/{}/{}",
                              package.manifest().name(),
@@ -365,7 +359,7 @@ impl DocBuilder {
     /// * SourceCodePro-Semibold.woff
     /// * SourceSerifPro-Bold.woff
     /// * SourceSerifPro-Regular.woff
-    pub fn add_essential_files(&self) -> Result<(), DocBuilderError> {
+    pub fn add_essential_files(&self) -> Result<()> {
         use std::fs::{copy, create_dir_all};
 
         // acme-client-0.0.0 is an empty library crate and it will always build
@@ -374,8 +368,8 @@ impl DocBuilder {
         let rustc_version = parse_rustc_version(&res.rustc_version);
 
         if !res.build_success {
-            return Err(DocBuilderError::GenericError(format!("Failed to build empty crate for: {}",
-                                                             res.rustc_version)));
+            return Err(format!("Failed to build empty crate for: {}",
+                                res.rustc_version).into());
         }
 
         info!("Copying essential files for: {}", res.rustc_version);
@@ -439,12 +433,12 @@ impl DocBuilder {
 
 
 /// Simple function to capture command output
-fn command_result(output: Output) -> CommandResult {
+fn command_result(output: Output) -> Result<String> {
     let mut command_out = String::from_utf8_lossy(&output.stdout).into_owned();
     command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
     match output.status.success() {
         true => Ok(command_out),
-        false => Err(command_out),
+        false => Err(command_out.into()),
     }
 }
 
@@ -479,7 +473,7 @@ fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
 ///
 /// First argument of func is the name of crate and
 /// second argument is the version of crate. Func will be run for every crate.
-fn crates<F>(path: PathBuf, mut func: F) -> Result<(), DocBuilderError>
+fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
 {
     crates_from_path(&path, &mut func)

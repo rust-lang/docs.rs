@@ -1,13 +1,13 @@
 
-use ::DocBuilderError;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
 use std::path::PathBuf;
 use rustc_serialize::json::Json;
+use errors::*;
 
 
-fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderError>
+fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> () {
 
     let reader = try!(fs::File::open(path)
@@ -28,13 +28,13 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderErr
             Err(_) => continue
         };
 
-        let obj = try!(data.as_object().ok_or(DocBuilderError::JsonNotObject));
+        let obj = try!(data.as_object().ok_or("Not a JSON object"));
         let crate_name = try!(obj.get("name")
                               .and_then(|n| n.as_string())
-                              .ok_or(DocBuilderError::JsonNameNotFound));
+                              .ok_or("`name` not found in JSON object"));
         let vers = try!(obj.get("vers")
                         .and_then(|n| n.as_string())
-                        .ok_or(DocBuilderError::JsonVersNotFound));
+                        .ok_or("`vers` not found in JSON object"));
 
         name.clear();
         name.push_str(crate_name);
@@ -53,11 +53,11 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderErr
 
 
 
-pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<(), DocBuilderError>
+pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> () {
 
     if !path.is_dir() {
-        return Err(DocBuilderError::FileNotFound);
+        return Err("Not a directory".into());
     }
 
     for file in try!(path.read_dir()) {

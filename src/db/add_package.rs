@@ -1,5 +1,5 @@
 
-use {DocBuilderError, ChrootBuilderResult};
+use ChrootBuilderResult;
 use utils::source_path;
 use regex::Regex;
 
@@ -16,6 +16,8 @@ use semver;
 use postgres::Connection;
 use time;
 
+use errors::*;
+
 
 
 /// Adds a package into database.
@@ -26,7 +28,7 @@ pub fn add_package_into_database(conn: &Connection,
                                  res: &ChrootBuilderResult,
                                  files: Option<Json>,
                                  doc_targets: Vec<String>)
-                                 -> Result<i32, DocBuilderError> {
+                                 -> Result<i32> {
     debug!("Adding package into database");
     let crate_id = try!(initialize_package_in_database(&conn, &pkg));
     let dependencies = convert_dependencies(&pkg);
@@ -154,7 +156,7 @@ pub fn add_package_into_database(conn: &Connection,
 pub fn add_build_into_database(conn: &Connection,
                                release_id: &i32,
                                res: &ChrootBuilderResult)
-                               -> Result<i32, DocBuilderError> {
+                               -> Result<i32> {
     debug!("Adding build into database");
     let mut rows = try!(conn.query("SELECT id FROM builds WHERE rid = $1 AND rustc_version = $2",
                                    &[release_id, &res.rustc_version]));
@@ -184,7 +186,7 @@ pub fn add_build_into_database(conn: &Connection,
 
 fn initialize_package_in_database(conn: &Connection,
                                   pkg: &Package)
-                                  -> Result<i32, DocBuilderError> {
+                                  -> Result<i32> {
     let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
                                    &[&pkg.manifest().name()]));
     // insert crate into database if it is not exists
@@ -210,10 +212,10 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
 
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
-fn get_readme(pkg: &Package) -> Result<Option<String>, DocBuilderError> {
+fn get_readme(pkg: &Package) -> Result<Option<String>> {
     if pkg.manifest().metadata().readme.is_some() {
         let readme_path = PathBuf::from(try!(source_path(&pkg)
-                                                 .ok_or(DocBuilderError::FileNotFound)))
+                                                 .ok_or("File not found")))
                               .join(pkg.manifest().metadata().readme.clone().unwrap());
         let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
         let mut readme = String::new();
@@ -225,11 +227,11 @@ fn get_readme(pkg: &Package) -> Result<Option<String>, DocBuilderError> {
 }
 
 
-fn get_rustdoc(pkg: &Package) -> Result<Option<String>, DocBuilderError> {
+fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
     if pkg.manifest().targets()[0].src_path().is_absolute() {
         read_rust_doc(pkg.manifest().targets()[0].src_path())
     } else {
-        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or(DocBuilderError::FileNotFound)));
+        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")));
         path.push(pkg.manifest().targets()[0].src_path());
         read_rust_doc(path.as_path())
     }
@@ -237,7 +239,7 @@ fn get_rustdoc(pkg: &Package) -> Result<Option<String>, DocBuilderError> {
 
 
 /// Reads rustdoc from library
-fn read_rust_doc(file_path: &Path) -> Result<Option<String>, DocBuilderError> {
+fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
     let reader = try!(fs::File::open(file_path).map(|f| BufReader::new(f)));
     let mut rustdoc = String::new();
 
@@ -263,7 +265,7 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>, DocBuilderError> {
 /// Get release_time, yanked and downloads from crates.io
 fn get_release_time_yanked_downloads
     (pkg: &Package)
-     -> Result<(Option<time::Timespec>, Option<bool>, Option<i32>), DocBuilderError> {
+     -> Result<(Option<time::Timespec>, Option<bool>, Option<i32>)> {
     let url = format!("https://crates.io/api/v1/crates/{}/versions",
                       pkg.manifest().name());
     // FIXME: There is probably better way to do this
@@ -276,30 +278,30 @@ fn get_release_time_yanked_downloads
     let versions = try!(json.as_object()
                             .and_then(|o| o.get("versions"))
                             .and_then(|v| v.as_array())
-                            .ok_or(DocBuilderError::JsonNotObject));
+                            .ok_or("Not a JSON object"));
 
     let (mut release_time, mut yanked, mut downloads) = (None, None, None);
 
     for version in versions {
-        let version = try!(version.as_object().ok_or(DocBuilderError::JsonNotObject));
+        let version = try!(version.as_object().ok_or("Not a JSON object"));
         let version_num = try!(version.get("num")
                                       .and_then(|v| v.as_string())
-                                      .ok_or(DocBuilderError::JsonNotObject));
+                                      .ok_or("Not a JSON object"));
 
         if &semver::Version::parse(version_num).unwrap() == pkg.manifest().version() {
             let release_time_raw = try!(version.get("created_at")
                                                .and_then(|c| c.as_string())
-                                               .ok_or(DocBuilderError::JsonNotObject));
+                                               .ok_or("Not a JSON object"));
             release_time = Some(time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
                                     .unwrap()
                                     .to_timespec());
 
             yanked = Some(try!(version.get("yanked")
                                       .and_then(|c| c.as_boolean())
-                                      .ok_or(DocBuilderError::JsonNotObject)));
+                                      .ok_or("Not a JSON object")));
 
             downloads = Some(try!(version.get("downloads").and_then(|c| c.as_i64())
-                                  .ok_or(DocBuilderError::JsonNotObject)) as i32);
+                                  .ok_or("Not a JSON object")) as i32);
 
             break;
         }
@@ -313,7 +315,7 @@ fn get_release_time_yanked_downloads
 fn add_keywords_into_database(conn: &Connection,
                               pkg: &Package,
                               release_id: &i32)
-                              -> Result<(), DocBuilderError> {
+                              -> Result<()> {
     for keyword in &pkg.manifest().metadata().keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
@@ -341,7 +343,7 @@ fn add_keywords_into_database(conn: &Connection,
 fn add_authors_into_database(conn: &Connection,
                              pkg: &Package,
                              release_id: &i32)
-                             -> Result<(), DocBuilderError> {
+                             -> Result<()> {
 
     let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
     for author in &pkg.manifest().metadata().authors {
@@ -378,7 +380,7 @@ fn add_authors_into_database(conn: &Connection,
 fn add_owners_into_database(conn: &Connection,
                             pkg: &Package,
                             crate_id: &i32)
-                            -> Result<(), DocBuilderError> {
+                            -> Result<()> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
                              &pkg.manifest().name());
