@@ -170,14 +170,23 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     }
 
     // Now try to match with semver
-    let req_sem_ver = VersionReq::parse(&req_version).unwrap();
+    let req_sem_ver = match VersionReq::parse(&req_version) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };;
 
     // we need to sort versions first
     let versions_sem = {
         let mut versions_sem: Vec<Version> = Vec::new();
 
         for version in &versions {
-            versions_sem.push(Version::parse(&version).unwrap());
+            // in theory a crate must always have a semver compatible version
+            // but check result just in case
+            let version = match Version::parse(&version) {
+                Ok(v) => v,
+                Err(_) => return None,
+            };
+            versions_sem.push(version);
         }
 
         versions_sem.sort();
