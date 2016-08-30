@@ -111,25 +111,41 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
+    let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap_or("").to_string();
+    let version = req.extensions
+        .get::<Router>()
+        .unwrap()
+        .find("version");
+    let conn = req.extensions.get::<Pool>().unwrap();
+    let version = try!(match_version(&conn, &name, version)
+        .ok_or(IronError::new(Nope::ResourceNotFound, status::NotFound)));
+
+    // remove name and version from path
+    for _ in 0..2 {
+        req.url.path.remove(0);
+    }
+
+    // docs have "rustdoc" prefix in database
+    req.url.path.insert(0, "rustdoc".to_owned());
+
+    // add crate name and version
+    req.url.path.insert(1, name.clone());
+    req.url.path.insert(2, version.clone());
+
     let path = {
-        let mut path = req.url.path.clone();
-        // documentations have "rustdoc" prefix in database
-        path.insert(0, "rustdoc".to_owned());
-
-        let mut path = path.join("/");
+        let mut path = req.url.path.join("/");
         if path.ends_with("/") {
-            path.push_str("index.html")
+            path.push_str("index.html");
+            req.url.path.push("index.html".to_owned());
         }
-
         path
     };
-
+    
     // don't touch anything other than html files
     if !path.ends_with(".html") {
         return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
     }
 
-    let conn = req.extensions.get::<Pool>().unwrap();
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
@@ -164,15 +180,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             content.body.push('\n');
         }
     }
-
-
-    let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap_or("").to_string();
-    let version = req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("version")
-        .unwrap_or("")
-        .to_string();
 
     // content.metadata = MetaData::from_crate(&conn, &name, &version);
     let (metadata, platforms) = {
