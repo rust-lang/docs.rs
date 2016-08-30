@@ -69,21 +69,7 @@ pub struct DatabaseFileHandler;
 impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
 
-        let path = {
-            let mut path = req.url.path.clone().join("/");
-            if path.ends_with("/") {
-                path.push_str("index.html");
-            }
-            // rustdoc javascripts have rustdoc prefix in database
-            // FIXME: this is kinda lame I have to save all javascripts with rustdoc prefix
-            // FIXME: this code became more retarded than before
-            if path.ends_with(".js") && !path.starts_with("main-") &&
-               !path.starts_with("jquery-") && !path.starts_with("playpen-") {
-                format!("rustdoc/{}", path)
-            } else {
-                path
-            }
-        };
+        let path = req.url.path.clone().join("/");
 
         let conn = req.extensions.get::<Pool>().unwrap();
         if let Some(file) = File::from_path(&conn, &path) {
