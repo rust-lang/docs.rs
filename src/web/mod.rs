@@ -142,7 +142,8 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
             Ok(p) => Some(p.into_owned()),
             Err(_) => None,
         }
-    }).unwrap_or("*".to_string());
+    }).map(|v| if v == "newest" { "*".to_owned() } else { v })
+    .unwrap_or("*".to_string());
 
     let versions = {
         let mut versions = Vec::new();
