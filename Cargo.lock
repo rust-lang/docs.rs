@@ -21,6 +21,7 @@ dependencies = [
  "regex 0.1.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "router 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sass-rs 0.0.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "semver 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "slug 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "staticfile 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -972,6 +973,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "sass-rs"
+version = "0.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sass-sys 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "sass-sys"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pkg-config 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "semver"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1386,6 +1405,8 @@ dependencies = [
 "checksum rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)" = "6159e4e6e559c81bd706afe9c8fd68f547d3e851ce12e76b1de7914bab61691b"
 "checksum rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
 "checksum rusttype 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8e8b427624232d53e950b2349cfa2a1a16214176f3b412acf89fb8caff7d454c"
+"checksum sass-rs 0.0.18 (registry+https://github.com/rust-lang/crates.io-index)" = "98552ea76b181c4c6d490619e273649432dff0333b8278c53529a86bb99e1a6e"
+"checksum sass-sys 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "87571886fa04f9a959602861b5b45e54dfbf0b9a85e741a0f8bc700e90914866"
 "checksum semver 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)" = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
 "checksum semver 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2d5b7638a1f03815d94e88cb3b3c08e87f0db4d683ef499d1836aaf70a45623f"
 "checksum sequence_trie 0.0.13 (registry+https://github.com/rust-lang/crates.io-index)" = "d5b4eb0f7d1ff9b9666d8b8ff543f3705dd464025269a5b0e1988ffa60ca1be8"
