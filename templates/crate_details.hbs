@@ -40,6 +40,12 @@
               </ul>
             </div>
           </li>
+          <li class="pure-menu-heading">Owners</li>
+          <li class="pure-menu-item">
+          {{#each owners}}
+            <a href="/releases/@{{this.[0]}}"><img src="{{this.[1]}}" alt="{{this.[0]}}" class="owner"></a>
+          {{/each}}
+          </li>
         </ul>
       </div>
     </div>

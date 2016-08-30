@@ -349,6 +349,12 @@ div.package-page-container {
                 border-bottom: none;
             }
         }
+
+        img.owner {
+            max-width: 32px;
+            max-height: 32px;
+            border-radius: 2px;
+        }
     }
 
     div.package-details {

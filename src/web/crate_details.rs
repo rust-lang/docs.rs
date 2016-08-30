@@ -24,6 +24,7 @@ struct CrateDetails {
     version: String,
     description: Option<String>,
     authors: Vec<(String, String)>,
+    owners: Vec<(String, String)>,
     authors_json: Option<Json>,
     dependencies: Option<Json>,
     readme: Option<String>,
@@ -53,6 +54,7 @@ impl ToJson for CrateDetails {
         m.insert("version".to_string(), self.version.to_json());
         m.insert("description".to_string(), self.description.to_json());
         m.insert("authors".to_string(), self.authors.to_json());
+        m.insert("owners".to_string(), self.owners.to_json());
         m.insert("authors_json".to_string(), self.authors_json.to_json());
         m.insert("dependencies".to_string(), self.dependencies.to_json());
         if let Some(ref readme) = self.readme {
@@ -86,7 +88,9 @@ impl CrateDetails {
     fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
 
         // get all stuff, I love you rustfmt
-        let query = "SELECT crates.name, \
+        let query = "SELECT crates.id, \
+                            releases.id, \
+                            crates.name, \
                             releases.version, \
                             releases.description, \
                             releases.authors, \
@@ -102,16 +106,12 @@ impl CrateDetails {
                             releases.have_examples, \
                             releases.target_name, \
                             crates.versions, \
-                            authors.name, \
-                            authors.slug, \
                             crates.github_stars, \
                             crates.github_forks, \
                             crates.github_issues, \
                             releases.is_library \
-                     FROM author_rels \
-                     LEFT OUTER JOIN authors ON authors.id = author_rels.aid \
-                     LEFT OUTER JOIN releases ON releases.id = author_rels.rid \
-                     LEFT OUTER JOIN crates ON crates.id = releases.crate_id \
+                     FROM releases \
+                     INNER JOIN crates ON releases.crate_id = crates.id \
                      WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
@@ -120,10 +120,13 @@ impl CrateDetails {
             return None;
         }
 
+        let crate_id: i32 = rows.get(0).get(0);
+        let release_id: i32 = rows.get(0).get(1);
+
         // sort versions with semver
         let versions = {
             let mut versions: Vec<semver::Version> = Vec::new();
-            let versions_from_db: Json = rows.get(0).get(15);
+            let versions_from_db: Json = rows.get(0).get(17);
 
             versions_from_db.as_array().map(|vers| {
                 for version in vers {
@@ -141,30 +144,31 @@ impl CrateDetails {
         };
 
         let metadata = MetaData {
-            name: rows.get(0).get(0),
-            version: rows.get(0).get(1),
-            description: rows.get(0).get(2),
-            rustdoc_status: rows.get(0).get(9),
-            target_name: rows.get(0).get(14),
+            name: rows.get(0).get(2),
+            version: rows.get(0).get(3),
+            description: rows.get(0).get(4),
+            rustdoc_status: rows.get(0).get(11),
+            target_name: rows.get(0).get(16),
         };
 
         let mut crate_details = CrateDetails {
-            name: rows.get(0).get(0),
-            version: rows.get(0).get(1),
-            description: rows.get(0).get(2),
+            name: rows.get(0).get(2),
+            version: rows.get(0).get(3),
+            description: rows.get(0).get(4),
             authors: Vec::new(),
-            authors_json: rows.get(0).get(3),
-            dependencies: rows.get(0).get(4),
-            readme: rows.get(0).get(5),
-            rustdoc: rows.get(0).get(6),
-            release_time: rows.get(0).get(7),
-            build_status: rows.get(0).get(8),
-            rustdoc_status: rows.get(0).get(9),
-            repository_url: rows.get(0).get(10),
-            homepage_url: rows.get(0).get(11),
-            keywords: rows.get(0).get(12),
-            have_examples: rows.get(0).get(13),
-            target_name: rows.get(0).get(14),
+            owners: Vec::new(),
+            authors_json: rows.get(0).get(5),
+            dependencies: rows.get(0).get(6),
+            readme: rows.get(0).get(7),
+            rustdoc: rows.get(0).get(8),
+            release_time: rows.get(0).get(9),
+            build_status: rows.get(0).get(10),
+            rustdoc_status: rows.get(0).get(11),
+            repository_url: rows.get(0).get(12),
+            homepage_url: rows.get(0).get(13),
+            keywords: rows.get(0).get(14),
+            have_examples: rows.get(0).get(15),
+            target_name: rows.get(0).get(16),
             versions: versions,
             github: false,
             github_stars: rows.get(0).get(18),
@@ -179,9 +183,20 @@ impl CrateDetails {
                                    repository_url.starts_with("https://github.com");
         }
 
-        // Insert authors with name and slug
-        for row in &rows {
-            crate_details.authors.push((row.get(16), row.get(17)));
+        // get authors
+        for row in &conn.query("SELECT name, slug
+                                FROM authors
+                                INNER JOIN author_rels ON author_rels.aid = authors.id
+                                WHERE rid = $1", &[&release_id]).unwrap() {
+            crate_details.authors.push((row.get(0), row.get(1)));
+        }
+
+        // get owners
+        for row in &conn.query("SELECT login, avatar
+                                FROM owners
+                                INNER JOIN owner_rels ON owner_rels.oid = owners.id
+                                WHERE cid = $1", &[&crate_id]).unwrap() {
+            crate_details.owners.push((row.get(0), row.get(1)));
         }
 
         Some(crate_details)
