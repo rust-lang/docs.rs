@@ -41,6 +41,7 @@ tempdir = "0.3"
 
 [build-dependencies]
 time = "0.1"
+sass-rs = "0.0.18"
 
 [[bin]]
 name = "cratesfyi"
