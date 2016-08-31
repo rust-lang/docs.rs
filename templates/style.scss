@@ -383,6 +383,45 @@ div.package-page-container {
         h6:first-child {
             margin-top: 0;
         }
+
+        table {
+            // most of this stuff is taken from pure tables.css
+            border-collapse: collapse;
+            border-spacing: 0;
+            empty-cells: show;
+            border: 1px solid #cbcbcb;
+            margin-bottom: 15px;
+
+            td, th {
+                border-left: 1px solid #cbcbcb;
+                border-width: 0 0 0 1px;
+                font-size: inherit;
+                margin: 0;
+                overflow: visible;
+                padding: 0.5em 1em;
+            }
+
+            th {
+                font-family: $font-family-sans;
+                font-weight: 500;
+            }
+
+            td {
+                border-bottom: 1px solid #cbcbcb;
+            }
+
+            tbody > tr:last-child > td {
+                border-bottom-width: 0;
+            }
+
+            thead {
+                background-color: #e0e0e0;
+                color: #000;
+                text-align: left;
+                vertical-align: bottom;
+            }
+
+        }
     }
 
     pre {

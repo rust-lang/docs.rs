@@ -16,7 +16,7 @@ use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
-use iron::Handler;
+use iron::{Handler, status};
 use router::{Router, NoRoute};
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
@@ -30,6 +30,7 @@ use std::collections::BTreeMap;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
+const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 
 
 struct CratesfyiHandler {
@@ -59,6 +60,7 @@ impl CratesfyiHandler {
     pub fn new() -> CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page);
+        router.get("/style.css", style_css_handler);
         router.get("/about", |_: &mut Request| {
             page::Page::new(false).title("About Docs.rs").to_resp("about")
         });
@@ -266,6 +268,17 @@ fn duration_to_str(ts: time::Timespec) -> String {
 
 }
 
+
+
+fn style_css_handler(_: &mut Request) -> IronResult<Response> {
+    use iron::headers::{CacheControl, CacheDirective, ContentType};
+    let mut response = Response::with((status::Ok, STYLE_CSS));
+    let cache = vec![CacheDirective::Public,
+    CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    response.headers.set(ContentType("text/css".parse().unwrap()));
+    response.headers.set(CacheControl(cache));
+    Ok(response)
+}
 
 
 /// MetaData used in header
