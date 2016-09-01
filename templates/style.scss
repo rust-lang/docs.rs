@@ -427,10 +427,16 @@ div.package-page-container {
     pre {
         background-color: inherit;
         padding: 0;
-
         code {
-            white-space: pre;
+            padding: 0.5em;
         }
+    }
+
+    code {
+        white-space: pre;
+        background-color: $color-background-code;
+        padding: 0 0.2em;
+        border-radius: 2px;
     }
 }
 
