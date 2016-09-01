@@ -6,12 +6,13 @@ use std::io::prelude::*;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::fs;
+use errors::*;
 
 use regex::Regex;
 
 
 /// Copies files from source directory to destination directory.
-pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> io::Result<()> {
+pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
     copy_files_and_handle_html(source.as_ref().to_path_buf(),
                                destination.as_ref().to_path_buf(),
                                false,
@@ -30,7 +31,7 @@ pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
                                     destination: P,
                                     rustc_version: &str,
                                     target_platform: bool)
-                                    -> io::Result<()> {
+                                    -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
     debug!("Copying documentation from: {}", source.display());
     copy_files_and_handle_html(source,
@@ -46,7 +47,7 @@ fn copy_files_and_handle_html(source: PathBuf,
                               handle_html: bool,
                               rustc_version: &str,
                               target: bool)
-                              -> io::Result<()> {
+                              -> Result<()> {
 
     // Make sure destination directory is exists
     if !destination.exists() {
@@ -89,7 +90,7 @@ fn copy_html(source: &PathBuf,
              destination: &PathBuf,
              rustc_version: &str,
              target: bool)
-             -> io::Result<()> {
+             -> Result<()> {
 
     let source_file = try!(fs::File::open(source));
     let mut destination_file = try!(fs::OpenOptions::new()

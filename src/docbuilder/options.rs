@@ -2,6 +2,7 @@
 
 use std::{env, fmt};
 use std::path::PathBuf;
+use errors::*;
 
 
 #[derive(Clone)]
@@ -19,35 +20,6 @@ pub struct DocBuilderOptions {
     pub skip_oldest_versions: bool,
     pub build_only_latest_version: bool,
     pub debug: bool,
-}
-
-
-
-// This error only occurs if check_dirs fails
-pub enum DocBuilderPathError {
-    DestinationPathNotExists,
-    ChrootPathNotExists,
-    BuildDirectoryNotExists,
-    CratesIoIndexPathNotExists,
-    LogsPathNotExists,
-}
-
-
-impl fmt::Debug for DocBuilderPathError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            DocBuilderPathError::DestinationPathNotExists =>
-                write!(f, "Destination path not exists"),
-            DocBuilderPathError::ChrootPathNotExists =>
-                write!(f, "Chroot path not exists"),
-            DocBuilderPathError::BuildDirectoryNotExists =>
-                write!(f, "Build directory path not exists"),
-            DocBuilderPathError::CratesIoIndexPathNotExists =>
-                write!(f, "crates.io-index path not exists"),
-            DocBuilderPathError::LogsPathNotExists =>
-                write!(f, "Logs path not exists"),
-        }
-    }
 }
 
 
@@ -120,18 +92,18 @@ impl DocBuilderOptions {
     }
 
 
-    pub fn check_paths(&self) -> Result<(), DocBuilderPathError> {
+    pub fn check_paths(&self) -> Result<()> {
         if !self.destination.exists() {
-            return Err(DocBuilderPathError::DestinationPathNotExists)
+            return Err("Destination path not exists".into())
         }
         if !self.chroot_path.exists() {
-            return Err(DocBuilderPathError::ChrootPathNotExists)
+            return Err("Chroot path not exists".into())
         }
         if !self.crates_io_index_path.exists() {
-            return Err(DocBuilderPathError::CratesIoIndexPathNotExists)
+            return Err("crates.io-index path not exists".into())
         }
         if !self.crates_io_index_path.exists() {
-            return Err(DocBuilderPathError::LogsPathNotExists)
+            return Err("Logs path not exists".into())
         }
         Ok(())
     }
