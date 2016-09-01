@@ -1,5 +1,4 @@
 
-pub mod error;
 pub mod options;
 mod chroot_builder;
 mod crates;
@@ -13,7 +12,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::collections::BTreeSet;
-use ::{DocBuilderError, DocBuilderOptions};
+use DocBuilderOptions;
+use errors::*;
 
 
 /// chroot based documentation builder
@@ -35,7 +35,7 @@ impl DocBuilder {
 
 
     /// Loads build cache
-    pub fn load_cache(&mut self) -> Result<(), DocBuilderError> {
+    pub fn load_cache(&mut self) -> Result<()> {
         debug!("Loading cache");
         let path = PathBuf::from(&self.options.prefix).join("cache");
         let reader = fs::File::open(path).map(|f| BufReader::new(f));
@@ -54,7 +54,7 @@ impl DocBuilder {
     }
 
 
-    fn load_database_cache(&mut self) -> Result<(), DocBuilderError> {
+    fn load_database_cache(&mut self) -> Result<()> {
         debug!("Loading database cache");
         use db::connect_db;
         let conn = try!(connect_db());
@@ -71,7 +71,7 @@ impl DocBuilder {
 
 
     /// Saves build cache
-    pub fn save_cache(&self) -> Result<(), DocBuilderError> {
+    pub fn save_cache(&self) -> Result<()> {
         debug!("Saving cache");
         let path = PathBuf::from(&self.options.prefix).join("cache");
         let mut file = try!(fs::OpenOptions::new().write(true).create(true)

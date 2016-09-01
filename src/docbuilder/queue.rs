@@ -2,15 +2,15 @@
 
 
 use super::DocBuilder;
-use DocBuilderError;
 use rustc_serialize::json::Json;
 use git2;
 use db::connect_db;
+use errors::*;
 
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue
-    pub fn get_new_crates(&self) -> Result<(), DocBuilderError> {
+    pub fn get_new_crates(&self) -> Result<()> {
 
         let repo = try!(git2::Repository::open(&self.options.crates_io_index_path));
 
@@ -81,7 +81,7 @@ impl DocBuilder {
     }
 
 
-    fn update_repo(&self, repo: &git2::Repository) -> Result<(), git2::Error> {
+    fn update_repo(&self, repo: &git2::Repository) -> Result<()> {
         let mut remote = try!(repo.find_remote("origin"));
         try!(remote.fetch(&["refs/heads/*:refs/remotes/origin/*"], None, None));
 
@@ -94,18 +94,19 @@ impl DocBuilder {
     }
 
 
-    fn head_tree<'a>(&'a self, repo: &'a git2::Repository) -> Result<git2::Tree, git2::Error> {
+    fn head_tree<'a>(&'a self, repo: &'a git2::Repository) -> Result<git2::Tree> {
         repo.head()
             .ok()
             .and_then(|head| head.target())
             .ok_or(git2::Error::from_str("HEAD SHA1 not found"))
             .and_then(|oid| repo.find_commit(oid))
             .and_then(|commit| commit.tree())
+            .or_else(|e| Err(ErrorKind::Git2Error(e).into()))
     }
 
 
     /// Builds packages from queue
-    pub fn build_packages_queue(&mut self) -> Result<(), DocBuilderError> {
+    pub fn build_packages_queue(&mut self) -> Result<()> {
         let conn = try!(connect_db());
 
         for row in &try!(conn.query("SELECT id, name, version FROM queue ORDER BY id ASC", &[])) {

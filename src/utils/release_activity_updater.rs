@@ -1,12 +1,12 @@
 
 use db::connect_db;
-use DocBuilderError;
 use time::{now, Duration};
 use std::collections::BTreeMap;
 use rustc_serialize::json::ToJson;
+use errors::*;
 
 
-pub fn update_release_activity() -> Result<(), DocBuilderError> {
+pub fn update_release_activity() -> Result<()> {
 
     let conn = try!(connect_db());
     let mut dates = Vec::new();

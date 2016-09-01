@@ -6,11 +6,11 @@
 
 
 use std::path::Path;
-use DocBuilderError;
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
 use std::io::Read;
+use errors::*;
 
 
 
@@ -25,7 +25,7 @@ fn file_path(prefix: &str, name: &str) -> String {
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
                                           prefix: &str,
                                           files: &mut Vec<String>)
-                                          -> Result<(), DocBuilderError> {
+                                          -> Result<()> {
     let path = path.as_ref();
 
     for file in try!(path.read_dir()) {
@@ -44,12 +44,12 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 }
 
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>, DocBuilderError> {
+pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
     let path = path.as_ref();
     let mut files: Vec<String> = Vec::new();
 
     if !path.exists() {
-        return Err(DocBuilderError::FileNotFound);
+        return Err("File not found".into());
     } else if path.is_file() {
         path.file_name()
             .and_then(|name| name.to_str())
@@ -66,7 +66,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>, DocBuilderE
 pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               prefix: &str,
                                               path: P)
-                                              -> Result<Json, DocBuilderError> {
+                                              -> Result<Json> {
     use magic::{Cookie, flags};
     let cookie = try!(Cookie::open(flags::MIME_TYPE));
     // FIXME: This is linux specific but idk any alternative
@@ -131,7 +131,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
 
 
-fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json, DocBuilderError> {
+fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
 
     let mut file_list_json: Vec<Json> = Vec::new();
 

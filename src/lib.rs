@@ -3,6 +3,8 @@
 
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate error_chain;
 extern crate cargo;
 extern crate regex;
 extern crate rustc_serialize;
@@ -27,10 +29,10 @@ extern crate badge;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
-pub use self::docbuilder::error::DocBuilderError;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::web::start_web_server;
 
+pub mod errors;
 pub mod db;
 pub mod utils;
 mod docbuilder;

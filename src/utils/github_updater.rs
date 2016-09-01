@@ -1,8 +1,8 @@
 
 use ::db::connect_db;
 use regex::Regex;
-use DocBuilderError;
 use time;
+use errors::*;
 
 
 
@@ -18,7 +18,7 @@ struct GitHubFields {
 
 
 /// Updates github fields in crates table
-pub fn github_updater() -> Result<(), DocBuilderError> {
+pub fn github_updater() -> Result<()> {
     let conn = try!(connect_db());
 
     // TODO: This query assumes repository field in Cargo.toml is
@@ -39,8 +39,7 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
         let repository_url: String = row.get(2);
 
         if let Err(err) = get_github_path(&repository_url[..])
-                              .ok_or(DocBuilderError::GenericError("Failed to get github path"
-                                                                       .to_string()))
+                              .ok_or("Failed to get github path".into())
                               .and_then(|path| get_github_fields(&path[..]))
                               .and_then(|fields| {
                                   conn.execute("UPDATE crates SET github_description = $1, \
@@ -53,7 +52,7 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
                                                  &(fields.issues as i32),
                                                  &(fields.last_commit),
                                                  &crate_id])
-                                      .map_err(DocBuilderError::DatabaseError)
+                                      .or_else(|e| Err(e.into()))
                               }) {
             debug!("Failed to update github fields of: {} {}", crate_name, err);
         }
@@ -68,7 +67,7 @@ pub fn github_updater() -> Result<(), DocBuilderError> {
 }
 
 
-fn get_github_fields(path: &str) -> Result<GitHubFields, DocBuilderError> {
+fn get_github_fields(path: &str) -> Result<GitHubFields> {
     use rustc_serialize::json::Json;
 
     let body = {
@@ -94,7 +93,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields, DocBuilderError> {
                                   .send());
 
         if resp.status != StatusCode::Ok {
-            return Err(DocBuilderError::GenericError("Failed to get github data".to_string()));
+            return Err("Failed to get github data".into());
         }
 
         try!(resp.read_to_string(&mut body));
