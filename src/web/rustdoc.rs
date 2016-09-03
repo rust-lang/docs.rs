@@ -13,6 +13,8 @@ use super::error::Nope;
 use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
+use iron::headers::{Expires, HttpDate};
+use time;
 
 
 
@@ -76,9 +78,6 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                                       target_name)[..])
             .unwrap();
         let mut resp = Response::with((status::Found, Redirect(url)));
-
-        use iron::headers::{Expires, HttpDate};
-        use time;
         resp.headers.set(Expires(HttpDate(time::now())));
 
         Ok(resp)
@@ -265,5 +264,6 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut resp = Response::with((status::Ok, Badge::new(options).unwrap().to_svg()));
     resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
+    resp.headers.set(Expires(HttpDate(time::now())));
     Ok(resp)
 }
