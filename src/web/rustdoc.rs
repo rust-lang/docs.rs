@@ -70,9 +70,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        target_name: &str)
                        -> IronResult<Response> {
         let url = Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
-                                      req.url.scheme,
-                                      req.url.host,
-                                      req.url.port,
+                                      req.url.scheme(),
+                                      req.url.host(),
+                                      req.url.port(),
                                       name,
                                       vers,
                                       target_name)[..])
