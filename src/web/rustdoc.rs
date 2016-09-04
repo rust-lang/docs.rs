@@ -13,7 +13,7 @@ use super::error::Nope;
 use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use iron::headers::{Expires, HttpDate};
+use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
 use time;
 
 
@@ -139,7 +139,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
         path
     };
-    
+
     // don't touch anything other than html files
     if !path.ends_with(".html") {
         return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
@@ -265,5 +265,8 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let mut resp = Response::with((status::Ok, Badge::new(options).unwrap().to_svg()));
     resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
     resp.headers.set(Expires(HttpDate(time::now())));
+    resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
+                                       CacheDirective::NoStore,
+                                       CacheDirective::MustRevalidate]));
     Ok(resp)
 }
