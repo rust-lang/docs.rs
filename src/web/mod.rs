@@ -246,7 +246,7 @@ fn render_markdown(text: &str) -> String {
     use hoedown::renderer::html;
 
     let extensions = {
-        use hoedown::{FENCED_CODE, FOOTNOTES, SUPERSCRIPT, TABLES, AUTOLINK};
+        use hoedown::{FENCED_CODE, FOOTNOTES, SUPERSCRIPT, TABLES, AUTOLINK, NO_INTRA_EMPHASIS};
 
         let mut extensions = Extension::empty();
         extensions.insert(FENCED_CODE);
@@ -254,6 +254,7 @@ fn render_markdown(text: &str) -> String {
         extensions.insert(SUPERSCRIPT);
         extensions.insert(TABLES);
         extensions.insert(AUTOLINK);
+        extensions.insert(NO_INTRA_EMPHASIS);
 
         extensions
     };
