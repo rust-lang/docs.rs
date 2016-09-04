@@ -229,21 +229,24 @@ fn get_search_results(conn: &Connection,
     let offset = (page - 1) * limit;
     let mut packages = Vec::new();
 
-    for row in &conn.query("SELECT crates.name, \
+    let rows = match conn.query("SELECT crates.name, \
                                    releases.version, \
                                    releases.description, \
                                    releases.target_name, \
                                    releases.release_time, \
                                    releases.rustdoc_status, \
                                    ts_rank_cd(crates.content, to_tsquery($1)) AS rank \
-                            FROM crates \
-                            INNER JOIN releases ON crates.latest_version_id = releases.id \
-                            WHERE crates.content @@ to_tsquery($1) \
-                            ORDER BY rank DESC \
-                            LIMIT $2 OFFSET $3",
-               &[&query, &limit, &offset])
-        .unwrap() {
+                                 FROM crates \
+                                 INNER JOIN releases ON crates.latest_version_id = releases.id \
+                                 WHERE crates.content @@ to_tsquery($1) \
+                                 ORDER BY rank DESC \
+                                 LIMIT $2 OFFSET $3",
+                                &[&query, &limit, &offset]) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
 
+    for row in &rows {
         let package = Release {
             name: row.get(0),
             version: row.get(1),
