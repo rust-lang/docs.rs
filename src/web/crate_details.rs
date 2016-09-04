@@ -187,7 +187,9 @@ impl CrateDetails {
         for row in &conn.query("SELECT name, slug
                                 FROM authors
                                 INNER JOIN author_rels ON author_rels.aid = authors.id
-                                WHERE rid = $1", &[&release_id]).unwrap() {
+                                WHERE rid = $1",
+                   &[&release_id])
+            .unwrap() {
             crate_details.authors.push((row.get(0), row.get(1)));
         }
 
@@ -195,7 +197,9 @@ impl CrateDetails {
         for row in &conn.query("SELECT login, avatar
                                 FROM owners
                                 INNER JOIN owner_rels ON owner_rels.oid = owners.id
-                                WHERE cid = $1", &[&crate_id]).unwrap() {
+                                WHERE cid = $1",
+                   &[&crate_id])
+            .unwrap() {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
@@ -206,11 +210,12 @@ impl CrateDetails {
 
 
 pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
+    let router = extension!(req, Router);
     // this handler must always called with a crate name
-    let name = req.extensions.get::<Router>().unwrap().find("name").unwrap();
-    let req_version = req.extensions.get::<Router>().unwrap().find("version");
+    let name = cexpect!(router.find("name"));
+    let req_version = router.find("version");
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
 
     match_version(&conn, &name, req_version)
         .and_then(|version| CrateDetails::new(&conn, &name, &version))
