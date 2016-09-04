@@ -97,8 +97,8 @@ impl FileList {
                                FROM releases
                                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
-                              &[&name, &version])
-                       .unwrap();
+                   &[&name, &version])
+            .unwrap();
 
         if rows.len() == 0 {
             return None;
@@ -181,8 +181,9 @@ impl FileList {
 
 
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
-    let name = req.extensions.get::<Router>().unwrap().find("name").unwrap();
-    let version = req.extensions.get::<Router>().unwrap().find("version").unwrap();
+    let router = extension!(req, Router);
+    let name = cexpect!(router.find("name"));
+    let version = cexpect!(router.find("version"));
 
     // get path (req_path) for FileList::from_path and actual path for super::file::File::from_path
     let (req_path, file_path) = {
@@ -208,7 +209,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
 
     // try to get actual file first
     // skip if request is a directory
@@ -235,10 +236,10 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     let list = FileList::from_path(&conn, &name, &version, &req_path);
 
     let page = Page::new(list)
-                   .set_bool("show_parent_link", !req_path.is_empty())
-                   .set_true("javascript_highlightjs")
-                   .set_true("show_package_navigation")
-                   .set_true("package_source_tab");
+        .set_bool("show_parent_link", !req_path.is_empty())
+        .set_true("javascript_highlightjs")
+        .set_true("show_package_navigation")
+        .set_true("package_source_tab");
 
     if let Some(content) = content {
         page.set("file_content", &content)

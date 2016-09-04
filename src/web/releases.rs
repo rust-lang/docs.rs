@@ -272,7 +272,7 @@ fn get_search_results(conn: &Connection,
 
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
     let packages = get_releases(conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
     Page::new(packages)
         .set_true("show_search_form")
@@ -283,15 +283,9 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 
 pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
-    let page_number: i64 = req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
+    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
 
     if packages.is_empty() {
@@ -320,15 +314,9 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
 // TODO: This function is almost identical to previous one
 pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
-    let page_number: i64 = req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
+    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
 
     if packages.is_empty() {
@@ -356,25 +344,20 @@ pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn author_handler(req: &mut Request) -> IronResult<Response> {
+    let router = extension!(req, Router);
     // page number of releases
-    let page_number: i64 = req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
+    let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
 
-    let conn = req.extensions.get::<Pool>().unwrap();
-    let author = try!(req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("author")
+    let conn = extension!(req, Pool);
+    let author = ctry!(router.find("author")
         .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
     let (author_name, packages) = if author.starts_with("@") {
         let mut author = author.clone().split("@");
-        get_releases_by_owner(conn, page_number, RELEASES_IN_RELEASES, author.nth(1).unwrap())
+        get_releases_by_owner(conn,
+                              page_number,
+                              RELEASES_IN_RELEASES,
+                              cexpect!(author.nth(1)))
     } else {
         get_releases_by_author(conn, page_number, RELEASES_IN_RELEASES, author)
     };
@@ -405,10 +388,10 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     use params::{Params, Value};
 
-    let params = req.get::<Params>().unwrap();
+    let params = ctry!(req.get::<Params>());
     let query = params.find(&["query"]);
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
     if let Some(&Value::String(ref query)) = query {
 
         // check if I am feeling lucky button pressed and redirect user to crate page
@@ -421,29 +404,29 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
             // redirect to a random crate if query is empty
             if query.is_empty() {
-                let rows =  conn.query("SELECT crates.name, \
+                let rows = ctry!(conn.query("SELECT crates.name, \
                                                releases.version, \
                                                releases.target_name \
                                         FROM crates \
                                         INNER JOIN releases
                                               ON crates.latest_version_id = releases.id \
                                         WHERE github_stars >= 100 AND rustdoc_status = true \
-                                        OFFSET FLOOR(RANDOM() * 280) LIMIT 1", &[]).unwrap();
-                                        //                ~~~~~~^
-                                        // FIXME: This is a fast query but using a constant
-                                        //        There are currently 280 crates with docs and 100+
-                                        //        starts. This should be fine for a while.
+                                        OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
+                                            &[]));
+                //                ~~~~~~^
+                // FIXME: This is a fast query but using a constant
+                //        There are currently 280 crates with docs and 100+
+                //        starts. This should be fine for a while.
                 let name: String = rows.get(0).get(0);
                 let version: String = rows.get(0).get(1);
                 let target_name: String = rows.get(0).get(2);
-                let url = Url::parse(&format!("{}://{}:{}/{}/{}/{}",
-                                              req.url.scheme,
-                                              req.url.host,
-                                              req.url.port,
-                                              name,
-                                              version,
-                                              target_name))
-                    .unwrap();
+                let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
+                                                    req.url.scheme,
+                                                    req.url.host,
+                                                    req.url.port,
+                                                    name,
+                                                    version,
+                                                    target_name)));
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
                 use iron::headers::{Expires, HttpDate};
@@ -454,13 +437,12 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 
             if let Some(version) = match_version(&conn, &query, None) {
-                let url = Url::parse(&format!("{}://{}:{}/crate/{}/{}",
+                let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
                                               req.url.scheme,
                                               req.url.host,
                                               req.url.port,
                                               query,
-                                              version)[..])
-                    .unwrap();
+                                              version)[..]));
                 let mut resp = Response::with((status::Found, Redirect(url)));
 
                 use iron::headers::{Expires, HttpDate};
@@ -488,11 +470,10 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
     let release_activity_data: Json =
-        conn.query("SELECT value FROM config WHERE name = 'release_activity'",
-                   &[])
-            .unwrap()
+        ctry!(conn.query("SELECT value FROM config WHERE name = 'release_activity'",
+                         &[]))
             .get(0)
             .get(0);
     Page::new(release_activity_data)

@@ -22,8 +22,8 @@ impl File {
 
         let rows = conn.query("SELECT path, mime, date_added, date_updated, content FROM files \
                                WHERE path = $1",
-                              &[&path])
-                       .unwrap();
+                   &[&path])
+            .unwrap();
 
         if rows.len() == 0 {
             None
@@ -46,7 +46,7 @@ impl File {
 
         let mut response = Response::with((status::Ok, self.content));
         let cache = vec![CacheDirective::Public,
-        CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32)];
+                         CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32)];
         response.headers.set(ContentType(self.mime.parse().unwrap()));
         response.headers.set(CacheControl(cache));
         response.headers.set(LastModified(HttpDate(time::at(self.date_updated))));
@@ -71,7 +71,7 @@ impl Handler for DatabaseFileHandler {
 
         let path = req.url.path.clone().join("/");
 
-        let conn = req.extensions.get::<Pool>().unwrap();
+        let conn = extension!(req, Pool);
         if let Some(file) = File::from_path(&conn, &path) {
             Ok(file.serve())
         } else {

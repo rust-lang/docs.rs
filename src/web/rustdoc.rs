@@ -26,7 +26,7 @@ struct RustdocPage {
     pub version: String,
     pub description: Option<String>,
     pub metadata: Option<MetaData>,
-    pub platforms: Option<Json>
+    pub platforms: Option<Json>,
 }
 
 
@@ -69,25 +69,25 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        vers: &str,
                        target_name: &str)
                        -> IronResult<Response> {
-        let url = Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
-                                      req.url.scheme,
-                                      req.url.host,
-                                      req.url.port,
-                                      name,
-                                      vers,
-                                      target_name)[..])
-            .unwrap();
+        let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
+                                            req.url.scheme,
+                                            req.url.host,
+                                            req.url.port,
+                                            name,
+                                            vers,
+                                            target_name)[..]));
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
         Ok(resp)
     }
 
+    let router = extension!(req, Router);
     // this handler should never called without crate pattern
-    let crate_name = req.extensions.get::<Router>().unwrap().find("crate").unwrap();
-    let req_version = req.extensions.get::<Router>().unwrap().find("version");
+    let crate_name = cexpect!(router.find("crate"));
+    let req_version = router.find("version");
 
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let conn = extension!(req, Pool);
 
     let version = match match_version(&conn, &crate_name, req_version) {
         Some(v) => v,
@@ -96,13 +96,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // get target name
     // FIXME: This is a bit inefficient but allowing us to use less code in general
-    let target_name: String = conn.query("SELECT target_name FROM releases INNER JOIN crates ON \
+    let target_name: String =
+        ctry!(conn.query("SELECT target_name FROM releases INNER JOIN crates ON \
                                           crates.id = releases.crate_id WHERE crates.name = $1 \
                                           AND releases.version = $2",
-               &[&crate_name, &version])
-        .unwrap()
-        .get(0)
-        .get(0);
+                         &[&crate_name, &version]))
+            .get(0)
+            .get(0);
 
     redirect_to_doc(req, &crate_name, &version, &target_name)
 }
@@ -110,12 +110,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
-    let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap_or("").to_string();
-    let version = req.extensions
-        .get::<Router>()
-        .unwrap()
-        .find("version");
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let router = extension!(req, Router);
+    let name = router.find("crate").unwrap_or("").to_string();
+    let version = router.find("version");
+    let conn = extension!(req, Pool);
     let version = try!(match_version(&conn, &name, version)
         .ok_or(IronError::new(Nope::ResourceNotFound, status::NotFound)));
 
@@ -155,7 +153,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut content = RustdocPage::default();
 
-    let file_content = String::from_utf8(file.content).unwrap();
+    let file_content = ctry!(String::from_utf8(file.content));
 
     for line in file_content.lines() {
 
@@ -182,7 +180,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // content.metadata = MetaData::from_crate(&conn, &name, &version);
     let (metadata, platforms) = {
-        let rows = conn.query("SELECT crates.name,
+        let rows = ctry!(conn.query("SELECT crates.name,
                                       releases.version,
                                       releases.description,
                                       releases.target_name,
@@ -191,7 +189,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                                FROM releases
                                INNER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
-                              &[&name, &version]).unwrap();
+                                    &[&name, &version]));
 
         let metadata = MetaData {
             name: rows.get(0).get(0),
@@ -222,23 +220,23 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     use badge::{Badge, BadgeOptions};
 
     let version = {
-        let params = req.get_ref::<Params>().unwrap();
+        let params = ctry!(req.get_ref::<Params>());
         match params.find(&["version"]) {
             Some(&Value::String(ref version)) => version.clone(),
             _ => "*".to_owned(),
         }
     };
 
-    let name = req.extensions.get::<Router>().unwrap().find("crate").unwrap();
-    let conn = req.extensions.get::<Pool>().unwrap();
+    let name = cexpect!(extension!(req, Router).find("crate"));
+    let conn = extension!(req, Pool);
 
     let options = match match_version(&conn, &name, Some(&version)) {
         Some(version) => {
-            let rows = conn.query("SELECT rustdoc_status
+            let rows = ctry!(conn.query("SELECT rustdoc_status
                                    FROM releases
                                    INNER JOIN crates ON crates.id = releases.crate_id
                                    WHERE crates.name = $1 AND releases.version = $2",
-                                  &[&name, &version]).unwrap();
+                                        &[&name, &version]));
             if rows.len() > 0 && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
@@ -252,17 +250,17 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                     color: "#e05d44".to_owned(),
                 }
             }
-        },
+        }
         None => {
             BadgeOptions {
                 subject: "docs".to_owned(),
                 status: "no builds".to_owned(),
                 color: "#e05d44".to_owned(),
             }
-        },
+        }
     };
 
-    let mut resp = Response::with((status::Ok, Badge::new(options).unwrap().to_svg()));
+    let mut resp = Response::with((status::Ok, ctry!(Badge::new(options)).to_svg()));
     resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
     resp.headers.set(Expires(HttpDate(time::now())));
     resp.headers.set(CacheControl(vec![CacheDirective::NoCache,

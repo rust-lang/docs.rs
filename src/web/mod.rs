@@ -1,9 +1,42 @@
 //! Web interface of cratesfyi
 
 
+pub mod page;
+
+/// ctry! (cratesfyitry) is extremely similar to try! and itry!
+/// except it returns an error page response instead of plain Err.
+macro_rules! ctry {
+    ($result:expr) => (match $result {
+        Ok(v) => v,
+        Err(e) => {
+            return super::page::Page::new(format!("{:?}", e)).title("An error has occured")
+                .set_status(::iron::status::BadRequest).to_resp("resp");
+        }
+    })
+}
+
+/// cexpect will check an option and if it's not Some
+/// it will return an error page response
+macro_rules! cexpect {
+    ($option:expr) => (match $option {
+        Some(v) => v,
+        None => {
+            return super::page::Page::new("Resource not found".to_owned())
+                .title("An error has occured")
+                .set_status(::iron::status::BadRequest).to_resp("resp");
+        }
+    })
+}
+
+/// Gets an extension from Request
+macro_rules! extension {
+    ($req:expr, $ext:ty) => (
+        cexpect!($req.extensions.get::<$ext>())
+        )
+}
+
 mod rustdoc;
 mod releases;
-mod page;
 mod crate_details;
 mod source;
 mod pool;
@@ -25,7 +58,6 @@ use postgres::Connection;
 use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-
 
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
@@ -114,21 +146,21 @@ impl Handler for CratesfyiHandler {
                 // if router fails try to serve files from database first
                 self.database_file_handler.handle(req).or(Err(e))
             })
-            .or_else(|e| {
-                // and then try static handler. if all of them fails, return 404
-                self.static_handler.handle(req).or(Err(e))
-            })
-            .or_else(|e| {
-                debug!("{}", e.description());
-                let err = if let Some(err) = e.error.downcast::<error::Nope>() {
-                    *err
-                } else if e.error.downcast::<NoRoute>().is_some() {
-                    error::Nope::ResourceNotFound
-                } else {
-                    panic!("all cratesfyi errors should be of type Nope");
-                };
-                Self::chain(err).handle(req)
-            })
+        .or_else(|e| {
+            // and then try static handler. if all of them fails, return 404
+            self.static_handler.handle(req).or(Err(e))
+        })
+        .or_else(|e| {
+            debug!("{}", e.description());
+            let err = if let Some(err) = e.error.downcast::<error::Nope>() {
+                *err
+            } else if e.error.downcast::<NoRoute>().is_some() {
+                error::Nope::ResourceNotFound
+            } else {
+                panic!("all cratesfyi errors should be of type Nope");
+            };
+            Self::chain(err).handle(req)
+        })
     }
 }
 
@@ -303,7 +335,7 @@ impl MetaData {
                                 FROM releases
                                 INNER JOIN crates ON crates.id = releases.crate_id
                                 WHERE crates.name = $1 AND releases.version = $2",
-                               &[&name, &version]).unwrap() {
+                                &[&name, &version]).unwrap() {
 
             return Some(MetaData {
                 name: row.get(0),
