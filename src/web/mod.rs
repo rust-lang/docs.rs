@@ -97,6 +97,7 @@ impl CratesfyiHandler {
             page::Page::new(false).title("About Docs.rs").to_resp("about")
         });
         router.get("/releases", releases::releases_handler);
+        router.get("/releases/feed", releases::releases_feed_handler);
         router.get("/releases/recent/:page", releases::releases_handler);
         router.get("/releases/stars", releases::stars_handler);
         router.get("/releases/stars/:page", releases::stars_handler);
