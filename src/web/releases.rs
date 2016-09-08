@@ -18,6 +18,8 @@ use postgres::Connection;
 const RELEASES_IN_HOME: i64 = 15;
 /// Releases in /releases page
 const RELEASES_IN_RELEASES: i64 = 30;
+/// Releases in recent releases feed
+const RELEASES_IN_FEED: i64 = 150;
 
 
 pub struct Release {
@@ -56,6 +58,8 @@ impl ToJson for Release {
         m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
         m.insert("release_time".to_string(),
                  duration_to_str(self.release_time).to_json());
+        m.insert("release_time_rfc3339".to_string(),
+                 format!("{}", time::at(self.release_time).rfc3339()).to_json());
         m.insert("stars".to_string(), self.stars.to_json());
         m.to_json()
     }
@@ -281,6 +285,15 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
         .set_true("show_search_form")
         .set_true("hide_package_navigation")
         .to_resp("releases")
+}
+
+
+pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
+    let conn = extension!(req, Pool);
+    let packages = get_releases(conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+    let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
+    resp.headers.set(::iron::headers::ContentType("application/atom+xml".parse().unwrap()));
+    Ok(resp)
 }
 
 
