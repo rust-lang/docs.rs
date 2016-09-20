@@ -72,6 +72,22 @@ body {
 }
 
 
+// this is a super nasty override for help dialog in rustdocs
+// see #52 for details
+body.blur > :not(#help) {
+    filter: none;
+    -webkit-filter: none;
+}
+
+body.blur > div.nav-container > *,
+body.blur > div.cratesfyi-package-container > *,
+body.blur > div.rustdoc > :not(#help) {
+    filter: blur(8px);
+    -webkit-filter: blur(8px);
+    opacity: .7;
+}
+
+
 // rustdocs have 200px sidebar and
 // max-width 960px main pane
 // BUT I really want to make the website centered
