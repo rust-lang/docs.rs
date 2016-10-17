@@ -115,7 +115,6 @@ mod test {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_build_doc() {
         let doc = build_doc("rand", None, None);
         assert!(doc.is_ok());
@@ -128,7 +127,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn test_get_package() {
         let pkg = get_package("rand", None);
         assert!(pkg.is_ok());
@@ -141,7 +139,6 @@ mod test {
 
 
     #[test]
-    #[ignore]
     fn test_source_path() {
         let pkg = get_package("rand", None).unwrap();
         let source_path = source_path(&pkg).unwrap();
