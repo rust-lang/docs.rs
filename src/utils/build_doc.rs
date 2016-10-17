@@ -6,10 +6,10 @@
 use std::path::{Path, PathBuf};
 use std::env;
 
-use cargo::core::{SourceId, Dependency, Registry, Source, Package};
+use cargo::core::{SourceId, Dependency, Registry, Source, Package, Workspace};
 use cargo::util::{CargoResult, Config, human, Filesystem};
-use cargo::sources::RegistrySource;
-use cargo::{ops, ChainError};
+use cargo::sources::SourceConfigMap;
+use cargo::ops;
 
 
 /// Builds documentation of a crate and version.
@@ -22,9 +22,10 @@ use cargo::{ops, ChainError};
 // instead of doing it manually like in the previous version of cratesfyi
 pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoResult<Package> {
     let config = try!(Config::default());
-    let source_id = try!(SourceId::for_central(&config));
+    let source_id = try!(SourceId::crates_io(&config));
 
-    let mut source = RegistrySource::new(&source_id, &config);
+    let source_map = try!(SourceConfigMap::new(&config));
+    let mut source = try!(source_map.load(&source_id));
 
     // update crates.io-index registry
     try!(source.update());
@@ -38,10 +39,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
                    .unwrap_or(Err(human("PKG download error"))));
 
     let current_dir = try!(env::current_dir());
-    let target_dir = PathBuf::from(current_dir).join(
-        format!("{}-{}", pkg.manifest().name(), pkg.manifest().version()));
-
-    config.set_target_dir(Filesystem::new(target_dir.clone()));
+    let target_dir = PathBuf::from(current_dir)
+        .join(format!("{}-{}", pkg.manifest().name(), pkg.manifest().version()));
 
     let opts = ops::CompileOptions {
         config: &config,
@@ -58,12 +57,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         target_rustdoc_args: None,
     };
 
-    try!(ops::compile_pkg(&pkg, Some(Box::new(source)), &opts).chain_error(|| {
-        human(format!("failed to compile `{}`, intermediate artifacts can be \
-                       found at `{}`", pkg, target_dir.display()))
-    }));
+    let ws = try!(Workspace::one(pkg, &config, Some(Filesystem::new(target_dir))));
 
-    Ok(pkg)
+    try!(ops::compile_ws(&ws, Some(source), &opts));
+
+    Ok(try!(ws.current()).clone())
 }
 
 
@@ -72,9 +70,10 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
 pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     debug!("Getting package with cargo");
     let config = try!(Config::default());
-    let source_id = try!(SourceId::for_central(&config));
+    let source_id = try!(SourceId::crates_io(&config));
 
-    let mut source = RegistrySource::new(&source_id, &config);
+    let source_map = try!(SourceConfigMap::new(&config));
+    let mut source = try!(source_map.load(&source_id));
 
     let dep = try!(Dependency::parse(name, vers, &source_id));
     let deps = try!(source.query(&dep));
@@ -91,9 +90,10 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 /// Updates central crates-io.index repository
 pub fn update_sources() -> CargoResult<()> {
     let config = try!(Config::default());
-    let source_id = try!(SourceId::for_central(&config));
+    let source_id = try!(SourceId::crates_io(&config));
 
-    let mut source = RegistrySource::new(&source_id, &config);
+    let source_map = try!(SourceConfigMap::new(&config));
+    let mut source = try!(source_map.load(&source_id));
 
     source.update()
 }

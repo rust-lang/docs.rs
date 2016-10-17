@@ -15,7 +15,7 @@ postgres = { version = "^0.11", features = [ "time", "rustc-serialize" ] }
 clap = "2.5.2"
 time = "0.1"
 hyper = "0.9.7"
-semver = "0.2.2"
+semver = "0.4"
 slug = "^0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
@@ -35,7 +35,7 @@ error-chain = "0.5"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "ffa147d393037fd5632cd8c9d048b5521d70ab4c"
+rev = "c917e94b419ce62760c0a6fdcf90ff0d7d1d5cdb"
 
 [dev-dependencies]
 tempdir = "0.3"
