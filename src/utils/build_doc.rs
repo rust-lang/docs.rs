@@ -111,14 +111,17 @@ pub fn source_path(pkg: &Package) -> Option<&Path> {
 #[cfg(test)]
 mod test {
     use std::path::Path;
+    use std::fs::remove_dir_all;
     use super::*;
 
     #[test]
     #[ignore]
     fn test_build_doc() {
-        // FIXME: Need to remove directory after we are finished
         let doc = build_doc("rand", None, None);
         assert!(doc.is_ok());
+
+        let doc = doc.unwrap();
+        remove_dir_all(format!("{}-{}", doc.manifest().name(), doc.manifest().version())).unwrap();
 
         let doc = build_doc("SOMECRATEWICHWILLBENVEREXISTS", None, None);
         assert!(doc.is_err());
