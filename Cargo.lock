@@ -89,7 +89,7 @@ dependencies = [
 name = "badge"
 version = "0.1.0"
 dependencies = [
- "rusttype 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rusttype 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -501,11 +501,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -585,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "linked-hash-map"
-version = "0.0.9"
+version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -691,16 +686,6 @@ dependencies = [
  "mime_guess 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempdir 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "ndarray"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "itertools 0.4.15 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1024,12 +1009,11 @@ dependencies = [
 
 [[package]]
 name = "rusttype"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arrayvec 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
- "linked-hash-map 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "ndarray 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "linked-hash-map 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "stb_truetype 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1431,7 +1415,6 @@ dependencies = [
 "checksum hyper 0.9.10 (registry+https://github.com/rust-lang/crates.io-index)" = "eb27e8a3e8f17ac43ffa41bbda9cf5ad3f9f13ef66fa4873409d4902310275f7"
 "checksum idna 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1053236e00ce4f668aeca4a769a09b3bf5a682d802abd6f3cb39374f6b162c11"
 "checksum iron 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bce8d64fae23c51acaaa737720b3dde37aeacd3d21ea73059999e0016c9673d9"
-"checksum itertools 0.4.15 (registry+https://github.com/rust-lang/crates.io-index)" = "88f21fed5ebd96f4db04106cd37c21417393e08533d3914a42fc666f75d5064f"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum language-tags 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a91d884b6667cd606bb5a69aa0c99ba811a115fc68915e7056ec08a46e93199a"
 "checksum lazy_static 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)" = "cf186d1a8aa5f5bee5fd662bc9c1b949e0259e1bcc379d1f006847b0080c7417"
@@ -1442,7 +1425,7 @@ dependencies = [
 "checksum libressl-pnacl-sys 2.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "cbc058951ab6a3ef35ca16462d7642c4867e6403520811f28537a4e2f2db3e71"
 "checksum libssh2-sys 0.1.37 (registry+https://github.com/rust-lang/crates.io-index)" = "c45fba84ee1fa05b830cb471741ef30d41eb1c3b97160b8ad8d955af824de880"
 "checksum libz-sys 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "c9795a8a0498b3abab873f8f063816fcc2e002388e89df87da065628dd5a8ed2"
-"checksum linked-hash-map 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)" = "83f7ff3baae999fdf921cccf54b61842bb3b26868d50d02dff48052ebec8dd79"
+"checksum linked-hash-map 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)" = "f26e961e0c884309cd527b1402a5409d35db612b36915d755e1a4f5c1547a31c"
 "checksum log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "ab83497bf8bf4ed2a74259c1c802351fcd67a65baa86394b6ba73c36f4838054"
 "checksum magic 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0171890abdef5ff5e9199aa40831d71ae43f08ffb63504a9544a69e9c3e38945"
 "checksum magic-sys 0.0.8 (registry+https://github.com/rust-lang/crates.io-index)" = "255aea8397b20a4779dea4656428f6df29d19ff4d679bcd0fac2fc3aa802ea5a"
@@ -1455,7 +1438,6 @@ dependencies = [
 "checksum modifier 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "41f5c9112cb662acd3b204077e0de5bc66305fa8df65c8019d5adb10e9ab6e58"
 "checksum mount 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9098630c44ff3511087d2f06889141a98d632a62d7745abb132d8e08b325dd39"
 "checksum multipart 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6afda429f7ebcb31c1ce8ea4c6afb2bec0b3f28b002686610b29f323e92a2731"
-"checksum ndarray 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ca4cf6783555b7ad65d411e89d2955ec36248f93b0a9947edc603fb2652d85c0"
 "checksum net2 0.2.23 (registry+https://github.com/rust-lang/crates.io-index)" = "6a816012ca11cb47009693c1e0c6130e26d39e4d97ee2a13c50e868ec83e3204"
 "checksum nodrop 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "ac897fe104d12461f7fc6b4f29657564796b3d05d214efcdcf417d58fceb6e7d"
 "checksum num 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)" = "c04bd954dbf96f76bab6e5bd6cef6f1ce1262d15268ce4f926d2b5b778fa7af2"
@@ -1493,7 +1475,7 @@ dependencies = [
 "checksum rustc-demangle 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c4c2d35b2ed94cec4fad26a36eee4d6eff394ce70a8ceea064b0b6ca42ea4cf0"
 "checksum rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)" = "6159e4e6e559c81bd706afe9c8fd68f547d3e851ce12e76b1de7914bab61691b"
 "checksum rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
-"checksum rusttype 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8e8b427624232d53e950b2349cfa2a1a16214176f3b412acf89fb8caff7d454c"
+"checksum rusttype 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c3c64ffc93b0cc5a6f5e5e84da2a4082b0271e0a1dd76e821bdac570bda7797e"
 "checksum sass-rs 0.0.18 (registry+https://github.com/rust-lang/crates.io-index)" = "98552ea76b181c4c6d490619e273649432dff0333b8278c53529a86bb99e1a6e"
 "checksum sass-sys 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "87571886fa04f9a959602861b5b45e54dfbf0b9a85e741a0f8bc700e90914866"
 "checksum semver 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)" = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
