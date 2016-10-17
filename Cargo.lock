@@ -2,7 +2,7 @@
 name = "cratesfyi"
 version = "0.2.1"
 dependencies = [
- "badge 0.1.0",
+ "badge 0.1.1",
  "cargo 0.13.0 (git+https://github.com/rust-lang/cargo.git?rev=c917e94b419ce62760c0a6fdcf90ff0d7d1d5cdb)",
  "clap 2.10.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "badge"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rusttype 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
