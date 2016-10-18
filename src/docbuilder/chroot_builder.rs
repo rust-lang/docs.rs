@@ -379,8 +379,7 @@ impl DocBuilder {
             ["rustdoc.css",
              "main.css",
              "main.js",
-             "jquery.js",
-             "playpen.js"],
+             "jquery.js"],
             // files doesn't require rustc version subfix
             ["normalize.css",
              "FiraSans-Medium.woff",
