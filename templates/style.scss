@@ -184,6 +184,10 @@ div.recent-releases-container {
         padding: 0;
     }
 
+    strong {
+        font-weight: 500;
+    }
+
     .release {
         display: block;
         border-bottom: 1px solid $color-border;
