@@ -23,7 +23,7 @@ magic = "^0.10.0"
 iron = "0.3.0"
 router = "0.1.1"
 staticfile = { version = "0.2.0", features = [ "cache" ] }
-handlebars-iron = "0.15.2"
+handlebars-iron = "=0.15.2"
 r2d2 = "0.7.0"
 r2d2_postgres = "0.10.1"
 url = "1.1.1"
