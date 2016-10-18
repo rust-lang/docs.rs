@@ -69,8 +69,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               -> Result<Json> {
     use magic::{Cookie, flags};
     let cookie = try!(Cookie::open(flags::MIME_TYPE));
-    // FIXME: This is linux specific but idk any alternative
-    try!(cookie.load(&vec!["/usr/share/misc/magic.mgc"]));
+    try!(cookie.load::<&str>(&[]));
 
     let trans = try!(conn.transaction());
 
