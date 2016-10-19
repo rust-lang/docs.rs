@@ -19,7 +19,7 @@ semver = "0.4"
 slug = "=0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
-magic = "0.10"
+magic = "0.12"
 iron = "0.3.1"
 router = "0.1.1"
 staticfile = { version = "0.2.0", features = [ "cache" ] }
