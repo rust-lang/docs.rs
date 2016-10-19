@@ -27,10 +27,12 @@ extern crate libc;
 extern crate badge;
 extern crate crates_index_diff;
 extern crate git2;
+extern crate toml;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
 pub use self::docbuilder::options::DocBuilderOptions;
+pub use self::docbuilder::metadata::Metadata;
 pub use self::web::start_web_server;
 
 pub mod errors;

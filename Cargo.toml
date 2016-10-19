@@ -27,6 +27,7 @@ libc = "0.2"
 hoedown = "6.0"
 badge = { version = "0", path = "src/web/badge" }
 error-chain = "0.5"
+toml = "0.2"
 
 # iron dependencies
 iron = "0.5"
