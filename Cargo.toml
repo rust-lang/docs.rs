@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
@@ -15,7 +15,7 @@ postgres = { version = "0.11", features = [ "time", "rustc-serialize" ] }
 clap = "2.14"
 time = "0.1"
 hyper = "0.9"
-semver = "0.4"
+semver = "0.5"
 slug = "=0.1.1"
 env_logger = "0.3"
 git2 = "0.4"
@@ -35,7 +35,7 @@ error-chain = "0.5"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "c917e94b419ce62760c0a6fdcf90ff0d7d1d5cdb"
+rev = "02fed69e71806989a96ae372f5d0f7cbb9528c37"
 
 [dev-dependencies]
 tempdir = "0.3"

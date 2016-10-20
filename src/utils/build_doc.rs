@@ -30,7 +30,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
     // update crates.io-index registry
     try!(source.update());
 
-    let dep = try!(Dependency::parse(name, vers, &source_id));
+    let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
     let deps = try!(source.query(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
                    // FIXME: This is probably not a rusty way to handle options and results
@@ -47,11 +47,12 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         jobs: None,
         target: target,
         features: &[],
+        all_features: false,
         no_default_features: false,
         spec: &[],
-        exec_engine: None,
         mode: ops::CompileMode::Doc { deps: false },
         release: false,
+        message_format: ops::MessageFormat::Human,
         filter: ops::CompileFilter::new(true, &[], &[], &[], &[]),
         target_rustc_args: None,
         target_rustdoc_args: None,
@@ -75,7 +76,7 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let source_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_map.load(&source_id));
 
-    let dep = try!(Dependency::parse(name, vers, &source_id));
+    let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
     let deps = try!(source.query(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
                    // FIXME: This is probably not a rusty way to handle options and results
