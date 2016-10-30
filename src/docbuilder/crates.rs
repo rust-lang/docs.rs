@@ -36,12 +36,8 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
                         .and_then(|n| n.as_string())
                         .ok_or("`vers` not found in JSON object"));
 
-        let yanked = try!(obj.get("yanked")
-                          .and_then(|n| n.as_boolean())
-                          .ok_or("`vers` not found in JSON object"));
-
         // Skip yanked crates
-        if yanked {
+        if obj.get("yanked").and_then(|n| n.as_boolean()).unwrap_or(false) {
             continue;
         }
 
