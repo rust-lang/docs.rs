@@ -47,16 +47,15 @@ impl DocBuilder {
 
     /// Builds package documentation in chroot environment and adds into cratesfyi database
     pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool> {
-        info!("Building package {}-{}", name, version);
-
         // Skip crates according to options
         if (self.options.skip_if_log_exists &&
             self.cache.contains(&format!("{}-{}", name, version)[..])) ||
            (self.options.skip_if_exists &&
             self.db_cache.contains(&format!("{}-{}", name, version)[..])) {
-            info!("Skipping");
             return Ok(false);
         }
+
+        info!("Building package {}-{}", name, version);
 
 
         // Database connection
