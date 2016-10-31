@@ -2,106 +2,52 @@
 
 
 use super::DocBuilder;
-use rustc_serialize::json::Json;
-use git2;
+use rustc_serialize::json::{Json, Array};
+use hyper;
 use db::connect_db;
 use errors::*;
 
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue
-    pub fn get_new_crates(&self) -> Result<()> {
+    pub fn get_new_crates(&mut self) -> Result<()> {
+        try!(self.load_database_cache());
 
-        let repo = try!(git2::Repository::open(&self.options.crates_io_index_path));
+        let body = {
+            use std::io::Read;
+            let client = hyper::Client::new();
+            let mut res = try!(client.get("https://crates.io/summary").send());
+            let mut body = String::new();
+            try!(res.read_to_string(&mut body));
+            body
+        };
 
-        let old_tree = try!(self.head_tree(&repo));
-        try!(self.update_repo(&repo));
-        let new_tree = try!(self.head_tree(&repo));
+        let json = try!(Json::from_str(&body));
 
-        let diff = try!(repo.diff_tree_to_tree(Some(&old_tree), Some(&new_tree), None));
+        let crates = {
+            let mut crates: Vec<(String, String)> = Vec::new();
+            for section in ["just_updated", "new_crates"].iter() {
+                match json.as_object()
+                    .and_then(|o| o.get(&section[..]))
+                    .and_then(|j| j.as_array())
+                    .map(get_crates_from_array) {
+                    Some(mut c) => crates.append(c.as_mut()),
+                    None => continue,
+                }
+            }
+            crates
+        };
+
         let conn = try!(connect_db());
-        let mut line_n = 0;
-
-        try!(diff.print(git2::DiffFormat::Patch, |_, hunk, diffline| -> bool {
-            let line = String::from_utf8_lossy(diffline.content()).into_owned();
-            // crate strings starts with '{'
-            // skip if line is not a crate string
-            if line.chars().nth(0) != Some('{') {
-                line_n = 0;
-                return true;
+        for (name, version) in crates {
+            if self.db_cache.contains(&format!("{}-{}", name, version)[..]) {
+                continue;
             }
-
-            line_n += 1;
-
-            if match hunk {
-                Some(hunk) => hunk.new_lines() != line_n,
-                None => true,
-            } {
-                return true;
-            }
-
-            let json = match Json::from_str(&line[..]) {
-                Ok(j) => j,
-                Err(err) => {
-                    error!("Failed to parse crate string: {}", err);
-                    // just continue even if we get an error for a crate
-                    return true;
-                }
-            };
-
-            // check if a crate is yanked just in case
-            if json.as_object()
-                .and_then(|obj| obj.get("yanked"))
-                .and_then(|y| y.as_boolean())
-                .unwrap_or(true) {
-                return true;
-            }
-
-            if let Some((krate, version)) = json.as_object()
-                .map(|obj| {
-                    (obj.get("name")
-                        .and_then(|n| n.as_string()),
-                     obj.get("vers")
-                        .and_then(|n| n.as_string()))
-                }) {
-
-                // Skip again if we can't get crate name and version
-                if krate.is_none() || version.is_none() {
-                    return true;
-                }
-
-                let _ = conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
-                                     &[&krate.unwrap(), &version.unwrap()]);
-            }
-
-            true
-        }));
+            let _ = conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
+                                 &[&name, &version]);
+        }
 
         Ok(())
-    }
-
-
-    fn update_repo(&self, repo: &git2::Repository) -> Result<()> {
-        let mut remote = try!(repo.find_remote("origin"));
-        try!(remote.fetch(&["refs/heads/*:refs/remotes/origin/*"], None, None));
-
-        // checkout master
-        try!(repo.refname_to_id("refs/remotes/origin/master")
-            .and_then(|oid| repo.find_object(oid, None))
-            .and_then(|object| repo.reset(&object, git2::ResetType::Hard, None)));
-
-        Ok(())
-    }
-
-
-    fn head_tree<'a>(&'a self, repo: &'a git2::Repository) -> Result<git2::Tree> {
-        repo.head()
-            .ok()
-            .and_then(|head| head.target())
-            .ok_or(git2::Error::from_str("HEAD SHA1 not found"))
-            .and_then(|oid| repo.find_commit(oid))
-            .and_then(|commit| commit.tree())
-            .or_else(|e| Err(ErrorKind::Git2Error(e).into()))
     }
 
 
@@ -117,7 +63,7 @@ impl DocBuilder {
             match self.build_package(&name[..], &version[..]) {
                 Ok(_) => {
                     let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-                },
+                }
                 Err(e) => {
                     error!("Failed to build package {}-{} from queue: {}",
                            name,
@@ -131,6 +77,29 @@ impl DocBuilder {
     }
 }
 
+
+/// Returns Vec<CRATE_NAME, CRATE_VERSION> from a summary array
+fn get_crates_from_array<'a>(crates: &'a Array) -> Vec<(String, String)> {
+    let mut crates_vec: Vec<(String, String)> = Vec::new();
+    for crte in crates {
+        let name = match crte.as_object()
+            .and_then(|o| o.get("id"))
+            .and_then(|i| i.as_string())
+            .map(|s| s.to_owned()) {
+            Some(s) => s,
+            None => continue,
+        };
+        let version = match crte.as_object()
+            .and_then(|o| o.get("max_version"))
+            .and_then(|v| v.as_string())
+            .map(|s| s.to_owned()) {
+            Some(s) => s,
+            None => continue,
+        };
+        crates_vec.push((name, version));
+    }
+    crates_vec
+}
 
 
 
@@ -146,8 +115,12 @@ mod test {
     fn test_get_new_crates() {
         let _ = env_logger::init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let docbuilder = DocBuilder::new(options);
-        assert!(docbuilder.get_new_crates().is_ok());
+        let mut docbuilder = DocBuilder::new(options);
+        let res = docbuilder.get_new_crates();
+        if res.is_err() {
+            error!("{:?}", res);
+        }
+        assert!(res.is_ok());
     }
 
 

@@ -5,7 +5,6 @@ use rustc_serialize::json;
 use postgres;
 use cargo;
 use hyper;
-use git2;
 use magic::MagicError;
 
 
@@ -23,7 +22,6 @@ error_chain! {
         postgres::error::ConnectError, PostgresConnectError;
         postgres::error::Error, PostgresError;
         hyper::Error, HyperError;
-        git2::Error, Git2Error;
         MagicError, MagicError;
         Box<cargo::CargoError>, CargoError;
     }
