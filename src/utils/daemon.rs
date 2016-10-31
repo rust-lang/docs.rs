@@ -51,8 +51,7 @@ pub fn start_daemon() {
         loop {
             thread::sleep(Duration::from_secs(900));
             debug!("Checking new crates");
-            let doc_builder = DocBuilder::new(opts());
-            if let Err(e) = doc_builder.get_new_crates() {
+            if let Err(e) = DocBuilder::new(opts()).get_new_crates() {
                 error!("Failed to get new crates: {}", e);
             }
         }
