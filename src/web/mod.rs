@@ -43,6 +43,7 @@ mod pool;
 mod file;
 mod builds;
 mod error;
+mod sitemap;
 
 use std::env;
 use std::error::Error;
@@ -96,6 +97,8 @@ impl CratesfyiHandler {
         router.get("/about", |_: &mut Request| {
             page::Page::new(false).title("About Docs.rs").to_resp("about")
         });
+        router.get("/robots.txt", sitemap::robots_txt_handler);
+        router.get("/sitemap.xml", sitemap::sitemap_handler);
         router.get("/releases", releases::releases_handler);
         router.get("/releases/feed", releases::releases_feed_handler);
         router.get("/releases/recent/:page", releases::releases_handler);
