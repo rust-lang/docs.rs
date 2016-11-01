@@ -45,24 +45,23 @@ pub fn start_daemon() {
     }
 
 
-    // check new crates every 15 minutes
+    // check new crates every 5 minutes
     // FIXME: why not just check new crates and build them if there is any?
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(900));
+            thread::sleep(Duration::from_secs(300));
             debug!("Checking new crates");
-            let doc_builder = DocBuilder::new(opts());
-            if let Err(e) = doc_builder.get_new_crates() {
+            if let Err(e) = DocBuilder::new(opts()).get_new_crates() {
                 error!("Failed to get new crates: {}", e);
             }
         }
     });
 
 
-    // build crates in que every 12 minutes
+    // build crates in que every 5 minutes
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(720));
+            thread::sleep(Duration::from_secs(300));
 
             let mut opts = opts();
             opts.skip_if_exists = true;

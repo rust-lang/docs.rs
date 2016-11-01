@@ -13,7 +13,6 @@ extern crate hyper;
 extern crate time;
 extern crate semver;
 extern crate slug;
-extern crate git2;
 extern crate magic;
 extern crate iron;
 extern crate router;
