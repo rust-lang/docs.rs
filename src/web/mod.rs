@@ -231,6 +231,12 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         versions_sem
     };
 
+    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
+    // return first version if requested version is '*'
+    if req_version == "*" && !versions_sem.is_empty() {
+        return Some(format!("{}", versions_sem[0]));
+    }
+
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
             return Some(format!("{}", version))
