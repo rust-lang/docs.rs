@@ -4,6 +4,7 @@
 use super::DocBuilder;
 use rustc_serialize::json::{Json, Array};
 use hyper;
+use hyper::header::{Accept, qitem};
 use db::connect_db;
 use errors::*;
 
@@ -16,7 +17,9 @@ impl DocBuilder {
         let body = {
             use std::io::Read;
             let client = hyper::Client::new();
-            let mut res = try!(client.get("https://crates.io/summary").send());
+            let mut res = try!(client.get("https://crates.io/summary")
+                .header(Accept(vec![qitem("application/json".parse().unwrap())]))
+                .send());
             let mut body = String::new();
             try!(res.read_to_string(&mut body));
             body
