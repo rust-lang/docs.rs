@@ -210,6 +210,8 @@ div.recent-releases-container {
     .name {
         color: $color-url;
         font-weight: 500;
+        text-overflow: ellipsis;
+        overflow: hidden;
     }
 
     .build {
