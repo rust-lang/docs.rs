@@ -44,6 +44,7 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
+mod opensearch;
 
 use std::env;
 use std::error::Error;
@@ -99,6 +100,7 @@ impl CratesfyiHandler {
         });
         router.get("/robots.txt", sitemap::robots_txt_handler);
         router.get("/sitemap.xml", sitemap::sitemap_handler);
+        router.get("/opensearch.xml", opensearch::serve_opensearch);
         router.get("/releases", releases::releases_handler);
         router.get("/releases/feed", releases::releases_feed_handler);
         router.get("/releases/recent/:page", releases::releases_handler);
