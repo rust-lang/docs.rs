@@ -47,6 +47,93 @@ Example badges for `mio` crate:
 | Version 0.1.0: <https://docs.rs/mio/badge.svg?version=0.1.0> | ![mio](https://docs.rs/mio/badge.svg?version=0.1.0) |
 
 
+## Development
+
+We strongly recommend using vagrant, this will give you a virtual machine
+already configured and ready to start developing on.
+
+### Getting started
+
+Make sure you have vagrant, virtualbox and a ssh client and you need
+to able to download ~800MB data on the first run.
+
+
+```sh
+git clone https://github.com/onur/docs.rs.git docs.rs
+cd docs.rs
+vagrant up  # This may take a little while on the first run
+```
+
+You can always run `vagrant provision` to reconfigure virtual machine.
+Provision will install required dependencies and latest version of nightly
+into virtual machine. It will also configure lxc-container inside
+virtual machine.
+
+### CLI
+
+Make sure you are running every listed command inside `/vagrant` directory
+of virtual machine. You can connect to virtual machine with `vagrant ssh` and
+switch to cwd with: `cd /vagrant` inside virtual machine.
+
+You can get a full list of commands with `cargo run -- --help`.
+
+#### Starting web server
+
+This command will start web interface of docs.rs and you can access it from:
+`http://localhost:3000/`
+
+```
+cargo run -- start-web-server
+```
+
+
+#### `build` subcommand
+
+```sh
+# Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
+# This is the main command to build and add a documentation into docs.rs.
+cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
+
+# Adds essential files (css and fonts) into database to avoid duplication
+# This command needs to be run after each rustc update
+cargo run -- build add-essential-files
+
+# Builds every crate adds them into database
+# (beware: this may take months to finish)
+cargo run -- build world
+```
+
+
+#### Database operations
+
+```
+# Initializes database. Currently, only creates tables in database.
+cargo run -- database init
+
+# Adds a directory into database to serve with `staticfile` crate.
+cargo run -- database add-directory <DIRECTORY> [PREFIX]
+
+# Updates github stats for crates.
+# You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
+# environment variables in order to run this command.
+# You can define them in ~/.cratesfyi.env file.
+cargo run -- database update-github-fields
+
+# Updates release activitiy
+cargo run -- database update-release-activity    
+```
+
+
+#### `doc` subcommand
+
+This subcommand will only build documentation of a crate.
+This subcommand is designed to run inside a container.
+
+```
+cargo run -- doc <CRATE_NAME>
+```
+
+
 #### Contributors
 
 * [Onur Aslan](https://github.com/onur)
