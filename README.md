@@ -55,6 +55,7 @@ Example badges for `mio` crate:
 * [Matthew Hall](https://github.com/mattyhall)
 * [Guillaume Gomez](https://github.com/GuillaumeGomez)
 * [Mark Simulacrum](https://github.com/Mark-Simulacrum)
+* [Sebastian Thiel](https://github.com/Byron)
 
 #### Sponsors
 
