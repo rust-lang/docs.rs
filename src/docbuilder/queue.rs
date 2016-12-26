@@ -2,52 +2,24 @@
 
 
 use super::DocBuilder;
-use rustc_serialize::json::{Json, Array};
-use hyper;
-use hyper::header::{Accept, qitem};
 use db::connect_db;
 use errors::*;
+use crates_index_diff::{ChangeKind, Index};
 
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue
     pub fn get_new_crates(&mut self) -> Result<()> {
         try!(self.load_database_cache());
-
-        let body = {
-            use std::io::Read;
-            let client = hyper::Client::new();
-            let mut res = try!(client.get("https://crates.io/summary")
-                .header(Accept(vec![qitem("application/json".parse().unwrap())]))
-                .send());
-            let mut body = String::new();
-            try!(res.read_to_string(&mut body));
-            body
-        };
-
-        let json = try!(Json::from_str(&body));
-
-        let crates = {
-            let mut crates: Vec<(String, String)> = Vec::new();
-            for section in ["just_updated", "new_crates"].iter() {
-                match json.as_object()
-                    .and_then(|o| o.get(&section[..]))
-                    .and_then(|j| j.as_array())
-                    .map(get_crates_from_array) {
-                    Some(mut c) => crates.append(c.as_mut()),
-                    None => continue,
-                }
-            }
-            crates
-        };
-
         let conn = try!(connect_db());
-        for (name, version) in crates {
-            if self.db_cache.contains(&format!("{}-{}", name, version)[..]) {
+        let index = try!(Index::from_path_or_cloned(&self.options.crates_io_index_path));
+        let changes = try!(index.fetch_changes());
+        for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
+            if self.db_cache.contains(&format!("{}-{}", krate.name, krate.version)) {
                 continue;
             }
-            let _ = conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
-                                 &[&name, &version]);
+            conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
+                         &[&krate.name, &krate.version]).ok();
         }
 
         Ok(())
@@ -79,33 +51,6 @@ impl DocBuilder {
         Ok(())
     }
 }
-
-
-/// Returns Vec<CRATE_NAME, CRATE_VERSION> from a summary array
-fn get_crates_from_array<'a>(crates: &'a Array) -> Vec<(String, String)> {
-    let mut crates_vec: Vec<(String, String)> = Vec::new();
-    for crte in crates {
-        let name = match crte.as_object()
-            .and_then(|o| o.get("id"))
-            .and_then(|i| i.as_string())
-            .map(|s| s.to_owned()) {
-            Some(s) => s,
-            None => continue,
-        };
-        let version = match crte.as_object()
-            .and_then(|o| o.get("max_version"))
-            .and_then(|v| v.as_string())
-            .map(|s| s.to_owned()) {
-            Some(s) => s,
-            None => continue,
-        };
-        crates_vec.push((name, version));
-    }
-    crates_vec
-}
-
-
-
 
 #[cfg(test)]
 mod test {

@@ -13,6 +13,8 @@ rustc-serialize = "0.3"
 regex = "0.1"
 postgres = { version = "0.11", features = [ "time", "rustc-serialize" ] }
 clap = "2.14"
+crates-index-diff = "2.0.0"
+git2 = "0.4"
 time = "0.1"
 hyper = "0.9"
 semver = "0.5"
