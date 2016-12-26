@@ -1,9 +1,9 @@
 [root]
 name = "cratesfyi"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "badge 0.1.1",
- "cargo 0.14.0 (git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37)",
+ "cargo 0.15.0 (git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15)",
  "clap 2.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -140,11 +140,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cargo"
-version = "0.14.0"
-source = "git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37#02fed69e71806989a96ae372f5d0f7cbb9528c37"
+version = "0.15.0"
+source = "git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15#f6500c6b6480c89492773bff6d41c4abf6c5ee15"
 dependencies = [
  "advapi32-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "crates-io 0.4.0 (git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37)",
+ "crates-io 0.4.0 (git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15)",
  "crossbeam 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "curl 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "docopt 0.6.86 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -224,7 +224,7 @@ dependencies = [
 [[package]]
 name = "crates-io"
 version = "0.4.0"
-source = "git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37#02fed69e71806989a96ae372f5d0f7cbb9528c37"
+source = "git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15#f6500c6b6480c89492773bff6d41c4abf6c5ee15"
 dependencies = [
  "curl 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1393,13 +1393,13 @@ dependencies = [
 "checksum bufstream 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7b48dbe2ff0e98fa2f03377d204a9637d3c9816cd431bfe05a8abbd0ea11d074"
 "checksum byteorder 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "96c8b41881888cc08af32d47ac4edd52bc7fa27fef774be47a92443756451304"
 "checksum byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
-"checksum cargo 0.14.0 (git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37)" = "<none>"
+"checksum cargo 0.15.0 (git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15)" = "<none>"
 "checksum cfg-if 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "de1e760d7b6535af4241fca8bd8adf68e2e7edacc6b29f5d399050c5e48cf88c"
 "checksum clap 2.14.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5fa304b03c49ccbb005784fc26e985b5d2310b1d37f2c311ce90dbcd18ea5fde"
 "checksum cmake 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)" = "dfcf5bcece56ef953b8ea042509e9dcbdfe97820b7e20d86beb53df30ed94978"
 "checksum conduit-mime-types 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)" = "95ca30253581af809925ef68c2641cc140d6183f43e12e0af4992d53768bd7b8"
 "checksum cookie 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "0e3d6405328b6edb412158b3b7710e2634e23f3614b9bb1c412df7952489a626"
-"checksum crates-io 0.4.0 (git+https://github.com/rust-lang/cargo.git?rev=02fed69e71806989a96ae372f5d0f7cbb9528c37)" = "<none>"
+"checksum crates-io 0.4.0 (git+https://github.com/rust-lang/cargo.git?rev=f6500c6b6480c89492773bff6d41c4abf6c5ee15)" = "<none>"
 "checksum crossbeam 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)" = "0c5ea215664ca264da8a9d9c3be80d2eaf30923c259d03e870388eb927508f97"
 "checksum curl 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "180f002567c2e45472018922f2cda208aad6effa0a09e7704bc8313e53a59f9f"
 "checksum curl-sys 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "4ae8698d4d2bc4b8182a11f4a5298fa03d2127c29e95dbae538d0cf003141818"

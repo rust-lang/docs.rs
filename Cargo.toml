@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
@@ -34,7 +34,7 @@ error-chain = "0.5"
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "02fed69e71806989a96ae372f5d0f7cbb9528c37"
+rev = "f6500c6b6480c89492773bff6d41c4abf6c5ee15"
 
 [dev-dependencies]
 tempdir = "0.3"
