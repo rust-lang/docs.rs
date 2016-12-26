@@ -6,6 +6,7 @@ use postgres;
 use cargo;
 use hyper;
 use magic::MagicError;
+use git2;
 
 
 error_chain! {
@@ -22,6 +23,7 @@ error_chain! {
         postgres::error::ConnectError, PostgresConnectError;
         postgres::error::Error, PostgresError;
         hyper::Error, HyperError;
+        git2::Error, Git2Error;
         MagicError, MagicError;
         Box<cargo::CargoError>, CargoError;
     }

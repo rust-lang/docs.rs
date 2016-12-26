@@ -25,6 +25,8 @@ extern crate url;
 extern crate params;
 extern crate libc;
 extern crate badge;
+extern crate crates_index_diff;
+extern crate git2;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
