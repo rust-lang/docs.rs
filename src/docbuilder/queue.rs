@@ -10,14 +10,10 @@ use crates_index_diff::{ChangeKind, Index};
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue
     pub fn get_new_crates(&mut self) -> Result<()> {
-        try!(self.load_database_cache());
         let conn = try!(connect_db());
         let index = try!(Index::from_path_or_cloned(&self.options.crates_io_index_path));
         let changes = try!(index.fetch_changes());
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
-            if self.db_cache.contains(&format!("{}-{}", krate.name, krate.version)) {
-                continue;
-            }
             conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
                          &[&krate.name, &krate.version]).ok();
         }
