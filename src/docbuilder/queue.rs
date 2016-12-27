@@ -8,17 +8,26 @@ use crates_index_diff::{ChangeKind, Index};
 
 
 impl DocBuilder {
-    /// Updates crates.io-index repository and adds new crates into build queue
-    pub fn get_new_crates(&mut self) -> Result<()> {
+    /// Updates crates.io-index repository and adds new crates into build queue.
+    /// Returns size of queue
+    pub fn get_new_crates(&mut self) -> Result<i64> {
         let conn = try!(connect_db());
         let index = try!(Index::from_path_or_cloned(&self.options.crates_io_index_path));
-        let changes = try!(index.fetch_changes());
+        let mut changes = try!(index.fetch_changes());
+
+        // I belive this will fix ordering of queue if we get more than one crate from changes
+        changes.reverse();
+
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
             conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
                          &[&krate.name, &krate.version]).ok();
+            debug!("{}-{} added into build queue", krate.name, krate.version);
         }
 
-        Ok(())
+        let queue_count = conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5",
+                                     &[]).unwrap().get(0).get(0);
+
+        Ok(queue_count)
     }
 
 
@@ -26,7 +35,10 @@ impl DocBuilder {
     pub fn build_packages_queue(&mut self) -> Result<()> {
         let conn = try!(connect_db());
 
-        for row in &try!(conn.query("SELECT id, name, version FROM queue ORDER BY id ASC", &[])) {
+        for row in &try!(conn.query("SELECT id, name, version \
+                                     FROM queue \
+                                     WHERE attempt < 5 \
+                                     ORDER BY id ASC", &[])) {
             let id: i32 = row.get(0);
             let name: String = row.get(1);
             let version: String = row.get(2);
@@ -36,6 +48,9 @@ impl DocBuilder {
                     let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
                 }
                 Err(e) => {
+                    // Increase attempt count
+                    let _ = conn.execute("UPDATE queue SET attempt = attempt + 1 WHERE id = $1",
+                                         &[&id]);
                     error!("Failed to build package {}-{} from queue: {}",
                            name,
                            version,

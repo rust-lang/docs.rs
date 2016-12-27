@@ -505,7 +505,10 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let mut crates: Vec<(String, String)> = Vec::new();
-    for krate in &conn.query("SELECT name, version FROM queue ORDER BY id ASC", &[]).unwrap() {
+    for krate in &conn.query("SELECT name, version
+                              FROM queue
+                              WHERE attempt < 5
+                              ORDER BY id ASC", &[]).unwrap() {
         crates.push((krate.get(0), krate.get(1)));
     }
     let is_empty = crates.is_empty();

@@ -45,23 +45,10 @@ pub fn start_daemon() {
     }
 
 
-    // check new crates every 5 minutes
-    // FIXME: why not just check new crates and build them if there is any?
+    // check new crates every minute
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_secs(300));
-            debug!("Checking new crates");
-            if let Err(e) = DocBuilder::new(opts()).get_new_crates() {
-                error!("Failed to get new crates: {}", e);
-            }
-        }
-    });
-
-
-    // build crates in que every 5 minutes
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(300));
+            thread::sleep(Duration::from_secs(60));
 
             let mut opts = opts();
             opts.skip_if_exists = true;
@@ -72,25 +59,54 @@ pub fn start_daemon() {
                 continue;
             }
 
+            let mut doc_builder = DocBuilder::new(opts);
+
+            debug!("Checking new crates");
+            let queue_count = match doc_builder.get_new_crates() {
+                Ok(size) => size,
+                Err(e) => {
+                    error!("Failed to get new crates: {}", e);
+                    continue;
+                }
+            };
+
+            // Only build crates if there is any
+            if queue_count == 0 {
+                debug!("Queue is empty, going back to sleep");
+                continue;
+            }
+
+            info!("Building {} crates from queue", queue_count);
+
             // update index
             if let Err(e) = update_sources() {
                 error!("Failed to update sources: {}", e);
                 continue;
             }
 
-            let mut doc_builder = DocBuilder::new(opts);
             if let Err(e) = doc_builder.load_cache() {
                 error!("Failed to load cache: {}", e);
                 continue;
             }
 
-            debug!("Building new crates");
-            if let Err(e) = doc_builder.build_packages_queue() {
-                error!("Failed build new crates: {}", e);
-            }
 
-            if let Err(e) = doc_builder.save_cache() {
-                error!("Failed to save cache: {}", e);
+            // Run build_packages_queue in it's own thread to catch panics
+            // This only panicked twice in the last 6 months but its just a better
+            // idea to do this.
+            let res = thread::spawn(move || {
+                if let Err(e) = doc_builder.build_packages_queue() {
+                    error!("Failed build new crates: {}", e);
+                }
+
+                if let Err(e) = doc_builder.save_cache() {
+                    error!("Failed to save cache: {}", e);
+                }
+
+                debug!("Finished building new crates, going back to sleep");
+            }).join();
+
+            if let Err(e) = res {
+                error!("GRAVE ERROR Building new crates panicked: {:?}", e);
             }
         }
     });

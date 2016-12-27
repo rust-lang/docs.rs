@@ -159,6 +159,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             id SERIAL, \
             name VARCHAR(255), \
             version VARCHAR(100), \
+            attempt INT DEFAULT 0, \
+            date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             UNIQUE(name, version) \
         )",
         "CREATE TABLE files ( \
