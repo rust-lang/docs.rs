@@ -210,6 +210,7 @@ div.recent-releases-container {
     .name {
         color: $color-url;
         font-weight: 500;
+        white-space: nowrap;
         @media #{$media-sm} {
             text-overflow: ellipsis;
             overflow: hidden;
