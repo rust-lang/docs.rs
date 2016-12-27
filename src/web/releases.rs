@@ -500,3 +500,20 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("javascript_highchartjs")
         .to_resp("releases_activity")
 }
+
+
+pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
+    let conn = extension!(req, Pool);
+    let mut crates: Vec<(String, String)> = Vec::new();
+    for krate in &conn.query("SELECT name, version FROM queue ORDER BY id ASC", &[]).unwrap() {
+        crates.push((krate.get(0), krate.get(1)));
+    }
+    let is_empty = crates.is_empty();
+    Page::new(crates)
+        .title("Build queue")
+        .set("description", "List of crates scheduled to build")
+        .set_bool("queue_empty", is_empty)
+        .set_true("show_releases_navigation")
+        .set_true("releases_queue_tab")
+        .to_resp("releases_queue")
+}

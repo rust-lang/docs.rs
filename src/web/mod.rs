@@ -110,6 +110,7 @@ impl CratesfyiHandler {
         router.get("/releases/:author/:page", releases::author_handler);
         router.get("/releases/activity", releases::activity_handler);
         router.get("/releases/search", releases::search_handler);
+        router.get("/releases/queue", releases::build_queue_handler);
         router.get("/crate/:name", crate_details::crate_details_handler);
         router.get("/crate/:name/", crate_details::crate_details_handler);
         router.get("/crate/:name/:version", crate_details::crate_details_handler);

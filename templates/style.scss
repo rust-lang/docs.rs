@@ -184,6 +184,14 @@ div.recent-releases-container {
         padding: 0;
     }
 
+    ol.queue-list li {
+        list-style-type: decimal;
+        margin-left: 20px;
+        a {
+            color: $color-url;
+        }
+    }
+
     strong {
         font-weight: 500;
     }
