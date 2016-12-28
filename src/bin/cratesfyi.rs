@@ -203,7 +203,7 @@ pub fn main() {
             cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
-        start_web_server(matches.value_of("SOCKET_ADDR"));
+        start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
     } else if let Some(_) = matches.subcommand_matches("daemon") {
         cratesfyi::utils::start_daemon();
     } else {
