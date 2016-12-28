@@ -159,11 +159,7 @@ pub fn add_build_into_database(conn: &Connection,
                                res: &ChrootBuilderResult)
                                -> Result<i32> {
     debug!("Adding build into database");
-    let mut rows = try!(conn.query("SELECT id FROM builds WHERE rid = $1 AND rustc_version = $2",
-                                   &[release_id, &res.rustc_version]));
-    // insert crate into database if it is not exists
-    if rows.len() == 0 {
-        rows = try!(conn.query("INSERT INTO builds (rid, rustc_version, cratesfyi_version, \
+    let rows = try!(conn.query("INSERT INTO builds (rid, rustc_version, cratesfyi_version, \
                                 build_status, output)
                                 VALUES \
                                 ($1, $2, $3, $4, $5) RETURNING id",
@@ -172,15 +168,6 @@ pub fn add_build_into_database(conn: &Connection,
                                  &res.cratesfyi_version,
                                  &res.build_success,
                                  &res.output]));
-    } else {
-        try!(conn.query("UPDATE builds SET rustc_version = $2, cratesfyi_version = $3, \
-                         build_status = $4, output = $5 WHERE rid = $1",
-                        &[release_id,
-                          &res.rustc_version,
-                          &res.cratesfyi_version,
-                          &res.build_success,
-                          &res.output]));
-    }
     Ok(rows.get(0).get(0))
 }
 
