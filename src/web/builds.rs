@@ -84,7 +84,8 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                             FROM builds \
                             INNER JOIN releases ON releases.id = builds.rid \
                             INNER JOIN crates ON releases.crate_id = crates.id \
-                            WHERE crates.name = $1 AND releases.version = $2",
+                            WHERE crates.name = $1 AND releases.version = $2 \
+                            ORDER BY id DESC",
                                  &[&name, &version])) {
 
         let id: i32 = row.get(5);
