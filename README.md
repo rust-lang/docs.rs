@@ -20,8 +20,8 @@ crates' documentation easily. Example of URL redirections for `clap` crate:
 | URL                          | Redirects to documentation of                  |
 |------------------------------|------------------------------------------------|
 | <https://docs.rs/clap>       | Latest version of clap                         |
-| <https://docs.rs/clap/^2>    | 2.* version                                    |
-| <https://docs.rs/clap/^2.9>  | 2.9.* version                                  |
+| <https://docs.rs/clap/~2>    | 2.* version                                    |
+| <https://docs.rs/clap/~2.9>  | 2.9.* version                                  |
 | <https://docs.rs/clap/2.9.3> | 2.9.3 version (you don't need = unlike semver) |
 
 The crates.fyi domain will redirect to docs.rs, supporting all of the
