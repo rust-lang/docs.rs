@@ -91,7 +91,13 @@ pub fn main() {
                                                                .required(true)
                                                                .help("Version of crate")))
                                       .subcommand(SubCommand::with_name("add-essential-files")
-                                                      .about("Adds essential files for rustc")))
+                                                      .about("Adds essential files for rustc"))
+                                      .subcommand(SubCommand::with_name("lock")
+                                                      .about("Locks cratesfyi daemon to stop \
+                                                              building new crates"))
+                                      .subcommand(SubCommand::with_name("unlock")
+                                                      .about("Unlocks cratesfyi daemon to continue \
+                                                              building new crates")))
                       .subcommand(SubCommand::with_name("start-web-server")
                                       .about("Starts web server")
                                       .arg(Arg::with_name("SOCKET_ADDR")
@@ -169,19 +175,24 @@ pub fn main() {
 
         let mut docbuilder = DocBuilder::new(docbuilder_opts);
 
-        docbuilder.load_cache().expect("Failed to load cache");
-
         if let Some(_) = matches.subcommand_matches("world") {
+            docbuilder.load_cache().expect("Failed to load cache");
             docbuilder.build_world().expect("Failed to build world");
+            docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
+            docbuilder.load_cache().expect("Failed to load cache");
             docbuilder.build_package(matches.value_of("CRATE_NAME").unwrap(),
                                      matches.value_of("CRATE_VERSION").unwrap())
                       .expect("Building documentation failed");
+            docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
             docbuilder.add_essential_files().expect("Failed to add essential files");
+        } else if let Some(_) = matches.subcommand_matches("lock") {
+            docbuilder.lock().expect("Failed to lock");
+        } else if let Some(_) = matches.subcommand_matches("unlock") {
+            docbuilder.unlock().expect("Failed to unlock");
         }
 
-        docbuilder.save_cache().expect("Failed to save cache");
     } else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(_) = matches.subcommand_matches("init") {
             use std::io::Write;
