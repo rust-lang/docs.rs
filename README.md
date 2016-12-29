@@ -65,7 +65,7 @@ vagrant up  # This may take a little while on the first run
 ```
 
 You can always run `vagrant provision` to reconfigure virtual machine.
-Provision will install required dependencies and latest version of nightly
+Provision will install required dependencies and nightly rust compiler
 into virtual machine. It will also configure lxc-container inside
 virtual machine.
 
@@ -73,9 +73,8 @@ virtual machine.
 
 Make sure you are running every listed command inside `/vagrant` directory
 in virtual machine. You can connect to virtual machine with `vagrant ssh` and
-switch cwd with: `cd /vagrant` inside virtual machine.
+switch current working directory with: `cd /vagrant` inside virtual machine.
 
-You can get a full list of commands with `cargo run -- --help`.
 
 #### Starting web server
 
@@ -100,13 +99,13 @@ cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
 cargo run -- build add-essential-files
 
 
-# Builds every crate adds them into database
+# Builds every crate and adds them into database
 # (beware: this may take months to finish)
 cargo run -- build world
 ```
 
 
-#### Database operations
+#### `database` subcommand
 
 ```sh
 # Initializes database. Currently, only creates tables in database.
@@ -120,21 +119,24 @@ cargo run -- database add-directory <DIRECTORY> [PREFIX]
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
-# You can define them in ~/.cratesfyi.env file.
+# You can set this environment variables in ~/.cratesfyi.env file.
 cargo run -- database update-github-fields
 
 
 # Updates search-index.
 # daemon is running this command occasionally, and this command must be
-# run to update recent-version of a crate and search index.
+# run to update recent-version of a crate index and search index.
 # If you are having any trouble with accessing right version of a crate,
-# run this command.
+# run this command. Otherwise it's not required.
 cargo run -- database update-search-index
 
 
 # Updates release activitiy chart
 cargo run -- database update-release-activity    
 ```
+
+If you want to explore or edit database manually, you can connect database
+with `psql` command.
 
 
 #### `doc` subcommand
