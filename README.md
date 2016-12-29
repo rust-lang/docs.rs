@@ -106,7 +106,7 @@ cargo run -- build world
 
 #### Database operations
 
-```
+```sh
 # Initializes database. Currently, only creates tables in database.
 cargo run -- database init
 
