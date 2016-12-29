@@ -9,7 +9,6 @@ extern crate time;
 
 
 use std::env;
-use std::process;
 use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
@@ -199,20 +198,15 @@ pub fn main() {
 
     } else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(_) = matches.subcommand_matches("init") {
-            use std::io::Write;
-            use std::io;
             let conn = db::connect_db().unwrap();
-            if let Err(err) = db::create_tables(&conn) {
-                writeln!(&mut io::stderr(), "Failed to initialize database: {}", err).unwrap();
-                process::exit(1);
-            }
+            db::create_tables(&conn).expect("Failed to initialize database");
         } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
         } else if let Some(matches) = matches.subcommand_matches("add-directory") {
             add_path_into_database(&db::connect_db().unwrap(),
                                    matches.value_of("PREFIX").unwrap_or(""),
                                    matches.value_of("DIRECTORY").unwrap())
-                .unwrap();
+                .expect("Failed to add directory into database");
         } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
             // FIXME: This is actually util command not database
             cratesfyi::utils::update_release_activity().expect("Failed to update release activity");

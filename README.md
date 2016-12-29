@@ -94,9 +94,11 @@ cargo run -- start-web-server
 # This is the main command to build and add a documentation into docs.rs.
 cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
 
+
 # Adds essential files (css and fonts) into database to avoid duplication
 # This command needs to be run after each rustc update
 cargo run -- build add-essential-files
+
 
 # Builds every crate adds them into database
 # (beware: this may take months to finish)
@@ -110,8 +112,10 @@ cargo run -- build world
 # Initializes database. Currently, only creates tables in database.
 cargo run -- database init
 
+
 # Adds a directory into database to serve with `staticfile` crate.
 cargo run -- database add-directory <DIRECTORY> [PREFIX]
+
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
@@ -119,7 +123,16 @@ cargo run -- database add-directory <DIRECTORY> [PREFIX]
 # You can define them in ~/.cratesfyi.env file.
 cargo run -- database update-github-fields
 
-# Updates release activitiy
+
+# Updates search-index.
+# daemon is running this command occasionally, and this command must be
+# run to update recent-version of a crate and search index.
+# If you are having any trouble with accessing right version of a crate,
+# run this command.
+cargo run -- database update-search-index
+
+
+# Updates release activitiy chart
 cargo run -- database update-release-activity    
 ```
 
@@ -127,7 +140,7 @@ cargo run -- database update-release-activity
 #### `doc` subcommand
 
 This subcommand will only build documentation of a crate.
-This subcommand is designed to run inside a container.
+It is designed to run inside a secure container.
 
 ```
 cargo run -- doc <CRATE_NAME>
