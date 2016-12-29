@@ -81,4 +81,27 @@ impl DocBuilder {
         }
         Ok(())
     }
+
+
+    fn lock_path(&self) -> PathBuf {
+        self.options.prefix.join("cratesfyi.lock")
+    }
+
+    /// Creates a lock file. Daemon will check this lock file and stop operating if its exists.
+    pub fn lock(&self) -> Result<()> {
+        let path = self.lock_path();
+        if !path.exists() {
+            try!(fs::OpenOptions::new().write(true).create(true).open(path));
+        }
+        Ok(())
+    }
+
+    /// Removes lock file. 
+    pub fn unlock(&self) -> Result<()> {
+        let path = self.lock_path();
+        if path.exists() {
+            try!(fs::remove_file(path));
+        }
+        Ok(())
+    }
 }

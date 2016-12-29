@@ -9,7 +9,6 @@ extern crate time;
 
 
 use std::env;
-use std::process;
 use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
@@ -91,7 +90,13 @@ pub fn main() {
                                                                .required(true)
                                                                .help("Version of crate")))
                                       .subcommand(SubCommand::with_name("add-essential-files")
-                                                      .about("Adds essential files for rustc")))
+                                                      .about("Adds essential files for rustc"))
+                                      .subcommand(SubCommand::with_name("lock")
+                                                      .about("Locks cratesfyi daemon to stop \
+                                                              building new crates"))
+                                      .subcommand(SubCommand::with_name("unlock")
+                                                      .about("Unlocks cratesfyi daemon to continue \
+                                                              building new crates")))
                       .subcommand(SubCommand::with_name("start-web-server")
                                       .about("Starts web server")
                                       .arg(Arg::with_name("SOCKET_ADDR")
@@ -118,7 +123,11 @@ pub fn main() {
                                                                .index(2)
                                                                .help("Prefix of files in \
                                                                       database")))
-                                      .subcommand(SubCommand::with_name("update-release-activity")))
+                                      .subcommand(SubCommand::with_name("update-release-activity"))
+                                                      .about("Updates montly release activity \
+                                                              chart")
+                                      .subcommand(SubCommand::with_name("update-search-index"))
+                                                      .about("Updates search index"))
                       .get_matches();
 
 
@@ -169,41 +178,44 @@ pub fn main() {
 
         let mut docbuilder = DocBuilder::new(docbuilder_opts);
 
-        docbuilder.load_cache().expect("Failed to load cache");
-
         if let Some(_) = matches.subcommand_matches("world") {
+            docbuilder.load_cache().expect("Failed to load cache");
             docbuilder.build_world().expect("Failed to build world");
+            docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
+            docbuilder.load_cache().expect("Failed to load cache");
             docbuilder.build_package(matches.value_of("CRATE_NAME").unwrap(),
                                      matches.value_of("CRATE_VERSION").unwrap())
                       .expect("Building documentation failed");
+            docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
             docbuilder.add_essential_files().expect("Failed to add essential files");
+        } else if let Some(_) = matches.subcommand_matches("lock") {
+            docbuilder.lock().expect("Failed to lock");
+        } else if let Some(_) = matches.subcommand_matches("unlock") {
+            docbuilder.unlock().expect("Failed to unlock");
         }
 
-        docbuilder.save_cache().expect("Failed to save cache");
     } else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(_) = matches.subcommand_matches("init") {
-            use std::io::Write;
-            use std::io;
             let conn = db::connect_db().unwrap();
-            if let Err(err) = db::create_tables(&conn) {
-                writeln!(&mut io::stderr(), "Failed to initialize database: {}", err).unwrap();
-                process::exit(1);
-            }
+            db::create_tables(&conn).expect("Failed to initialize database");
         } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
         } else if let Some(matches) = matches.subcommand_matches("add-directory") {
             add_path_into_database(&db::connect_db().unwrap(),
                                    matches.value_of("PREFIX").unwrap_or(""),
                                    matches.value_of("DIRECTORY").unwrap())
-                .unwrap();
+                .expect("Failed to add directory into database");
         } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
             // FIXME: This is actually util command not database
             cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
+        } else if let Some(_) = matches.subcommand_matches("update-search-index") {
+            let conn = db::connect_db().unwrap();
+            db::update_search_index(&conn).expect("Failed to update search index");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
-        start_web_server(matches.value_of("SOCKET_ADDR"));
+        start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
     } else if let Some(_) = matches.subcommand_matches("daemon") {
         cratesfyi::utils::start_daemon();
     } else {
