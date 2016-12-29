@@ -72,8 +72,8 @@ virtual machine.
 ### CLI
 
 Make sure you are running every listed command inside `/vagrant` directory
-of virtual machine. You can connect to virtual machine with `vagrant ssh` and
-switch to cwd with: `cd /vagrant` inside virtual machine.
+in virtual machine. You can connect to virtual machine with `vagrant ssh` and
+switch cwd with: `cd /vagrant` inside virtual machine.
 
 You can get a full list of commands with `cargo run -- --help`.
 
