@@ -124,7 +124,11 @@ pub fn main() {
                                                                .index(2)
                                                                .help("Prefix of files in \
                                                                       database")))
-                                      .subcommand(SubCommand::with_name("update-release-activity")))
+                                      .subcommand(SubCommand::with_name("update-release-activity"))
+                                                      .about("Updates montly release activity \
+                                                              chart")
+                                      .subcommand(SubCommand::with_name("update-search-index"))
+                                                      .about("Updates search index"))
                       .get_matches();
 
 
@@ -212,6 +216,9 @@ pub fn main() {
         } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
             // FIXME: This is actually util command not database
             cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
+        } else if let Some(_) = matches.subcommand_matches("update-search-index") {
+            let conn = db::connect_db().unwrap();
+            db::update_search_index(&conn).expect("Failed to update search index");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
