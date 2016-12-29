@@ -128,5 +128,19 @@ EOF
     su - cratesfyi -c "cd /vagrant && cargo run -- build crate rand 0.3.15" 2>&1
     su - cratesfyi -c "cd /vagrant && cargo run -- build crate log 0.3.6" 2>&1
     su - cratesfyi -c "cd /vagrant && cargo run -- build crate regex 0.1.80" 2>&1
+
+    ############################################################
+    # Update search index and release activity                 #
+    ############################################################
+    su - cratesfyi -c "cd /vagrant && cargo run -- database update-search-index" 2>&1
+    su - cratesfyi -c "cd /vagrant && cargo run -- database update-release-activity" 2>&1
+
+
+    ############################################################
+    # docs.rs vagrant box is ready!                            #
+    #----------------------------------------------------------#
+    # You can connect to virtual machine with `vagrant ssh`.   #
+    # docs.rs is available in `/vagrant` folder!               #
+    ############################################################
   SHELL
 end
