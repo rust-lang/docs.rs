@@ -93,52 +93,90 @@ impl CratesfyiHandler {
 
     pub fn new() -> CratesfyiHandler {
         let mut router = Router::new();
-        router.get("/", releases::home_page);
-        router.get("/style.css", style_css_handler);
-        router.get("/about", |_: &mut Request| {
-            page::Page::new(false).title("About Docs.rs").to_resp("about")
-        });
-        router.get("/robots.txt", sitemap::robots_txt_handler);
-        router.get("/sitemap.xml", sitemap::sitemap_handler);
-        router.get("/opensearch.xml", opensearch::serve_opensearch);
-        router.get("/releases", releases::releases_handler);
-        router.get("/releases/feed", releases::releases_feed_handler);
-        router.get("/releases/recent/:page", releases::releases_handler);
-        router.get("/releases/stars", releases::stars_handler);
-        router.get("/releases/stars/:page", releases::stars_handler);
-        router.get("/releases/:author", releases::author_handler);
-        router.get("/releases/:author/:page", releases::author_handler);
-        router.get("/releases/activity", releases::activity_handler);
-        router.get("/releases/search", releases::search_handler);
-        router.get("/releases/queue", releases::build_queue_handler);
-        router.get("/crate/:name", crate_details::crate_details_handler);
-        router.get("/crate/:name/", crate_details::crate_details_handler);
+        router.get("/", releases::home_page, "index");
+        router.get("/style.css", style_css_handler, "style_css");
+        router.get("/about",
+                   |_: &mut Request| page::Page::new(false).title("About Docs.rs").to_resp("about"),
+                   "about");
+        router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
+        router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
+        router.get("/opensearch.xml",
+                   opensearch::serve_opensearch,
+                   "opensearch_xml");
+        router.get("/releases", releases::releases_handler, "releases");
+        router.get("/releases/feed",
+                   releases::releases_feed_handler,
+                   "releases_feed");
+        router.get("/releases/recent/:page",
+                   releases::releases_handler,
+                   "releases_recent_page");
+        router.get("/releases/stars", releases::stars_handler, "releases_stars");
+        router.get("/releases/stars/:page",
+                   releases::stars_handler,
+                   "releases_stars_page");
+        router.get("/releases/:author",
+                   releases::author_handler,
+                   "releases_author");
+        router.get("/releases/:author/:page",
+                   releases::author_handler,
+                   "releases_author_page");
+        router.get("/releases/activity",
+                   releases::activity_handler,
+                   "releases_activity");
+        router.get("/releases/search",
+                   releases::search_handler,
+                   "releases_search");
+        router.get("/releases/queue",
+                   releases::build_queue_handler,
+                   "releases_queue");
+        router.get("/crate/:name",
+                   crate_details::crate_details_handler,
+                   "crate_name");
+        router.get("/crate/:name/",
+                   crate_details::crate_details_handler,
+                   "crate_name_");
         router.get("/crate/:name/:version",
-                   crate_details::crate_details_handler);
+                   crate_details::crate_details_handler,
+                   "crate_name_version");
         router.get("/crate/:name/:version/",
-                   crate_details::crate_details_handler);
-        router.get("/crate/:name/:version/builds", builds::build_list_handler);
+                   crate_details::crate_details_handler,
+                   "crate_name_version_");
+        router.get("/crate/:name/:version/builds",
+                   builds::build_list_handler,
+                   "crate_name_version_builds");
         router.get("/crate/:name/:version/builds.json",
-                   builds::build_list_handler);
+                   builds::build_list_handler,
+                   "crate_name_version_builds_json");
         router.get("/crate/:name/:version/builds/:id",
-                   builds::build_list_handler);
+                   builds::build_list_handler,
+                   "crate_name_version_builds_id");
         router.get("/crate/:name/:version/source/",
-                   source::source_browser_handler);
+                   source::source_browser_handler,
+                   "crate_name_version_source");
         router.get("/crate/:name/:version/source/*",
-                   source::source_browser_handler);
-        router.get("/:crate", rustdoc::rustdoc_redirector_handler);
-        router.get("/:crate/", rustdoc::rustdoc_redirector_handler);
-        router.get("/:crate/badge.svg", rustdoc::badge_handler);
-        router.get("/:crate/:version", rustdoc::rustdoc_redirector_handler);
-        router.get("/:crate/:version/", rustdoc::rustdoc_redirector_handler);
+                   source::source_browser_handler,
+                   "crate_name_version_source_");
+        router.get("/:crate", rustdoc::rustdoc_redirector_handler, "crate");
+        router.get("/:crate/", rustdoc::rustdoc_redirector_handler, "crate_");
+        router.get("/:crate/badge.svg", rustdoc::badge_handler, "crate_badge");
+        router.get("/:crate/:version",
+                   rustdoc::rustdoc_redirector_handler,
+                   "crate_version");
+        router.get("/:crate/:version/",
+                   rustdoc::rustdoc_redirector_handler,
+                   "crate_version_");
         router.get("/:crate/:version/search-index.js",
-                   rustdoc::rustdoc_html_server_handler);
+                   rustdoc::rustdoc_html_server_handler,
+                   "crate_version_search_index_js");
         router.get("/:crate/:version/:target",
-                   rustdoc::rustdoc_redirector_handler);
+                   rustdoc::rustdoc_redirector_handler,
+                   "crate_version_target");
         router.get("/:crate/:version/:target/",
-                   rustdoc::rustdoc_html_server_handler);
+                   rustdoc::rustdoc_html_server_handler,
+                   "crate_version_target_");
         router.get("/:crate/:version/:target/*.html",
-                   rustdoc::rustdoc_html_server_handler);
+                   rustdoc::rustdoc_html_server_handler,
+                   "crate_version_target_html");
 
         let router_chain = Self::chain(router);
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");

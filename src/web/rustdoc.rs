@@ -70,9 +70,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        target_name: &str)
                        -> IronResult<Response> {
         let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
-                                            req.url.scheme,
-                                            req.url.host,
-                                            req.url.port,
+                                            req.url.scheme(),
+                                            req.url.host(),
+                                            req.url.port(),
                                             name,
                                             vers,
                                             target_name)[..]));
@@ -116,24 +116,25 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let version = try!(match_version(&conn, &name, version)
         .ok_or(IronError::new(Nope::ResourceNotFound, status::NotFound)));
+    let mut req_path = req.url.path();
 
     // remove name and version from path
     for _ in 0..2 {
-        req.url.path.remove(0);
+        req_path.remove(0);
     }
 
     // docs have "rustdoc" prefix in database
-    req.url.path.insert(0, "rustdoc".to_owned());
+    req_path.insert(0, "rustdoc");
 
     // add crate name and version
-    req.url.path.insert(1, name.clone());
-    req.url.path.insert(2, version.clone());
+    req_path.insert(1, &name);
+    req_path.insert(2, &version);
 
     let path = {
-        let mut path = req.url.path.join("/");
+        let mut path = req_path.join("/");
         if path.ends_with("/") {
             path.push_str("index.html");
-            req.url.path.push("index.html".to_owned());
+            req_path.push("index.html");
         }
         path
     };
