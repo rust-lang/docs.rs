@@ -39,6 +39,8 @@ impl ToJson for Build {
                  self.cratesfyi_version.to_json());
         m.insert("build_status".to_owned(), self.build_status.to_json());
         m.insert("build_time".to_owned(),
+                 format!("{}", time::at(self.build_time).rfc3339()).to_json());
+        m.insert("build_time_relative".to_owned(),
                  duration_to_str(self.build_time).to_json());
         m.insert("output".to_owned(), self.output.to_json());
         m.to_json()
@@ -106,14 +108,37 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         build_list.push(build);
     }
 
-    let builds_page = BuildsPage {
-        metadata: MetaData::from_crate(&conn, &name, &version),
-        builds: build_list,
-        build_details: build_details,
-    };
+    if req.url.path.join("/").ends_with(".json") {
+        use iron::status;
+        use iron::headers::{Expires,
+                            HttpDate,
+                            CacheControl,
+                            CacheDirective,
+                            ContentType,
+                            AccessControlAllowOrigin};
 
-    Page::new(builds_page)
-        .set_true("show_package_navigation")
-        .set_true("package_navigation_builds_tab")
-        .to_resp("builds")
+        // Remove build output from build list for json output
+        for build in build_list.as_mut_slice() {
+            build.output = None;
+        }
+
+        let mut resp = Response::with((status::Ok, build_list.to_json().to_string()));
+        resp.headers.set(ContentType("application/json".parse().unwrap()));
+        resp.headers.set(Expires(HttpDate(time::now())));
+        resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
+                                           CacheDirective::NoStore,
+                                           CacheDirective::MustRevalidate]));
+        resp.headers.set(AccessControlAllowOrigin::Any);
+        Ok(resp)
+    } else {
+        let builds_page = BuildsPage {
+            metadata: MetaData::from_crate(&conn, &name, &version),
+            builds: build_list,
+            build_details: build_details,
+        };
+        Page::new(builds_page)
+            .set_true("show_package_navigation")
+            .set_true("package_navigation_builds_tab")
+            .to_resp("builds")
+    }
 }

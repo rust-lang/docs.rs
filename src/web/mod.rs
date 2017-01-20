@@ -116,6 +116,7 @@ impl CratesfyiHandler {
         router.get("/crate/:name/:version", crate_details::crate_details_handler);
         router.get("/crate/:name/:version/", crate_details::crate_details_handler);
         router.get("/crate/:name/:version/builds", builds::build_list_handler);
+        router.get("/crate/:name/:version/builds.json", builds::build_list_handler);
         router.get("/crate/:name/:version/builds/:id", builds::build_list_handler);
         router.get("/crate/:name/:version/source/", source::source_browser_handler);
         router.get("/crate/:name/:version/source/*", source::source_browser_handler);
