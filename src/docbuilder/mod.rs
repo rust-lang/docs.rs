@@ -60,7 +60,9 @@ impl DocBuilder {
         let conn = try!(connect_db());
 
         for row in &conn.query("SELECT name, version FROM crates, releases \
-                               WHERE crates.id = releases.crate_id", &[]).unwrap() {
+                               WHERE crates.id = releases.crate_id",
+                   &[])
+            .unwrap() {
             let name: String = row.get(0);
             let version: String = row.get(1);
             self.db_cache.insert(format!("{}-{}", name, version));
@@ -74,8 +76,10 @@ impl DocBuilder {
     pub fn save_cache(&self) -> Result<()> {
         debug!("Saving cache");
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let mut file = try!(fs::OpenOptions::new().write(true).create(true)
-                            .open(path));
+        let mut file = try!(fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path));
         for krate in &self.cache {
             try!(writeln!(file, "{}", krate));
         }
@@ -96,7 +100,7 @@ impl DocBuilder {
         Ok(())
     }
 
-    /// Removes lock file. 
+    /// Removes lock file.
     pub fn unlock(&self) -> Result<()> {
         let path = self.lock_path();
         if path.exists() {

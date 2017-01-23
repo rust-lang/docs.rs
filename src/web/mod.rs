@@ -113,22 +113,32 @@ impl CratesfyiHandler {
         router.get("/releases/queue", releases::build_queue_handler);
         router.get("/crate/:name", crate_details::crate_details_handler);
         router.get("/crate/:name/", crate_details::crate_details_handler);
-        router.get("/crate/:name/:version", crate_details::crate_details_handler);
-        router.get("/crate/:name/:version/", crate_details::crate_details_handler);
+        router.get("/crate/:name/:version",
+                   crate_details::crate_details_handler);
+        router.get("/crate/:name/:version/",
+                   crate_details::crate_details_handler);
         router.get("/crate/:name/:version/builds", builds::build_list_handler);
-        router.get("/crate/:name/:version/builds.json", builds::build_list_handler);
-        router.get("/crate/:name/:version/builds/:id", builds::build_list_handler);
-        router.get("/crate/:name/:version/source/", source::source_browser_handler);
-        router.get("/crate/:name/:version/source/*", source::source_browser_handler);
+        router.get("/crate/:name/:version/builds.json",
+                   builds::build_list_handler);
+        router.get("/crate/:name/:version/builds/:id",
+                   builds::build_list_handler);
+        router.get("/crate/:name/:version/source/",
+                   source::source_browser_handler);
+        router.get("/crate/:name/:version/source/*",
+                   source::source_browser_handler);
         router.get("/:crate", rustdoc::rustdoc_redirector_handler);
         router.get("/:crate/", rustdoc::rustdoc_redirector_handler);
         router.get("/:crate/badge.svg", rustdoc::badge_handler);
         router.get("/:crate/:version", rustdoc::rustdoc_redirector_handler);
         router.get("/:crate/:version/", rustdoc::rustdoc_redirector_handler);
-        router.get("/:crate/:version/search-index.js", rustdoc::rustdoc_html_server_handler);
-        router.get("/:crate/:version/:target", rustdoc::rustdoc_redirector_handler);
-        router.get("/:crate/:version/:target/", rustdoc::rustdoc_html_server_handler);
-        router.get("/:crate/:version/:target/*.html", rustdoc::rustdoc_html_server_handler);
+        router.get("/:crate/:version/search-index.js",
+                   rustdoc::rustdoc_html_server_handler);
+        router.get("/:crate/:version/:target",
+                   rustdoc::rustdoc_redirector_handler);
+        router.get("/:crate/:version/:target/",
+                   rustdoc::rustdoc_html_server_handler);
+        router.get("/:crate/:version/:target/*.html",
+                   rustdoc::rustdoc_html_server_handler);
 
         let router_chain = Self::chain(router);
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
@@ -154,21 +164,21 @@ impl Handler for CratesfyiHandler {
                 // if router fails try to serve files from database first
                 self.database_file_handler.handle(req).or(Err(e))
             })
-        .or_else(|e| {
-            // and then try static handler. if all of them fails, return 404
-            self.static_handler.handle(req).or(Err(e))
-        })
-        .or_else(|e| {
-            debug!("{}", e.description());
-            let err = if let Some(err) = e.error.downcast::<error::Nope>() {
-                *err
-            } else if e.error.downcast::<NoRoute>().is_some() {
-                error::Nope::ResourceNotFound
-            } else {
-                panic!("all cratesfyi errors should be of type Nope");
-            };
-            Self::chain(err).handle(req)
-        })
+            .or_else(|e| {
+                // and then try static handler. if all of them fails, return 404
+                self.static_handler.handle(req).or(Err(e))
+            })
+            .or_else(|e| {
+                debug!("{}", e.description());
+                let err = if let Some(err) = e.error.downcast::<error::Nope>() {
+                    *err
+                } else if e.error.downcast::<NoRoute>().is_some() {
+                    error::Nope::ResourceNotFound
+                } else {
+                    panic!("all cratesfyi errors should be of type Nope");
+                };
+                Self::chain(err).handle(req)
+            })
     }
 }
 
@@ -180,12 +190,13 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     // need to decode first
     use url::percent_encoding::percent_decode;
     let req_version = version.and_then(|v| {
-        match percent_decode(v.as_bytes()).decode_utf8() {
-            Ok(p) => Some(p.into_owned()),
-            Err(_) => None,
-        }
-    }).map(|v| if v == "newest" { "*".to_owned() } else { v })
-    .unwrap_or("*".to_string());
+            match percent_decode(v.as_bytes()).decode_utf8() {
+                Ok(p) => Some(p.into_owned()),
+                Err(_) => None,
+            }
+        })
+        .map(|v| if v == "newest" { "*".to_owned() } else { v })
+        .unwrap_or("*".to_string());
 
     let versions = {
         let mut versions = Vec::new();
@@ -206,7 +217,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     // we can't expect users to use semver in query
     for version in &versions {
         if version == &req_version {
-            return Some(version.clone())
+            return Some(version.clone());
         }
     }
 
@@ -214,7 +225,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     let req_sem_ver = match VersionReq::parse(&req_version) {
         Ok(v) => v,
         Err(_) => return None,
-    };;
+    };
 
     // we need to sort versions first
     let versions_sem = {
@@ -243,7 +254,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
 
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
-            return Some(format!("{}", version))
+            return Some(format!("{}", version));
         }
     }
 
@@ -322,7 +333,7 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     use iron::headers::{CacheControl, CacheDirective, ContentType};
     let mut response = Response::with((status::Ok, STYLE_CSS));
     let cache = vec![CacheDirective::Public,
-    CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
     response.headers.set(ContentType("text/css".parse().unwrap()));
     response.headers.set(CacheControl(cache));
     Ok(response)
@@ -350,7 +361,8 @@ impl MetaData {
                                 FROM releases
                                 INNER JOIN crates ON crates.id = releases.crate_id
                                 WHERE crates.name = $1 AND releases.version = $2",
-                                &[&name, &version]).unwrap() {
+                   &[&name, &version])
+            .unwrap() {
 
             return Some(MetaData {
                 name: row.get(0),

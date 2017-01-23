@@ -103,11 +103,7 @@ fn copy_html(source: &PathBuf,
     let replace_regex = Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc|playpen)\.(css|js)""#)
         .unwrap();
     let replace_str = format!("$1=\"{}../../$2$3-{}.$4\"",
-                              if target {
-                                  "../"
-                              } else {
-                                  ""
-                              },
+                              if target { "../" } else { "" },
                               rustc_version);
 
     for line in reader.lines() {

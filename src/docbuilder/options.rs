@@ -61,21 +61,20 @@ impl fmt::Debug for DocBuilderOptions {
                 sources_path: {:?}, chroot_user: {:?}, \
                 keep_build_directory: {:?}, skip_if_exists: {:?}, \
                 skip_if_log_exists: {:?}, debug: {:?} }}",
-                self.destination,
-                self.chroot_path,
-                self.crates_io_index_path,
-                self.sources_path,
-                self.chroot_user,
-                self.keep_build_directory,
-                self.skip_if_exists,
-                self.skip_if_log_exists,
-                self.debug)
+               self.destination,
+               self.chroot_path,
+               self.crates_io_index_path,
+               self.sources_path,
+               self.chroot_user,
+               self.keep_build_directory,
+               self.skip_if_exists,
+               self.skip_if_log_exists,
+               self.debug)
     }
 }
 
 
 impl DocBuilderOptions {
-
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
         let (prefix, destination, chroot_path, crates_io_index_path, sources_path) =
@@ -87,27 +86,26 @@ impl DocBuilderOptions {
             crates_io_index_path: crates_io_index_path,
             sources_path: sources_path,
 
-            .. Default::default()
+            ..Default::default()
         }
     }
 
 
     pub fn check_paths(&self) -> Result<()> {
         if !self.destination.exists() {
-            return Err("Destination path not exists".into())
+            return Err("Destination path not exists".into());
         }
         if !self.chroot_path.exists() {
-            return Err("Chroot path not exists".into())
+            return Err("Chroot path not exists".into());
         }
         if !self.crates_io_index_path.exists() {
-            return Err("crates.io-index path not exists".into())
+            return Err("crates.io-index path not exists".into());
         }
         if !self.crates_io_index_path.exists() {
-            return Err("Logs path not exists".into())
+            return Err("Logs path not exists".into());
         }
         Ok(())
     }
-
 }
 
 

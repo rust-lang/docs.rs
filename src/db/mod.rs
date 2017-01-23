@@ -65,14 +65,14 @@ pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
             content = doc.content
         FROM doc
         WHERE crates.id = doc.crate_id AND
-            (crates.latest_version_id = 0 OR crates.latest_version_id != doc.id);", &[])
+            (crates.latest_version_id = 0 OR crates.latest_version_id != doc.id);",
+                 &[])
 }
 
 
 /// Creates database tables
 pub fn create_tables(conn: &Connection) -> Result<(), Error> {
-    let queries = [
-        "CREATE TABLE crates ( \
+    let queries = ["CREATE TABLE crates ( \
             id SERIAL PRIMARY KEY, \
             name VARCHAR(255) UNIQUE NOT NULL, \
             latest_version_id INT DEFAULT 0, \
@@ -86,7 +86,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             github_last_update TIMESTAMP, \
             content tsvector \
         )",
-        "CREATE TABLE releases ( \
+                   "CREATE TABLE releases ( \
             id SERIAL PRIMARY KEY, \
             crate_id INT NOT NULL REFERENCES crates(id), \
             version VARCHAR(100), \
@@ -113,40 +113,40 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             doc_rustc_version VARCHAR(100) NOT NULL, \
             UNIQUE (crate_id, version) \
         )",
-        "CREATE TABLE authors ( \
+                   "CREATE TABLE authors ( \
             id SERIAL PRIMARY KEY, \
             name VARCHAR(255), \
             email VARCHAR(255), \
             slug VARCHAR(255) UNIQUE NOT NULL \
         )",
-        "CREATE TABLE author_rels ( \
+                   "CREATE TABLE author_rels ( \
             rid INT REFERENCES releases(id), \
             aid INT REFERENCES authors(id), \
             UNIQUE(rid, aid) \
         )",
-        "CREATE TABLE keywords ( \
+                   "CREATE TABLE keywords ( \
             id SERIAL PRIMARY KEY, \
             name VARCHAR(255), \
             slug VARCHAR(255) NOT NULL UNIQUE \
         )",
-        "CREATE TABLE keyword_rels ( \
+                   "CREATE TABLE keyword_rels ( \
             rid INT REFERENCES releases(id), \
             kid INT REFERENCES keywords(id), \
             UNIQUE(rid, kid) \
         )",
-        "CREATE TABLE owners ( \
+                   "CREATE TABLE owners ( \
             id SERIAL PRIMARY KEY, \
             login VARCHAR(255) NOT NULL UNIQUE, \
             avatar VARCHAR(255), \
             name VARCHAR(255), \
             email VARCHAR(255) \
         )",
-        "CREATE TABLE owner_rels ( \
+                   "CREATE TABLE owner_rels ( \
             cid INT REFERENCES releases(id), \
             oid INT REFERENCES owners(id), \
             UNIQUE(cid, oid) \
         )",
-        "CREATE TABLE builds ( \
+                   "CREATE TABLE builds ( \
             id SERIAL, \
             rid INT NOT NULL REFERENCES releases(id), \
             rustc_version VARCHAR(100) NOT NULL, \
@@ -155,7 +155,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             build_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             output TEXT \
         )",
-        "CREATE TABLE queue ( \
+                   "CREATE TABLE queue ( \
             id SERIAL, \
             name VARCHAR(255), \
             version VARCHAR(100), \
@@ -163,20 +163,19 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             UNIQUE(name, version) \
         )",
-        "CREATE TABLE files ( \
+                   "CREATE TABLE files ( \
             path VARCHAR(4096) NOT NULL PRIMARY KEY, \
             mime VARCHAR(100) NOT NULL, \
             date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             content BYTEA \
         )",
-        "CREATE INDEX content_idx ON crates USING gin(content)",
-        "CREATE TABLE config ( \
+                   "CREATE INDEX content_idx ON crates USING gin(content)",
+                   "CREATE TABLE config ( \
             name VARCHAR(100) NOT NULL PRIMARY KEY, \
             value JSON NOT NULL \
         )",
-        "INSERT INTO config VALUES ('database_version', '1'::json)",
-    ];
+                   "INSERT INTO config VALUES ('database_version', '1'::json)"];
 
     for query in queries.into_iter() {
         try!(conn.execute(query, &[]));

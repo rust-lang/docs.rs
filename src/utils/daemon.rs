@@ -94,16 +94,17 @@ pub fn start_daemon() {
             // This only panicked twice in the last 6 months but its just a better
             // idea to do this.
             let res = thread::spawn(move || {
-                if let Err(e) = doc_builder.build_packages_queue() {
-                    error!("Failed build new crates: {}", e);
-                }
+                    if let Err(e) = doc_builder.build_packages_queue() {
+                        error!("Failed build new crates: {}", e);
+                    }
 
-                if let Err(e) = doc_builder.save_cache() {
-                    error!("Failed to save cache: {}", e);
-                }
+                    if let Err(e) = doc_builder.save_cache() {
+                        error!("Failed to save cache: {}", e);
+                    }
 
-                debug!("Finished building new crates, going back to sleep");
-            }).join();
+                    debug!("Finished building new crates, going back to sleep");
+                })
+                .join();
 
             if let Err(e) = res {
                 error!("GRAVE ERROR Building new crates panicked: {:?}", e);

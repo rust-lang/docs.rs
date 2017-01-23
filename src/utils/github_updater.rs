@@ -39,21 +39,21 @@ pub fn github_updater() -> Result<()> {
         let repository_url: String = row.get(2);
 
         if let Err(err) = get_github_path(&repository_url[..])
-                              .ok_or("Failed to get github path".into())
-                              .and_then(|path| get_github_fields(&path[..]))
-                              .and_then(|fields| {
-                                  conn.execute("UPDATE crates SET github_description = $1, \
+            .ok_or("Failed to get github path".into())
+            .and_then(|path| get_github_fields(&path[..]))
+            .and_then(|fields| {
+                conn.execute("UPDATE crates SET github_description = $1, \
                                                 github_stars = $2, github_forks = $3, \
                                                 github_issues = $4, github_last_commit = $5, \
                                                 github_last_update = NOW() WHERE id = $6",
-                                               &[&fields.description,
-                                                 &(fields.stars as i32),
-                                                 &(fields.forks as i32),
-                                                 &(fields.issues as i32),
-                                                 &(fields.last_commit),
-                                                 &crate_id])
-                                      .or_else(|e| Err(e.into()))
-                              }) {
+                             &[&fields.description,
+                               &(fields.stars as i32),
+                               &(fields.forks as i32),
+                               &(fields.issues as i32),
+                               &(fields.last_commit),
+                               &crate_id])
+                    .or_else(|e| Err(e.into()))
+            }) {
             debug!("Failed to update github fields of: {} {}", crate_name, err);
         }
 
@@ -81,16 +81,15 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
         let mut body = String::new();
 
         let mut resp = try!(client.get(&format!("https://api.github.com/repos/{}", path)[..])
-                                  .header(UserAgent(format!("cratesfyi/{}",
-                                                            env!("CARGO_PKG_VERSION"))))
-                                  .header(Authorization(Basic {
-                                      username: env::var("CRATESFYI_GITHUB_USERNAME")
-                                                    .ok()
-                                                    .and_then(|u| Some(u.to_string()))
-                                                    .unwrap_or("".to_string()),
-                                      password: env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
-                                  }))
-                                  .send());
+            .header(UserAgent(format!("cratesfyi/{}", env!("CARGO_PKG_VERSION"))))
+            .header(Authorization(Basic {
+                username: env::var("CRATESFYI_GITHUB_USERNAME")
+                    .ok()
+                    .and_then(|u| Some(u.to_string()))
+                    .unwrap_or("".to_string()),
+                password: env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
+            }))
+            .send());
 
         if resp.status != StatusCode::Ok {
             return Err("Failed to get github data".into());
@@ -109,11 +108,11 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
         forks: obj.get("forks_count").and_then(|d| d.as_i64()).unwrap_or(0),
         issues: obj.get("open_issues").and_then(|d| d.as_i64()).unwrap_or(0),
         last_commit: time::strptime(obj.get("pushed_at")
-                                       .and_then(|d| d.as_string())
-                                       .unwrap_or(""),
+                                        .and_then(|d| d.as_string())
+                                        .unwrap_or(""),
                                     "%Y-%m-%dT%H:%M:%S")
-                         .unwrap_or(time::now())
-                         .to_timespec(),
+            .unwrap_or(time::now())
+            .to_timespec(),
     })
 }
 
@@ -125,12 +124,14 @@ fn get_github_path(url: &str) -> Option<String> {
         Some(cap) => {
             let username = cap.at(1).unwrap();
             let reponame = cap.at(2).unwrap();
-            Some(format!("{}/{}", username, if reponame.ends_with(".git") {
-                reponame.split(".git").nth(0).unwrap()
-            } else {
-                reponame
-            }))
-        },
+            Some(format!("{}/{}",
+                         username,
+                         if reponame.ends_with(".git") {
+                             reponame.split(".git").nth(0).unwrap()
+                         } else {
+                             reponame
+                         }))
+        }
         None => None,
     }
 }

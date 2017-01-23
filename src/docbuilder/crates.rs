@@ -8,10 +8,10 @@ use errors::*;
 
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
-    where F: FnMut(&str, &str) -> () {
+    where F: FnMut(&str, &str) -> ()
+{
 
-    let reader = try!(fs::File::open(path)
-                      .map(|f| BufReader::new(f)));
+    let reader = try!(fs::File::open(path).map(|f| BufReader::new(f)));
 
     let mut name = String::new();
     let mut versions = Vec::new();
@@ -21,20 +21,20 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
         // skip them
         let line = match line {
             Ok(l) => l,
-            Err(_) => continue
+            Err(_) => continue,
         };
         let data = match Json::from_str(line.trim()) {
             Ok(d) => d,
-            Err(_) => continue
+            Err(_) => continue,
         };
 
         let obj = try!(data.as_object().ok_or("Not a JSON object"));
         let crate_name = try!(obj.get("name")
-                              .and_then(|n| n.as_string())
-                              .ok_or("`name` not found in JSON object"));
+            .and_then(|n| n.as_string())
+            .ok_or("`name` not found in JSON object"));
         let vers = try!(obj.get("vers")
-                        .and_then(|n| n.as_string())
-                        .ok_or("`vers` not found in JSON object"));
+            .and_then(|n| n.as_string())
+            .ok_or("`vers` not found in JSON object"));
 
         // Skip yanked crates
         if obj.get("yanked").and_then(|n| n.as_boolean()).unwrap_or(false) {
@@ -59,7 +59,8 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
 
 
 pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
-    where F: FnMut(&str, &str) -> () {
+    where F: FnMut(&str, &str) -> ()
+{
 
     if !path.is_dir() {
         return Err("Not a directory".into());
@@ -69,10 +70,9 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         let file = try!(file);
         let path = file.path();
         // skip files under .git and config.json
-        if path.to_str().unwrap().contains(".git") ||
-            path.file_name().unwrap() == "config.json" {
-                continue;
-            }
+        if path.to_str().unwrap().contains(".git") || path.file_name().unwrap() == "config.json" {
+            continue;
+        }
 
         if path.is_dir() {
             try!(crates_from_path(&path, func));

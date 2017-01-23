@@ -166,10 +166,8 @@ impl DocBuilder {
                        "x86_64-pc-windows-msvc",
                        // "x86_64-rumprun-netbsd",
                        // "x86_64-unknown-freebsd",
-                       "x86_64-unknown-linux-gnu",
-                       // "x86_64-unknown-linux-musl",
-                       // "x86_64-unknown-netbsd",
-                       ];
+                       "x86_64-unknown-linux-gnu" /* "x86_64-unknown-linux-musl",
+                                                   * "x86_64-unknown-netbsd", */];
 
         let mut successfuly_targets = Vec::new();
 
@@ -310,10 +308,7 @@ impl DocBuilder {
 
 
     /// Adds sources into database
-    fn add_sources_into_database(&self,
-                                 conn: &Connection,
-                                 package: &Package)
-                                 -> Result<Json> {
+    fn add_sources_into_database(&self, conn: &Connection, package: &Package) -> Result<Json> {
         debug!("Adding sources into database");
         let prefix = format!("sources/{}/{}",
                              package.manifest().name(),
@@ -367,29 +362,22 @@ impl DocBuilder {
         let rustc_version = parse_rustc_version(&res.rustc_version);
 
         if !res.build_success {
-            return Err(format!("Failed to build empty crate for: {}",
-                                res.rustc_version).into());
+            return Err(format!("Failed to build empty crate for: {}", res.rustc_version).into());
         }
 
         info!("Copying essential files for: {}", res.rustc_version);
 
-        let files = (
-            // files require rustc version subfix
-            ["rustdoc.css",
-             "main.css",
-             "main.js",
-             "jquery.js"],
-            // files doesn't require rustc version subfix
-            ["normalize.css",
-             "FiraSans-Medium.woff",
-             "FiraSans-Regular.woff",
-             "Heuristica-Italic.woff",
-             "SourceCodePro-Regular.woff",
-             "SourceCodePro-Semibold.woff",
-             "SourceSerifPro-Bold.woff",
-             "SourceSerifPro-Regular.woff",
-            ],
-        );
+        let files = (// files require rustc version subfix
+                     ["rustdoc.css", "main.css", "main.js", "jquery.js"],
+                     // files doesn't require rustc version subfix
+                     ["normalize.css",
+                      "FiraSans-Medium.woff",
+                      "FiraSans-Regular.woff",
+                      "Heuristica-Italic.woff",
+                      "SourceCodePro-Regular.woff",
+                      "SourceCodePro-Semibold.woff",
+                      "SourceSerifPro-Bold.woff",
+                      "SourceSerifPro-Regular.woff"]);
 
         let source = PathBuf::from(&self.options.chroot_path)
             .join("home")
@@ -400,9 +388,7 @@ impl DocBuilder {
         // use copy_documentation destination directory so self.clean can remove it when
         // we are done
         let destination = PathBuf::from(&self.options.destination)
-            .join(format!("{}/{}",
-                          pkg.manifest().name(),
-                          pkg.manifest().version()));
+            .join(format!("{}/{}", pkg.manifest().name(), pkg.manifest().version()));
         try!(create_dir_all(&destination));
 
         for file in files.0.iter() {

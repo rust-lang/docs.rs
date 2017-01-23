@@ -116,7 +116,7 @@ impl<'a> Badge<'a> {
                 g.pixel_bounding_box()
                     .map(|b| b.min.x as f32 + g.unpositioned().h_metrics().advance_width)
             })
-        .next()
+            .next()
             .unwrap_or(0.0)
             .ceil() as u32;
         width + ((text.len() as u32 - 1) * 2)
@@ -155,7 +155,7 @@ mod tests {
         let options = BadgeOptions {
             subject: "build".to_owned(),
             status: "passing".to_owned(),
-            .. BadgeOptions::default()
+            ..BadgeOptions::default()
         };
         let badge = Badge::new(options).unwrap();
         file.write_all(badge.to_svg().as_bytes()).unwrap();

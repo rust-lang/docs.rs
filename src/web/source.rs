@@ -129,7 +129,7 @@ impl FileList {
                         let ftype = if path_splited.len() > 1 {
                             FileType::Dir
                         } else if mime.starts_with("text") &&
-                                       path_splited[0].ends_with(".rs") {
+                                              path_splited[0].ends_with(".rs") {
                             FileType::RustSource
                         } else if mime.starts_with("text") {
                             FileType::Text

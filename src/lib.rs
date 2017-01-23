@@ -42,7 +42,7 @@ mod web;
 
 /// Version string generated at build time contains last git
 /// commit hash and build date
-pub const BUILD_VERSION: &'static str = concat!(
-    env!("CARGO_PKG_VERSION"), " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
-);
+pub const BUILD_VERSION: &'static str = concat!(env!("CARGO_PKG_VERSION"),
+                                                " ",
+                                                include_str!(concat!(env!("OUT_DIR"),
+                                                                     "/git_version")));

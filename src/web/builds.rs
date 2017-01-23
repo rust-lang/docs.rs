@@ -110,11 +110,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
 
     if req.url.path.join("/").ends_with(".json") {
         use iron::status;
-        use iron::headers::{Expires,
-                            HttpDate,
-                            CacheControl,
-                            CacheDirective,
-                            ContentType,
+        use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType,
                             AccessControlAllowOrigin};
 
         // Remove build output from build list for json output

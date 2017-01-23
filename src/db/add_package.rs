@@ -131,8 +131,8 @@ pub fn add_package_into_database(conn: &Connection,
     {
         let mut versions: Json = try!(conn.query("SELECT versions FROM crates WHERE id = $1",
                                                  &[&crate_id]))
-                                     .get(0)
-                                     .get(0);
+            .get(0)
+            .get(0);
         if let Some(versions_array) = versions.as_array_mut() {
             let mut found = false;
             for version in versions_array.clone() {
@@ -172,9 +172,7 @@ pub fn add_build_into_database(conn: &Connection,
 }
 
 
-fn initialize_package_in_database(conn: &Connection,
-                                  pkg: &Package)
-                                  -> Result<i32> {
+fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i32> {
     let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
                                    &[&pkg.manifest().name()]));
     // insert crate into database if it is not exists
@@ -202,9 +200,8 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &Package) -> Result<Option<String>> {
     if pkg.manifest().metadata().readme.is_some() {
-        let readme_path = PathBuf::from(try!(source_path(&pkg)
-                                                 .ok_or("File not found")))
-                              .join(pkg.manifest().metadata().readme.clone().unwrap());
+        let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")))
+            .join(pkg.manifest().metadata().readme.clone().unwrap());
         let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
         let mut readme = String::new();
         reader.read_to_string(&mut readme).unwrap();
@@ -266,32 +263,33 @@ fn get_release_time_yanked_downloads
     res.read_to_string(&mut body).unwrap();
     let json = Json::from_str(&body[..]).unwrap();
     let versions = try!(json.as_object()
-                            .and_then(|o| o.get("versions"))
-                            .and_then(|v| v.as_array())
-                            .ok_or("Not a JSON object"));
+        .and_then(|o| o.get("versions"))
+        .and_then(|v| v.as_array())
+        .ok_or("Not a JSON object"));
 
     let (mut release_time, mut yanked, mut downloads) = (None, None, None);
 
     for version in versions {
         let version = try!(version.as_object().ok_or("Not a JSON object"));
         let version_num = try!(version.get("num")
-                                      .and_then(|v| v.as_string())
-                                      .ok_or("Not a JSON object"));
+            .and_then(|v| v.as_string())
+            .ok_or("Not a JSON object"));
 
         if &semver::Version::parse(version_num).unwrap() == pkg.manifest().version() {
             let release_time_raw = try!(version.get("created_at")
-                                               .and_then(|c| c.as_string())
-                                               .ok_or("Not a JSON object"));
+                .and_then(|c| c.as_string())
+                .ok_or("Not a JSON object"));
             release_time = Some(time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
-                                    .unwrap()
-                                    .to_timespec());
+                .unwrap()
+                .to_timespec());
 
             yanked = Some(try!(version.get("yanked")
-                                      .and_then(|c| c.as_boolean())
-                                      .ok_or("Not a JSON object")));
+                .and_then(|c| c.as_boolean())
+                .ok_or("Not a JSON object")));
 
-            downloads = Some(try!(version.get("downloads").and_then(|c| c.as_i64())
-                                  .ok_or("Not a JSON object")) as i32);
+            downloads = Some(try!(version.get("downloads")
+                .and_then(|c| c.as_i64())
+                .ok_or("Not a JSON object")) as i32);
 
             break;
         }
@@ -302,10 +300,7 @@ fn get_release_time_yanked_downloads
 
 
 /// Adds keywords into database
-fn add_keywords_into_database(conn: &Connection,
-                              pkg: &Package,
-                              release_id: &i32)
-                              -> Result<()> {
+fn add_keywords_into_database(conn: &Connection, pkg: &Package, release_id: &i32) -> Result<()> {
     for keyword in &pkg.manifest().metadata().keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
@@ -330,10 +325,7 @@ fn add_keywords_into_database(conn: &Connection,
 
 
 /// Adds authors into database
-fn add_authors_into_database(conn: &Connection,
-                             pkg: &Package,
-                             release_id: &i32)
-                             -> Result<()> {
+fn add_authors_into_database(conn: &Connection, pkg: &Package, release_id: &i32) -> Result<()> {
 
     let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
     for author in &pkg.manifest().metadata().authors {
@@ -367,10 +359,7 @@ fn add_authors_into_database(conn: &Connection,
 
 
 /// Adds owners into database
-fn add_owners_into_database(conn: &Connection,
-                            pkg: &Package,
-                            crate_id: &i32)
-                            -> Result<()> {
+fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) -> Result<()> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
                              &pkg.manifest().name());
@@ -385,26 +374,26 @@ fn add_owners_into_database(conn: &Connection,
     let json = try!(Json::from_str(&body[..]));
 
     if let Some(owners) = json.as_object()
-                              .and_then(|j| j.get("users"))
-                              .and_then(|j| j.as_array()) {
+        .and_then(|j| j.get("users"))
+        .and_then(|j| j.as_array()) {
         for owner in owners {
             // FIXME: I know there is a better way to do this
             let avatar = owner.as_object()
-                              .and_then(|o| o.get("avatar"))
-                              .and_then(|o| o.as_string())
-                              .unwrap_or("");
+                .and_then(|o| o.get("avatar"))
+                .and_then(|o| o.as_string())
+                .unwrap_or("");
             let email = owner.as_object()
-                             .and_then(|o| o.get("email"))
-                             .and_then(|o| o.as_string())
-                             .unwrap_or("");
+                .and_then(|o| o.get("email"))
+                .and_then(|o| o.as_string())
+                .unwrap_or("");
             let login = owner.as_object()
-                             .and_then(|o| o.get("login"))
-                             .and_then(|o| o.as_string())
-                             .unwrap_or("");
+                .and_then(|o| o.get("login"))
+                .and_then(|o| o.as_string())
+                .unwrap_or("");
             let name = owner.as_object()
-                            .and_then(|o| o.get("name"))
-                            .and_then(|o| o.as_string())
-                            .unwrap_or("");
+                .and_then(|o| o.get("name"))
+                .and_then(|o| o.as_string())
+                .unwrap_or("");
 
             if login.is_empty() {
                 continue;
