@@ -5,11 +5,12 @@
 
 use std::path::{Path, PathBuf};
 use std::env;
+use std::sync::Arc;
 
 use cargo::core::{SourceId, Dependency, Registry, Source, Package, Workspace};
 use cargo::util::{CargoResult, Config, human, Filesystem};
 use cargo::sources::SourceConfigMap;
-use cargo::ops;
+use cargo::ops::{self, Packages, DefaultExecutor};
 
 
 /// Builds documentation of a crate and version.
@@ -49,7 +50,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         features: &[],
         all_features: false,
         no_default_features: false,
-        spec: &[],
+        spec: Packages::Packages(&[]),
         mode: ops::CompileMode::Doc { deps: false },
         release: false,
         message_format: ops::MessageFormat::Human,
@@ -58,9 +59,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         target_rustdoc_args: None,
     };
 
-    let ws = try!(Workspace::one(pkg, &config, Some(Filesystem::new(target_dir))));
-
-    try!(ops::compile_ws(&ws, Some(source), &opts));
+    let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir))));
+    try!(ops::compile_ws(&ws, Some(source), &opts, Arc::new(DefaultExecutor)));
 
     Ok(try!(ws.current()).clone())
 }
