@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
@@ -12,8 +12,8 @@ log = "0.3"
 rustc-serialize = "0.3"
 regex = "0.1"
 postgres = { version = "0.11", features = [ "time", "rustc-serialize" ] }
-clap = "2.14"
-crates-index-diff = "2.0.0"
+clap = "2"
+crates-index-diff = "2"
 git2 = "0.4"
 time = "0.1"
 hyper = "0.9"
@@ -21,18 +21,27 @@ semver = "0.5"
 slug = "=0.1.1"
 env_logger = "0.3"
 magic = "0.12"
-iron = "0.3.1"
-router = "0.1.1"
-staticfile = { version = "0.2.0", features = [ "cache" ] }
-handlebars-iron = "=0.15.2"
-r2d2 = "0.7.0"
-r2d2_postgres = "0.10.1"
+r2d2 = "0.7"
+r2d2_postgres = "0.10"
 url = "1.2"
-params = "0.2"
 libc = "0.2"
 hoedown = "5.0"
 badge = { version = "0", path = "src/web/badge" }
 error-chain = "0.5"
+
+# iron dependencies
+iron = "0.5"
+router = "0.5"
+handlebars-iron = "0.22"
+params = "0.6"
+
+# iron-0.5 compatible staticfile
+# TODO: WIP upstream patch: https://github.com/iron/staticfile/pull/91
+# This requires iron-test crate to be compatible with iron-0.5
+[dependencies.staticfile]
+git = "https://github.com/onur/staticfile.git"
+branch = "iron-0.5"
+features = [ "cache" ]
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"

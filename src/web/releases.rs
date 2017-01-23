@@ -437,9 +437,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 let version: String = rows.get(0).get(1);
                 let target_name: String = rows.get(0).get(2);
                 let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
-                                                    req.url.scheme,
-                                                    req.url.host,
-                                                    req.url.port,
+                                                    req.url.scheme(),
+                                                    req.url.host(),
+                                                    req.url.port(),
                                                     name,
                                                     version,
                                                     target_name)));
@@ -454,9 +454,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
             if let Some(version) = match_version(&conn, &query, None) {
                 let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                              req.url.scheme,
-                                              req.url.host,
-                                              req.url.port,
+                                              req.url.scheme(),
+                                              req.url.host(),
+                                              req.url.port(),
                                               query,
                                               version)[..]));
                 let mut resp = Response::with((status::Found, Redirect(url)));

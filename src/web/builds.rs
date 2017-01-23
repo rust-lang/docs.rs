@@ -108,7 +108,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         build_list.push(build);
     }
 
-    if req.url.path.join("/").ends_with(".json") {
+    if req.url.path().join("/").ends_with(".json") {
         use iron::status;
         use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType,
                             AccessControlAllowOrigin};

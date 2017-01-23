@@ -69,7 +69,14 @@ pub struct DatabaseFileHandler;
 impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
 
-        let path = req.url.path.clone().join("/");
+        let mut path = req.url.path().join("/");
+
+        // rustdoc javascript files are kept under rustdoc prefix
+        // i.e: search-index.js, sidebar-items.js, trait.X.js etc.
+        // FIXME: This is extremely poor implementation
+        if path.ends_with(".js") && !path.starts_with("main") && !path.starts_with("jquery") {
+            path = format!("rustdoc/{}", path);
+        }
 
         let conn = extension!(req, Pool);
         if let Some(file) = File::from_path(&conn, &path) {
