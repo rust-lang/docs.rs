@@ -101,6 +101,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             license VARCHAR(100), \
             repository_url VARCHAR(255), \
             homepage_url VARCHAR(255), \
+            documentation_url VARCHAR(255), \
             description VARCHAR(1024), \
             description_long VARCHAR(51200), \
             readme VARCHAR(51200), \
