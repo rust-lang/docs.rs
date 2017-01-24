@@ -11,8 +11,8 @@ use std::fs;
 use cargo::core::{Package, TargetKind};
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
-use hyper::client::Client;
-use hyper::header::{Accept, qitem};
+use reqwest::Client;
+use reqwest::header::{Accept, qitem};
 use semver;
 use postgres::Connection;
 use time;
@@ -255,7 +255,7 @@ fn get_release_time_yanked_downloads
                       pkg.manifest().name());
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
-    let client = Client::new();
+    let client = try!(Client::new());
     let mut res = try!(client.get(&url[..])
         .header(Accept(vec![qitem("application/json".parse().unwrap())]))
         .send());
@@ -363,7 +363,7 @@ fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) ->
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
                              &pkg.manifest().name());
-    let client = Client::new();
+    let client = try!(Client::new());
     let mut res = try!(client.get(&owners_url[..])
         .header(Accept(vec![qitem("application/json".parse().unwrap())]))
         .send());

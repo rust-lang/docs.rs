@@ -9,7 +9,7 @@ extern crate cargo;
 extern crate regex;
 extern crate rustc_serialize;
 extern crate postgres;
-extern crate hyper;
+extern crate reqwest;
 extern crate time;
 extern crate semver;
 extern crate slug;

@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
@@ -13,10 +13,10 @@ rustc-serialize = "0.3"
 regex = "0.1"
 postgres = { version = "0.11", features = [ "time", "rustc-serialize" ] }
 clap = "2"
-crates-index-diff = "2"
-git2 = "0.4"
+crates-index-diff = "3"
+git2 = "0.6"
 time = "0.1"
-hyper = "0.9"
+reqwest = "0.3"
 semver = "0.5"
 slug = "=0.1.1"
 env_logger = "0.3"
@@ -45,7 +45,7 @@ features = [ "cache" ]
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "f6500c6b6480c89492773bff6d41c4abf6c5ee15"
+rev = "2324c2bbaf7fc6ea9cbdd77c034ef1af769cb617"
 
 [dev-dependencies]
 tempdir = "0.3"

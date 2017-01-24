@@ -72,12 +72,11 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
 
     let body = {
         use std::io::Read;
-        use hyper::client::Client;
-        use hyper::header::{UserAgent, Authorization, Basic};
-        use hyper::status::StatusCode;
+        use reqwest::{Client, StatusCode};
+        use reqwest::header::{UserAgent, Authorization, Basic};
         use std::env;
 
-        let client = Client::new();
+        let client = try!(Client::new());
         let mut body = String::new();
 
         let mut resp = try!(client.get(&format!("https://api.github.com/repos/{}", path)[..])
@@ -91,7 +90,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
             }))
             .send());
 
-        if resp.status != StatusCode::Ok {
+        if resp.status() != &StatusCode::Ok {
             return Err("Failed to get github data".into());
         }
 

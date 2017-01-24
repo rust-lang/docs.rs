@@ -40,7 +40,7 @@ Vagrant.configure("2") do |config|
     # Installing docs.rs dependencies                          #
     ############################################################
     apt-get update
-    apt-get install -y --no-install-recommends cmake curl cmake gcc g++ git libmagic-dev libssl-dev
+    apt-get install -y --no-install-recommends cmake curl cmake gcc g++ git libmagic-dev libssl-dev pkg-config
 
     ############################################################
     # Installing rustc into cratesfyi-container                #
