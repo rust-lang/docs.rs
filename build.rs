@@ -1,29 +1,42 @@
 
 extern crate time;
 extern crate sass_rs;
+extern crate git2;
 
 use std::env;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
-use std::process::Command;
+use git2::Repository;
+
 
 fn main() {
-    let git_hash = match Command::new("git")
-        .args(&["log", "--pretty=format:%h", "-n", "1"])
-        .output() {
-        Ok(output) => String::from_utf8_lossy(&output.stdout).into_owned(),
-        Err(_) => "???????".to_string(),
-    };
+    write_git_version();
+    compile_sass();
+}
+
+
+fn write_git_version() {
+    let git_hash = get_git_hash().unwrap_or("???????".to_owned());
     let build_date = time::strftime("%Y-%m-%d", &time::now_utc()).unwrap();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("git_version");
     let mut file = File::create(&dest_path).unwrap();
     write!(file, "({} {})", git_hash, build_date).unwrap();
-
-    // compile style.scss
-    compile_sass();
 }
 
+
+fn get_git_hash() -> Option<String> {
+    let repo = match Repository::open(env::current_dir().unwrap()) {
+        Ok(repo) => repo,
+        Err(_) => return None,
+    };
+    let head = repo.head().unwrap();
+    head.target().map(|h| {
+        let mut h = format!("{}", h);
+        h.truncate(7);
+        h
+    })
+}
 
 
 fn compile_sass() {
