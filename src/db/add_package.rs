@@ -199,16 +199,17 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &Package) -> Result<Option<String>> {
-    if pkg.manifest().metadata().readme.is_some() {
-        let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")))
-            .join(pkg.manifest().metadata().readme.clone().unwrap());
-        let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
-        let mut readme = String::new();
-        reader.read_to_string(&mut readme).unwrap();
-        Ok(Some(readme))
-    } else {
-        Ok(None)
+    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")))
+        .join(pkg.manifest().metadata().readme.clone().unwrap_or("README.md".to_owned()));
+
+    if !readme_path.exists() {
+        return Ok(None);
     }
+
+    let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
+    let mut readme = String::new();
+    try!(reader.read_to_string(&mut readme));
+    Ok(Some(readme))
 }
 
 
