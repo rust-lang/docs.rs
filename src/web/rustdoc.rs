@@ -139,16 +139,15 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         path
     };
 
-    // don't touch anything other than html files
-    if !path.ends_with(".html") {
-        return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
-    }
-
-
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
         None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
+
+    // serve file directly if it's not html
+    if !path.ends_with(".html") {
+        return Ok(file.serve());
+    }
 
     let (mut in_head, mut in_body) = (false, false);
 
