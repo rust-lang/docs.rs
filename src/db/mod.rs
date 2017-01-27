@@ -171,6 +171,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
             date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, \
             content BYTEA \
         )",
+                   "CREATE INDEX ON releases (release_time DESC)",
                    "CREATE INDEX content_idx ON crates USING gin(content)",
                    "CREATE TABLE config ( \
             name VARCHAR(100) NOT NULL PRIMARY KEY, \
