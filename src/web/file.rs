@@ -20,7 +20,8 @@ impl File {
     /// Gets file from database
     pub fn from_path(conn: &Connection, path: &str) -> Option<File> {
 
-        let rows = conn.query("SELECT path, mime, date_added, date_updated, content FROM files \
+        let rows = conn.query("SELECT path, mime, date_added, date_updated, content
+                               FROM files
                                WHERE path = $1",
                    &[&path])
             .unwrap();

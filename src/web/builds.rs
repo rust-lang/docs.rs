@@ -72,22 +72,22 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let mut build_details = None;
 
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    for row in &ctry!(conn.query("SELECT crates.name, \
-                                   releases.version, \
-                                   releases.description, \
-                                   releases.rustdoc_status, \
-                                   releases.target_name, \
-                                   builds.id, \
-                                   builds.rustc_version, \
-                                   builds.cratesfyi_version, \
-                                   builds.build_status, \
-                                   builds.build_time, \
-                                   builds.output \
-                            FROM builds \
-                            INNER JOIN releases ON releases.id = builds.rid \
-                            INNER JOIN crates ON releases.crate_id = crates.id \
-                            WHERE crates.name = $1 AND releases.version = $2 \
-                            ORDER BY id DESC",
+    for row in &ctry!(conn.query("SELECT crates.name,
+                                         releases.version,
+                                         releases.description,
+                                         releases.rustdoc_status,
+                                         releases.target_name,
+                                         builds.id,
+                                         builds.rustc_version,
+                                         builds.cratesfyi_version,
+                                         builds.build_status,
+                                         builds.build_time,
+                                         builds.output
+                                  FROM builds
+                                  INNER JOIN releases ON releases.id = builds.rid
+                                  INNER JOIN crates ON releases.crate_id = crates.id
+                                  WHERE crates.name = $1 AND releases.version = $2
+                                  ORDER BY id DESC",
                                  &[&name, &version])) {
 
         let id: i32 = row.get(5);

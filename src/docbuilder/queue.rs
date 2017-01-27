@@ -38,9 +38,9 @@ impl DocBuilder {
     pub fn build_packages_queue(&mut self) -> Result<()> {
         let conn = try!(connect_db());
 
-        for row in &try!(conn.query("SELECT id, name, version \
-                                     FROM queue \
-                                     WHERE attempt < 5 \
+        for row in &try!(conn.query("SELECT id, name, version
+                                     FROM queue
+                                     WHERE attempt < 5
                                      ORDER BY id ASC",
                                     &[])) {
             let id: i32 = row.get(0);

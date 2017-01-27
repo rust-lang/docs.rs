@@ -97,9 +97,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // get target name
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let target_name: String =
-        ctry!(conn.query("SELECT target_name FROM releases INNER JOIN crates ON \
-                                          crates.id = releases.crate_id WHERE crates.name = $1 \
-                                          AND releases.version = $2",
+        ctry!(conn.query("SELECT target_name
+                          FROM releases
+                          INNER JOIN crates ON crates.id = releases.crate_id
+                          WHERE crates.name = $1 AND releases.version = $2",
                          &[&crate_name, &version]))
             .get(0)
             .get(0);
@@ -181,14 +182,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // content.metadata = MetaData::from_crate(&conn, &name, &version);
     let (metadata, platforms) = {
         let rows = ctry!(conn.query("SELECT crates.name,
-                                      releases.version,
-                                      releases.description,
-                                      releases.target_name,
-                                      releases.rustdoc_status,
-                                      doc_targets
-                               FROM releases
-                               INNER JOIN crates ON crates.id = releases.crate_id
-                               WHERE crates.name = $1 AND releases.version = $2",
+                                            releases.version,
+                                            releases.description,
+                                            releases.target_name,
+                                            releases.rustdoc_status,
+                                            doc_targets
+                                     FROM releases
+                                     INNER JOIN crates ON crates.id = releases.crate_id
+                                     WHERE crates.name = $1 AND releases.version = $2",
                                     &[&name, &version]));
 
         let metadata = MetaData {
@@ -233,9 +234,9 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let options = match match_version(&conn, &name, Some(&version)) {
         Some(version) => {
             let rows = ctry!(conn.query("SELECT rustdoc_status
-                                   FROM releases
-                                   INNER JOIN crates ON crates.id = releases.crate_id
-                                   WHERE crates.name = $1 AND releases.version = $2",
+                                         FROM releases
+                                         INNER JOIN crates ON crates.id = releases.crate_id
+                                         WHERE crates.name = $1 AND releases.version = $2",
                                         &[&name, &version]));
             if rows.len() > 0 && rows.get(0).get(0) {
                 BadgeOptions {

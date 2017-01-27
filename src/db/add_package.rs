@@ -47,18 +47,18 @@ pub fn add_package_into_database(conn: &Connection,
 
         if rows.len() == 0 {
             let rows = try!(conn.query("INSERT INTO releases (
-                                            crate_id, version, release_time, \
-                                            dependencies, target_name, yanked, build_status, \
-                                            rustdoc_status, test_status, license, repository_url, \
-                                            homepage_url, description, description_long, readme, \
-                                            authors, keywords, have_examples, downloads, files, \
-                                            doc_targets, is_library, doc_rustc_version, \
-                                            documentation_url \
-                                        ) \
-                                        VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10, \
-                                                 $11, $12, $13, $14, $15, $16, $17, $18, $19, \
-                                                 $20, $21, $22, $23, $24 \
-                                        ) \
+                                            crate_id, version, release_time,
+                                            dependencies, target_name, yanked, build_status,
+                                            rustdoc_status, test_status, license, repository_url,
+                                            homepage_url, description, description_long, readme,
+                                            authors, keywords, have_examples, downloads, files,
+                                            doc_targets, is_library, doc_rustc_version,
+                                            documentation_url
+                                        )
+                                        VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10,
+                                                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                                                 $20, $21, $22, $23, $24
+                                        )
                                         RETURNING id",
                                        &[&crate_id,
                                          &format!("{}", pkg.manifest().version()),
@@ -88,13 +88,29 @@ pub fn add_package_into_database(conn: &Connection,
             rows.get(0).get(0)
 
         } else {
-            try!(conn.query("UPDATE releases SET release_time = $3, dependencies = $4, \
-                             target_name = $5, yanked = $6, build_status = $7, rustdoc_status = \
-                             $8, test_status = $9, license = $10, repository_url = $11, \
-                             homepage_url = $12, description = $13, description_long = $14, \
-                             readme = $15, authors = $16, keywords = $17, have_examples = $18, \
-                             downloads = $19, files = $20, doc_targets = $21, is_library = $22, \
-                             doc_rustc_version = $23, documentation_url = $24 \
+            try!(conn.query("UPDATE releases
+                             SET release_time = $3,
+                                 dependencies = $4,
+                                 target_name = $5,
+                                 yanked = $6,
+                                 build_status = $7,
+                                 rustdoc_status = $8,
+                                 test_status = $9,
+                                 license = $10,
+                                 repository_url = $11,
+                                 homepage_url = $12,
+                                 description = $13,
+                                 description_long = $14,
+                                 readme = $15,
+                                 authors = $16,
+                                 keywords = $17,
+                                 have_examples = $18,
+                                 downloads = $19,
+                                 files = $20,
+                                 doc_targets = $21,
+                                 is_library = $22,
+                                 doc_rustc_version = $23,
+                                 documentation_url = $24
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
@@ -162,10 +178,11 @@ pub fn add_build_into_database(conn: &Connection,
                                res: &ChrootBuilderResult)
                                -> Result<i32> {
     debug!("Adding build into database");
-    let rows = try!(conn.query("INSERT INTO builds (rid, rustc_version, cratesfyi_version, \
-                                build_status, output)
-                                VALUES \
-                                ($1, $2, $3, $4, $5) RETURNING id",
+    let rows = try!(conn.query("INSERT INTO builds (rid, rustc_version,
+                                                    cratesfyi_version,
+                                                    build_status, output)
+                                VALUES ($1, $2, $3, $4, $5)
+                                RETURNING id",
                                &[release_id,
                                  &res.rustc_version,
                                  &res.cratesfyi_version,
@@ -343,7 +360,7 @@ fn add_authors_into_database(conn: &Connection, pkg: &Package, release_id: &i32)
                 if rows.len() > 0 {
                     rows.get(0).get(0)
                 } else {
-                    try!(conn.query("INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3) \
+                    try!(conn.query("INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)
                                      RETURNING id",
                                     &[&author, &email, &slug]))
                         .get(0)
@@ -408,8 +425,9 @@ fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) ->
                 if rows.len() > 0 {
                     rows.get(0).get(0)
                 } else {
-                    try!(conn.query("INSERT INTO owners (login, avatar, name, email) VALUES ($1, \
-                                     $2, $3, $4) RETURNING id",
+                    try!(conn.query("INSERT INTO owners (login, avatar, name, email)
+                                     VALUES ($1, $2, $3, $4)
+                                     RETURNING id",
                                     &[&login, &avatar, &name, &email]))
                         .get(0)
                         .get(0)

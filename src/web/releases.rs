@@ -80,30 +80,30 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
     //       repeats for queries. There is definitely room for improvements.
     let query = match order {
         Order::ReleaseTime => {
-            "SELECT crates.name, \
-                                      releases.version, \
-                                      releases.description, \
-                                      releases.target_name, \
-                                      releases.release_time, \
-                                      releases.rustdoc_status, \
-                                      crates.github_stars \
-                               FROM crates \
-                               INNER JOIN releases ON crates.id = releases.crate_id \
-                               ORDER BY releases.release_time DESC \
-                               LIMIT $1 OFFSET $2"
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.release_time,
+                    releases.rustdoc_status,
+                    crates.github_stars
+             FROM crates
+             INNER JOIN releases ON crates.id = releases.crate_id
+             ORDER BY releases.release_time DESC
+             LIMIT $1 OFFSET $2"
         }
         Order::GithubStars => {
-            "SELECT crates.name, \
-                                      releases.version, \
-                                      releases.description, \
-                                      releases.target_name, \
-                                      releases.release_time, \
-                                      releases.rustdoc_status, \
-                                      crates.github_stars \
-                               FROM crates \
-                               INNER JOIN releases ON releases.id = crates.latest_version_id \
-                               ORDER BY crates.github_stars DESC \
-                               LIMIT $1 OFFSET $2"
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.release_time,
+                    releases.rustdoc_status,
+                    crates.github_stars
+             FROM crates
+             INNER JOIN releases ON releases.id = crates.latest_version_id
+             ORDER BY crates.github_stars DESC
+             LIMIT $1 OFFSET $2"
         }
     };
 
@@ -233,17 +233,17 @@ fn get_search_results(conn: &Connection,
     let offset = (page - 1) * limit;
     let mut packages = Vec::new();
 
-    let rows = match conn.query("SELECT crates.name, \
-                                   releases.version, \
-                                   releases.description, \
-                                   releases.target_name, \
-                                   releases.release_time, \
-                                   releases.rustdoc_status, \
-                                   ts_rank_cd(crates.content, to_tsquery($1)) AS rank \
-                                 FROM crates \
-                                 INNER JOIN releases ON crates.latest_version_id = releases.id \
-                                 WHERE crates.content @@ to_tsquery($1) \
-                                 ORDER BY rank DESC \
+    let rows = match conn.query("SELECT crates.name,
+                                   releases.version,
+                                   releases.description,
+                                   releases.target_name,
+                                   releases.release_time,
+                                   releases.rustdoc_status,
+                                   ts_rank_cd(crates.content, to_tsquery($1)) AS rank
+                                 FROM crates
+                                 INNER JOIN releases ON crates.latest_version_id = releases.id
+                                 WHERE crates.content @@ to_tsquery($1)
+                                 ORDER BY rank DESC
                                  LIMIT $2 OFFSET $3",
                                 &[&query, &limit, &offset]) {
         Ok(r) => r,
@@ -420,16 +420,16 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
             // redirect to a random crate if query is empty
             if query.is_empty() {
-                let rows = ctry!(conn.query("SELECT crates.name, \
-                                               releases.version, \
-                                               releases.target_name \
-                                        FROM crates \
-                                        INNER JOIN releases
-                                              ON crates.latest_version_id = releases.id \
-                                        WHERE github_stars >= 100 AND rustdoc_status = true \
-                                        OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
+                let rows = ctry!(conn.query("SELECT crates.name,
+                                                    releases.version,
+                                                    releases.target_name
+                                             FROM crates
+                                             INNER JOIN releases
+                                                   ON crates.latest_version_id = releases.id
+                                             WHERE github_stars >= 100 AND rustdoc_status = true
+                                             OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
                                             &[]));
-                //                ~~~~~~^
+                //                                        ~~~~~~^
                 // FIXME: This is a fast query but using a constant
                 //        There are currently 280 crates with docs and 100+
                 //        starts. This should be fine for a while.
