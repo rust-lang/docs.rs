@@ -4,7 +4,7 @@ pub use self::add_package::add_package_into_database;
 pub use self::add_package::add_build_into_database;
 pub use self::file::add_path_into_database;
 
-use postgres::{Connection, SslMode};
+use postgres::{Connection, TlsMode};
 use postgres::error::{Error, ConnectError};
 use std::env;
 use r2d2;
@@ -19,7 +19,7 @@ pub fn connect_db() -> Result<Connection, ConnectError> {
     // FIXME: unwrap might not be the best here
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
-    Connection::connect(&db_url[..], SslMode::None)
+    Connection::connect(&db_url[..], TlsMode::None)
 }
 
 
@@ -28,7 +28,7 @@ pub fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
     let config = r2d2::Config::default();
     let manager = r2d2_postgres::PostgresConnectionManager::new(&db_url[..],
-                                                                r2d2_postgres::SslMode::None)
+                                                                r2d2_postgres::TlsMode::None)
         .expect("Failed to create PostgresConnectionManager");
     r2d2::Pool::new(config, manager).expect("Failed to create r2d2 pool")
 }
