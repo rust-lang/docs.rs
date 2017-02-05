@@ -1,5 +1,6 @@
 
 use ChrootBuilderResult;
+use Metadata;
 use utils::source_path;
 use regex::Regex;
 
@@ -40,6 +41,7 @@ pub fn add_package_into_database(conn: &Connection,
         &TargetKind::Lib(_) => true,
         _ => false,
     };
+    let metadata = Metadata::from_package(pkg);
 
     let release_id: i32 = {
         let rows = try!(conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
@@ -53,11 +55,11 @@ pub fn add_package_into_database(conn: &Connection,
                                             homepage_url, description, description_long, readme,
                                             authors, keywords, have_examples, downloads, files,
                                             doc_targets, is_library, doc_rustc_version,
-                                            documentation_url
+                                            documentation_url, default_target
                                         )
                                         VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10,
                                                  $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                                                 $20, $21, $22, $23, $24
+                                                 $20, $21, $22, $23, $24, $25
                                         )
                                         RETURNING id",
                                        &[&crate_id,
@@ -83,7 +85,8 @@ pub fn add_package_into_database(conn: &Connection,
                                          &doc_targets.to_json(),
                                          &is_library,
                                          &res.rustc_version,
-                                         &pkg.manifest().metadata().documentation]));
+                                         &pkg.manifest().metadata().documentation,
+                                         &metadata.default_target]));
             // return id
             rows.get(0).get(0)
 
@@ -110,7 +113,8 @@ pub fn add_package_into_database(conn: &Connection,
                                  doc_targets = $21,
                                  is_library = $22,
                                  doc_rustc_version = $23,
-                                 documentation_url = $24
+                                 documentation_url = $24,
+                                 default_target = $25
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", pkg.manifest().version()),
@@ -135,7 +139,8 @@ pub fn add_package_into_database(conn: &Connection,
                               &doc_targets.to_json(),
                               &is_library,
                               &res.rustc_version,
-                              &pkg.manifest().metadata().documentation]));
+                              &pkg.manifest().metadata().documentation,
+                              &metadata.default_target]));
             rows.get(0).get(0)
         }
     };
