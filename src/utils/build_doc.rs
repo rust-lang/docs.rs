@@ -59,7 +59,10 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         release: false,
         message_format: ops::MessageFormat::Human,
         filter: ops::CompileFilter::new(true, &[], &[], &[], &[]),
-        target_rustc_args: metadata.rustc_args.as_ref().map(Vec::as_slice),
+        // FIXME: cargo is ignoring target_rustdoc_args if rustc_args set.
+        //        I believe this is expected behavior when building docs but I am not sure.
+        //        This needs to be investigated.
+        target_rustc_args: None,
         target_rustdoc_args: metadata.rustdoc_args.as_ref().map(Vec::as_slice),
     };
 
