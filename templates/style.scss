@@ -50,16 +50,12 @@ html, button, input, select, textarea,
 // rustdoc overrides
 div.rustdoc {
     font-family: $font-family-serif;
-    padding: 0 1em;
-
-    @media #{$media-sm} {
-        padding-left: 0;
-    }
+    padding: 10px 15px 20px 15px;
 }
 
 .sidebar {
-    top: 160px;
-    left: auto;
+    top: 34px;
+    left: 0;
 }
 
 body {
@@ -100,6 +96,11 @@ pre {
 div.container {
     max-width: 1160px;
     margin: 0 auto;
+    text-align: left;
+}
+
+div.container-rustdoc {
+    max-width: 1200px;
     text-align: left;
 }
 
@@ -150,6 +151,15 @@ div.nav-container {
         margin-left: -1px;
         li {
             border-left: none;
+        }
+    }
+
+    div.rustdoc-navigation {
+        span.title {
+            display: none;
+            @media #{$media-sm} {
+                display: inline;
+            }
         }
     }
 }
@@ -495,6 +505,9 @@ div.cratesfyi-package-container {
             text-overflow: ellipsis;
         }
     }
+    div.description-in-rustdoc {
+        padding: 10px 0 10px 14px;
+    }
 
     .pure-menu {
         margin-bottom: -1px;
@@ -553,6 +566,10 @@ div.cratesfyi-package-container {
             display: inline-block;
         }
     }
+}
+
+div.cratesfyi-package-container-rustdoc {
+    margin-bottom: 10px;
 }
 
 
