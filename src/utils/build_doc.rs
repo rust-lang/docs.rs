@@ -59,7 +59,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         target_rustdoc_args: None,
     };
 
-    let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir))));
+    let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
     try!(ops::compile_ws(&ws, Some(source), &opts, Arc::new(DefaultExecutor)));
 
     Ok(try!(ws.current()).clone())
