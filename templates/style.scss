@@ -93,6 +93,10 @@ body {
     font: 16px/1.4 $font-family-sans;
 }
 
+pre {
+    overflow: auto;
+}
+
 div.container {
     max-width: 1160px;
     margin: 0 auto;
