@@ -445,11 +445,11 @@ fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
     let captures = version_regex.captures(version.as_ref()).expect("Failed to parse rustc version");
 
     format!("{}{}{}-{}-{}",
-            captures.at(3).unwrap(),
-            captures.at(4).unwrap(),
-            captures.at(5).unwrap(),
-            captures.at(1).unwrap(),
-            captures.at(2).unwrap())
+            captures.get(3).unwrap().as_str(),
+            captures.get(4).unwrap().as_str(),
+            captures.get(5).unwrap().as_str(),
+            captures.get(1).unwrap().as_str(),
+            captures.get(2).unwrap().as_str())
 }
 
 

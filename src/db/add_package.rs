@@ -351,8 +351,8 @@ fn add_authors_into_database(conn: &Connection, pkg: &Package, release_id: &i32)
     let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
     for author in &pkg.manifest().metadata().authors {
         if let Some(author_captures) = author_capture_re.captures(&author[..]) {
-            let author = author_captures.at(1).unwrap_or("").trim();
-            let email = author_captures.at(2).unwrap_or("").trim();
+            let author = author_captures.get(1).map(|m| m.as_str()).unwrap_or("").trim();
+            let email = author_captures.get(2).map(|m| m.as_str()).unwrap_or("").trim();
             let slug = slugify(&author);
 
             let author_id: i32 = {

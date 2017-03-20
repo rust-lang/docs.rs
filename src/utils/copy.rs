@@ -110,7 +110,7 @@ fn copy_html(source: &PathBuf,
         let mut line = try!(line);
 
         // replace css links
-        line = replace_regex.replace_all(&line[..], &replace_str[..]);
+        line = replace_regex.replace_all(&line[..], &replace_str[..]).into_owned();
 
         try!(destination_file.write(line.as_bytes()));
         // need to write consumed newline

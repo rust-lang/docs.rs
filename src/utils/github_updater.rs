@@ -122,8 +122,8 @@ fn get_github_path(url: &str) -> Option<String> {
     let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
     match re.captures(url) {
         Some(cap) => {
-            let username = cap.at(1).unwrap();
-            let reponame = cap.at(2).unwrap();
+            let username = cap.get(1).unwrap().as_str();
+            let reponame = cap.get(2).unwrap().as_str();
             Some(format!("{}/{}",
                          username,
                          if reponame.ends_with(".git") {
