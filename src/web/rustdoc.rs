@@ -4,6 +4,7 @@
 use super::pool::Pool;
 use super::file::File;
 use super::MetaData;
+use super::latest_version;
 use iron::prelude::*;
 use iron::{status, Url};
 use iron::modifiers::Redirect;
@@ -180,13 +181,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // content.metadata = MetaData::from_crate(&conn, &name, &version);
-    let (metadata, platforms) = {
+    let (metadata, platforms, latest_version) = {
         let rows = ctry!(conn.query("SELECT crates.name,
                                             releases.version,
                                             releases.description,
                                             releases.target_name,
                                             releases.rustdoc_status,
-                                            doc_targets
+                                            doc_targets,
+                                            crates.versions
                                      FROM releases
                                      INNER JOIN crates ON crates.id = releases.crate_id
                                      WHERE crates.name = $1 AND releases.version = $2",
@@ -200,7 +202,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             rustdoc_status: rows.get(0).get(4),
         };
         let platforms: Json = rows.get(0).get(5);
-        (Some(metadata), platforms)
+        let versions = rows.get(0).get(6);
+        (Some(metadata), platforms, latest_version(&versions, &version))
     };
 
     content.metadata = metadata;
@@ -210,6 +213,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
+        .set_bool("is_latest_version", latest_version.is_none())
+        .set("latest_version", &latest_version.unwrap_or(String::new()))
         .to_resp("rustdoc")
 }
 

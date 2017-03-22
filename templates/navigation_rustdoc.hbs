@@ -11,6 +11,11 @@
             <li class="pure-menu-item">
               <a href="/crate/{{name}}/{{version}}" class="pure-menu-link" title="{{description}}"><i class="fa fa-fw fa-cube"></i><span class="title"> {{name}}-{{version}}</span></a>
             </li>
+            {{#unless ../../varsb.is_latest_version}}
+            <li class="pure-menu-item">
+              <a href="/{{name}}/{{../../varss.latest_version}}" class="pure-menu-link warn" title="You are seeing an outdated version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> Go to latest version</span></a>
+            </li>
+            {{/unless}}
             <li class="pure-menu-item">
               <a href="/crate/{{name}}/{{version}}/source/" title="Browse source of {{name}}-{{version}}" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a>
             </li>

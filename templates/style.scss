@@ -154,6 +154,15 @@ div.nav-container {
         }
     }
 
+    // used for latest version warning
+    .warn {
+        color: $color-type;
+    }
+
+    .warn:hover {
+        color: darken($color-type, 10%);
+    }
+
     div.rustdoc-navigation {
         span.title {
             display: none;
