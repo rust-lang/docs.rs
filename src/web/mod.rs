@@ -303,28 +303,21 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
 
 
 
-/// Wrapper around the pulldown-cmark parser and renderer to render markdown
+/// Wrapper around the Markdown parser and renderer to render markdown
 fn render_markdown(text: &str) -> String {
-    use hoedown::{Markdown, Html, Render, Extension};
-    use hoedown::renderer::html;
+    use comrak::{markdown_to_html, ComrakOptions};
 
-    let extensions = {
-        use hoedown::{FENCED_CODE, FOOTNOTES, SUPERSCRIPT, TABLES, AUTOLINK, NO_INTRA_EMPHASIS};
-
-        let mut extensions = Extension::empty();
-        extensions.insert(FENCED_CODE);
-        extensions.insert(FOOTNOTES);
-        extensions.insert(SUPERSCRIPT);
-        extensions.insert(TABLES);
-        extensions.insert(AUTOLINK);
-        extensions.insert(NO_INTRA_EMPHASIS);
-
-        extensions
+    let options = {
+        let mut options = ComrakOptions::default();
+        options.ext_superscript = true;
+        options.ext_table = true;
+        options.ext_autolink = true;
+        options.ext_tasklist = true;
+        options.ext_strikethrough = true;
+        options
     };
 
-    let doc = Markdown::new(text).extensions(extensions);
-    let mut html = Html::new(html::Flags::empty(), 0);
-    html.render(&doc).to_str().unwrap().to_owned()
+    markdown_to_html(text, &options)
 }
 
 
