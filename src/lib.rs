@@ -18,7 +18,7 @@ extern crate iron;
 extern crate router;
 extern crate staticfile;
 extern crate handlebars_iron;
-extern crate hoedown;
+extern crate comrak;
 extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate url;
