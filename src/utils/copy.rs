@@ -100,8 +100,12 @@ fn copy_html(source: &PathBuf,
 
     let reader = io::BufReader::new(source_file);
 
-    let replace_regex = Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc|playpen)\.(css|js)""#)
-        .unwrap();
+    // FIXME: We don't need to store common libraries (jquery and normalize) for the each version
+    //        of rustc. I believe storing only one version of this files should work in every
+    //        documentation page.
+    let replace_regex =
+        Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc|playpen|normalize)\.(css|js)""#)
+            .unwrap();
     let replace_str = format!("$1=\"{}../../$2$3-{}.$4\"",
                               if target { "../" } else { "" },
                               rustc_version);
