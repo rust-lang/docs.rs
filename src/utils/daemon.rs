@@ -13,7 +13,7 @@ use libc::fork;
 use time;
 use DocBuilderOptions;
 use DocBuilder;
-use utils::{update_sources, update_release_activity, github_updater};
+use utils::{update_sources, update_release_activity, github_updater, pubsubhubbub};
 use db::{connect_db, update_search_index};
 
 
@@ -94,8 +94,16 @@ pub fn start_daemon() {
             // This only panicked twice in the last 6 months but its just a better
             // idea to do this.
             let res = thread::spawn(move || {
-                    if let Err(e) = doc_builder.build_packages_queue() {
-                        error!("Failed build new crates: {}", e);
+                    match doc_builder.build_packages_queue() {
+                        Err(e) => error!("Failed build new crates: {}", e),
+                        Ok(n) => {
+                            if n > 0 {
+                                match pubsubhubbub::ping_hubs() {
+                                    Err(e) => error!("Failed to ping hub: {}", e),
+                                    Ok(n) => debug!("Succesfully pinged {} hubs", n)
+                                }
+                            }
+                        }
                     }
 
                     if let Err(e) = doc_builder.save_cache() {

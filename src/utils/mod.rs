@@ -12,3 +12,4 @@ mod build_doc;
 mod copy;
 mod release_activity_updater;
 mod daemon;
+mod pubsubhubbub;
