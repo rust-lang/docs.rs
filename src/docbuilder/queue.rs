@@ -35,8 +35,9 @@ impl DocBuilder {
 
 
     /// Builds packages from queue
-    pub fn build_packages_queue(&mut self) -> Result<()> {
+    pub fn build_packages_queue(&mut self) -> Result<usize> {
         let conn = try!(connect_db());
+        let mut build_count = 0;
 
         for row in &try!(conn.query("SELECT id, name, version
                                      FROM queue
@@ -49,6 +50,7 @@ impl DocBuilder {
 
             match self.build_package(&name[..], &version[..]) {
                 Ok(_) => {
+                    build_count += 1;
                     let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
                 }
                 Err(e) => {
@@ -63,7 +65,7 @@ impl DocBuilder {
             }
         }
 
-        Ok(())
+        Ok(build_count)
     }
 }
 
