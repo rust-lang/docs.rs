@@ -54,7 +54,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         mode: ops::CompileMode::Doc { deps: false },
         release: false,
         message_format: ops::MessageFormat::Human,
-        filter: ops::CompileFilter::new(true, &[], &[], &[], &[]),
+        filter: ops::CompileFilter::new(true,
+                                        &[], false,
+                                        &[], false,
+                                        &[], false,
+                                        &[], false),
         target_rustc_args: None,
         target_rustdoc_args: None,
     };

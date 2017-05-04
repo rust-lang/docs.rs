@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
@@ -15,7 +15,7 @@ clap = "2"
 crates-index-diff = "3"
 git2 = "0.6"
 time = "0.1"
-reqwest = "0.4"
+reqwest = "0.5"
 semver = "0.6"
 slug = "=0.1.1"
 env_logger = "0.4"
@@ -26,7 +26,7 @@ url = "1.4"
 libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
 error-chain = "0.5"
-comrak = { version = "0.1.3", default-features = false }
+comrak = { version = "0.1", default-features = false }
 
 # iron dependencies
 iron = "0.5"
@@ -37,7 +37,7 @@ staticfile = { version = "0.4", features = [ "cache" ] }
 
 [dependencies.cargo]
 git = "https://github.com/rust-lang/cargo.git"
-rev = "bb1472e02d2384052348ff5ff2357be0ded9442d"
+rev = "9fe7f07579d6d2672dd7e95c70adaea65d8e9a2e"
 
 [dependencies.postgres]
 version = "0.14"
