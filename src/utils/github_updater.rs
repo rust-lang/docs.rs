@@ -2,7 +2,7 @@
 use ::db::connect_db;
 use regex::Regex;
 use time;
-use errors::*;
+use error::Result;
 
 
 

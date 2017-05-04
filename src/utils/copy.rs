@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::fs;
-use errors::*;
+use error::Result;
 
 use regex::Regex;
 

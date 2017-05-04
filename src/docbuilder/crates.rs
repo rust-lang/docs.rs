@@ -4,7 +4,7 @@ use std::io::BufReader;
 use std::fs;
 use std::path::PathBuf;
 use rustc_serialize::json::Json;
-use errors::*;
+use error::Result;
 
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
