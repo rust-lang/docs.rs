@@ -16,9 +16,7 @@ use reqwest::header::{Accept, qitem};
 use semver;
 use postgres::Connection;
 use time;
-
-use errors::*;
-
+use error::Result;
 
 
 /// Adds a package into database.

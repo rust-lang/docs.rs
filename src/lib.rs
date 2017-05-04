@@ -33,7 +33,7 @@ pub use self::docbuilder::ChrootBuilderResult;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::web::start_web_server;
 
-pub mod errors;
+pub mod error;
 pub mod db;
 pub mod utils;
 mod docbuilder;

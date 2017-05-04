@@ -3,7 +3,7 @@
 
 use super::DocBuilder;
 use db::connect_db;
-use errors::*;
+use error::Result;
 use crates_index_diff::{ChangeKind, Index};
 
 

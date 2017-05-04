@@ -10,24 +10,14 @@ use git2;
 
 
 error_chain! {
-    types {
-        Error, ErrorKind, ChainErr, Result;
-    }
-
-    links {
-    }
-
     foreign_links {
-        io::Error, IoError;
-        json::BuilderError, JsonBuilderError;
-        postgres::error::ConnectError, PostgresConnectError;
-        postgres::error::Error, PostgresError;
-        reqwest::Error, ReqwestError;
-        git2::Error, Git2Error;
-        MagicError, MagicError;
-        Box<cargo::CargoError>, CargoError;
-    }
-
-    errors {
+        IoError(io::Error);
+        JsonBuilderError(json::BuilderError);
+        PostgresConnectError(postgres::error::ConnectError);
+        PostgresError(postgres::error::Error);
+        ReqwestError(reqwest::Error);
+        Git2Error(git2::Error);
+        MagicError(MagicError);
+        CargoError(Box<cargo::CargoError>);
     }
 }

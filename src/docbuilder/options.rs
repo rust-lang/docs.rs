@@ -2,7 +2,7 @@
 
 use std::{env, fmt};
 use std::path::PathBuf;
-use errors::*;
+use error::Result;
 
 
 #[derive(Clone)]

@@ -13,7 +13,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::collections::BTreeSet;
 use DocBuilderOptions;
-use errors::*;
+use error::Result;
 
 
 /// chroot based documentation builder

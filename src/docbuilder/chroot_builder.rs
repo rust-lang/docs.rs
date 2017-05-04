@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 use std::path::PathBuf;
 use postgres::Connection;
 use rustc_serialize::json::Json;
-use errors::*;
+use error::Result;
 use regex::Regex;
 
 

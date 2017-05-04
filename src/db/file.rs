@@ -10,7 +10,7 @@ use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
 use std::io::Read;
-use errors::*;
+use error::Result;
 
 
 
