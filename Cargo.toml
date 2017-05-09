@@ -43,6 +43,10 @@ rev = "9fe7f07579d6d2672dd7e95c70adaea65d8e9a2e"
 version = "0.14"
 features = [ "with-time", "with-rustc-serialize" ]
 
+[replace."rusttype:0.2.1"]
+git = "https://github.com/onur/rusttype.git"
+rev = "2c0b58a4017c1387b0bb621def92541eba256381"
+
 [dev-dependencies]
 tempdir = "0.3"
 
