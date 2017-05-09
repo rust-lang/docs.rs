@@ -1,6 +1,6 @@
 [root]
 name = "cratesfyi"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "badge 0.1.1",
  "cargo 0.20.0 (git+https://github.com/rust-lang/cargo.git?rev=9fe7f07579d6d2672dd7e95c70adaea65d8e9a2e)",

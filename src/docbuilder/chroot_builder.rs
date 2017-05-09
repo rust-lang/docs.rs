@@ -368,7 +368,7 @@ impl DocBuilder {
         info!("Copying essential files for: {}", res.rustc_version);
 
         let files = (// files require rustc version subfix
-                     ["rustdoc.css", "main.css", "main.js", "jquery.js", "normalize.css"],
+                     ["rustdoc.css", "main.css", "main.js", "normalize.css"],
                      // files doesn't require rustc version subfix
                      ["FiraSans-Medium.woff",
                       "FiraSans-Regular.woff",
