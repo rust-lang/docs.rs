@@ -54,9 +54,8 @@ div.rustdoc {
 }
 
 .sidebar {
-    top: 34px;
+    top: 32px;
     left: 0;
-    z-index: -1;
 }
 
 body {
@@ -106,6 +105,7 @@ div.container-rustdoc {
 }
 
 div.nav-container {
+    height: 32px;
     border-bottom: 1px solid $color-border;
 
     li {
@@ -113,11 +113,11 @@ div.nav-container {
     }
 
     .pure-menu-has-children>.pure-menu-link:after {
-        font-size: 14px;
+        font-size: 0.8em;
     }
 
     a {
-        font-size: 14px;
+        font-size: 0.8em;
         font-weight: 400;
     }
 
@@ -132,10 +132,10 @@ div.nav-container {
             max-width: 200px;
             border: none;
             margin: 0 1em 0 0;
-            font-size: 14px;
+            font-size: 0.8em;
             text-align: right;
             box-shadow: none;
-            height: 33px;
+            height: 32px;
             display: none;
             @media #{$media-sm} {
                 display: block;
