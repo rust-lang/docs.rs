@@ -40,8 +40,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
                    .unwrap_or(Err(human("PKG download error"))));
 
     let current_dir = try!(env::current_dir());
-    let target_dir = PathBuf::from(current_dir)
-        .join(format!("{}-{}", pkg.manifest().name(), pkg.manifest().version()));
+    let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
     let opts = ops::CompileOptions {
         config: &config,
