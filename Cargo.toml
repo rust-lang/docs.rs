@@ -1,6 +1,6 @@
 [package]
 name = "cratesfyi"
-version = "0.3.4"
+version = "0.4.0-dev"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
