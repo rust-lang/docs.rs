@@ -12,6 +12,8 @@ use cargo::util::{CargoResult, Config, human, Filesystem};
 use cargo::sources::SourceConfigMap;
 use cargo::ops::{self, Packages, DefaultExecutor};
 
+use Metadata;
+
 
 /// Builds documentation of a crate and version.
 ///
@@ -43,13 +45,15 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
     let target_dir = PathBuf::from(current_dir)
         .join(format!("{}-{}", pkg.manifest().name(), pkg.manifest().version()));
 
+    let metadata = Metadata::from_package(&pkg);
+
     let opts = ops::CompileOptions {
         config: &config,
         jobs: None,
         target: target,
-        features: &[],
-        all_features: false,
-        no_default_features: false,
+        features: &metadata.features.unwrap_or(Vec::new()),
+        all_features: metadata.all_features,
+        no_default_features: metadata.no_default_features,
         spec: Packages::Packages(&[]),
         mode: ops::CompileMode::Doc { deps: false },
         release: false,
@@ -59,8 +63,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
                                         &[], false,
                                         &[], false,
                                         &[], false),
+        // FIXME: cargo is ignoring target_rustdoc_args if rustc_args set.
+        //        I believe this is expected behavior when building docs but I am not sure.
+        //        This needs to be investigated.
         target_rustc_args: None,
-        target_rustdoc_args: None,
+        target_rustdoc_args: metadata.rustdoc_args.as_ref().map(Vec::as_slice),
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));

@@ -1,5 +1,6 @@
 
 pub mod options;
+pub mod metadata;
 mod chroot_builder;
 mod crates;
 mod queue;

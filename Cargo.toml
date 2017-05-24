@@ -27,6 +27,7 @@ libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
 error-chain = "0.10"
 comrak = { version = "0.1", default-features = false }
+toml = "0.4"
 
 # iron dependencies
 iron = "0.5"
