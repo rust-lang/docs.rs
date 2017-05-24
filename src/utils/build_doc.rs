@@ -123,8 +123,10 @@ mod test {
         let doc = build_doc("rand", None, None);
         assert!(doc.is_ok());
 
-        let doc = doc.unwrap();
-        remove_dir_all(format!("{}-{}", doc.manifest().name(), doc.manifest().version())).unwrap();
+        let root_path = Path::new("cratesfyi");
+        assert!(root_path.join("doc").join("rand").exists());
+
+        remove_dir_all(root_path).unwrap();
 
         let doc = build_doc("SOMECRATEWICHWILLBENVEREXISTS", None, None);
         assert!(doc.is_err());
