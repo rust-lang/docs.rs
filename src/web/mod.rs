@@ -471,18 +471,13 @@ mod test {
 
     #[test]
     fn test_latest_version() {
-        let json = r#"
-        [
-            "1.0.0",
-            "1.1.0",
-            "0.9.0",
-            "0.9.1"
-        ]
-        "#;
-        let json = Json::from_str(json).unwrap();
-        assert_eq!(latest_version(&json, "1.1.0"), None);
-        assert_eq!(latest_version(&json, "1.0.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&json, "0.9.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&json, "invalidversion"), None);
+        let versions = vec!["1.0.0".to_string(),
+                            "1.1.0".to_string(),
+                            "0.9.0".to_string(),
+                            "0.9.1".to_string()];
+        assert_eq!(latest_version(&versions, "1.1.0"), None);
+        assert_eq!(latest_version(&versions, "1.0.0"), Some("1.1.0".to_owned()));
+        assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
+        assert_eq!(latest_version(&versions, "invalidversion"), None);
     }
 }
