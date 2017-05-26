@@ -45,6 +45,8 @@ pub struct CrateDetails {
     metadata: MetaData,
     is_library: bool,
     doc_targets: Option<Json>,
+    license: Option<String>,
+    documentation_url: Option<String>,
 }
 
 
@@ -81,6 +83,8 @@ impl ToJson for CrateDetails {
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.insert("is_library".to_string(), self.is_library.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
+        m.insert("license".to_string(), self.license.to_json());
+        m.insert("documentation_url".to_string(), self.documentation_url.to_json());
         m.to_json()
     }
 }
@@ -112,7 +116,9 @@ impl CrateDetails {
                             crates.github_forks,
                             crates.github_issues,
                             releases.is_library,
-                            releases.doc_targets
+                            releases.doc_targets,
+                            releases.license,
+                            releases.documentation_url
                      FROM releases
                      INNER JOIN crates ON releases.crate_id = crates.id
                      WHERE crates.name = $1 AND releases.version = $2;";
@@ -180,6 +186,8 @@ impl CrateDetails {
             metadata: metadata,
             is_library: rows.get(0).get(21),
             doc_targets: rows.get(0).get(22),
+            license: rows.get(0).get(23),
+            documentation_url: rows.get(0).get(24),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
