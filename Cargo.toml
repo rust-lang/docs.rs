@@ -36,8 +36,8 @@ params = "0.6"
 staticfile = { version = "0.4", features = [ "cache" ] }
 
 [dependencies.cargo]
-git = "https://github.com/rust-lang/cargo.git"
-rev = "9fe7f07579d6d2672dd7e95c70adaea65d8e9a2e"
+git = "https://github.com/onur/cargo.git"
+branch = "docs.rs"
 
 [dependencies.postgres]
 version = "0.14"
