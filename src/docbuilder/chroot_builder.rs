@@ -206,7 +206,6 @@ impl DocBuilder {
                           package.manifest().name(),
                           package.manifest().version()))
             .join(target.unwrap_or(""));
-        println!("CRATE DOC PATH {:?}", crate_doc_path);
         copy_doc_dir(crate_doc_path,
                      destination,
                      parse_rustc_version(rustc_version).trim(),
