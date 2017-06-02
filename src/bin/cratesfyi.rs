@@ -50,13 +50,18 @@ pub fn main() {
                 .takes_value(true))
             .arg(Arg::with_name("CHROOT_PATH")
                 .short("c")
-                .long("chroot")
+                .long("chroot-path")
                 .help("Sets chroot path")
                 .takes_value(true))
             .arg(Arg::with_name("CHROOT_USER")
                 .short("u")
                 .long("chroot-user")
                 .help("Sets chroot user name")
+                .takes_value(true))
+            .arg(Arg::with_name("CONTAINER_NAME")
+                .short("n")
+                .long("container-name")
+                .help("Sets name of the container")
                 .takes_value(true))
             .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
                 .long("crates-io-index-path")
@@ -93,7 +98,8 @@ pub fn main() {
                                                               building new crates"))
             .subcommand(SubCommand::with_name("unlock")
                 .about("Unlocks cratesfyi daemon to continue \
-                                                              building new crates")))
+                                                              building new crates"))
+            .subcommand(SubCommand::with_name("print-options")))
         .subcommand(SubCommand::with_name("start-web-server")
             .about("Starts web server")
             .arg(Arg::with_name("SOCKET_ADDR")
@@ -158,6 +164,10 @@ pub fn main() {
                 docbuilder_opts.chroot_user = chroot_user.to_string();
             }
 
+            if let Some(container_name) = matches.value_of("CONTAINER_NAME") {
+                docbuilder_opts.container_name = container_name.to_string();
+            }
+
             if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
                 docbuilder_opts.crates_io_index_path = PathBuf::from(crates_io_index_path);
             }
@@ -189,6 +199,8 @@ pub fn main() {
             docbuilder.lock().expect("Failed to lock");
         } else if let Some(_) = matches.subcommand_matches("unlock") {
             docbuilder.unlock().expect("Failed to unlock");
+        } else if let Some(_) = matches.subcommand_matches("print-options") {
+            println!("{:?}", docbuilder.options());
         }
 
     } else if let Some(matches) = matches.subcommand_matches("database") {

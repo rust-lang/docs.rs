@@ -108,4 +108,9 @@ impl DocBuilder {
         }
         Ok(())
     }
+
+    /// Returns a reference of options
+    pub fn options(&self) -> &DocBuilderOptions {
+        &self.options
+    }
 }
