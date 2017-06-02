@@ -43,6 +43,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
     let target_dir = PathBuf::from(current_dir)
         .join(format!("{}-{}", pkg.manifest().name(), pkg.manifest().version()));
 
+    let playpen_args = ["--playground-url".to_string(), "https://play.rust-lang.org/".to_string(),
+                        "-Zunstable-options".to_string()];
     let opts = ops::CompileOptions {
         config: &config,
         jobs: None,
@@ -60,7 +62,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
                                         &[], false,
                                         &[], false),
         target_rustc_args: None,
-        target_rustdoc_args: None,
+        target_rustdoc_args: Some(&playpen_args),
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
