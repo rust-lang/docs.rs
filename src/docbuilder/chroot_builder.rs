@@ -6,10 +6,25 @@ use db::{connect_db, add_package_into_database, add_build_into_database, add_pat
 use cargo::core::Package;
 use std::process::{Command, Output};
 use std::path::PathBuf;
+use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::Json;
 use error::Result;
 use regex::Regex;
+
+
+/// List of targets supported by docs.rs
+const TARGETS: [&'static str; 8] = [
+    "i686-apple-darwin",
+    "i686-pc-windows-gnu",
+    "i686-pc-windows-msvc",
+    "i686-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-gnu",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu"
+];
+
 
 
 #[derive(Debug)]
@@ -57,6 +72,8 @@ impl DocBuilder {
 
         info!("Building package {}-{}", name, version);
 
+        // Start with clean documentation directory
+        try!(self.remove_build_dir());
 
         // Database connection
         let conn = try!(connect_db());
@@ -132,46 +149,9 @@ impl DocBuilder {
 
     /// Builds documentation of crate for every target and returns Vec of successfully targets
     fn build_package_for_all_targets(&self, package: &Package) -> Vec<String> {
-        // Temporary skip tier 2 and tier 3 platforms
-        let targets = [// "aarch64-apple-ios",
-                       // "aarch64-linux-android",
-                       // "aarch64-unknown-linux-gnu",
-                       // "arm-linux-androideabi",
-                       // "arm-unknown-linux-gnueabi",
-                       // "arm-unknown-linux-gnueabihf",
-                       // "armv7-apple-ios",
-                       // "armv7-linux-androideabi",
-                       // "armv7-unknown-linux-gnueabihf",
-                       // "armv7s-apple-ios",
-                       // "i386-apple-ios",
-                       // "i586-pc-windows-msvc",
-                       // "i586-unknown-linux-gnu",
-                       "i686-apple-darwin",
-                       // "i686-linux-android",
-                       "i686-pc-windows-gnu",
-                       "i686-pc-windows-msvc",
-                       // "i686-unknown-freebsd",
-                       "i686-unknown-linux-gnu",
-                       // "i686-unknown-linux-musl",
-                       // "mips-unknown-linux-gnu",
-                       // "mips-unknown-linux-musl",
-                       // "mipsel-unknown-linux-gnu",
-                       // "mipsel-unknown-linux-musl",
-                       // "powerpc-unknown-linux-gnu",
-                       // "powerpc64-unknown-linux-gnu",
-                       // "powerpc64le-unknown-linux-gnu",
-                       "x86_64-apple-darwin",
-                       // "x86_64-apple-ios",
-                       "x86_64-pc-windows-gnu",
-                       "x86_64-pc-windows-msvc",
-                       // "x86_64-rumprun-netbsd",
-                       // "x86_64-unknown-freebsd",
-                       "x86_64-unknown-linux-gnu" /* "x86_64-unknown-linux-musl",
-                                                   * "x86_64-unknown-netbsd", */];
-
         let mut successfuly_targets = Vec::new();
 
-        for target in targets.iter() {
+        for target in TARGETS.iter() {
             debug!("Building {} for {}", canonical_name(&package), target);
             let cmd = format!("cratesfyi doc {} ={} {}",
                               package.manifest().name(),
@@ -185,7 +165,7 @@ impl DocBuilder {
                 let target_doc_path = PathBuf::from(&self.options.chroot_path)
                     .join("home")
                     .join(&self.options.chroot_user)
-                    .join(canonical_name(&package))
+                    .join("cratesfyi")
                     .join(&target)
                     .join("doc");
                 if target_doc_path.exists() {
@@ -219,7 +199,7 @@ impl DocBuilder {
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
-            .join(canonical_name(&package))
+            .join("cratesfyi")
             .join(target.unwrap_or(""));
         let destination = PathBuf::from(&self.options.destination)
             .join(format!("{}/{}",
@@ -234,8 +214,22 @@ impl DocBuilder {
 
 
     /// Removes build directory of a package in chroot
-    fn remove_build_dir(&self, package: &Package) -> Result<()> {
-        let _ = self.chroot_command(format!("rm -rf {}", canonical_name(&package)));
+    fn remove_build_dir(&self) -> Result<()> {
+        let crate_doc_path = PathBuf::from(&self.options.chroot_path)
+            .join("home")
+            .join(&self.options.chroot_user)
+            .join("cratesfyi")
+            .join("doc");
+        let _ = remove_dir_all(crate_doc_path);
+        for target in TARGETS.iter() {
+            let crate_doc_path = PathBuf::from(&self.options.chroot_path)
+                .join("home")
+                .join(&self.options.chroot_user)
+                .join("cratesfyi")
+                .join(target)
+                .join("doc");
+            let _ = remove_dir_all(crate_doc_path);
+        }
         Ok(())
     }
 
@@ -248,7 +242,7 @@ impl DocBuilder {
             .join(package.manifest().name());
         let source_path = source_path(&package).unwrap();
         // Some crates don't have documentation, so we don't care if removing_dir_all fails
-        let _ = self.remove_build_dir(&package);
+        let _ = self.remove_build_dir();
         let _ = remove_dir_all(documentation_path);
         let _ = remove_dir_all(source_path);
         Ok(())
@@ -280,7 +274,7 @@ impl DocBuilder {
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
-            .join(canonical_name(&package))
+            .join("cratesfyi")
             .join("doc")
             .join(package.targets()[0].name().replace("-", "_").to_string());
         crate_doc_path.exists()
@@ -381,7 +375,7 @@ impl DocBuilder {
         let source = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
-            .join(canonical_name(&pkg))
+            .join("cratesfyi")
             .join("doc");
 
         // use copy_documentation destination directory so self.clean can remove it when

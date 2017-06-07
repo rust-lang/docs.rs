@@ -112,6 +112,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), Error> {
                         files JSON,
                         doc_targets JSON DEFAULT '[]',
                         doc_rustc_version VARCHAR(100) NOT NULL,
+                        default_target VARCHAR(100),
                         UNIQUE (crate_id, version)
                     )",
                    "CREATE TABLE authors (

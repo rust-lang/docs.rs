@@ -1,5 +1,6 @@
 
 pub mod options;
+pub mod metadata;
 mod chroot_builder;
 mod crates;
 mod queue;
@@ -107,5 +108,10 @@ impl DocBuilder {
             try!(fs::remove_file(path));
         }
         Ok(())
+    }
+
+    /// Returns a reference of options
+    pub fn options(&self) -> &DocBuilderOptions {
+        &self.options
     }
 }

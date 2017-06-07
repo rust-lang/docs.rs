@@ -33,7 +33,6 @@ pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
                                     target_platform: bool)
                                     -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
-    debug!("Copying documentation from: {}", source.display());
     copy_files_and_handle_html(source,
                                destination.as_ref().to_path_buf(),
                                true,

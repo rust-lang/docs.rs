@@ -3,8 +3,8 @@
 
 use super::pool::Pool;
 use super::file::File;
-use super::MetaData;
 use super::latest_version;
+use super::crate_details::CrateDetails;
 use iron::prelude::*;
 use iron::{status, Url};
 use iron::modifiers::Redirect;
@@ -26,8 +26,7 @@ struct RustdocPage {
     pub name: String,
     pub version: String,
     pub description: Option<String>,
-    pub metadata: Option<MetaData>,
-    pub platforms: Option<Json>,
+    pub crate_details: Option<CrateDetails>,
 }
 
 
@@ -39,8 +38,7 @@ impl Default for RustdocPage {
             name: String::new(),
             version: String::new(),
             description: None,
-            metadata: None,
-            platforms: None,
+            crate_details: None,
         }
     }
 }
@@ -55,8 +53,7 @@ impl ToJson for RustdocPage {
         m.insert("name".to_string(), self.name.to_json());
         m.insert("version".to_string(), self.version.to_json());
         m.insert("description".to_string(), self.description.to_json());
-        m.insert("metadata".to_string(), self.metadata.to_json());
-        m.insert("platforms".to_string(), self.platforms.to_json());
+        m.insert("crate_details".to_string(), self.crate_details.to_json());
         m.to_json()
     }
 }
@@ -180,34 +177,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
     }
 
-    // content.metadata = MetaData::from_crate(&conn, &name, &version);
-    let (metadata, platforms, latest_version) = {
-        let rows = ctry!(conn.query("SELECT crates.name,
-                                            releases.version,
-                                            releases.description,
-                                            releases.target_name,
-                                            releases.rustdoc_status,
-                                            doc_targets,
-                                            crates.versions
-                                     FROM releases
-                                     INNER JOIN crates ON crates.id = releases.crate_id
-                                     WHERE crates.name = $1 AND releases.version = $2",
-                                    &[&name, &version]));
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    let latest_version = latest_version(&crate_details.versions, &version);
 
-        let metadata = MetaData {
-            name: rows.get(0).get(0),
-            version: rows.get(0).get(1),
-            description: rows.get(0).get(2),
-            target_name: rows.get(0).get(3),
-            rustdoc_status: rows.get(0).get(4),
-        };
-        let platforms: Json = rows.get(0).get(5);
-        let versions = rows.get(0).get(6);
-        (Some(metadata), platforms, latest_version(&versions, &version))
-    };
-
-    content.metadata = metadata;
-    content.platforms = Some(platforms);
+    content.crate_details = Some(crate_details);
 
     Page::new(content)
         .set_true("show_package_navigation")

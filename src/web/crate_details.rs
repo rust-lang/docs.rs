@@ -19,7 +19,7 @@ use semver;
 
 
 #[derive(Debug)]
-struct CrateDetails {
+pub struct CrateDetails {
     name: String,
     version: String,
     description: Option<String>,
@@ -37,13 +37,16 @@ struct CrateDetails {
     keywords: Option<Json>,
     have_examples: bool, // need to check this manually
     target_name: Option<String>,
-    versions: Vec<String>,
+    pub versions: Vec<String>,
     github: bool, // is crate hosted in github
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
     metadata: MetaData,
     is_library: bool,
+    doc_targets: Option<Json>,
+    license: Option<String>,
+    documentation_url: Option<String>,
 }
 
 
@@ -79,13 +82,16 @@ impl ToJson for CrateDetails {
         m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.insert("is_library".to_string(), self.is_library.to_json());
+        m.insert("doc_targets".to_string(), self.doc_targets.to_json());
+        m.insert("license".to_string(), self.license.to_json());
+        m.insert("documentation_url".to_string(), self.documentation_url.to_json());
         m.to_json()
     }
 }
 
 
 impl CrateDetails {
-    fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
+    pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
 
         // get all stuff, I love you rustfmt
         let query = "SELECT crates.id,
@@ -109,7 +115,10 @@ impl CrateDetails {
                             crates.github_stars,
                             crates.github_forks,
                             crates.github_issues,
-                            releases.is_library
+                            releases.is_library,
+                            releases.doc_targets,
+                            releases.license,
+                            releases.documentation_url
                      FROM releases
                      INNER JOIN crates ON releases.crate_id = crates.id
                      WHERE crates.name = $1 AND releases.version = $2;";
@@ -176,6 +185,9 @@ impl CrateDetails {
             github_issues: rows.get(0).get(20),
             metadata: metadata,
             is_library: rows.get(0).get(21),
+            doc_targets: rows.get(0).get(22),
+            license: rows.get(0).get(23),
+            documentation_url: rows.get(0).get(24),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {

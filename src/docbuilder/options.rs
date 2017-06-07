@@ -58,13 +58,14 @@ impl fmt::Debug for DocBuilderOptions {
         write!(f,
                "DocBuilderOptions {{ destination: {:?}, chroot_path: {:?}, \
                 crates_io_index_path: {:?}, \
-                sources_path: {:?}, chroot_user: {:?}, \
+                sources_path: {:?}, container_name: {:?}, chroot_user: {:?}, \
                 keep_build_directory: {:?}, skip_if_exists: {:?}, \
                 skip_if_log_exists: {:?}, debug: {:?} }}",
                self.destination,
                self.chroot_path,
                self.crates_io_index_path,
                self.sources_path,
+               self.container_name,
                self.chroot_user,
                self.keep_build_directory,
                self.skip_if_exists,
