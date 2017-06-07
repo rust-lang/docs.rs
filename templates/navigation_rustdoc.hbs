@@ -6,10 +6,77 @@
             <input class="search-input-nav" name="query" tabindex="-1" type="text" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
             {{/unless}}
             <a href="/" class="pure-menu-heading pure-menu-link"><i class="fa fa-cubes fa-fw"></i><span class="title"> Docs.rs</span></a>
-          {{#with content.metadata}}
+          {{#with content.crate_details}}
           <ul class="pure-menu-list">
-            <li class="pure-menu-item">
+            <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
               <a href="/crate/{{name}}/{{version}}" class="pure-menu-link" title="{{description}}"><i class="fa fa-fw fa-cube"></i><span class="title"> {{name}}-{{version}}</span></a>
+              <div class="pure-menu-children package-details-menu">
+                <!-- CRATE DETAILS -->
+                <ul class="pure-menu-list menu-item-divided">
+                  <li class="pure-menu-heading">{{name}}</li>
+                  <li class="pure-menu-item">
+                    <a href="/crate/{{name}}/{{version}}" class="pure-menu-link" class="description"><i class="fa fa-fw fa-cube"></i> {{description}}</a>
+                  </li>
+                  <li class="pure-menu-item">
+                    <a href="/crate/{{name}}/{{version}}" class="pure-menu-link"><i class="fa fa-fw fa-balance-scale"></i> {{license}}</a>
+                  </li>
+                </ul>
+                <div class="pure-g menu-item-divided">
+                  <div class="pure-u-1-2 right-border">
+                    <ul class="pure-menu-list">
+                      <li class="pure-menu-heading">Links</li>
+                      {{#if homepage_url}}<li class="pure-menu-item"><a href="{{homepage_url}}" class="pure-menu-link"><i class="fa fa-home fa-fw"></i> Homepage</a></li>{{/if}}
+                      {{#if documentation_url}}<li class="pure-menu-item"><a href="{{documentation_url}}" title="Canonical documentation" class="pure-menu-link"><i class="fa fa-fw fa-file-text"></i> Documentation</a></li>{{/if}}
+                      {{#if github}}
+                      <li class="pure-menu-item">
+                        <a href="{{repository_url}}" class="pure-menu-link"><i class="fa fa-github fa-fw"></i> <i class="fa fa-star-o fa-fw"></i> {{github_stars}} <i class="fa fa-code-fork fa-fw"></i> {{github_forks}} <i class="fa fa-exclamation-circle fa-fw"></i> {{github_issues}}</a>
+                      </li>
+                      {{else}}
+                      {{#if repository_url}}<li class="pure-menu-item"><a href="{{repository_url}}" class="pure-menu-link"><i class="fa fa-code-fork fa-fw"></i> Repository</a></li>{{/if}}
+                      {{/if}}
+                      <li class="pure-menu-item"><a href="https://crates.io/crates/{{name}}" class="pure-menu-link" title="See {{name}} in crates.io"><i class="fa fa-cube fa-fw"></i> Crates.io</a></li>
+                    </ul>
+                  </div>
+                  <div class="pure-u-1-2">
+                    <ul class="pure-menu-list">
+                      <li class="pure-menu-heading">Authors</li>
+                      {{#each authors}}
+                      <li class="pure-menu-item"><a href="/releases/{{this.[1]}}" class="pure-menu-link"><i class="fa fa-fw fa-user"></i> {{this.[0]}}</a></li>
+                      {{/each}}
+                    </ul>
+                  </div>
+                </div>
+                <div class="pure-g">
+                  <div class="pure-u-1-2 right-border">
+                    <ul class="pure-menu-list">
+                      <li class="pure-menu-heading">Dependencies</li>
+                      <li class="pure-menu-item">
+                        <div class="pure-menu pure-menu-scrollable sub-menu">
+                          <ul class="pure-menu-list">
+                            {{#each dependencies}}
+                            <li class="pure-menu-item"><a href="/crate/{{this.[0]}}/{{this.[1]}}" class="pure-menu-link">{{this.[0]}} {{this.[1]}}</a></li>
+                            {{/each}}
+                          </ul>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="pure-u-1-2">
+                    <ul class="pure-menu-list">
+                      <li class="pure-menu-heading">Versions</li>
+                      <li class="pure-menu-item">
+                        <div class="pure-menu pure-menu-scrollable sub-menu">
+                          <ul class="pure-menu-list">
+                            {{#each versions}}
+                            <li class="pure-menu-item"><a href="/crate/{{../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
+                            {{/each}}
+                          </ul>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </li>
             {{#unless ../../varsb.is_latest_version}}
             <li class="pure-menu-item">
@@ -19,15 +86,15 @@
             <li class="pure-menu-item">
               <a href="/crate/{{name}}/{{version}}/source/" title="Browse source of {{name}}-{{version}}" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a>
             </li>
-          {{/with}}
             <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
               <a href="#" class="pure-menu-link"><i class="fa fa-fw fa-gears"></i><span class="title"> Platform</span></a>
               <ul class="pure-menu-children">
-                {{#each content.platforms}}
+                {{#each doc_targets}}
                 <li class="pure-menu-item"><a href="/{{../../metadata.name}}/{{../../metadata.version}}/{{this}}/{{../../metadata.target_name}}/" class="pure-menu-link">{{this}}</a></li>
                 {{/each}}
               </ul>
             </li>
+          {{/with}}
           </ul>
           </form>
         </div>

@@ -324,15 +324,14 @@ fn render_markdown(text: &str) -> String {
 
 /// Returns latest version if required version is not the latest
 /// req_version must be an exact version
-fn latest_version(versions_json: &Json, req_version: &str) -> Option<String> {
+fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<String> {
     let req_version = match Version::parse(req_version) {
         Ok(v) => v,
         Err(_) => return None,
     };
     let versions = {
         let mut versions: Vec<Version> = Vec::new();
-        for version in versions_json.as_array().unwrap() {
-            let version: String = version.as_string().unwrap().to_owned();
+        for version in versions_json {
             let version = match Version::parse(&version) {
                 Ok(v) => v,
                 Err(_) => return None,
@@ -472,18 +471,13 @@ mod test {
 
     #[test]
     fn test_latest_version() {
-        let json = r#"
-        [
-            "1.0.0",
-            "1.1.0",
-            "0.9.0",
-            "0.9.1"
-        ]
-        "#;
-        let json = Json::from_str(json).unwrap();
-        assert_eq!(latest_version(&json, "1.1.0"), None);
-        assert_eq!(latest_version(&json, "1.0.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&json, "0.9.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&json, "invalidversion"), None);
+        let versions = vec!["1.0.0".to_string(),
+                            "1.1.0".to_string(),
+                            "0.9.0".to_string(),
+                            "0.9.1".to_string()];
+        assert_eq!(latest_version(&versions, "1.1.0"), None);
+        assert_eq!(latest_version(&versions, "1.0.0"), Some("1.1.0".to_owned()));
+        assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
+        assert_eq!(latest_version(&versions, "invalidversion"), None);
     }
 }
