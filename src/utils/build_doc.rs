@@ -44,7 +44,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
     let current_dir = try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
-    let metadata = Metadata::from_package(&pkg);
+    let metadata = Metadata::from_package(&pkg).map_err(|e| human(e.description()))?;
 
     let opts = ops::CompileOptions {
         config: &config,

@@ -39,7 +39,7 @@ pub fn add_package_into_database(conn: &Connection,
         &TargetKind::Lib(_) => true,
         _ => false,
     };
-    let metadata = Metadata::from_package(pkg);
+    let metadata = Metadata::from_package(pkg)?;
 
     let release_id: i32 = {
         let rows = try!(conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
