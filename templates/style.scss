@@ -140,6 +140,9 @@ div.nav-container {
             display: none;
             @media #{$media-sm} {
                 display: block;
+                border-right: 1px solid $color-border;
+                border-left: 1px solid $color-border;
+                padding-right: 3px;
             }
         }
         input.search-input-nav:focus {
