@@ -53,9 +53,8 @@ pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
                    setweight(to_tsvector(coalesce(releases.description, '')), 'B')            ||
                    setweight(to_tsvector(coalesce((
                                 SELECT string_agg(value, ' ')
-                                FROM json_array_elements_text(releases.keywords)), '')), 'B') ||
-                   setweight(to_tsvector(coalesce(releases.readme, '')), 'C')                 ||
-                   setweight(to_tsvector(coalesce(releases.description_long, '')), 'C') as content
+                                FROM json_array_elements_text(releases.keywords)), '')), 'B')
+                    as content
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
             ORDER BY releases.crate_id, releases.release_time DESC
