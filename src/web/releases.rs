@@ -234,16 +234,19 @@ fn get_search_results(conn: &Connection,
     let mut packages = Vec::new();
 
     let rows = match conn.query("SELECT crates.name,
-                                   releases.version,
-                                   releases.description,
-                                   releases.target_name,
-                                   releases.release_time,
-                                   releases.rustdoc_status,
-                                   ts_rank_cd(crates.content, to_tsquery($1)) AS rank
+                                    releases.version,
+                                    releases.description,
+                                    releases.target_name,
+                                    releases.release_time,
+                                    releases.rustdoc_status,
+                                    ts_rank_cd(crates.content, to_tsquery($1)) AS rank
                                  FROM crates
                                  INNER JOIN releases ON crates.latest_version_id = releases.id
-                                 WHERE crates.content @@ to_tsquery($1)
-                                 ORDER BY rank DESC
+                                 WHERE crates.name LIKE concat('%', $1, '%')
+                                    OR crates.content @@ to_tsquery($1)
+                                 ORDER BY crates.name = $1 DESC,
+                                    crates.name LIKE concat('%', $1, '%') DESC,
+                                    rank DESC
                                  LIMIT $2 OFFSET $3",
                                 &[&query, &limit, &offset]) {
         Ok(r) => r,
