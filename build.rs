@@ -40,11 +40,11 @@ fn get_git_hash() -> Option<String> {
 
 
 fn compile_sass() {
-    use sass_rs::sass_context::SassFileContext;
-
-    let mut file_context = SassFileContext::new(concat!(env!("CARGO_MANIFEST_DIR"),
-                                                        "/templates/style.scss"));
-    let css = file_context.compile().unwrap();
+    use sass_rs::{compile_file, Options};
+    let css = compile_file(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style.scss"),
+        Options::default(),
+    ).unwrap();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("style.css");
     let mut file = File::create(&dest_path).unwrap();
     file.write_all(css.as_bytes()).unwrap();
