@@ -46,6 +46,15 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
 
     let metadata = Metadata::from_package(&pkg).map_err(|e| human(e.description()))?;
 
+    // This is only way to pass rustc_args to cargo.
+    // CompileOptions::target_rustc_args is used only for the current crate,
+    // and since docs.rs never runs rustc on the current crate, we assume rustc_args
+    // will be used for the dependencies. That is why we are creating RUSTFLAGS environment
+    // variable instead of using target_rustc_args.
+    if let Some(rustc_args) = metadata.rustc_args {
+        env::set_var("RUSTFLAGS", rustc_args.join(" "));
+    }
+
     let opts = ops::CompileOptions {
         config: &config,
         jobs: None,
