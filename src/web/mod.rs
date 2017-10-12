@@ -44,7 +44,6 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
-mod opensearch;
 
 use std::env;
 use std::error::Error;
@@ -52,6 +51,7 @@ use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
 use iron::{Handler, status};
+use iron::headers::{CacheControl, CacheDirective, ContentType};
 use router::{Router, NoRoute};
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
@@ -65,6 +65,7 @@ use std::collections::BTreeMap;
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 
 struct CratesfyiHandler {
@@ -100,9 +101,7 @@ impl CratesfyiHandler {
                    "about");
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
-        router.get("/opensearch.xml",
-                   opensearch::serve_opensearch,
-                   "opensearch_xml");
+        router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
         router.get("/releases", releases::releases_handler, "releases");
         router.get("/releases/feed",
                    releases::releases_feed_handler,
@@ -395,11 +394,20 @@ fn duration_to_str(ts: time::Timespec) -> String {
 
 
 fn style_css_handler(_: &mut Request) -> IronResult<Response> {
-    use iron::headers::{CacheControl, CacheDirective, ContentType};
     let mut response = Response::with((status::Ok, STYLE_CSS));
     let cache = vec![CacheDirective::Public,
                      CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
     response.headers.set(ContentType("text/css".parse().unwrap()));
+    response.headers.set(CacheControl(cache));
+    Ok(response)
+}
+
+
+fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
+    let mut response = Response::with((status::Ok, OPENSEARCH_XML));
+    let cache = vec![CacheDirective::Public,
+                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    response.headers.set(ContentType("application/opensearchdescription+xml".parse().unwrap()));
     response.headers.set(CacheControl(cache));
     Ok(response)
 }
