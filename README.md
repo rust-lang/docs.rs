@@ -152,12 +152,21 @@ cargo run -- doc <CRATE_NAME>
 #### Contributors
 
 * [Onur Aslan](https://github.com/onur)
-* [Corey Farwell](https://github.com/frewsxcv)
 * [Jon Gjengset](https://github.com/jonhoo)
-* [Matthew Hall](https://github.com/mattyhall)
-* [Guillaume Gomez](https://github.com/GuillaumeGomez)
-* [Mark Simulacrum](https://github.com/Mark-Simulacrum)
 * [Sebastian Thiel](https://github.com/Byron)
+* [Guillaume Gomez](https://github.com/GuillaumeGomez)
+* [Ashe Connor](https://github.com/kivikakk)
+* [Samuel Tardieu](https://github.com/samueltardieu)
+* [Corey Farwell](https://github.com/frewsxcv)
+* [Michael Howell](https://github.com/notriddle)
+* [Alex Burka](https://github.com/durka)
+* [Giang Nguyen](https://github.com/hngnaig)
+* [Dimitri Sabadie](https://github.com/phaazon)
+* [Nemikolh](https://github.com/Nemikolh)
+* [bluss](https://github.com/bluss)
+* [Pascal Hartig](https://github.com/passy)
+* [Matthew Hall](https://github.com/mattyhall)
+* [Mark Simulacrum](https://github.com/Mark-Simulacrum)
 
 #### Sponsors
 
