@@ -125,6 +125,9 @@ impl CratesfyiHandler {
         router.get("/releases/search",
                    releases::search_handler,
                    "releases_search");
+        router.get("/releases/search.json",
+                   releases::search_handler,
+                   "releases_search_json");
         router.get("/releases/queue",
                    releases::build_queue_handler,
                    "releases_queue");

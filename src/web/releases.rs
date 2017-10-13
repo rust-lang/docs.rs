@@ -477,10 +477,25 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             .ok_or(IronError::new(Nope::NoResults, status::NotFound))
             .and_then(|(_, results)| {
                 // FIXME: There is no pagination
-                Page::new(results)
-                    .set("search_query", &query)
-                    .title(&format!("Search results for '{}'", query))
-                    .to_resp("releases")
+                if req.url.path().join("/").ends_with(".json") {
+                    use iron::status;
+                    use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType,
+                                        AccessControlAllowOrigin};
+
+                    let mut resp = Response::with((status::Ok, results.to_json().to_string()));
+                    resp.headers.set(ContentType("application/json".parse().unwrap()));
+                    resp.headers.set(Expires(HttpDate(time::now())));
+                    resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
+                                                       CacheDirective::NoStore,
+                                                       CacheDirective::MustRevalidate]));
+                    resp.headers.set(AccessControlAllowOrigin::Any);
+                    Ok(resp)
+                } else {
+                    Page::new(results)
+                        .set("search_query", &query)
+                        .title(&format!("Search results for '{}'", query))
+                        .to_resp("releases")
+                }
             })
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))

@@ -4,6 +4,7 @@ use iron::Handler;
 use iron::status;
 use web::page::Page;
 use std::fmt;
+use time;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Nope {
@@ -48,7 +49,21 @@ impl Handler for Nope {
             Nope::NoResults => {
                 use params::{Params, Value};
                 let params = req.get::<Params>().unwrap();
-                if let Some(&Value::String(ref query)) = params.find(&["query"]) {
+
+                if req.url.path().join("/").ends_with(".json") {
+                    use iron::status;
+                    use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType,
+                                        AccessControlAllowOrigin};
+
+                    let mut resp = Response::with((status::Ok, "[]"));
+                    resp.headers.set(ContentType("application/json".parse().unwrap()));
+                    resp.headers.set(Expires(HttpDate(time::now())));
+                    resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
+                                                       CacheDirective::NoStore,
+                                                       CacheDirective::MustRevalidate]));
+                    resp.headers.set(AccessControlAllowOrigin::Any);
+                    Ok(resp)
+                } else if let Some(&Value::String(ref query)) = params.find(&["query"]) {
                     // this used to be a search
                     Page::new(Vec::<super::releases::Release>::new())
                         .set_status(status::NotFound)
