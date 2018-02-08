@@ -122,15 +122,18 @@ impl DocBuilder {
 
         let meta = Metadata::from_package(package).ok();
         let target = meta.as_ref().and_then(|meta| meta.default_target.as_ref());
-        let cmd = if let Some(target) = target {
-            format!("cratesfyi doc {} ={} {}",
-                package.manifest().name(),
-                package.manifest().version(),
-                target)
-        } else {
-            format!("cratesfyi doc {} ={}",
-                package.manifest().name(),
-                package.manifest().version())
+        let cmd = match target {
+            Some(target) if TARGETS.contains(&target.as_str()) => {
+                format!("cratesfyi doc {} ={} {}",
+                    package.manifest().name(),
+                    package.manifest().version(),
+                    target)
+            }
+            _ => {
+                format!("cratesfyi doc {} ={}",
+                    package.manifest().name(),
+                    package.manifest().version())
+            }
         };
 
         match self.chroot_command(cmd) {
