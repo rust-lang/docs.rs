@@ -1,6 +1,7 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
+use super::metadata::Metadata;
 use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
@@ -118,9 +119,20 @@ impl DocBuilder {
         use std::error::Error as StdError;
         debug!("Building package in chroot");
         let (rustc_version, cratesfyi_version) = self.get_versions();
-        let cmd = format!("cratesfyi doc {} ={}",
-                          package.manifest().name(),
-                          package.manifest().version());
+
+        let meta = Metadata::from_package(package).ok();
+        let target = meta.as_ref().and_then(|meta| meta.default_target.as_ref());
+        let cmd = if let Some(target) = target {
+            format!("cratesfyi doc {} ={} {}",
+                package.manifest().name(),
+                package.manifest().version(),
+                target)
+        } else {
+            format!("cratesfyi doc {} ={}",
+                package.manifest().name(),
+                package.manifest().version())
+        };
+
         match self.chroot_command(cmd) {
             Ok(o) => {
                 ChrootBuilderResult {
