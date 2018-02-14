@@ -11,4 +11,5 @@ documentation = "https://docs.rs/badge"
 path = "badge.rs"
 
 [dependencies]
+base64 = "0.9.0"
 rusttype = "0.4.0"

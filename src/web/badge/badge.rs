@@ -1,8 +1,10 @@
 //! Simple badge generator
 
+extern crate base64;
 extern crate rusttype;
 
 
+use base64::display::Base64Display;
 use rusttype::{Font, FontCollection, Scale, point, Point, PositionedGlyph};
 
 
@@ -57,6 +59,12 @@ impl Badge {
             scale: scale,
             offset: offset,
         })
+    }
+
+
+    pub fn to_svg_data_uri(&self) -> String {
+        format!("data:image/svg+xml;base64,{}",
+            Base64Display::standard(self.to_svg().as_bytes()))
     }
 
 
