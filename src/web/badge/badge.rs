@@ -1,8 +1,10 @@
 //! Simple badge generator
 
+extern crate base64;
 extern crate rusttype;
 
 
+use base64::display::Base64Display;
 use rusttype::{Font, FontCollection, Scale, point, Point, PositionedGlyph};
 
 
@@ -32,16 +34,16 @@ impl Default for BadgeOptions {
 }
 
 
-pub struct Badge<'a> {
+pub struct Badge {
     options: BadgeOptions,
-    font: Font<'a>,
+    font: Font<'static>,
     scale: Scale,
     offset: Point<f32>,
 }
 
 
-impl<'a> Badge<'a> {
-    pub fn new(options: BadgeOptions) -> Result<Badge<'a>, String> {
+impl Badge {
+    pub fn new(options: BadgeOptions) -> Result<Badge, String> {
         let collection = FontCollection::from_bytes(FONT_DATA);
         // this should never fail in practice
         let font = try!(collection.into_font().ok_or("Failed to load font data".to_owned()));
@@ -57,6 +59,12 @@ impl<'a> Badge<'a> {
             scale: scale,
             offset: offset,
         })
+    }
+
+
+    pub fn to_svg_data_uri(&self) -> String {
+        format!("data:image/svg+xml;base64,{}",
+            Base64Display::standard(self.to_svg().as_bytes()))
     }
 
 

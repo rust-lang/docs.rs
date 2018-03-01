@@ -1,6 +1,6 @@
 [package]
 name = "badge"
-version = "0.1.1"
+version = "0.2.0"
 description = "Simple badge generator"
 authors = ["Onur Aslan <onur@onur.im>"]
 license-file = "LICENSE"
@@ -11,4 +11,5 @@ documentation = "https://docs.rs/badge"
 path = "badge.rs"
 
 [dependencies]
-rusttype = "0.2.1"
+base64 = "0.9.0"
+rusttype = "0.4.0"
