@@ -145,20 +145,6 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_build_doc() {
-        let doc = build_doc("rand", None, None);
-        assert!(doc.is_ok());
-
-        let root_path = Path::new("cratesfyi");
-        assert!(root_path.join("doc").join("rand").exists());
-
-        remove_dir_all(root_path).unwrap();
-
-        let doc = build_doc("SOMECRATEWICHWILLBENVEREXISTS", None, None);
-        assert!(doc.is_err());
-    }
-
-    #[test]
     fn test_get_package() {
         let pkg = get_package("rand", None);
         assert!(pkg.is_ok());
