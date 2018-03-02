@@ -208,7 +208,7 @@ impl DocBuilder {
             .join(target.unwrap_or(""));
         copy_doc_dir(crate_doc_path,
                      destination,
-                     parse_rustc_version(rustc_version).trim(),
+                     parse_rustc_version(rustc_version)?.trim(),
                      target.is_some())
     }
 
@@ -353,7 +353,7 @@ impl DocBuilder {
         // acme-client-0.0.0 is an empty library crate and it will always build
         let pkg = try!(get_package("acme-client", Some("=0.0.0")));
         let res = self.build_package_in_chroot(&pkg);
-        let rustc_version = parse_rustc_version(&res.rustc_version);
+        let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
         if !res.build_success {
             return Err(format!("Failed to build empty crate for: {}", res.rustc_version).into());

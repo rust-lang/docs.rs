@@ -4,16 +4,17 @@ use regex::Regex;
 use error::Result;
 
 /// Parses rustc commit hash from rustc version string
-pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
-    let version_regex = Regex::new(r" ([\w-.]+) \((\w+) (\d+)-(\d+)-(\d+)\)").unwrap();
-    let captures = version_regex.captures(version.as_ref()).expect("Failed to parse rustc version");
+pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
+    let version_regex = Regex::new(r" ([\w-.]+) \((\w+) (\d+)-(\d+)-(\d+)\)")?;
+    let captures = version_regex.captures(version.as_ref())
+        .ok_or("Failed to parse rustc version")?;
 
-    format!("{}{}{}-{}-{}",
+    Ok(format!("{}{}{}-{}-{}",
             captures.get(3).unwrap().as_str(),
             captures.get(4).unwrap().as_str(),
             captures.get(5).unwrap().as_str(),
             captures.get(1).unwrap().as_str(),
-            captures.get(2).unwrap().as_str())
+            captures.get(2).unwrap().as_str()))
 }
 
 
