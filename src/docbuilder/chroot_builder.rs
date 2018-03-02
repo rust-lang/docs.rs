@@ -1,16 +1,16 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
-use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
+use utils::{get_package, source_path, copy_dir, copy_doc_dir,
+            update_sources, parse_rustc_version, command_result};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
-use std::process::{Command, Output};
+use std::process::Command;
 use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::Json;
 use error::Result;
-use regex::Regex;
 
 
 /// List of targets supported by docs.rs
@@ -409,18 +409,6 @@ impl DocBuilder {
 }
 
 
-/// Simple function to capture command output
-fn command_result(output: Output) -> Result<String> {
-    let mut command_out = String::from_utf8_lossy(&output.stdout).into_owned();
-    command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
-    match output.status.success() {
-        true => Ok(command_out),
-        false => Err(command_out.into()),
-    }
-}
-
-
-
 /// Returns canonical name of a package.
 ///
 /// It's just package-version. All directory structure used in cratesfyi is
@@ -429,20 +417,6 @@ fn canonical_name(package: &Package) -> String {
     format!("{}-{}",
             package.manifest().name(),
             package.manifest().version())
-}
-
-
-/// Parses rustc commit hash from rustc version string
-fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
-    let version_regex = Regex::new(r" ([\w-.]+) \((\w+) (\d+)-(\d+)-(\d+)\)").unwrap();
-    let captures = version_regex.captures(version.as_ref()).expect("Failed to parse rustc version");
-
-    format!("{}{}{}-{}-{}",
-            captures.get(3).unwrap().as_str(),
-            captures.get(4).unwrap().as_str(),
-            captures.get(5).unwrap().as_str(),
-            captures.get(1).unwrap().as_str(),
-            captures.get(2).unwrap().as_str())
 }
 
 
