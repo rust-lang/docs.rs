@@ -12,6 +12,9 @@ use cargo::util::{CargoResult, Config, human, Filesystem};
 use cargo::sources::SourceConfigMap;
 use cargo::ops::{self, Packages, DefaultExecutor};
 
+use utils::{get_current_versions, parse_rustc_version};
+use error::Result;
+
 use Metadata;
 
 
@@ -23,7 +26,7 @@ use Metadata;
 // idea is to make cargo to download
 // and build a crate and its documentation
 // instead of doing it manually like in the previous version of cratesfyi
-pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoResult<Package> {
+pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result<Package> {
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
 
@@ -55,6 +58,16 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
         env::set_var("RUSTFLAGS", rustc_args.join(" "));
     }
 
+    // since https://github.com/rust-lang/rust/pull/48511 we can pass --resource-suffix to
+    // add correct version numbers to css and javascript files
+    let mut rustdoc_args: Vec<String> =
+        vec!["-Z".to_string(), "unstable-options".to_string(),
+             "--resource-suffix".to_string(),
+             format!("-{}", parse_rustc_version(get_current_versions()?.0)?)];
+    if let Some(package_rustdoc_args) = metadata.rustdoc_args {
+        rustdoc_args.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
+    }
+
     let opts = ops::CompileOptions {
         config: &config,
         jobs: None,
@@ -72,7 +85,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> CargoR
                                         &[], false,
                                         &[], false),
         target_rustc_args: None,
-        target_rustdoc_args: metadata.rustdoc_args.as_ref().map(Vec::as_slice),
+        target_rustdoc_args: Some(rustdoc_args.as_slice()),
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
