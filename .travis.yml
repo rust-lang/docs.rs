@@ -1,5 +1,6 @@
 dist: precise
 language: rust
+cache: cargo
 addons:
   apt:
     sources:
