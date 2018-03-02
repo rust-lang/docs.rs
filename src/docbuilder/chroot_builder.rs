@@ -362,7 +362,14 @@ impl DocBuilder {
         info!("Copying essential files for: {}", res.rustc_version);
 
         let files = (// files require rustc version subfix
-                     ["rustdoc.css", "main.css", "main.js", "normalize.css"],
+                     ["brush.svg",
+                      "dark.css",
+                      "main.css",
+                      "main.js",
+                      "normalize.css",
+                      "rustdoc.css",
+                      "storage.js",
+                      "theme.js"],
                      // files doesn't require rustc version subfix
                      ["FiraSans-Medium.woff",
                       "FiraSans-Regular.woff",
@@ -385,11 +392,10 @@ impl DocBuilder {
         try!(create_dir_all(&destination));
 
         for file in files.0.iter() {
-            let source_path = source.join(file);
-            let destination_path = {
-                let spl: Vec<&str> = file.split('.').collect();
-                destination.join(format!("{}-{}.{}", spl[0], rustc_version, spl[1]))
-            };
+            let spl: Vec<&str> = file.split('.').collect();
+            let file_name = format!("{}-{}.{}", spl[0], rustc_version, spl[1]);
+            let source_path = source.join(&file_name);
+            let destination_path = destination.join(&file_name);
             try!(copy(source_path, destination_path));
         }
 
@@ -434,7 +440,6 @@ fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    use super::parse_rustc_version;
     use std::path::PathBuf;
     use {DocBuilder, DocBuilderOptions};
 
@@ -456,14 +461,6 @@ mod test {
         let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.build_package("rand", "0.3.14");
         assert!(res.is_ok());
-    }
-
-    #[test]
-    fn test_parse_rustc_version() {
-        assert_eq!(parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)"),
-                   "20160523-1.10.0-nightly-57ef01513");
-        assert_eq!(parse_rustc_version("cratesfyi 0.2.0 (ba9ae23 2016-05-26)"),
-                   "20160526-0.2.0-ba9ae23");
     }
 
     #[test]
