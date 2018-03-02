@@ -103,6 +103,13 @@ div.container {
 div.container-rustdoc {
     max-width: 1200px;
     text-align: left;
+
+    #theme-picker {
+        margin-top: 30px;
+    }
+    #theme-choices {
+        top: 60px;
+    }
 }
 
 div.nav-container {
