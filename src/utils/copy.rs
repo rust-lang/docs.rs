@@ -2,8 +2,6 @@
 // FIXME: There is so many PathBuf's in this module
 //        Conver them to Path
 
-use std::io::prelude::*;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::fs;
 use error::Result;
