@@ -105,6 +105,8 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let source_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_map.load(&source_id));
 
+    try!(source.update());
+
     let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
     let deps = try!(source.query(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
