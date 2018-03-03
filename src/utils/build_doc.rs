@@ -141,7 +141,6 @@ pub fn source_path(pkg: &Package) -> Option<&Path> {
 #[cfg(test)]
 mod test {
     use std::path::Path;
-    use std::fs::remove_dir_all;
     use super::*;
 
     #[test]
