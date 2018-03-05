@@ -2,8 +2,6 @@
 // FIXME: There is so many PathBuf's in this module
 //        Conver them to Path
 
-use std::io::prelude::*;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::fs;
 use error::Result;
@@ -48,13 +46,17 @@ fn copy_files_and_handle_html(source: PathBuf,
                               target: bool)
                               -> Result<()> {
 
+    // FIXME: handle_html is useless since we started using --resource-suffix
+    //        argument with rustdoc
+
     // Make sure destination directory is exists
     if !destination.exists() {
         try!(fs::create_dir_all(&destination));
     }
 
-    // Avoid copying duplicated files
-    let dup_regex = Regex::new(r"(\.lock|\.txt|\.woff|jquery\.js|playpen\.js|main\.js|\.css)$")
+    // Avoid copying common files
+    let dup_regex = Regex::new(
+        r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
     for file in try!(source.read_dir()) {
@@ -72,8 +74,6 @@ fn copy_files_and_handle_html(source: PathBuf,
                                             handle_html,
                                             &rustc_version,
                                             target));
-        } else if handle_html && file.file_name().into_string().unwrap().ends_with(".html") {
-            try!(copy_html(&file.path(), &destination_full_path, rustc_version, target));
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
@@ -81,45 +81,6 @@ fn copy_files_and_handle_html(source: PathBuf,
         }
 
     }
-    Ok(())
-}
-
-
-fn copy_html(source: &PathBuf,
-             destination: &PathBuf,
-             rustc_version: &str,
-             target: bool)
-             -> Result<()> {
-
-    let source_file = try!(fs::File::open(source));
-    let mut destination_file = try!(fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(destination));
-
-    let reader = io::BufReader::new(source_file);
-
-    // FIXME: We don't need to store common libraries (jquery and normalize) for the each version
-    //        of rustc. I believe storing only one version of this files should work in every
-    //        documentation page.
-    let replace_regex =
-        Regex::new(r#"(href|src)="(.*)(main|jquery|rustdoc|playpen|normalize)\.(css|js)""#)
-            .unwrap();
-    let replace_str = format!("$1=\"{}../../$2$3-{}.$4\"",
-                              if target { "../" } else { "" },
-                              rustc_version);
-
-    for line in reader.lines() {
-        let mut line = try!(line);
-
-        // replace css links
-        line = replace_regex.replace_all(&line[..], &replace_str[..]).into_owned();
-
-        try!(destination_file.write(line.as_bytes()));
-        // need to write consumed newline
-        try!(destination_file.write(&['\n' as u8]));
-    }
-
     Ok(())
 }
 

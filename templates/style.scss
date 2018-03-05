@@ -54,8 +54,8 @@ div.rustdoc {
 }
 
 .sidebar {
-    top: 32px;
-    left: 0;
+    padding-top: 32px;
+    z-index: -1;
 }
 
 body {
@@ -103,11 +103,19 @@ div.container {
 div.container-rustdoc {
     max-width: 1200px;
     text-align: left;
+
+    #theme-picker {
+        margin-top: 30px;
+    }
+    #theme-choices {
+        top: 60px;
+    }
 }
 
 div.nav-container {
     height: 32px;
     border-bottom: 1px solid $color-border;
+    background-color: #fff;
 
     li {
         border-left: 1px solid $color-border;

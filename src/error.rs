@@ -7,6 +7,7 @@ use cargo;
 use reqwest;
 use magic::MagicError;
 use git2;
+use regex;
 
 
 error_chain! {
@@ -19,5 +20,6 @@ error_chain! {
         Git2Error(git2::Error);
         MagicError(MagicError);
         CargoError(Box<cargo::CargoError>);
+        RegexError(regex::Error);
     }
 }

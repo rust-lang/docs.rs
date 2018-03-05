@@ -1,16 +1,16 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
-use utils::{get_package, source_path, copy_dir, copy_doc_dir, update_sources};
+use utils::{get_package, source_path, copy_dir, copy_doc_dir,
+            update_sources, parse_rustc_version, command_result};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
-use std::process::{Command, Output};
+use std::process::Command;
 use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::Json;
 use error::Result;
-use regex::Regex;
 
 
 /// List of targets supported by docs.rs
@@ -208,7 +208,7 @@ impl DocBuilder {
             .join(target.unwrap_or(""));
         copy_doc_dir(crate_doc_path,
                      destination,
-                     parse_rustc_version(rustc_version).trim(),
+                     parse_rustc_version(rustc_version)?.trim(),
                      target.is_some())
     }
 
@@ -353,7 +353,7 @@ impl DocBuilder {
         // acme-client-0.0.0 is an empty library crate and it will always build
         let pkg = try!(get_package("acme-client", Some("=0.0.0")));
         let res = self.build_package_in_chroot(&pkg);
-        let rustc_version = parse_rustc_version(&res.rustc_version);
+        let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
         if !res.build_success {
             return Err(format!("Failed to build empty crate for: {}", res.rustc_version).into());
@@ -362,7 +362,14 @@ impl DocBuilder {
         info!("Copying essential files for: {}", res.rustc_version);
 
         let files = (// files require rustc version subfix
-                     ["rustdoc.css", "main.css", "main.js", "normalize.css"],
+                     ["brush.svg",
+                      "dark.css",
+                      "main.css",
+                      "main.js",
+                      "normalize.css",
+                      "rustdoc.css",
+                      "storage.js",
+                      "theme.js"],
                      // files doesn't require rustc version subfix
                      ["FiraSans-Medium.woff",
                       "FiraSans-Regular.woff",
@@ -385,11 +392,10 @@ impl DocBuilder {
         try!(create_dir_all(&destination));
 
         for file in files.0.iter() {
-            let source_path = source.join(file);
-            let destination_path = {
-                let spl: Vec<&str> = file.split('.').collect();
-                destination.join(format!("{}-{}.{}", spl[0], rustc_version, spl[1]))
-            };
+            let spl: Vec<&str> = file.split('.').collect();
+            let file_name = format!("{}-{}.{}", spl[0], rustc_version, spl[1]);
+            let source_path = source.join(&file_name);
+            let destination_path = destination.join(&file_name);
             try!(copy(source_path, destination_path));
         }
 
@@ -409,18 +415,6 @@ impl DocBuilder {
 }
 
 
-/// Simple function to capture command output
-fn command_result(output: Output) -> Result<String> {
-    let mut command_out = String::from_utf8_lossy(&output.stdout).into_owned();
-    command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
-    match output.status.success() {
-        true => Ok(command_out),
-        false => Err(command_out.into()),
-    }
-}
-
-
-
 /// Returns canonical name of a package.
 ///
 /// It's just package-version. All directory structure used in cratesfyi is
@@ -429,20 +423,6 @@ fn canonical_name(package: &Package) -> String {
     format!("{}-{}",
             package.manifest().name(),
             package.manifest().version())
-}
-
-
-/// Parses rustc commit hash from rustc version string
-fn parse_rustc_version<S: AsRef<str>>(version: S) -> String {
-    let version_regex = Regex::new(r" ([\w-.]+) \((\w+) (\d+)-(\d+)-(\d+)\)").unwrap();
-    let captures = version_regex.captures(version.as_ref()).expect("Failed to parse rustc version");
-
-    format!("{}{}{}-{}-{}",
-            captures.get(3).unwrap().as_str(),
-            captures.get(4).unwrap().as_str(),
-            captures.get(5).unwrap().as_str(),
-            captures.get(1).unwrap().as_str(),
-            captures.get(2).unwrap().as_str())
 }
 
 
@@ -460,7 +440,6 @@ fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    use super::parse_rustc_version;
     use std::path::PathBuf;
     use {DocBuilder, DocBuilderOptions};
 
@@ -482,14 +461,6 @@ mod test {
         let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.build_package("rand", "0.3.14");
         assert!(res.is_ok());
-    }
-
-    #[test]
-    fn test_parse_rustc_version() {
-        assert_eq!(parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)"),
-                   "20160523-1.10.0-nightly-57ef01513");
-        assert_eq!(parse_rustc_version("cratesfyi 0.2.0 (ba9ae23 2016-05-26)"),
-                   "20160526-0.2.0-ba9ae23");
     }
 
     #[test]
