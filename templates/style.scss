@@ -51,11 +51,14 @@ html, button, input, select, textarea,
 div.rustdoc {
     font-family: $font-family-serif;
     padding: 10px 15px 20px 15px;
-}
+    margin-top: 32px;
 
-.sidebar {
-    padding-top: 32px;
-    z-index: -1;
+    .sidebar {
+        padding-top: 32px;
+        .block > ul > li {
+            margin-right: -10px;
+        }
+    }
 }
 
 body {
@@ -103,13 +106,6 @@ div.container {
 div.container-rustdoc {
     max-width: 1200px;
     text-align: left;
-
-    #theme-picker {
-        margin-top: 30px;
-    }
-    #theme-choices {
-        top: 60px;
-    }
 }
 
 div.nav-container {
@@ -219,6 +215,14 @@ div.nav-container {
             }
         }
     }
+}
+
+div.nav-container-rustdoc {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 999;
+    width: 100%;
 }
 
 div.landing {
