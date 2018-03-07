@@ -51,7 +51,6 @@ html, button, input, select, textarea,
 div.rustdoc {
     font-family: $font-family-serif;
     padding: 10px 15px 20px 15px;
-    margin-top: 32px;
 
     .sidebar {
         padding-top: 32px;
@@ -101,6 +100,13 @@ div.container {
     max-width: 1160px;
     margin: 0 auto;
     text-align: left;
+}
+
+body > div.container-rustdoc {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 32px;
 }
 
 div.container-rustdoc {
@@ -218,11 +224,11 @@ div.nav-container {
 }
 
 div.nav-container-rustdoc {
-    position: fixed;
+    position: absolute;
     left: 0;
+    right: 0;
     top: 0;
     z-index: 999;
-    width: 100%;
 }
 
 div.landing {
