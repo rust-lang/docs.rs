@@ -58,6 +58,12 @@ div.rustdoc {
             margin-right: -10px;
         }
     }
+
+    // this is actual fix for docs.rs navigation and rustdoc sidebar
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 32px;
 }
 
 body {
@@ -100,13 +106,6 @@ div.container {
     max-width: 1160px;
     margin: 0 auto;
     text-align: left;
-}
-
-body > div.container-rustdoc {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 32px;
 }
 
 div.container-rustdoc {
