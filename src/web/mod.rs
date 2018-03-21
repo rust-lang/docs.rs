@@ -290,9 +290,14 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     }
 
     // For crates that have only pre-release versions, ranges like '"*"' will not match any
-    // versions.  Return the first version if requested version is '*'.
-    if req_version == "*" && !versions_sem.is_empty() {
-        return Some(format!("{}", versions_sem[0]));
+    // versions.  Try matching without the pre-release tag.
+    for version in &versions_sem {
+        let mut version_without_pre = version.clone();
+        version_without_pre.pre.clear();
+
+        if req_sem_ver.matches(&version_without_pre) {
+            return Some(format!("{}", version));
+        }
     }
 
     None
