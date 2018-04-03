@@ -47,7 +47,7 @@ Vagrant.configure("2") do |config|
     ############################################################
     lxc-attach -n cratesfyi-container -- apt-get update
     lxc-attach -n cratesfyi-container -- apt-get install -y --no-install-recommends curl ca-certificates binutils gcc libc6-dev libmagic1
-    lxc-attach -n cratesfyi-container -- su - cratesfyi -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2017-05-21'
+    lxc-attach -n cratesfyi-container -- su - cratesfyi -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2018-03-25'
 
     ############################################################
     # Creating rustc links for cratesfyi user                  #
