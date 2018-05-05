@@ -232,7 +232,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
                 Err(_) => None,
             }
         })
-        .map(|v| if v == "newest" { "*".to_owned() } else { v })
+        .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
         .unwrap_or("*".to_string());
 
     let versions = {
