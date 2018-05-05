@@ -99,6 +99,24 @@
     </tbody>
   </table>
 
+  <h4>Metadata for custom builds</h4>
+
+  <p>You can customize docs.rs builds by defining <code>[package.metadata.docs.rs]</code> table in your crates' `Cargo.toml`.</p>
+
+  <p>An example metadata:</p>
+
+  <pre><code>[package]
+  name = "test"
+
+  [package.metadata.docs.rs]
+  features = [ "feature1", "feature2" ]
+  all-features = true
+  no-default-features = true
+  default-target = "x86_64-unknown-linux-gnu"
+  rustc-args = [ "--example-rustc-arg" ]
+  rustdoc-args = [ "--example-rustdoc-arg" ]
+  dependencies = [ "example-system-dependency" ]</pre></code>
+
   <h4>Version</h4>
   <p>Currently running Docs.rs version is: <strong>{{cratesfyi_version}}</strong>
 
