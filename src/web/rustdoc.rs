@@ -24,6 +24,7 @@ struct RustdocPage {
     pub head: String,
     pub body: String,
     pub name: String,
+    pub full: String,
     pub version: String,
     pub description: Option<String>,
     pub crate_details: Option<CrateDetails>,
@@ -36,6 +37,7 @@ impl Default for RustdocPage {
             head: String::new(),
             body: String::new(),
             name: String::new(),
+            full: String::new(),
             version: String::new(),
             description: None,
             crate_details: None,
@@ -49,6 +51,7 @@ impl ToJson for RustdocPage {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("rustdoc_head".to_string(), self.head.to_json());
         m.insert("rustdoc_body".to_string(), self.body.to_json());
+        m.insert("rustdoc_full".to_string(), self.full.to_json());
         m.insert("rustdoc_status".to_string(), true.to_json());
         m.insert("name".to_string(), self.name.to_json());
         m.insert("version".to_string(), self.version.to_json());
@@ -177,6 +180,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
     }
 
+    content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     let latest_version = latest_version(&crate_details.versions, &version);
 
