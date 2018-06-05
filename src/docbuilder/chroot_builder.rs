@@ -363,11 +363,13 @@ impl DocBuilder {
 
         let files = (// files require rustc version subfix
                      ["brush.svg",
+                      "wheel.svg",
                       "dark.css",
-                      "main.css",
+                      "light.css",
                       "main.js",
                       "normalize.css",
                       "rustdoc.css",
+                      "settings.css",
                       "storage.js",
                       "theme.js"],
                      // files doesn't require rustc version subfix
