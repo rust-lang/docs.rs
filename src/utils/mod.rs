@@ -7,6 +7,7 @@ pub use self::github_updater::github_updater;
 pub use self::release_activity_updater::update_release_activity;
 pub use self::daemon::start_daemon;
 pub use self::rustc_version::{parse_rustc_version, get_current_versions, command_result};
+pub use self::html::extract_head_and_body;
 
 mod github_updater;
 mod build_doc;
@@ -15,3 +16,4 @@ mod release_activity_updater;
 mod daemon;
 mod pubsubhubbub;
 mod rustc_version;
+mod html;

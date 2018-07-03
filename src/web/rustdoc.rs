@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
 use time;
 use iron::Handler;
+use utils;
 
 
 #[derive(Debug)]
@@ -155,34 +156,13 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return Ok(file.serve());
     }
 
-    let (mut in_head, mut in_body) = (false, false);
-
     let mut content = RustdocPage::default();
 
     let file_content = ctry!(String::from_utf8(file.content));
 
-    for line in file_content.lines() {
-
-        if line.starts_with("<head") {
-            in_head = true;
-            continue;
-        } else if line.starts_with("</head") {
-            in_head = false;
-        } else if line.starts_with("<body") {
-            in_body = true;
-            continue;
-        } else if line.starts_with("</body") {
-            in_body = false;
-        }
-
-        if in_head {
-            content.head.push_str(&line[..]);
-            content.head.push('\n');
-        } else if in_body {
-            content.body.push_str(&line[..]);
-            content.body.push('\n');
-        }
-    }
+    let (head, body) = ctry!(utils::extract_head_and_body(&file_content));
+    content.head = head;
+    content.body = body;
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));

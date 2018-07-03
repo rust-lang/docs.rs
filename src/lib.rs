@@ -28,6 +28,7 @@ extern crate badge;
 extern crate crates_index_diff;
 extern crate git2;
 extern crate toml;
+extern crate html5ever;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
