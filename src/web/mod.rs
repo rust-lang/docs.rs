@@ -69,6 +69,7 @@ const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 
 struct CratesfyiHandler {
+    shared_resource_handler: Box<Handler>,
     router_handler: Box<Handler>,
     database_file_handler: Box<Handler>,
     static_handler: Box<Handler>,
@@ -186,12 +187,14 @@ impl CratesfyiHandler {
                    rustdoc::rustdoc_html_server_handler,
                    "crate_version_target_html");
 
+        let shared_resources = Self::chain(rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(router);
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
         CratesfyiHandler {
+            shared_resource_handler: Box::new(shared_resources),
             router_handler: Box::new(router_chain),
             database_file_handler: Box::new(file::DatabaseFileHandler),
             static_handler: Box::new(static_handler),
@@ -202,10 +205,13 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        // try router first then db/static file handler
+        // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
-        self.router_handler
+        self.shared_resource_handler
             .handle(req)
+            .or_else(|e| {
+                self.router_handler.handle(req).or(Err(e))
+            })
             .or_else(|e| {
                 // if router fails try to serve files from database first
                 self.database_file_handler.handle(req).or(Err(e))
