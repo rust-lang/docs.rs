@@ -65,6 +65,7 @@ CRATESFYI_DATABASE_URL=postgresql://cratesfyi@localhost
 CRATESFYI_GITHUB_USERNAME=
 CRATESFYI_GITHUB_ACCESSTOKEN=
 RUST_LOG=cratesfyi
+CARGO_TARGET_DIR=/home/cratesfyi/docs.rs/target
 EOF
 
     ############################################################
@@ -105,7 +106,7 @@ EOF
     ############################################################
     # Copying docs.rs into container                           #
     ############################################################
-    cp -v /vagrant/target/debug/cratesfyi /var/lib/lxc/cratesfyi-container/rootfs/usr/local/bin
+    cp -v /home/cratesfyi/docs.rs/target/debug/cratesfyi /var/lib/lxc/cratesfyi-container/rootfs/usr/local/bin
 
     ############################################################
     # Re-creating database                                     #
