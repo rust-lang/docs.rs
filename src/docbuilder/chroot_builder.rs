@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::Json;
-use error::Result;
+use error::{Result, ResultExt};
 
 
 /// List of targets supported by docs.rs
@@ -398,13 +398,15 @@ impl DocBuilder {
             let file_name = format!("{}-{}.{}", spl[0], rustc_version, spl[1]);
             let source_path = source.join(&file_name);
             let destination_path = destination.join(&file_name);
-            try!(copy(source_path, destination_path));
+            try!(copy(&source_path, &destination_path)
+                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
         }
 
         for file in files.1.iter() {
             let source_path = source.join(file);
             let destination_path = destination.join(file);
-            try!(copy(source_path, destination_path));
+            try!(copy(&source_path, &destination_path)
+                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
         }
 
         let conn = try!(connect_db());
