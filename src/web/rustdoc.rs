@@ -99,17 +99,28 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // get target name
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let target_name: String = {
-        let query = ctry!(conn.query("SELECT target_name, default_target
+        fn targets_contains(doc_targets: &Json, default_target: &str) -> bool {
+            doc_targets.as_array().map_or(false, |tgts| {
+                tgts.iter().any(|t| t.as_string() == Some(default_target))
+            })
+        }
+
+        let query = ctry!(conn.query("SELECT target_name, default_target, doc_targets
                                       FROM releases
                                       INNER JOIN crates ON crates.id = releases.crate_id
                                       WHERE crates.name = $1 AND releases.version = $2",
                                       &[&crate_name, &version]));
         let row = query.get(0);
 
-        let (target, default): (String, Option<String>) = (row.get(0), row.get(1));
+        let (target, default, doc_targets): (String, Option<String>, Json) =
+            (row.get(0), row.get(1), row.get(2));
 
         if let Some(default) = default {
-            format!("{}/{}", default, target)
+            if targets_contains(&doc_targets, &default) {
+                format!("{}/{}", default, target)
+            } else {
+                target
+            }
         } else {
             target
         }
