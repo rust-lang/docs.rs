@@ -98,14 +98,22 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // get target name
     // FIXME: This is a bit inefficient but allowing us to use less code in general
-    let target_name: String =
-        ctry!(conn.query("SELECT target_name
-                          FROM releases
-                          INNER JOIN crates ON crates.id = releases.crate_id
-                          WHERE crates.name = $1 AND releases.version = $2",
-                         &[&crate_name, &version]))
-            .get(0)
-            .get(0);
+    let target_name: String = {
+        let query = ctry!(conn.query("SELECT target_name, default_target
+                                      FROM releases
+                                      INNER JOIN crates ON crates.id = releases.crate_id
+                                      WHERE crates.name = $1 AND releases.version = $2",
+                                      &[&crate_name, &version]));
+        let row = query.get(0);
+
+        let (target, default): (String, Option<String>) = (row.get(0), row.get(1));
+
+        if let Some(default) = default {
+            format!("{}/{}", default, target)
+        } else {
+            target
+        }
+    };
 
     redirect_to_doc(req, &crate_name, &version, &target_name)
 }
