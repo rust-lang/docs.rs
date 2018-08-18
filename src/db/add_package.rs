@@ -264,6 +264,8 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
 
     if rustdoc.is_empty() {
         Ok(None)
+    } else if rustdoc.len() > 51200 {
+        Ok(Some(format!("(Library doc comment ignored due to being too long. ({} > 51200))", rustdoc.len())))
     } else {
         Ok(Some(rustdoc))
     }
