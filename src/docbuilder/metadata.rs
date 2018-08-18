@@ -45,6 +45,14 @@ pub struct Metadata {
     /// is always built on this target. You can change default target by setting this.
     pub default_target: Option<String>,
 
+    /// Define the Rust version that will be used to build documentation
+    ///
+    /// You can either provide a specific nightly (such as `2018-08-18`) or
+    /// simply `nightly` to always use the current.
+    ///
+    /// Note: Depending on latest nightly can easily break your documentation!
+    pub rustc_version: Option<String>,
+
     /// List of command line arguments for `rustc`.
     pub rustc_args: Option<Vec<String>>,
 
@@ -90,6 +98,7 @@ impl Metadata {
     fn default() -> Metadata {
         Metadata {
             features: None,
+            rustc_version: None,
             all_features: false,
             no_default_features: false,
             default_target: None,
@@ -120,6 +129,10 @@ impl Metadata {
                         .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
                     metadata.default_target = table.get("default-target")
                         .and_then(|v| v.as_str()).map(|v| v.to_owned());
+                    metadata.rustc_version = table.get("rustc-version").and_then(|f| match f {
+                        Value::String(s) => Some(s.clone()),
+                        _ => None,
+                    });
                     metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())

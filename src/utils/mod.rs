@@ -17,3 +17,4 @@ mod daemon;
 mod pubsubhubbub;
 mod rustc_version;
 mod html;
+mod rustup;

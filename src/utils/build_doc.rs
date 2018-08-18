@@ -15,6 +15,8 @@ use cargo::ops::{self, Packages, DefaultExecutor};
 use utils::{get_current_versions, parse_rustc_version};
 use error::Result;
 
+use super::rustup;
+
 use Metadata;
 
 
@@ -48,6 +50,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
     let metadata = Metadata::from_package(&pkg).map_err(|e| human(e.description()))?;
+
+    // Change rustc version if requested
+    if metadata.rustc_version.is_some() {
+        rustup::set_version(metadata.rustc_version.unwrap());
+    }
 
     // This is only way to pass rustc_args to cargo.
     // CompileOptions::target_rustc_args is used only for the current crate,
