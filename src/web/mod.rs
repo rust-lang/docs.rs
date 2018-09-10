@@ -68,6 +68,20 @@ const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.cs
 const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 
+struct ContentSecurityPolicy;
+impl AfterMiddleware for ContentSecurityPolicy {
+    fn after(&self, _req: &mut Request, mut resp: Response) -> IronResult<Response> {
+        if resp.headers.get(iron::headers::CONTENT_SECURITY_POLICY) == None {
+            resp.headers.insert(
+                iron::headers::CONTENT_SECURITY_POLICY,
+                "default-src 'self'; worker-src 'none'; font-src 'self' cdnjs.cloudflare.com; script-src 'self' cdnjs.cloudflare.com;".as_ref().parse().unwrap(),
+            );
+        }
+        Ok(resp)
+    }
+}
+
+
 struct CratesfyiHandler {
     shared_resource_handler: Box<Handler>,
     router_handler: Box<Handler>,
@@ -90,6 +104,7 @@ impl CratesfyiHandler {
         let mut chain = Chain::new(base);
         chain.link_before(pool::Pool::new());
         chain.link_after(hbse);
+        chain.link_after(ContentSecurityPolicy);
         chain
     }
 
