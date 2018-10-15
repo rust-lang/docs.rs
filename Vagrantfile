@@ -50,6 +50,12 @@ Vagrant.configure("2") do |config|
     lxc-attach -n cratesfyi-container -- su - cratesfyi -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2018-06-03'
 
     ############################################################
+    # Installing extra targets into cratesfyi-container        #
+    ############################################################
+    lxc-attach -n cratesfyi-container -- su - cratesfyi -c 'rustup target add x86_64-apple-darwin'
+    lxc-attach -n cratesfyi-container -- su - cratesfyi -c 'rustup target add x86_64-pc-windows-msvc'
+
+    ############################################################
     # Creating rustc links for cratesfyi user                  #
     ############################################################
     for directory in .cargo .rustup .multirust; do
