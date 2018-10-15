@@ -19,7 +19,7 @@ error_chain! {
         ReqwestError(reqwest::Error);
         Git2Error(git2::Error);
         MagicError(MagicError);
-        CargoError(Box<cargo::CargoError>);
+        CargoError(cargo::CargoError);
         RegexError(regex::Error);
     }
 }

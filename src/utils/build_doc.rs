@@ -8,9 +8,10 @@ use std::env;
 use std::sync::Arc;
 
 use cargo::core::{SourceId, Dependency, Registry, Source, Package, Workspace};
-use cargo::util::{CargoResult, Config, human, Filesystem};
+use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
+use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
-use cargo::ops::{self, Packages, DefaultExecutor};
+use cargo::ops::{self, Packages};
 
 use utils::{get_current_versions, parse_rustc_version};
 use error::Result;
@@ -37,17 +38,17 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     try!(source.update());
 
     let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
-    let deps = try!(source.query(&dep));
+    let deps = try!(source.query_vec(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
                    // FIXME: This is probably not a rusty way to handle options and results
                    //        or maybe it is who knows...
                    .map(|pkgid| source.download(pkgid))
-                   .unwrap_or(Err(human("PKG download error"))));
+                   .unwrap_or(Err(internal("PKG download error"))));
 
     let current_dir = try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
-    let metadata = Metadata::from_package(&pkg).map_err(|e| human(e.description()))?;
+    let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.description()))?;
 
     // This is only way to pass rustc_args to cargo.
     // CompileOptions::target_rustc_args is used only for the current crate,
@@ -60,6 +61,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/48511 we can pass --resource-suffix to
     // add correct version numbers to css and javascript files
+    // TODO: we can add --extern-html-root-url too, thanks to
+    // https://github.com/rust-lang/rust/pull/51384
     let mut rustdoc_args: Vec<String> =
         vec!["-Z".to_string(), "unstable-options".to_string(),
              "--resource-suffix".to_string(),
@@ -68,28 +71,34 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
         rustdoc_args.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
     }
 
+    let mut build_config = try!(BuildConfig::new(&config,
+                                                 None,
+                                                 &target.map(|t| t.to_string()),
+                                                 CompileMode::Doc { deps: false }));
+    build_config.release = false;
+    build_config.message_format = MessageFormat::Human;
+
     let opts = ops::CompileOptions {
         config: &config,
-        jobs: None,
-        target: target,
-        features: &metadata.features.unwrap_or(Vec::new()),
+        build_config,
+        features: metadata.features.unwrap_or(Vec::new()),
         all_features: metadata.all_features,
         no_default_features: metadata.no_default_features,
-        spec: Packages::Packages(&[]),
-        mode: ops::CompileMode::Doc { deps: false },
-        release: false,
-        message_format: ops::MessageFormat::Human,
+        spec: Packages::Packages(Vec::new()),
         filter: ops::CompileFilter::new(true,
-                                        &[], false,
-                                        &[], false,
-                                        &[], false,
-                                        &[], false),
+                                        Vec::new(), false,
+                                        Vec::new(), false,
+                                        Vec::new(), false,
+                                        Vec::new(), false,
+                                        false),
         target_rustc_args: None,
-        target_rustdoc_args: Some(rustdoc_args.as_slice()),
+        target_rustdoc_args: Some(rustdoc_args),
+        export_dir: None,
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
-    try!(ops::compile_ws(&ws, Some(source), &opts, Arc::new(DefaultExecutor)));
+    let exec: Arc<Executor> = Arc::new(DefaultExecutor);
+    try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
 
     Ok(try!(ws.current()).clone())
 }
@@ -108,12 +117,12 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     try!(source.update());
 
     let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
-    let deps = try!(source.query(&dep));
+    let deps = try!(source.query_vec(&dep));
     let pkg = try!(deps.iter().map(|p| p.package_id()).max()
                    // FIXME: This is probably not a rusty way to handle options and results
                    //        or maybe it is who knows...
                    .map(|pkgid| source.download(pkgid))
-                   .unwrap_or(Err(human("PKG download error"))));
+                   .unwrap_or(Err(internal("PKG download error"))));
 
     Ok(pkg)
 }

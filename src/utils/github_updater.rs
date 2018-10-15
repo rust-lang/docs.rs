@@ -74,24 +74,24 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
     let body = {
         use std::io::Read;
         use reqwest::{Client, StatusCode};
-        use reqwest::header::{UserAgent, Authorization, Basic};
+        use reqwest::header::USER_AGENT;
         use std::env;
 
-        let client = try!(Client::new());
+        let client = Client::new();
         let mut body = String::new();
 
         let mut resp = try!(client.get(&format!("https://api.github.com/repos/{}", path)[..])
-            .header(UserAgent(format!("cratesfyi/{}", env!("CARGO_PKG_VERSION"))))
-            .header(Authorization(Basic {
-                username: env::var("CRATESFYI_GITHUB_USERNAME")
+            .header(USER_AGENT, format!("cratesfyi/{}", env!("CARGO_PKG_VERSION")))
+            .basic_auth(
+                env::var("CRATESFYI_GITHUB_USERNAME")
                     .ok()
                     .and_then(|u| Some(u.to_string()))
                     .unwrap_or("".to_string()),
-                password: env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
-            }))
+                env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
+            )
             .send());
 
-        if resp.status() != &StatusCode::Ok {
+        if resp.status() != StatusCode::OK {
             return Err("Failed to get github data".into());
         }
 

@@ -13,7 +13,7 @@ use cargo::core::{Package, TargetKind};
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
-use reqwest::header::{Accept, qitem};
+use reqwest::header::ACCEPT;
 use semver;
 use postgres::Connection;
 use time;
@@ -197,11 +197,11 @@ pub fn add_build_into_database(conn: &Connection,
 
 fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i32> {
     let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
-                                   &[&pkg.manifest().name()]));
+                                   &[&pkg.manifest().name().as_str()]));
     // insert crate into database if it is not exists
     if rows.len() == 0 {
         rows = try!(conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
-                               &[&pkg.manifest().name()]));
+                               &[&pkg.manifest().name().as_str()]));
     }
     Ok(rows.get(0).get(0))
 }
@@ -212,7 +212,7 @@ fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i3
 fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
     let mut dependencies: Vec<(String, String)> = Vec::new();
     for dependency in pkg.manifest().dependencies() {
-        let name = dependency.name().to_string();
+        let name = dependency.package_name().to_string();
         let version = format!("{}", dependency.version_req());
         dependencies.push((name, version));
     }
@@ -279,9 +279,9 @@ fn get_release_time_yanked_downloads
                       pkg.manifest().name());
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
-    let client = try!(Client::new());
+    let client = Client::new();
     let mut res = try!(client.get(&url[..])
-        .header(Accept(vec![qitem("application/json".parse().unwrap())]))
+        .header(ACCEPT, "application/json")
         .send());
     let mut body = String::new();
     res.read_to_string(&mut body).unwrap();
@@ -387,9 +387,9 @@ fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) ->
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
                              &pkg.manifest().name());
-    let client = try!(Client::new());
+    let client = Client::new();
     let mut res = try!(client.get(&owners_url[..])
-        .header(Accept(vec![qitem("application/json".parse().unwrap())]))
+        .header(ACCEPT, "application/json")
         .send());
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
