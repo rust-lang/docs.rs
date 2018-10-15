@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use rustc_serialize::json::Json;
 use error::Result;
-
+use failure::err_msg;
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
@@ -28,13 +28,13 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
             Err(_) => continue,
         };
 
-        let obj = try!(data.as_object().ok_or("Not a JSON object"));
+        let obj = try!(data.as_object().ok_or_else(|| err_msg("Not a JSON object")));
         let crate_name = try!(obj.get("name")
             .and_then(|n| n.as_string())
-            .ok_or("`name` not found in JSON object"));
+            .ok_or_else(|| err_msg("`name` not found in JSON object")));
         let vers = try!(obj.get("vers")
             .and_then(|n| n.as_string())
-            .ok_or("`vers` not found in JSON object"));
+            .ok_or_else(|| err_msg("`vers` not found in JSON object")));
 
         // Skip yanked crates
         if obj.get("yanked").and_then(|n| n.as_boolean()).unwrap_or(false) {
@@ -63,7 +63,7 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
 {
 
     if !path.is_dir() {
-        return Err("Not a directory".into());
+        return Err(err_msg("Not a directory"));
     }
 
     for file in try!(path.read_dir()) {

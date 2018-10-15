@@ -18,7 +18,7 @@ use semver;
 use postgres::Connection;
 use time;
 use error::Result;
-
+use failure::err_msg;
 
 /// Adds a package into database.
 ///
@@ -222,7 +222,7 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &Package) -> Result<Option<String>> {
-    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")))
+    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))))
         .join(pkg.manifest().metadata().readme.clone().unwrap_or("README.md".to_owned()));
 
     if !readme_path.exists() {
@@ -240,7 +240,7 @@ fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
     if pkg.manifest().targets()[0].src_path().is_absolute() {
         read_rust_doc(pkg.manifest().targets()[0].src_path())
     } else {
-        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")));
+        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
         path.push(pkg.manifest().targets()[0].src_path());
         read_rust_doc(path.as_path())
     }
@@ -289,31 +289,31 @@ fn get_release_time_yanked_downloads
     let versions = try!(json.as_object()
         .and_then(|o| o.get("versions"))
         .and_then(|v| v.as_array())
-        .ok_or("Not a JSON object"));
+        .ok_or_else(|| err_msg("Not a JSON object")));
 
     let (mut release_time, mut yanked, mut downloads) = (None, None, None);
 
     for version in versions {
-        let version = try!(version.as_object().ok_or("Not a JSON object"));
+        let version = try!(version.as_object().ok_or_else(|| err_msg("Not a JSON object")));
         let version_num = try!(version.get("num")
             .and_then(|v| v.as_string())
-            .ok_or("Not a JSON object"));
+            .ok_or_else(|| err_msg("Not a JSON object")));
 
         if &semver::Version::parse(version_num).unwrap() == pkg.manifest().version() {
             let release_time_raw = try!(version.get("created_at")
                 .and_then(|c| c.as_string())
-                .ok_or("Not a JSON object"));
+                .ok_or_else(|| err_msg("Not a JSON object")));
             release_time = Some(time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
                 .unwrap()
                 .to_timespec());
 
             yanked = Some(try!(version.get("yanked")
                 .and_then(|c| c.as_boolean())
-                .ok_or("Not a JSON object")));
+                .ok_or_else(|| err_msg("Not a JSON object"))));
 
             downloads = Some(try!(version.get("downloads")
                 .and_then(|c| c.as_i64())
-                .ok_or("Not a JSON object")) as i32);
+                .ok_or_else(|| err_msg("Not a JSON object"))) as i32);
 
             break;
         }

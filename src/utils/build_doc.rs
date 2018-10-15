@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::env;
 use std::sync::Arc;
 
-use cargo::core::{SourceId, Dependency, Registry, Source, Package, Workspace};
+use cargo::core::{SourceId, Dependency, Source, Package, Workspace};
 use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
 use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
@@ -48,7 +48,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let current_dir = try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
-    let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.description()))?;
+    let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.to_string()))?;
 
     // This is only way to pass rustc_args to cargo.
     // CompileOptions::target_rustc_args is used only for the current crate,
@@ -162,7 +162,7 @@ mod test {
         let pkg = pkg.unwrap();
 
         let manifest = pkg.manifest();
-        assert_eq!(manifest.name(), "rand");
+        assert_eq!(manifest.name().as_str(), "rand");
     }
 
 

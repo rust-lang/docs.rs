@@ -3,7 +3,7 @@ use ::db::connect_db;
 use regex::Regex;
 use time;
 use error::Result;
-
+use failure::err_msg;
 
 
 /// Fields we need use in cratesfyi
@@ -39,7 +39,7 @@ pub fn github_updater() -> Result<()> {
         let repository_url: String = row.get(2);
 
         if let Err(err) = get_github_path(&repository_url[..])
-            .ok_or("Failed to get github path".into())
+            .ok_or_else(|| err_msg("Failed to get github path"))
             .and_then(|path| get_github_fields(&path[..]))
             .and_then(|fields| {
                 conn.execute("UPDATE crates
@@ -92,7 +92,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
             .send());
 
         if resp.status() != StatusCode::OK {
-            return Err("Failed to get github data".into());
+            return Err(err_msg("Failed to get github data"));
         }
 
         try!(resp.read_to_string(&mut body));

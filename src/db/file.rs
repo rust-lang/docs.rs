@@ -11,7 +11,7 @@ use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
 use std::io::Read;
 use error::Result;
-
+use failure::err_msg;
 
 
 fn file_path(prefix: &str, name: &str) -> String {
@@ -49,7 +49,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
     let mut files: Vec<String> = Vec::new();
 
     if !path.exists() {
-        return Err("File not found".into());
+        return Err(err_msg("File not found"));
     } else if path.is_file() {
         path.file_name()
             .and_then(|name| name.to_str())

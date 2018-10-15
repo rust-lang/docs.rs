@@ -1,4 +1,5 @@
-use error::{Result, Error};
+use error::Result;
+use failure::err_msg;
 
 use html5ever::serialize::{serialize, SerializeOpts};
 use html5ever::rcdom::{RcDom, NodeData, Handle};
@@ -24,14 +25,14 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
             NodeData::Element { ref name, .. } => match name.local.as_ref() {
                 "head" => {
                     if head.is_some() {
-                        return Err("duplicate <head> tag".into());
+                        return Err(err_msg("duplicate <head> tag"));
                     } else {
                         head = Some(handle.clone());
                     }
                 }
                 "body" => {
                     if body.is_some() {
-                        return Err("duplicate <body> tag".into());
+                        return Err(err_msg("duplicate <body> tag"));
                     } else {
                         body = Some(handle.clone());
                     }
@@ -44,8 +45,8 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
         worklist.extend(handle.children.borrow().iter().cloned());
     }
 
-    let head = head.ok_or_else(|| Error::from("couldn't find <head> tag in rustdoc output"))?;
-    let body = body.ok_or_else(|| Error::from("couldn't find <body> tag in rustdoc output"))?;
+    let head = head.ok_or_else(|| err_msg("couldn't find <head> tag in rustdoc output"))?;
+    let body = body.ok_or_else(|| err_msg("couldn't find <body> tag in rustdoc output"))?;
     Ok((head, body))
 }
 

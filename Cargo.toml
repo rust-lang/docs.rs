@@ -25,7 +25,7 @@ r2d2_postgres = "0.12"
 url = "1.4"
 libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
-error-chain = "0.12"
+failure = "0.1"
 comrak = { version = "0.2.10", default-features = false }
 toml = "0.4"
 html5ever = "0.22"
@@ -49,6 +49,9 @@ tempdir = "0.3"
 time = "0.1"
 git2 = "0.7"
 sass-rs = "0.2"
+
+[patch.crates-io]
+failure = { git = "https://github.com/rust-lang-nursery/failure.git" }
 
 [[bin]]
 name = "cratesfyi"
