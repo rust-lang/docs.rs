@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::env;
 use std::sync::Arc;
 
-use cargo::core::{SourceId, Dependency, Source, Package, Workspace};
+use cargo::core::{self, SourceId, Dependency, Source, Package, Workspace};
 use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
 use cargo::core::package::PackageSet;
 use cargo::core::source::SourceMap;
@@ -30,6 +30,7 @@ use Metadata;
 // and build a crate and its documentation
 // instead of doing it manually like in the previous version of cratesfyi
 pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result<Package> {
+    core::enable_nightly_features();
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
 
@@ -117,6 +118,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
 /// Downloads a crate and returns Cargo Package.
 pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
+    core::enable_nightly_features();
     debug!("Getting package with cargo");
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
