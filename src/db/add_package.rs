@@ -237,11 +237,11 @@ fn get_readme(pkg: &Package) -> Result<Option<String>> {
 
 
 fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
-    if pkg.manifest().targets()[0].src_path().is_absolute() {
-        read_rust_doc(pkg.manifest().targets()[0].src_path())
+    if pkg.manifest().targets()[0].src_path().path().is_absolute() {
+        read_rust_doc(pkg.manifest().targets()[0].src_path().path())
     } else {
         let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
-        path.push(pkg.manifest().targets()[0].src_path());
+        path.push(pkg.manifest().targets()[0].src_path().path());
         read_rust_doc(path.as_path())
     }
 }

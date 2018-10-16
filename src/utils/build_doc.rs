@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 use cargo::core::{SourceId, Dependency, Source, Package, Workspace};
 use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
+use cargo::core::package::PackageSet;
+use cargo::core::source::SourceMap;
 use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
 use cargo::ops::{self, Packages};
@@ -31,19 +33,25 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
 
-    let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(&source_id));
+    let source_cfg_map = try!(SourceConfigMap::new(&config));
+    let mut source = try!(source_cfg_map.load(&source_id));
 
     // update crates.io-index registry
     try!(source.update());
 
     let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
     let deps = try!(source.query_vec(&dep));
-    let pkg = try!(deps.iter().map(|p| p.package_id()).max()
-                   // FIXME: This is probably not a rusty way to handle options and results
-                   //        or maybe it is who knows...
-                   .map(|pkgid| source.download(pkgid))
-                   .unwrap_or(Err(internal("PKG download error"))));
+    let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
+                     // FIXME: This is probably not a rusty way to handle options and results
+                     //        or maybe it is who knows...
+                     .ok_or(internal("no package id available")));
+
+    let mut source_map = SourceMap::new();
+    source_map.insert(source);
+
+    let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
+
+    let pkg = try!(pkg_set.get_one(&pkgid)).clone();
 
     let current_dir = try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
@@ -93,11 +101,13 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
                                         false),
         target_rustc_args: None,
         target_rustdoc_args: Some(rustdoc_args),
+        local_rustdoc_args: None,
         export_dir: None,
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
     let exec: Arc<Executor> = Arc::new(DefaultExecutor);
+    let source = try!(source_cfg_map.load(&source_id));
     try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
 
     Ok(try!(ws.current()).clone())
@@ -118,11 +128,17 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
     let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
     let deps = try!(source.query_vec(&dep));
-    let pkg = try!(deps.iter().map(|p| p.package_id()).max()
-                   // FIXME: This is probably not a rusty way to handle options and results
-                   //        or maybe it is who knows...
-                   .map(|pkgid| source.download(pkgid))
-                   .unwrap_or(Err(internal("PKG download error"))));
+    let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
+                     // FIXME: This is probably not a rusty way to handle options and results
+                     //        or maybe it is who knows...
+                     .ok_or(internal("no package id available")));
+
+    let mut source_map = SourceMap::new();
+    source_map.insert(source);
+
+    let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
+
+    let pkg = try!(pkg_set.get_one(&pkgid)).clone();
 
     Ok(pkg)
 }

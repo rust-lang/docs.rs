@@ -29,7 +29,7 @@ failure = "0.1"
 comrak = { version = "0.2.10", default-features = false }
 toml = "0.4"
 html5ever = "0.22"
-cargo = "0.30"
+cargo = { git = "https://github.com/rust-lang/cargo.git" }
 
 # iron dependencies
 iron = "0.5"
