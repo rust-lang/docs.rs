@@ -10,6 +10,8 @@ use std::sync::Arc;
 use cargo::core::{self, SourceId, Dependency, Source, Package, Workspace};
 use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
 use cargo::core::package::PackageSet;
+use cargo::core::registry::PackageRegistry;
+use cargo::core::resolver;
 use cargo::core::source::SourceMap;
 use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
@@ -70,12 +72,20 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/48511 we can pass --resource-suffix to
     // add correct version numbers to css and javascript files
-    // TODO: we can add --extern-html-root-url too, thanks to
-    // https://github.com/rust-lang/rust/pull/51384
     let mut rustdoc_args: Vec<String> =
         vec!["-Z".to_string(), "unstable-options".to_string(),
              "--resource-suffix".to_string(),
              format!("-{}", parse_rustc_version(get_current_versions()?.0)?)];
+
+    // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
+    // force rustdoc to link to other docs.rs docs for dependencies
+    let source = try!(source_cfg_map.load(&source_id));
+    for (name, dep) in try!(resolve_deps(&pkg, &config, source)) {
+        rustdoc_args.push("--extern-html-root-url".to_string());
+        rustdoc_args.push(format!("{}=https://docs.rs/{}/{}",
+                                  name.replace("-", "_"), dep.name(), dep.version()));
+    }
+
     if let Some(package_rustdoc_args) = metadata.rustdoc_args {
         rustdoc_args.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
     }
@@ -114,7 +124,34 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     Ok(try!(ws.current()).clone())
 }
 
+fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cfg>)
+    -> CargoResult<Vec<(String, Package)>>
+{
+    let mut registry = try!(PackageRegistry::new(config));
+    registry.add_preloaded(src);
+    registry.lock_patches();
 
+    let resolver = try!(resolver::resolve(
+        &[(pkg.summary().clone(), resolver::Method::Everything)],
+        pkg.manifest().replace(),
+        &mut registry,
+        &Default::default(),
+        None,
+        false,
+    ));
+    let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).cloned().collect::<Vec<_>>();
+    let pkg_set = try!(registry.get(&dep_ids));
+    let deps = try!(pkg_set.get_many(&dep_ids));
+
+    let mut ret = Vec::new();
+    for dep in deps {
+        if let Some(d) = pkg.dependencies().iter().find(|d| d.package_name() == dep.name()) {
+            ret.push((d.name_in_toml().to_string(), dep.clone()));
+        }
+    }
+
+    Ok(ret)
+}
 
 /// Downloads a crate and returns Cargo Package.
 pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
