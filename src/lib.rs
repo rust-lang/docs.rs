@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 extern crate cargo;
 extern crate regex;
 extern crate rustc_serialize;

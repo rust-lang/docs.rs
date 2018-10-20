@@ -13,12 +13,12 @@ use cargo::core::{Package, TargetKind};
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
-use reqwest::header::{Accept, qitem};
+use reqwest::header::ACCEPT;
 use semver;
 use postgres::Connection;
 use time;
 use error::Result;
-
+use failure::err_msg;
 
 /// Adds a package into database.
 ///
@@ -197,11 +197,11 @@ pub fn add_build_into_database(conn: &Connection,
 
 fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i32> {
     let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
-                                   &[&pkg.manifest().name()]));
+                                   &[&pkg.manifest().name().as_str()]));
     // insert crate into database if it is not exists
     if rows.len() == 0 {
         rows = try!(conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
-                               &[&pkg.manifest().name()]));
+                               &[&pkg.manifest().name().as_str()]));
     }
     Ok(rows.get(0).get(0))
 }
@@ -212,7 +212,7 @@ fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i3
 fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
     let mut dependencies: Vec<(String, String)> = Vec::new();
     for dependency in pkg.manifest().dependencies() {
-        let name = dependency.name().to_string();
+        let name = dependency.package_name().to_string();
         let version = format!("{}", dependency.version_req());
         dependencies.push((name, version));
     }
@@ -222,7 +222,7 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &Package) -> Result<Option<String>> {
-    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")))
+    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))))
         .join(pkg.manifest().metadata().readme.clone().unwrap_or("README.md".to_owned()));
 
     if !readme_path.exists() {
@@ -237,11 +237,11 @@ fn get_readme(pkg: &Package) -> Result<Option<String>> {
 
 
 fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
-    if pkg.manifest().targets()[0].src_path().is_absolute() {
-        read_rust_doc(pkg.manifest().targets()[0].src_path())
+    if pkg.manifest().targets()[0].src_path().path().is_absolute() {
+        read_rust_doc(pkg.manifest().targets()[0].src_path().path())
     } else {
-        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or("File not found")));
-        path.push(pkg.manifest().targets()[0].src_path());
+        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
+        path.push(pkg.manifest().targets()[0].src_path().path());
         read_rust_doc(path.as_path())
     }
 }
@@ -279,9 +279,9 @@ fn get_release_time_yanked_downloads
                       pkg.manifest().name());
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
-    let client = try!(Client::new());
+    let client = Client::new();
     let mut res = try!(client.get(&url[..])
-        .header(Accept(vec![qitem("application/json".parse().unwrap())]))
+        .header(ACCEPT, "application/json")
         .send());
     let mut body = String::new();
     res.read_to_string(&mut body).unwrap();
@@ -289,31 +289,31 @@ fn get_release_time_yanked_downloads
     let versions = try!(json.as_object()
         .and_then(|o| o.get("versions"))
         .and_then(|v| v.as_array())
-        .ok_or("Not a JSON object"));
+        .ok_or_else(|| err_msg("Not a JSON object")));
 
     let (mut release_time, mut yanked, mut downloads) = (None, None, None);
 
     for version in versions {
-        let version = try!(version.as_object().ok_or("Not a JSON object"));
+        let version = try!(version.as_object().ok_or_else(|| err_msg("Not a JSON object")));
         let version_num = try!(version.get("num")
             .and_then(|v| v.as_string())
-            .ok_or("Not a JSON object"));
+            .ok_or_else(|| err_msg("Not a JSON object")));
 
         if &semver::Version::parse(version_num).unwrap() == pkg.manifest().version() {
             let release_time_raw = try!(version.get("created_at")
                 .and_then(|c| c.as_string())
-                .ok_or("Not a JSON object"));
+                .ok_or_else(|| err_msg("Not a JSON object")));
             release_time = Some(time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
                 .unwrap()
                 .to_timespec());
 
             yanked = Some(try!(version.get("yanked")
                 .and_then(|c| c.as_boolean())
-                .ok_or("Not a JSON object")));
+                .ok_or_else(|| err_msg("Not a JSON object"))));
 
             downloads = Some(try!(version.get("downloads")
                 .and_then(|c| c.as_i64())
-                .ok_or("Not a JSON object")) as i32);
+                .ok_or_else(|| err_msg("Not a JSON object"))) as i32);
 
             break;
         }
@@ -387,9 +387,9 @@ fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) ->
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
                              &pkg.manifest().name());
-    let client = try!(Client::new());
+    let client = Client::new();
     let mut res = try!(client.get(&owners_url[..])
-        .header(Accept(vec![qitem("application/json".parse().unwrap())]))
+        .header(ACCEPT, "application/json")
         .send());
     // FIXME: There is probably better way to do this
     //        and so many unwraps...

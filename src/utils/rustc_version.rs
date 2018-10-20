@@ -2,12 +2,13 @@
 use std::process::{Command, Output};
 use regex::Regex;
 use error::Result;
+use failure::err_msg;
 
 /// Parses rustc commit hash from rustc version string
 pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
-    let version_regex = Regex::new(r" ([\w-.]+) \((\w+) (\d+)-(\d+)-(\d+)\)")?;
+    let version_regex = Regex::new(r" ([\w.-]+) \((\w+) (\d+)-(\d+)-(\d+)\)")?;
     let captures = version_regex.captures(version.as_ref())
-        .ok_or("Failed to parse rustc version")?;
+        .ok_or_else(|| err_msg("Failed to parse rustc version"))?;
 
     Ok(format!("{}{}{}-{}-{}",
             captures.get(3).unwrap().as_str(),
@@ -32,7 +33,7 @@ pub fn command_result(output: Output) -> Result<String> {
     command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
     match output.status.success() {
         true => Ok(command_out),
-        false => Err(command_out.into()),
+        false => Err(err_msg(command_out)),
     }
 }
 

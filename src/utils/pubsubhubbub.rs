@@ -6,7 +6,7 @@ fn ping_hub(url: &str) -> Result<Response> {
     let mut params = HashMap::new();
     params.insert("hub.mode", "publish");
     params.insert("hub.url", "https://docs.rs/releases/feed");
-    let client = try!(Client::new());
+    let client = Client::new();
     client.post(url).form(&params).send()
 }
 

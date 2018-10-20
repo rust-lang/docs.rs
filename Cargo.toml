@@ -12,11 +12,11 @@ log = "0.3"
 rustc-serialize = "0.3"
 regex = "0.2"
 clap = "2"
-crates-index-diff = "3"
-git2 = "0.6"
+crates-index-diff = "4"
+git2 = "0.7"
 time = "0.1"
-reqwest = "0.5"
-semver = "0.6"
+reqwest = "0.9"
+semver = "0.9"
 slug = "=0.1.1"
 env_logger = "0.4"
 magic = "0.12"
@@ -25,10 +25,11 @@ r2d2_postgres = "0.12"
 url = "1.4"
 libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
-error-chain = "0.10"
+failure = "0.1"
 comrak = { version = "0.2.10", default-features = false }
 toml = "0.4"
 html5ever = "0.22"
+cargo = { git = "https://github.com/rust-lang/cargo.git" }
 
 # iron dependencies
 iron = "0.5"
@@ -36,10 +37,6 @@ router = "0.5"
 handlebars-iron = "0.22"
 params = "0.6"
 staticfile = { version = "0.4", features = [ "cache" ] }
-
-[dependencies.cargo]
-git = "https://github.com/onur/cargo.git"
-branch = "docs.rs"
 
 [dependencies.postgres]
 version = "0.14"
@@ -50,8 +47,11 @@ tempdir = "0.3"
 
 [build-dependencies]
 time = "0.1"
-git2 = "0.6"
-sass-rs = "0.0.18"
+git2 = "0.7"
+sass-rs = "0.2"
+
+[patch.crates-io]
+failure = { git = "https://github.com/rust-lang-nursery/failure.git" }
 
 [[bin]]
 name = "cratesfyi"

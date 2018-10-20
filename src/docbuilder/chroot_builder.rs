@@ -5,12 +5,13 @@ use utils::{get_package, source_path, copy_dir, copy_doc_dir,
             update_sources, parse_rustc_version, command_result};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
+use cargo::util::CargoResultExt;
 use std::process::Command;
 use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::Json;
-use error::{Result, ResultExt};
+use error::Result;
 
 
 /// List of targets supported by docs.rs
@@ -115,7 +116,6 @@ impl DocBuilder {
 
     /// Builds documentation of a package with cratesfyi in chroot environment
     fn build_package_in_chroot(&self, package: &Package) -> ChrootBuilderResult {
-        use std::error::Error as StdError;
         debug!("Building package in chroot");
         let (rustc_version, cratesfyi_version) = self.get_versions();
         let cmd = format!("cratesfyi doc {} ={}",
@@ -134,7 +134,7 @@ impl DocBuilder {
             }
             Err(e) => {
                 ChrootBuilderResult {
-                    output: e.description().to_owned(),
+                    output: e.to_string(),
                     build_success: false,
                     have_doc: false,
                     have_examples: self.have_examples(&package),
@@ -239,7 +239,7 @@ impl DocBuilder {
         debug!("Cleaning package");
         use std::fs::remove_dir_all;
         let documentation_path = PathBuf::from(&self.options.destination)
-            .join(package.manifest().name());
+            .join(package.manifest().name().as_str());
         let source_path = source_path(&package).unwrap();
         // Some crates don't have documentation, so we don't care if removing_dir_all fails
         let _ = self.remove_build_dir();
@@ -356,7 +356,7 @@ impl DocBuilder {
         let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
         if !res.build_success {
-            return Err(format!("Failed to build empty crate for: {}", res.rustc_version).into());
+            return Err(format_err!("Failed to build empty crate for: {}", res.rustc_version));
         }
 
         info!("Copying essential files for: {}", res.rustc_version);
