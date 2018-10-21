@@ -1,7 +1,7 @@
 # Docs.rs
 
-[![Build Status](https://secure.travis-ci.org/onur/docs.rs.svg?branch=master)](https://travis-ci.org/onur/docs.rs)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/onur/docs.rs/master/LICENSE)
+[![Build Status](https://secure.travis-ci.org/rust-lang-nursery/docs.rs.svg?branch=master)](https://travis-ci.org/rust-lang-nursery/docs.rs)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang-nursery/docs.rs/master/LICENSE)
 
 Docs.rs (formerly cratesfyi) is an open source project to host documentation
 of crates for the Rust Programming Language.
@@ -59,7 +59,7 @@ to able to download ~800MB data on the first run.
 
 
 ```sh
-git clone https://github.com/onur/docs.rs.git docs.rs
+git clone https://github.com/rust-lang-nursery/docs.rs.git docs.rs
 cd docs.rs
 vagrant up  # This may take a little while on the first run
 ```

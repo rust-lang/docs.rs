@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Simple badge generator"
 authors = ["Onur Aslan <onur@onur.im>"]
 license-file = "LICENSE"
-repository = "https://github.com/onur/docs.rs"
+repository = "https://github.com/rust-lang-nursery/docs.rs"
 documentation = "https://docs.rs/badge"
 
 [lib]
