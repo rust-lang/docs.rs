@@ -151,7 +151,7 @@ cargo run -- doc <CRATE_NAME>
 
 #### Contributors
 
-* [rust-lang-nursery Aslan](https://github.com/rust-lang-nursery)
+* [Onur Aslan](https://github.com/rust-lang-nursery)
 * [Jon Gjengset](https://github.com/jonhoo)
 * [Sebastian Thiel](https://github.com/Byron)
 * [Guillaume Gomez](https://github.com/GuillaumeGomez)
