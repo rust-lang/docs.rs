@@ -10,7 +10,7 @@ build = "build.rs"
 [dependencies]
 log = "0.3"
 rustc-serialize = "0.3"
-regex = "0.2"
+regex = "1"
 clap = "2"
 crates-index-diff = "4"
 git2 = "0.7"
