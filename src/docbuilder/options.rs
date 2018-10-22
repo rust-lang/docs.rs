@@ -3,7 +3,6 @@
 use std::{env, fmt};
 use std::path::PathBuf;
 use error::Result;
-use failure::err_msg;
 
 #[derive(Clone)]
 pub struct DocBuilderOptions {
@@ -94,16 +93,13 @@ impl DocBuilderOptions {
 
     pub fn check_paths(&self) -> Result<()> {
         if !self.destination.exists() {
-            return Err(err_msg("Destination path not exists"));
+            bail!("destionation path '{}' does not exist", self.destination.display());
         }
         if !self.chroot_path.exists() {
-            return Err(err_msg("Chroot path not exists"));
+            bail!("chroot path '{}' does not exist", self.chroot_path.display());
         }
         if !self.crates_io_index_path.exists() {
-            return Err(err_msg("crates.io-index path not exists"));
-        }
-        if !self.crates_io_index_path.exists() {
-            return Err(err_msg("Logs path not exists"));
+            bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
         }
         Ok(())
     }
