@@ -5,7 +5,7 @@ pub use self::add_package::add_build_into_database;
 pub use self::file::add_path_into_database;
 
 use postgres::{Connection, TlsMode};
-use postgres::error::{Error, ConnectError};
+use postgres::error::Error;
 use std::env;
 use r2d2;
 use r2d2_postgres;
@@ -15,7 +15,7 @@ mod file;
 
 
 /// Connects to database
-pub fn connect_db() -> Result<Connection, ConnectError> {
+pub fn connect_db() -> Result<Connection, Error> {
     // FIXME: unwrap might not be the best here
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");

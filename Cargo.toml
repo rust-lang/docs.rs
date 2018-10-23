@@ -21,7 +21,7 @@ slug = "=0.1.1"
 env_logger = "0.4"
 magic = "0.12"
 r2d2 = "0.7"
-r2d2_postgres = "0.12"
+r2d2_postgres = "0.13"
 url = "1.4"
 libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
@@ -39,7 +39,7 @@ params = "0.6"
 staticfile = { version = "0.4", features = [ "cache" ] }
 
 [dependencies.postgres]
-version = "0.14"
+version = "0.15"
 features = [ "with-time", "with-rustc-serialize" ]
 
 [dev-dependencies]
