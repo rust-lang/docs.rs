@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "comrak"
-version = "0.2.14"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "entities 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -349,7 +349,7 @@ dependencies = [
  "badge 0.2.0",
  "cargo 0.32.0 (git+https://github.com/rust-lang/cargo.git)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "comrak 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "comrak 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "crates-index-diff 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.2 (git+https://github.com/rust-lang-nursery/failure.git)",
@@ -2794,7 +2794,7 @@ dependencies = [
 "checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
 "checksum commoncrypto 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d056a8586ba25a1e4d61cb090900e495952c7886786fc55f909ab2f819b69007"
 "checksum commoncrypto-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1fed34f46747aa73dfaa578069fd8279d2818ade2b55f38f22a9401c7f4083e2"
-"checksum comrak 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)" = "378397d3ac20b5b0b8b29fa2e1bf20546a6d6cedd1bc18a422dfb41384129e29"
+"checksum comrak 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a9bd60be8877a3343d25b9a3dadbaf7f02f9ac843b54e663ecef73e29e8b9c6b"
 "checksum conduit-mime-types 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)" = "95ca30253581af809925ef68c2641cc140d6183f43e12e0af4992d53768bd7b8"
 "checksum constant_time_eq 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "8ff012e225ce166d4422e0e78419d901719760f62ae2b7969ca6b564d1b54a9e"
 "checksum core-foundation 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "286e0b41c3a20da26536c6000a280585d519fd07b3956b43aed8a79e9edce980"

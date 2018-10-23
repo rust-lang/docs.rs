@@ -26,7 +26,7 @@ url = "1.4"
 libc = "0.2"
 badge = { version = "0", path = "src/web/badge" }
 failure = "0.1"
-comrak = { version = "0.2.10", default-features = false }
+comrak = { version = "0.3", default-features = false }
 toml = "0.4"
 html5ever = "0.22"
 cargo = { git = "https://github.com/rust-lang/cargo.git" }
