@@ -233,16 +233,18 @@ pub fn main() {
 
 
 fn logger_init() {
-    let format = |record: &log::LogRecord| {
-        format!("{} [{}] {}: {}",
+    use std::io::Write;
+
+    let format = |buf: &mut env_logger::Formatter, record: &log::Record| {
+        writeln!(buf, "{} [{}] {}: {}",
                 time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
                 record.level(),
                 record.target(),
                 record.args())
     };
 
-    let mut builder = env_logger::LogBuilder::new();
+    let mut builder = env_logger::Builder::new();
     builder.format(format);
     builder.parse(&env::var("RUST_LOG").unwrap_or("cratesfyi=info".to_owned()));
-    builder.init().unwrap();
+    builder.init();
 }

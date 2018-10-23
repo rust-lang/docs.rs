@@ -141,7 +141,7 @@ mod test {
 
     #[test]
     fn test_cratesfyi_metadata() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let manifest = r#"
             [package]
             name = "test"
