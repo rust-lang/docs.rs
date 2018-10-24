@@ -32,7 +32,7 @@ jobs:
       displayName: 'Test docs.rs'
 
 
-- job: release_build
+- job: release
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   pool:
     vmImage: 'Ubuntu 16.04'
@@ -62,14 +62,14 @@ jobs:
       displayName: 'Copy build'
     - task: PublishBuildArtifacts@1
       inputs:
-        artifactName: $(containerResource)
+        artifactName: docsrs-$(containerResource)-$(Build.SourceVersion)_amd64
       displayName: 'Upload artifacts'
 
 
 - job: deploy
   dependsOn:
     - test
-    - release_build
+    - release
   condition: succeeded()
   pool:
     vmImage: 'Ubuntu 16.04'
@@ -78,11 +78,11 @@ jobs:
     - checkout: none
     - task: DownloadBuildArtifacts@0
       inputs:
-        artifactName: debian-jessie
+        artifactName: docsrs-debian-jessie-$(Build.SourceVersion)_amd64
         downloadPath: $(System.DefaultWorkingDirectory)
     - task: DownloadBuildArtifacts@0
       inputs:
-        artifactName: debian-stretch
+        artifactName: docsrs-debian-stretch-$(Build.SourceVersion)_amd64
         downloadPath: $(System.DefaultWorkingDirectory)
     - task: DownloadSecureFile@1
       inputs:
