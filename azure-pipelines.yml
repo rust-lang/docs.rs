@@ -62,7 +62,7 @@ jobs:
       displayName: 'Copy build'
     - task: PublishBuildArtifacts@1
       inputs:
-        artifactName: docsrs-$(containerResource)-$(Build.SourceVersion)_amd64
+        artifactName: $(containerResource)
       displayName: 'Upload artifacts'
 
 
@@ -78,11 +78,11 @@ jobs:
     - checkout: none
     - task: DownloadBuildArtifacts@0
       inputs:
-        artifactName: docsrs-debian-jessie-$(Build.SourceVersion)_amd64
+        artifactName: debian-jessie
         downloadPath: $(System.DefaultWorkingDirectory)
     - task: DownloadBuildArtifacts@0
       inputs:
-        artifactName: docsrs-debian-stretch-$(Build.SourceVersion)_amd64
+        artifactName: debian-stretch
         downloadPath: $(System.DefaultWorkingDirectory)
     - task: DownloadSecureFile@1
       inputs:
