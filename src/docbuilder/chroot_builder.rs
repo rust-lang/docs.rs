@@ -1,6 +1,7 @@
 
 use super::DocBuilder;
 use super::crates::crates_from_path;
+use super::metadata::Metadata;
 use utils::{get_package, source_path, copy_dir, copy_doc_dir,
             update_sources, parse_rustc_version, command_result};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
@@ -81,15 +82,19 @@ impl DocBuilder {
 
         // get_package (and cargo) is using semver, add '=' in front of version.
         let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
-        let res = self.build_package_in_chroot(&pkg);
+        let metadata = Metadata::from_package(&pkg)?;
+        let res = self.build_package_in_chroot(&pkg, metadata.default_target.clone());
 
         // copy sources and documentation
         let file_list = try!(self.add_sources_into_database(&conn, &pkg));
         let successfully_targets = if res.have_doc {
-            try!(self.copy_documentation(&pkg, &res.rustc_version, None));
+            try!(self.copy_documentation(&pkg,
+                                         &res.rustc_version,
+                                         metadata.default_target.as_ref().map(String::as_str),
+                                         true));
             let successfully_targets = self.build_package_for_all_targets(&pkg);
             for target in &successfully_targets {
-                try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target)));
+                try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target), false));
             }
             try!(self.add_documentation_into_database(&conn, &pkg));
             successfully_targets
@@ -115,18 +120,19 @@ impl DocBuilder {
 
 
     /// Builds documentation of a package with cratesfyi in chroot environment
-    fn build_package_in_chroot(&self, package: &Package) -> ChrootBuilderResult {
+    fn build_package_in_chroot(&self, package: &Package, default_target: Option<String>) -> ChrootBuilderResult {
         debug!("Building package in chroot");
         let (rustc_version, cratesfyi_version) = self.get_versions();
-        let cmd = format!("cratesfyi doc {} ={}",
+        let cmd = format!("cratesfyi doc {} ={} {}",
                           package.manifest().name(),
-                          package.manifest().version());
+                          package.manifest().version(),
+                          default_target.as_ref().unwrap_or(&"".to_string()));
         match self.chroot_command(cmd) {
             Ok(o) => {
                 ChrootBuilderResult {
                     output: o,
                     build_success: true,
-                    have_doc: self.have_documentation(&package),
+                    have_doc: self.have_documentation(&package, default_target),
                     have_examples: self.have_examples(&package),
                     rustc_version: rustc_version,
                     cratesfyi_version: cratesfyi_version,
@@ -194,22 +200,31 @@ impl DocBuilder {
     fn copy_documentation(&self,
                           package: &Package,
                           rustc_version: &str,
-                          target: Option<&str>)
+                          target: Option<&str>,
+                          is_default_target: bool)
                           -> Result<()> {
         let crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
             .join("cratesfyi")
             .join(target.unwrap_or(""));
-        let destination = PathBuf::from(&self.options.destination)
+        let mut destination = PathBuf::from(&self.options.destination)
             .join(format!("{}/{}",
                           package.manifest().name(),
-                          package.manifest().version()))
-            .join(target.unwrap_or(""));
+                          package.manifest().version()));
+
+        // only add target name to destination directory when we are copying a non-default target.
+        // this is allowing us to host documents in the root of the crate documentation directory.
+        // for example win-api will be available in docs.rs/win-api/$version/win-api/ for it's
+        // default target: x86_64-pc-windows-msvc. But since it will be built under
+        // cratesfyi/x86_64-pc-windows-msvc we still need target in this function.
+        if !is_default_target {
+            destination.push(target.unwrap_or(""));
+        }
+
         copy_doc_dir(crate_doc_path,
                      destination,
-                     parse_rustc_version(rustc_version)?.trim(),
-                     target.is_some())
+                     parse_rustc_version(rustc_version)?.trim())
     }
 
 
@@ -270,13 +285,18 @@ impl DocBuilder {
     ///
     /// This function is checking first target in targets to see if documentation exists for a
     /// crate. Package must be successfully built in chroot environment first.
-    fn have_documentation(&self, package: &Package) -> bool {
-        let crate_doc_path = PathBuf::from(&self.options.chroot_path)
+    fn have_documentation(&self, package: &Package, default_target: Option<String>) -> bool {
+        let mut crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
-            .join("cratesfyi")
-            .join("doc")
-            .join(package.targets()[0].name().replace("-", "_").to_string());
+            .join("cratesfyi");
+
+        if let Some(default_doc_path) = default_target {
+            crate_doc_path.push(default_doc_path);
+        }
+
+        crate_doc_path.push("doc");
+        crate_doc_path.push(package.targets()[0].name().replace("-", "_").to_string());
         crate_doc_path.exists()
     }
 
@@ -352,7 +372,7 @@ impl DocBuilder {
 
         // acme-client-0.0.0 is an empty library crate and it will always build
         let pkg = try!(get_package("acme-client", Some("=0.0.0")));
-        let res = self.build_package_in_chroot(&pkg);
+        let res = self.build_package_in_chroot(&pkg, None);
         let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
         if !res.build_success {
