@@ -15,13 +15,11 @@ use error::Result;
 
 
 /// List of targets supported by docs.rs
-const TARGETS: [&'static str; 8] = [
+const TARGETS: [&'static str; 6] = [
     "i686-apple-darwin",
-    "i686-pc-windows-gnu",
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
     "x86_64-apple-darwin",
-    "x86_64-pc-windows-gnu",
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu"
 ];
