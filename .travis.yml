@@ -1,6 +1,0 @@
-language: rust
-cache: cargo
-before_install:
-- sudo apt-get update -qq
-- sudo apt-get install -qq libmagic1 libmagic-dev
-script: cargo build --verbose && cargo test --verbose -- --test-threads=1
