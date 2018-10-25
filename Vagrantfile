@@ -2,10 +2,10 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "docs.rs"
-  config.vm.box_url = "https://docs.rs/vagrant.box"
-  config.vm.box_download_checksum = "02554eb16ac72367980a883c4ff05f17d9988406"
-  config.vm.box_download_checksum_type = "sha1"
+  config.vm.box = "docs.rs_v2"
+  config.vm.box_url = "https://docs.rs/vagrant_v2.box"
+  config.vm.box_download_checksum = "7c6d9ef85a55461bce361e9734baf54a6eea9affa2334480cd7613a9a6b62bc4"
+  config.vm.box_download_checksum_type = "sha256"
 
   config.ssh.username = "cratesfyi"
 
