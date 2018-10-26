@@ -215,7 +215,7 @@ impl DocBuilder {
 
         // only add target name to destination directory when we are copying a non-default target.
         // this is allowing us to host documents in the root of the crate documentation directory.
-        // for example win-api will be available in docs.rs/win-api/$version/win-api/ for it's
+        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
         // default target: x86_64-pc-windows-msvc. But since it will be built under
         // cratesfyi/x86_64-pc-windows-msvc we still need target in this function.
         if !is_default_target {
