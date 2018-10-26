@@ -93,13 +93,16 @@ impl DocBuilderOptions {
 
     pub fn check_paths(&self) -> Result<()> {
         if !self.destination.exists() {
-            bail!("destionation path '{}' does not exist", self.destination.display());
+            bail!("destination path '{}' does not exist", self.destination.display());
         }
         if !self.chroot_path.exists() {
             bail!("chroot path '{}' does not exist", self.chroot_path.display());
         }
         if !self.crates_io_index_path.exists() {
             bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
+        }
+        if !self.sources_path.exists() {
+            bail!("sources path '{}' does not exist", self.sources_path.display());
         }
         Ok(())
     }
