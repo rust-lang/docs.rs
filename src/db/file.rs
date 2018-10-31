@@ -155,7 +155,7 @@ mod test {
 
     #[test]
     fn test_get_file_list() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
 
         let files = get_file_list(env::current_dir().unwrap());
         assert!(files.is_ok());
@@ -168,7 +168,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_add_path_into_database() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
 
         let conn = connect_db().unwrap();
         let res = add_path_into_database(&conn, "example", env::current_dir().unwrap().join("src"));
