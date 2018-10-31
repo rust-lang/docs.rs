@@ -161,7 +161,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_get_github_fields() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let fields = get_github_fields("onur/cratesfyi");
         assert!(fields.is_ok());
 
@@ -179,7 +179,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_github_updater() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         assert!(github_updater().is_ok());
     }
 }

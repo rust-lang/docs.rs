@@ -203,7 +203,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_create_tables() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let conn = connect_db();
         assert!(conn.is_ok());
 

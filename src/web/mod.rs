@@ -488,7 +488,7 @@ mod test {
     #[ignore]
     fn test_start_web_server() {
         // FIXME: This test is doing nothing
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         start_web_server(None);
     }
 

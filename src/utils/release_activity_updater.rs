@@ -57,7 +57,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_update_release_activity() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         assert!(update_release_activity().is_ok());
     }
 }

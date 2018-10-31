@@ -78,7 +78,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_get_new_crates() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.get_new_crates();
@@ -92,7 +92,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_build_packages_queue() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let mut docbuilder = DocBuilder::new(options);
         assert!(docbuilder.build_packages_queue().is_ok());

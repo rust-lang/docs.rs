@@ -448,7 +448,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_build_world() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let mut docbuilder = DocBuilder::new(options);
         // This test is building WHOLE WORLD and may take forever
@@ -458,7 +458,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_build_package() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.build_package("rand", "0.3.14");
@@ -468,7 +468,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_add_essential_files() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let docbuilder = DocBuilder::new(options);
 
