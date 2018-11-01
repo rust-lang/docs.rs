@@ -14,8 +14,7 @@ pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
     copy_files_and_handle_html(source.as_ref().to_path_buf(),
                                destination.as_ref().to_path_buf(),
                                false,
-                               "",
-                               false)
+                               "")
 }
 
 
@@ -27,23 +26,20 @@ pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
 /// to rename common files (css files, jquery.js, playpen.js, main.js etc.) in a standard rustdoc.
 pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
                                     destination: P,
-                                    rustc_version: &str,
-                                    target_platform: bool)
+                                    rustc_version: &str)
                                     -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
     copy_files_and_handle_html(source,
                                destination.as_ref().to_path_buf(),
                                true,
-                               rustc_version,
-                               target_platform)
+                               rustc_version)
 }
 
 
 fn copy_files_and_handle_html(source: PathBuf,
                               destination: PathBuf,
                               handle_html: bool,
-                              rustc_version: &str,
-                              target: bool)
+                              rustc_version: &str)
                               -> Result<()> {
 
     // FIXME: handle_html is useless since we started using --resource-suffix
@@ -72,8 +68,7 @@ fn copy_files_and_handle_html(source: PathBuf,
             try!(copy_files_and_handle_html(file.path(),
                                             destination_full_path,
                                             handle_html,
-                                            &rustc_version,
-                                            target));
+                                            &rustc_version))
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
@@ -118,7 +113,7 @@ mod test {
         let pkg_dir = format!("rand-{}", pkg.manifest().version());
         let target = Path::new(&pkg_dir);
         let destination = tempdir::TempDir::new("cratesfyi").unwrap();
-        let res = copy_doc_dir(target, destination.path(), "UNKNOWN", false);
+        let res = copy_doc_dir(target, destination.path(), "UNKNOWN");
 
         // remove build and temp dir
         fs::remove_dir_all(target).unwrap();
