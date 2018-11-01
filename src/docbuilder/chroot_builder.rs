@@ -203,11 +203,16 @@ impl DocBuilder {
                           target: Option<&str>,
                           is_default_target: bool)
                           -> Result<()> {
-        let crate_doc_path = PathBuf::from(&self.options.chroot_path)
+        let mut crate_doc_path = PathBuf::from(&self.options.chroot_path)
             .join("home")
             .join(&self.options.chroot_user)
-            .join("cratesfyi")
-            .join(target.unwrap_or(""));
+            .join("cratesfyi");
+
+        // docs are available in cratesfyi/$TARGET when target is being used
+        if let Some(target) = target {
+            crate_doc_path.push(target);
+        }
+
         let mut destination = PathBuf::from(&self.options.destination)
             .join(format!("{}/{}",
                           package.manifest().name(),
@@ -219,7 +224,9 @@ impl DocBuilder {
         // default target: x86_64-pc-windows-msvc. But since it will be built under
         // cratesfyi/x86_64-pc-windows-msvc we still need target in this function.
         if !is_default_target {
-            destination.push(target.unwrap_or(""));
+            if let Some(target) = target {
+                destination.push(target);
+            }
         }
 
         copy_doc_dir(crate_doc_path,
