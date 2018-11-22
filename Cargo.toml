@@ -4,7 +4,7 @@ version = "0.6.0"
 authors = ["Onur Aslan <onuraslan@gmail.com>"]
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/rust-lang-nursery/docs.rs"
+repository = "https://github.com/rust-lang/docs.rs"
 build = "build.rs"
 
 [dependencies]
