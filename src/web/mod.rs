@@ -74,7 +74,7 @@ impl AfterMiddleware for ContentSecurityPolicy {
         if resp.headers.get(iron::headers::CONTENT_SECURITY_POLICY) == None {
             resp.headers.insert(
                 iron::headers::CONTENT_SECURITY_POLICY,
-                "default-src 'self'; worker-src 'none'; font-src 'self' cdnjs.cloudflare.com; script-src 'self' cdnjs.cloudflare.com;".as_ref().parse().unwrap(),
+                "default-src 'self'; worker-src 'none'; font-src 'self' cdnjs.cloudflare.com; script-src 'self' cdnjs.cloudflare.com; style-src 'self' cdnjs.cloudflare.com;".as_ref().parse().unwrap(),
             );
         }
         Ok(resp)
