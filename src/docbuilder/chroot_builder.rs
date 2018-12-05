@@ -11,7 +11,7 @@ use std::process::Command;
 use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
-use rustc_serialize::json::Json;
+use rustc_serialize::json::{Json, ToJson};
 use error::Result;
 
 
@@ -314,7 +314,7 @@ impl DocBuilder {
 
 
     /// Gets rustc and cratesfyi version from chroot environment
-    fn get_versions(&self) -> (String, String) {
+    pub fn get_versions(&self) -> (String, String) {
         // It is safe to use expect here
         // chroot environment must always have rustc and cratesfyi installed
         (String::from(self.chroot_command("rustc --version")
@@ -438,6 +438,15 @@ impl DocBuilder {
         try!(add_path_into_database(&conn, "", destination));
 
         try!(self.clean(&pkg));
+
+        let (vers, _) = self.get_versions();
+
+        try!(conn.query("INSERT INTO config (name, value) VALUES ('rustc_version', $1)",
+                   &[&vers.to_json()])
+            .or_else(|_| {
+                conn.query("UPDATE config SET value = $1 WHERE name = 'rustc_version'",
+                           &[&vers.to_json()])
+            }));
 
         Ok(())
     }
