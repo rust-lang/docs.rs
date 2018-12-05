@@ -37,12 +37,12 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_cfg_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_cfg_map.load(&source_id));
+    let mut source = try!(source_cfg_map.load(source_id));
 
     // update crates.io-index registry
     try!(source.update());
 
-    let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
+    let dep = try!(Dependency::parse_no_deprecated(name, vers, source_id));
     let deps = try!(source.query_vec(&dep));
     let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
                      // FIXME: This is probably not a rusty way to handle options and results
@@ -54,7 +54,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
 
-    let pkg = try!(pkg_set.get_one(&pkgid)).clone();
+    let pkg = try!(pkg_set.get_one(pkgid)).clone();
 
     let current_dir = try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
@@ -79,7 +79,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
     // force rustdoc to link to other docs.rs docs for dependencies
-    let source = try!(source_cfg_map.load(&source_id));
+    let source = try!(source_cfg_map.load(source_id));
     for (name, dep) in try!(resolve_deps(&pkg, &config, source)) {
         rustdoc_args.push("--extern-html-root-url".to_string());
         rustdoc_args.push(format!("{}=https://docs.rs/{}/{}",
@@ -118,7 +118,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
     let exec: Arc<Executor> = Arc::new(DefaultExecutor);
-    let source = try!(source_cfg_map.load(&source_id));
+    let source = try!(source_cfg_map.load(source_id));
     try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
 
     Ok(try!(ws.current()).clone())
@@ -139,9 +139,9 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cf
         None,
         false,
     ));
-    let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).cloned().collect::<Vec<_>>();
+    let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).collect::<Vec<_>>();
     let pkg_set = try!(registry.get(&dep_ids));
-    let deps = try!(pkg_set.get_many(&dep_ids));
+    let deps = try!(pkg_set.get_many(dep_ids));
 
     let mut ret = Vec::new();
     for dep in deps {
@@ -161,11 +161,11 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(&source_id));
+    let mut source = try!(source_map.load(source_id));
 
     try!(source.update());
 
-    let dep = try!(Dependency::parse_no_deprecated(name, vers, &source_id));
+    let dep = try!(Dependency::parse_no_deprecated(name, vers, source_id));
     let deps = try!(source.query_vec(&dep));
     let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
                      // FIXME: This is probably not a rusty way to handle options and results
@@ -177,7 +177,7 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
     let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
 
-    let pkg = try!(pkg_set.get_one(&pkgid)).clone();
+    let pkg = try!(pkg_set.get_one(pkgid)).clone();
 
     Ok(pkg)
 }
@@ -189,7 +189,7 @@ pub fn update_sources() -> CargoResult<()> {
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(&source_id));
+    let mut source = try!(source_map.load(source_id));
 
     source.update()
 }
