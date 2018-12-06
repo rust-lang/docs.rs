@@ -396,7 +396,8 @@ impl DocBuilder {
                       "rustdoc.css",
                       "settings.css",
                       "storage.js",
-                      "theme.js"],
+                      "theme.js",
+                      "source-script.js"],
                      // files doesn't require rustc version subfix
                      ["FiraSans-Medium.woff",
                       "FiraSans-Regular.woff",
