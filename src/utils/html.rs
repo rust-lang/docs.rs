@@ -6,14 +6,16 @@ use html5ever::rcdom::{RcDom, NodeData, Handle};
 use html5ever::driver::{parse_document, ParseOpts};
 use html5ever::tendril::TendrilSink;
 
-/// Extracts the contents of the `<head>` and `<body>` tags from an HTML document.
-pub fn extract_head_and_body(html: &str) -> Result<(String, String)> {
+/// Extracts the contents of the `<head>` and `<body>` tags from an HTML document, as well as the
+/// classes on the `<body>` tag, if any.
+pub fn extract_head_and_body(html: &str) -> Result<(String, String, String)> {
     let parser = parse_document(RcDom::default(), ParseOpts::default());
     let dom = parser.one(html);
 
     let (head, body) = extract_from_rcdom(&dom)?;
+    let class = extract_class(&body);
 
-    Ok((stringify(head), stringify(body)))
+    Ok((stringify(head), stringify(body), class))
 }
 
 fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
@@ -56,4 +58,17 @@ fn stringify(node: Handle) -> String {
         .expect("serializing into buffer failed");
 
     String::from_utf8(vec).expect("html5ever returned non-utf8 data")
+}
+
+fn extract_class(node: &Handle) -> String {
+    match node.data {
+        NodeData::Element { ref attrs, .. } => {
+            let attrs = attrs.borrow();
+
+            attrs.iter()
+                 .find(|a| &a.name.local == "class")
+                 .map_or(String::new(), |a| a.value.to_string())
+        }
+        _ => String::new()
+    }
 }
