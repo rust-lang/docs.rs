@@ -24,6 +24,7 @@ use utils;
 struct RustdocPage {
     pub head: String,
     pub body: String,
+    pub body_class: String,
     pub name: String,
     pub full: String,
     pub version: String,
@@ -37,6 +38,7 @@ impl Default for RustdocPage {
         RustdocPage {
             head: String::new(),
             body: String::new(),
+            body_class: String::new(),
             name: String::new(),
             full: String::new(),
             version: String::new(),
@@ -52,6 +54,7 @@ impl ToJson for RustdocPage {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("rustdoc_head".to_string(), self.head.to_json());
         m.insert("rustdoc_body".to_string(), self.body.to_json());
+        m.insert("rustdoc_body_class".to_string(), self.body_class.to_json());
         m.insert("rustdoc_full".to_string(), self.full.to_json());
         m.insert("rustdoc_status".to_string(), true.to_json());
         m.insert("name".to_string(), self.name.to_json());
@@ -160,9 +163,17 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let file_content = ctry!(String::from_utf8(file.content));
 
-    let (head, body) = ctry!(utils::extract_head_and_body(&file_content));
+    let (head, body, mut body_class) = ctry!(utils::extract_head_and_body(&file_content));
     content.head = head;
     content.body = body;
+
+    if body_class.is_empty() {
+        body_class = "rustdoc container-rustdoc".to_string();
+    } else {
+        // rustdoc adds its own "rustdoc" class to the body
+        body_class.push_str(" container-rustdoc");
+    }
+    content.body_class = body_class;
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
