@@ -177,6 +177,9 @@ impl CratesfyiHandler {
         router.get("/:crate/:version/aliases.js",
                    rustdoc::rustdoc_html_server_handler,
                    "crate_version_aliases_js");
+        router.get("/:crate/:version/source-files.js",
+                   rustdoc::rustdoc_html_server_handler,
+                   "crate_version_source_files_js");
         router.get("/:crate/:version/:target",
                    rustdoc::rustdoc_redirector_handler,
                    "crate_version_target");
