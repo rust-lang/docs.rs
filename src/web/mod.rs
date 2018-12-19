@@ -61,7 +61,6 @@ use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 
-
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
@@ -97,9 +96,7 @@ impl CratesfyiHandler {
         let mut router = Router::new();
         router.get("/", releases::home_page, "index");
         router.get("/style.css", style_css_handler, "style_css");
-        router.get("/about",
-                   |_: &mut Request| page::Page::new(false).title("About Docs.rs").to_resp("about"),
-                   "about");
+        router.get("/about", sitemap::about_handler, "about");
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
@@ -429,7 +426,6 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     response.headers.set(CacheControl(cache));
     Ok(response)
 }
-
 
 /// MetaData used in header
 #[derive(Debug)]
