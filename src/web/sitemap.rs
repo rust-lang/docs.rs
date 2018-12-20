@@ -5,7 +5,6 @@ use rustc_serialize::json::Json;
 use super::page::Page;
 use super::pool::Pool;
 use time;
-use db::connect_db;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool);
