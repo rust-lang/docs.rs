@@ -13,7 +13,6 @@ pub struct DocBuilderOptions {
     pub chroot_user: String,
     pub container_name: String,
     pub crates_io_index_path: PathBuf,
-    pub sources_path: PathBuf,
     pub skip_if_exists: bool,
     pub skip_if_log_exists: bool,
     pub skip_oldest_versions: bool,
@@ -28,7 +27,7 @@ impl Default for DocBuilderOptions {
 
         let cwd = env::current_dir().unwrap();
 
-        let (prefix, destination, chroot_path, crates_io_index_path, sources_path) =
+        let (prefix, destination, chroot_path, crates_io_index_path) =
             generate_paths(cwd);
 
         DocBuilderOptions {
@@ -36,7 +35,6 @@ impl Default for DocBuilderOptions {
             destination: destination,
             chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
-            sources_path: sources_path,
 
             chroot_user: "cratesfyi".to_string(),
             container_name: "cratesfyi-container".to_string(),
@@ -57,13 +55,12 @@ impl fmt::Debug for DocBuilderOptions {
         write!(f,
                "DocBuilderOptions {{ destination: {:?}, chroot_path: {:?}, \
                 crates_io_index_path: {:?}, \
-                sources_path: {:?}, container_name: {:?}, chroot_user: {:?}, \
+                container_name: {:?}, chroot_user: {:?}, \
                 keep_build_directory: {:?}, skip_if_exists: {:?}, \
                 skip_if_log_exists: {:?}, debug: {:?} }}",
                self.destination,
                self.chroot_path,
                self.crates_io_index_path,
-               self.sources_path,
                self.container_name,
                self.chroot_user,
                self.keep_build_directory,
@@ -77,14 +74,13 @@ impl fmt::Debug for DocBuilderOptions {
 impl DocBuilderOptions {
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (prefix, destination, chroot_path, crates_io_index_path, sources_path) =
+        let (prefix, destination, chroot_path, crates_io_index_path) =
             generate_paths(prefix);
         DocBuilderOptions {
             prefix: prefix,
             destination: destination,
             chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
-            sources_path: sources_path,
 
             ..Default::default()
         }
@@ -101,21 +97,17 @@ impl DocBuilderOptions {
         if !self.crates_io_index_path.exists() {
             bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
         }
-        if !self.sources_path.exists() {
-            bail!("sources path '{}' does not exist", self.sources_path.display());
-        }
         Ok(())
     }
 }
 
 
 
-fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
+fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
 
     let destination = PathBuf::from(&prefix).join("documentations");
     let chroot_path = PathBuf::from(&prefix).join("cratesfyi-container/rootfs");
     let crates_io_index_path = PathBuf::from(&prefix).join("crates.io-index");
-    let sources_path = PathBuf::from(&prefix).join("sources");
 
-    (prefix, destination, chroot_path, crates_io_index_path, sources_path)
+    (prefix, destination, chroot_path, crates_io_index_path)
 }
