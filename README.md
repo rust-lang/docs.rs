@@ -147,3 +147,7 @@ It is designed to run inside a secure container.
 ```
 cargo run -- doc <CRATE_NAME>
 ```
+
+#### Contact
+
+Docs.rs is run and maintaned by [Rustdoc team](https://www.rust-lang.org/governance/teams/dev-tools#Rustdoc%20team-info). You can find us in #rustdoc on [Discord](https://discord.gg/rust-lang).
