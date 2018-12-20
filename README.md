@@ -132,7 +132,7 @@ cargo run -- database update-search-index
 
 
 # Updates release activitiy chart
-cargo run -- database update-release-activity    
+cargo run -- database update-release-activity
 ```
 
 If you want to explore or edit database manually, you can connect database
