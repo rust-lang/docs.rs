@@ -52,11 +52,11 @@
         <td>Latest version of clap</td>
       </tr>
       <tr>
-        <td><a href="https://docs.rs/clap/%5E2">docs.rs/clap/~2</a></td>
+        <td><a href="https://docs.rs/clap/%7E2">docs.rs/clap/~2</a></td>
         <td>2.* version</td>
       </tr>
       <tr>
-        <td><a href="https://docs.rs/clap/%5E2.9">docs.rs/clap/~2.9</a></td>
+        <td><a href="https://docs.rs/clap/%7E2.9">docs.rs/clap/~2.9</a></td>
         <td>2.9.* version</td>
       </tr>
       <tr>
@@ -65,10 +65,6 @@
       </tr>
     </tbody>
   </table>
-
-  <p>The <a href="https://crates.fyi/">crates.fyi</a> domain will redirect to
-  <a href="https://docs.rs/">docs.rs</a>, supporting all of the redirects discussed
-  above</p>
 
   <h4>Badges</h4>
   <p>
@@ -112,44 +108,23 @@
   <p>An example metadata:</p>
 
   <pre><code>[package]
-  name = "test"
+name = "test"
 
-  [package.metadata.docs.rs]
-  features = [ "feature1", "feature2" ]
-  all-features = true
-  no-default-features = true
-  default-target = "x86_64-unknown-linux-gnu"
-  rustc-args = [ "--example-rustc-arg" ]
-  rustdoc-args = [ "--example-rustdoc-arg" ]
-  dependencies = [ "example-system-dependency" ]</pre></code>
+[package.metadata.docs.rs]
+features = [ "feature1", "feature2" ]
+all-features = true
+no-default-features = true
+default-target = "x86_64-unknown-linux-gnu"
+rustc-args = [ "--example-rustc-arg" ]
+rustdoc-args = [ "--example-rustdoc-arg" ]
+dependencies = [ "example-system-dependency" ]</pre></code>
 
   <h4>Version</h4>
   <p>Currently running Docs.rs version is: <strong>{{cratesfyi_version}}</strong>
 
-  <h4>Contributors</h4>
-  <ul>
-    <li><a href="https://github.com/onur" target="_blank">Onur Aslan</a></li>
-    <li><a href="https://github.com/jonhoo" target="_blank">Jon Gjengset</a></li>
-    <li><a href="https://github.com/Byron" target="_blank">Sebastian Thiel</a></li>
-    <li><a href="https://github.com/GuillaumeGomez" target="_blank">Guillaume Gomez</a></li>
-    <li><a href="https://github.com/kivikakk" target="_blank">Ashe Connor</a></li>
-    <li><a href="https://github.com/samueltardieu" target="_blank">Samuel Tardieu</a></li>
-    <li><a href="https://github.com/frewsxcv" target="_blank">Corey Farwell</a></li>
-    <li><a href="https://github.com/notriddle" target="_blank">Michael Howell</a></li>
-    <li><a href="https://github.com/durka" target="_blank">Alex Burka</a></li>
-    <li><a href="https://github.com/hngnaig" target="_blank">Giang Nguyen</a></li>
-    <li><a href="https://github.com/phaazon" target="_blank">Dimitri Sabadie</a></li>
-    <li><a href="https://github.com/Nemikolh" target="_blank">Nemikolh</a></li>
-    <li><a href="https://github.com/bluss" target="_blank">bluss</a></li>
-    <li><a href="https://github.com/passy" target="_blank">Pascal Hartig</a></li>
-    <li><a href="https://github.com/mattyhall" target="_blank">Matthew Hall</a></li>
-    <li><a href="https://github.com/Mark-Simulacrum" target="_blank">Mark Simulacrum</a></li>
-  </ul>
+  <h4>Contact</h4>
+  <p>Docs.rs is run and maintaned by <a href="https://www.rust-lang.org/governance/teams/dev-tools#Rustdoc%20team-info" target="_blank">Rustdoc team</a>. You can find us in #rustdoc on <a href="https://discord.gg/rust-lang" target="_blank">Discord</a>.</p>
 
-  <h4>Sponsors</h4>
-  <p>Hosting generously provided by:</p>
-  <p><a href="http://www.leaseweb.com" title="LeaseWeb offers hosted infrastructure solutions, including Cloud, CDN, Bare Metal Servers, Managed Hosting, Colocation, and Hybrid hosting" target="_blank"><img src="/leaseweb.gif" alt="Powered by LeaseWeb" width="150" height="40"/></a></p>
-  <p>If you are interested in sponsoring Docs.rs, please don't hesitate to contact us at <a href="&#109;&#97;&#105;&#x6c;&#x74;&#111;&#x3a;&#x6f;&#110;&#117;&#114;&#64;&#x6f;&#110;&#117;&#114;&#x2e;&#105;&#109;">&#x6f;&#110;&#117;&#114;&#64;&#x6f;&#110;&#117;&#114;&#x2e;&#105;&#109;</p>
 </div>
 
 {{> footer}}
