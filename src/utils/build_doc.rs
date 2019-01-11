@@ -75,7 +75,9 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let mut rustdoc_args: Vec<String> =
         vec!["-Z".to_string(), "unstable-options".to_string(),
              "--resource-suffix".to_string(),
-             format!("-{}", parse_rustc_version(get_current_versions()?.0)?)];
+             format!("-{}", parse_rustc_version(get_current_versions()?.0)?),
+             "--static-root-path".to_string(), "/".to_string(),
+             "--disable-per-crate-search".to_string()];
 
     // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
     // force rustdoc to link to other docs.rs docs for dependencies
