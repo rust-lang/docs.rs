@@ -237,12 +237,17 @@ fn get_readme(pkg: &Package) -> Result<Option<String>> {
 
 
 fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
-    if pkg.manifest().targets()[0].src_path().path().is_absolute() {
-        read_rust_doc(pkg.manifest().targets()[0].src_path().path())
+    if let Some(src_path) = pkg.manifest().targets()[0].src_path().path() {
+        if src_path.is_absolute() {
+            read_rust_doc(src_path)
+        } else {
+            let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
+            path.push(src_path);
+            read_rust_doc(path.as_path())
+        }
     } else {
-        let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
-        path.push(pkg.manifest().targets()[0].src_path().path());
-        read_rust_doc(path.as_path())
+        // FIXME: should we care about metabuild targets?
+        Ok(None)
     }
 }
 
