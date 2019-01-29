@@ -386,15 +386,17 @@ impl DocBuilder {
                       "storage.js",
                       "theme.js",
                       "source-script.js",
-                      "noscript.css"],
+                      "noscript.css",
+                      "rust-logo.png"],
+                      // favicon.ico is not needed because we set our own
                      // files doesn't require rustc version subfix
                      ["FiraSans-Medium.woff",
                       "FiraSans-Regular.woff",
-                      "Heuristica-Italic.woff",
                       "SourceCodePro-Regular.woff",
                       "SourceCodePro-Semibold.woff",
-                      "SourceSerifPro-Bold.woff",
-                      "SourceSerifPro-Regular.woff"]);
+                      "SourceSerifPro-Bold.ttf.woff",
+                      "SourceSerifPro-Regular.ttf.woff",
+                      "SourceSerifPro-It.ttf.woff"]);
 
         let source = PathBuf::from(&self.options.chroot_path)
             .join("home")
