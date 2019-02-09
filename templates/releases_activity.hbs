@@ -31,6 +31,9 @@ new Highcharts.Chart({
   series: [{
     name: 'Releases',
     data: [{{#each counts}}{{this}},{{/each}}]
+  },{
+    name: 'Build Failures',
+    data: [{{#each failures}}{{this}},{{/each}}]
   }]
 });
 </script>
