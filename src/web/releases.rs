@@ -116,7 +116,7 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
                     releases.rustdoc_status,
                     crates.github_stars
              FROM crates
-             INNER JOIN releases ON releases.id = crates.latest_version_id
+             INNER JOIN releases ON crates.id = releases.crate_id
              WHERE releases.build_status = FALSE AND releases.is_library = TRUE
              ORDER BY releases.release_time DESC
              LIMIT $1 OFFSET $2"
