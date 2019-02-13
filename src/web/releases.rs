@@ -69,6 +69,8 @@ impl ToJson for Release {
 enum Order {
     ReleaseTime, // this is default order
     GithubStars,
+    RecentFailures,
+    FailuresByGithubStars,
 }
 
 
@@ -102,6 +104,34 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
                     crates.github_stars
              FROM crates
              INNER JOIN releases ON releases.id = crates.latest_version_id
+             ORDER BY crates.github_stars DESC
+             LIMIT $1 OFFSET $2"
+        }
+        Order::RecentFailures => {
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.release_time,
+                    releases.rustdoc_status,
+                    crates.github_stars
+             FROM crates
+             INNER JOIN releases ON releases.id = crates.latest_version_id
+             WHERE releases.build_status = FALSE AND releases.is_library = TRUE
+             ORDER BY releases.release_time DESC
+             LIMIT $1 OFFSET $2"
+        }
+        Order::FailuresByGithubStars => {
+            "SELECT crates.name,
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.release_time,
+                    releases.rustdoc_status,
+                    crates.github_stars
+             FROM crates
+             INNER JOIN releases ON releases.id = crates.latest_version_id
+             WHERE releases.build_status = FALSE AND releases.is_library = TRUE
              ORDER BY crates.github_stars DESC
              LIMIT $1 OFFSET $2"
         }
@@ -300,13 +330,11 @@ pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
-    // page number of releases
-    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
-
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
-
+pub fn releases_handler(packages: Vec<Release>,
+                        page_number: i64,
+                        release_type: &str,
+                        tab: &str,
+                        title: &str) -> IronResult<Response> {
     if packages.is_empty() {
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
@@ -318,10 +346,10 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
 
     Page::new(packages)
         .title("Releases")
-        .set("description", "Recently uploaded crates")
-        .set("release_type", "recent")
+        .set("description", title)
+        .set("release_type", release_type)
         .set_true("show_releases_navigation")
-        .set_true("releases_navigation_recent_tab")
+        .set_true(tab)
         .set_bool("show_next_page_button", show_next_page)
         .set_int("next_page", page_number + 1)
         .set_bool("show_previous_page_button", show_previous_page)
@@ -330,35 +358,36 @@ pub fn releases_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-// TODO: This function is almost identical to previous one
-pub fn stars_handler(req: &mut Request) -> IronResult<Response> {
-    // page number of releases
+// Following functions caused a code repeat due to design of our /releases/ URL routes
+pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
+    let conn = extension!(req, Pool);
+    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
+    releases_handler(packages, page_number, "recent", "releases_navigation_recent_tab", "Recently uploaded crates")
+}
 
+
+pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
+    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
+    releases_handler(packages, page_number, "stars", "releases_navigation_stars_tab", "Crates with most stars")
+}
 
-    if packages.is_empty() {
-        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
-    }
 
-    // Show next and previous page buttons
-    // This is a temporary solution to avoid expensive COUNT(*)
-    let (show_next_page, show_previous_page) = (packages.len() == RELEASES_IN_RELEASES as usize,
-                                                page_number != 1);
+pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
+    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
+    let conn = extension!(req, Pool);
+    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::RecentFailures);
+    releases_handler(packages, page_number, "recent-failures", "releases_navigation_recent_failures_tab", "Recent crates failed to build")
+}
 
-    Page::new(packages)
-        .title("Releases")
-        .set("description", "Most starred crates")
-        .set("release_type", "stars")
-        .set_true("show_releases_navigation")
-        .set_true("releases_navigation_stars_tab")
-        .set_true("show_stars")
-        .set_bool("show_next_page_button", show_next_page)
-        .set_int("next_page", page_number + 1)
-        .set_bool("show_previous_page_button", show_previous_page)
-        .set_int("previous_page", page_number - 1)
-        .to_resp("releases")
+
+pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
+    let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
+    let conn = extension!(req, Pool);
+    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::FailuresByGithubStars);
+    releases_handler(packages, page_number, "failures", "releases_navigation_failures_by_stars_tab", "Crates with most stars failed to build")
 }
 
 
