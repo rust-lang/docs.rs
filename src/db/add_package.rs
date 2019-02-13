@@ -260,8 +260,10 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
     for line in reader.lines() {
         let line = try!(line);
         if line.starts_with("//!") {
-            if line.len() > 3 {
-                rustdoc.push_str(line.split_at(4).1);
+            // some lines may or may not have a space between the `//!` and the start of the text
+            let line = line.trim_start_matches("//!").trim_start();
+            if !line.is_empty() {
+                rustdoc.push_str(line);
             }
             rustdoc.push('\n');
         }
