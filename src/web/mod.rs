@@ -100,17 +100,25 @@ impl CratesfyiHandler {
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
-        router.get("/releases", releases::releases_handler, "releases");
+        router.get("/releases", releases::recent_releases_handler, "releases");
         router.get("/releases/feed",
                    releases::releases_feed_handler,
                    "releases_feed");
         router.get("/releases/recent/:page",
-                   releases::releases_handler,
+                   releases::recent_releases_handler,
                    "releases_recent_page");
-        router.get("/releases/stars", releases::stars_handler, "releases_stars");
+        router.get("/releases/stars", releases::releases_by_stars_handler, "releases_stars");
         router.get("/releases/stars/:page",
-                   releases::stars_handler,
+                   releases::releases_by_stars_handler,
                    "releases_stars_page");
+        router.get("/releases/recent-failures", releases::releases_recent_failures_handler, "releases_recent_failures");
+        router.get("/releases/recent-failures/:page",
+                   releases::releases_recent_failures_handler,
+                   "releases_recent_failures_page");
+        router.get("/releases/failures", releases::releases_failures_by_stars_handler, "releases_failures_by_stars");
+        router.get("/releases/failures/:page",
+                   releases::releases_failures_by_stars_handler,
+                   "releases_failures_by_starts_page");
         router.get("/releases/:author",
                    releases::author_handler,
                    "releases_author");

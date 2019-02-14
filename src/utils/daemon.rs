@@ -121,12 +121,12 @@ pub fn start_daemon() {
     });
 
 
-    // update release activity everyday at 02:00
+    // update release activity everyday at 23:55
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(60));
             let now = time::now();
-            if now.tm_hour == 2 && now.tm_min == 0 {
+            if now.tm_hour == 23 && now.tm_min == 55 {
                 info!("Updating release activity");
                 if let Err(e) = update_release_activity() {
                     error!("Failed to update release activity: {}", e);
