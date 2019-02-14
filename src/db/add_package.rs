@@ -232,7 +232,14 @@ fn get_readme(pkg: &Package) -> Result<Option<String>> {
     let mut reader = try!(fs::File::open(readme_path).map(|f| BufReader::new(f)));
     let mut readme = String::new();
     try!(reader.read_to_string(&mut readme));
-    Ok(Some(readme))
+
+    if readme.is_empty() {
+        Ok(None)
+    } else if readme.len() > 51200 {
+        Ok(Some(format!("(Readme ignored due to being too long. ({} > 51200))", readme.len())))
+    } else {
+        Ok(Some(readme))
+    }
 }
 
 
