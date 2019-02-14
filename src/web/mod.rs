@@ -45,12 +45,12 @@ mod builds;
 mod error;
 mod sitemap;
 
-use std::env;
+use std::{env, fmt};
 use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
-use iron::{Handler, status};
+use iron::{self, Handler, status};
 use iron::headers::{CacheControl, CacheDirective, ContentType};
 use router::{Router, NoRoute};
 use staticfile::Static;
@@ -237,6 +237,34 @@ impl Handler for CratesfyiHandler {
                 } else {
                     panic!("all cratesfyi errors should be of type Nope");
                 };
+
+                match err {
+                    error::Nope::ResourceNotFound => {
+                        // print the path of the URL that triggered a 404 error
+                        struct DebugPath<'a>(&'a iron::Url);
+                        impl<'a> fmt::Display for DebugPath<'a> {
+                            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                                for path_elem in self.0.path() {
+                                    write!(f, "/{}", path_elem)?;
+                                }
+
+                                if let Some(query) = self.0.query() {
+                                    write!(f, "?{}", query)?;
+                                }
+
+                                if let Some(hash) = self.0.fragment() {
+                                    write!(f, "#{}", hash)?;
+                                }
+
+                                Ok(())
+                            }
+                        }
+
+                        debug!("Path: {}", DebugPath(&req.url));
+                    }
+                    _ => {}
+                }
+
                 Self::chain(err).handle(req)
             })
     }
