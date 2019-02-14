@@ -276,6 +276,11 @@ div.recent-releases-container {
         font-weight: 500;
     }
 
+    pre {
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+    }
+
     .release {
         display: block;
         border-bottom: 1px solid $color-border;
