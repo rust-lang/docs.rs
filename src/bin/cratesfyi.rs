@@ -109,8 +109,9 @@ pub fn main() {
         .subcommand(SubCommand::with_name("daemon").about("Starts cratesfyi daemon"))
         .subcommand(SubCommand::with_name("database")
             .about("Database operations")
-            .subcommand(SubCommand::with_name("init").about("Initialize database. Currently \
-                                                              only creates tables in database."))
+            .subcommand(SubCommand::with_name("migrate")
+                .about("Run database migrations")
+                .arg(Arg::with_name("VERSION")))
             .subcommand(SubCommand::with_name("update-github-fields")
                 .about("Updates github stats for crates."))
             .subcommand(SubCommand::with_name("add-directory")
@@ -204,9 +205,10 @@ pub fn main() {
         }
 
     } else if let Some(matches) = matches.subcommand_matches("database") {
-        if let Some(_) = matches.subcommand_matches("init") {
-            let conn = db::connect_db().unwrap();
-            db::create_tables(&conn).expect("Failed to initialize database");
+        if let Some(matches) = matches.subcommand_matches("migrate") {
+            let version = matches.value_of("VERSION").map(|v| v.parse::<i64>()
+                                                          .expect("Version should be an integer"));
+            db::migrate(version).expect("Failed to run database migrations");
         } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
         } else if let Some(matches) = matches.subcommand_matches("add-directory") {

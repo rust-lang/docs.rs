@@ -120,9 +120,9 @@ EOF
     echo 'DROP DATABASE cratesfyi; CREATE DATABASE cratesfyi OWNER cratesfyi' | sudo -u postgres psql
 
     ############################################################
-    # Initializing database scheme                             #
+    # Migrate database to recent version                       #
     ############################################################
-    su - cratesfyi -c "cd /vagrant && cargo run -- database init"
+    su - cratesfyi -c "cd /vagrant && cargo run -- database migrate"
 
     ############################################################
     # Add essential files for downloaded nigthly               #

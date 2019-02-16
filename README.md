@@ -108,8 +108,8 @@ cargo run -- build world
 #### `database` subcommand
 
 ```sh
-# Initializes database. Currently, only creates tables in database.
-cargo run -- database init
+# Migrate database to recent version
+cargo run -- database migrate
 
 
 # Adds a directory into database to serve with `staticfile` crate.

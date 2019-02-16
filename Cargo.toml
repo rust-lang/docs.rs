@@ -30,6 +30,9 @@ comrak = { version = "0.3", default-features = false }
 toml = "0.4"
 html5ever = "0.22"
 cargo = { git = "https://github.com/rust-lang/cargo.git" }
+schemamama = "0.3"
+schemamama_postgres = "0.2"
+
 
 # iron dependencies
 iron = "0.5"
