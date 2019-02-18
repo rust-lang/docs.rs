@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 
 use cargo::core::{Package, TargetKind};
+use cargo::core::dependency::Kind;
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
@@ -208,13 +209,18 @@ fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i3
 
 
 
-/// Convert dependencies into Vec<(String, String)>
-fn convert_dependencies(pkg: &Package) -> Vec<(String, String)> {
-    let mut dependencies: Vec<(String, String)> = Vec::new();
+/// Convert dependencies into Vec<(String, String, String)>
+fn convert_dependencies(pkg: &Package) -> Vec<(String, String, String)> {
+    let mut dependencies: Vec<(String, String, String)> = Vec::new();
     for dependency in pkg.manifest().dependencies() {
         let name = dependency.package_name().to_string();
         let version = format!("{}", dependency.version_req());
-        dependencies.push((name, version));
+        let kind = match dependency.kind() {
+            Kind::Normal => "normal",
+            Kind::Development => "dev",
+            Kind::Build => "build",
+        };
+        dependencies.push((name, version, kind.to_string()));
     }
     dependencies
 }
