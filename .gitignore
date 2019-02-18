@@ -1,5 +1,2 @@
 target
-*.css
-*.css.map
-.sass-cache
-.vagrant
+.cache

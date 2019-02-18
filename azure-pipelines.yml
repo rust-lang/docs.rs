@@ -1,0 +1,21 @@
+# Ref: https://aka.ms/yaml
+
+jobs:
+- job: test
+  pool:
+    vmImage: 'Ubuntu 16.04'
+  steps:
+    - script: docker-compose build docsrs-development
+      displayName: 'Build development docker image'
+    - script: docker-compose up docsrs-development
+      displayName: 'Start development docker container'
+    - script: docker-compose run docsrs-development cargo build --verbose 
+      displayName: 'Build docs.rs'
+    - script: docker-compose run docsrs-development cargo test -- --test-threads=1
+      displayName: 'Test docs.rs'
+    - script: docker-compose run docsrs-development cargo fmt --all -- --check
+      displayName: 'rustfmt check'
+    - script: docker-compose run docsrs-development cargo check
+      displayName: 'cargo check'
+    - script: docker-compose run docsrs-development cargo clippy
+      displayName: 'clippy check'

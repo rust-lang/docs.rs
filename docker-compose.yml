@@ -1,0 +1,14 @@
+version: '3.3'
+services:
+    docsrs-development:
+        build: 
+            context: docker-images
+            dockerfile: development.Dockerfile
+        environment:
+            - DOCSRS_BUILD_ENV=1
+            - RUST_LOG=docsrs_builder
+        volumes:
+            - .:/docsrs
+            - ./.cache/target:/root/docsrs-target
+            - ./.cache/cargo/git:/root/.cargo/git
+            - ./.cache/cargo/registry:/root/.cargo/registry
