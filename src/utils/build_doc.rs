@@ -3,6 +3,7 @@
 //! This module is extremely similar to cargo install operation, except it's building
 //! documentation of a crate and not installing anything.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::env;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use cargo::core::resolver;
 use cargo::core::source::SourceMap;
 use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
-use cargo::ops::{self, Packages};
+use cargo::ops::{self, Packages, LibRule, FilterRule};
 
 use utils::{get_current_versions, parse_rustc_version};
 use error::Result;
@@ -37,7 +38,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_cfg_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_cfg_map.load(source_id));
+    let mut source = try!(source_cfg_map.load(source_id, &HashSet::new()));
 
     // update crates.io-index registry
     try!(source.update());
@@ -81,7 +82,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
     // force rustdoc to link to other docs.rs docs for dependencies
-    let source = try!(source_cfg_map.load(source_id));
+    let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
     for (name, dep) in try!(resolve_deps(&pkg, &config, source)) {
         rustdoc_args.push("--extern-html-root-url".to_string());
         rustdoc_args.push(format!("{}=https://docs.rs/{}/{}",
@@ -106,12 +107,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
         all_features: metadata.all_features,
         no_default_features: metadata.no_default_features,
         spec: Packages::Packages(Vec::new()),
-        filter: ops::CompileFilter::new(true,
-                                        Vec::new(), false,
-                                        Vec::new(), false,
-                                        Vec::new(), false,
-                                        Vec::new(), false,
-                                        false),
+        filter: ops::CompileFilter::new(LibRule::True,
+                                        FilterRule::none(),
+                                        FilterRule::none(),
+                                        FilterRule::none(),
+                                        FilterRule::none()),
         target_rustc_args: None,
         target_rustdoc_args: Some(rustdoc_args),
         local_rustdoc_args: None,
@@ -120,7 +120,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
     let exec: Arc<Executor> = Arc::new(DefaultExecutor);
-    let source = try!(source_cfg_map.load(source_id));
+    let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
     try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
 
     Ok(try!(ws.current()).clone())
@@ -139,6 +139,7 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cf
         &mut registry,
         &Default::default(),
         None,
+        false,
         false,
     ));
     let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).collect::<Vec<_>>();
@@ -163,7 +164,7 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(source_id));
+    let mut source = try!(source_map.load(source_id, &HashSet::new()));
 
     try!(source.update());
 
@@ -191,7 +192,7 @@ pub fn update_sources() -> CargoResult<()> {
     let source_id = try!(SourceId::crates_io(&config));
 
     let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(source_id));
+    let mut source = try!(source_map.load(source_id, &HashSet::new()));
 
     source.update()
 }
