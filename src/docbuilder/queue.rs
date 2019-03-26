@@ -18,11 +18,23 @@ impl DocBuilder {
         // I belive this will fix ordering of queue if we get more than one crate from changes
         changes.reverse();
 
-        for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
-            conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
-                         &[&krate.name, &krate.version])
-                .ok();
-            debug!("{}-{} added into build queue", krate.name, krate.version);
+        for krate in &changes {
+            match krate.kind {
+                ChangeKind::Yanked => {
+                    // FIXME: remove built doc files? set build as failed?
+                    conn.execute("UPDATE releases SET yanked = TRUE FROM crates WHERE \
+                                  crates.id = releases.crate_id AND name = $1 AND version = $2",
+                                 &[&krate.name, &krate.version])
+                        .ok();
+                    debug!("{}-{} yanked", krate.name, krate.version);
+                }
+                ChangeKind::Added => {
+                    conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
+                                 &[&krate.name, &krate.version])
+                        .ok();
+                    debug!("{}-{} added into build queue", krate.name, krate.version);
+                }
+            }
         }
 
         let queue_count = conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
