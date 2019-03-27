@@ -59,7 +59,7 @@ use time;
 use postgres::Connection;
 use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
@@ -301,6 +301,23 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         versions
     };
 
+    let yanked_versions = {
+        let rows = conn.query("SELECT version FROM crates JOIN releases \
+                               ON releases.crate_id = crates.id \
+                               WHERE crates.name = $1 AND releases.yanked = true",
+                              &[&name]).unwrap();
+        let mut versions = BTreeSet::<Version>::new();
+
+        for v in &rows {
+            let v: String = v.get(0);
+            if let Ok(semv) = Version::parse(&v) {
+                versions.insert(semv);
+            }
+        }
+
+        versions
+    };
+
     // first check for exact match
     // we can't expect users to use semver in query
     for version in &versions {
@@ -335,14 +352,18 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     };
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
-    // return first version if requested version is '*'
-    if req_version == "*" && !versions_sem.is_empty() {
-        return Some(format!("{}", versions_sem[0]));
+    // return first non-yanked version if requested version is '*'
+    if req_version == "*" {
+        return versions_sem.iter()
+                           .find(|v| !yanked_versions.contains(v))
+                           .map(|v| v.to_string());
     }
 
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
-            return Some(format!("{}", version));
+            if !yanked_versions.contains(&version) {
+                return Some(version.to_string());
+            }
         }
     }
 
