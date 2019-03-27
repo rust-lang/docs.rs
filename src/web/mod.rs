@@ -56,7 +56,7 @@ mod sitemap;
 mod source;
 
 use self::pool::Pool;
-use handlebars_iron::{DirectorySource, HandlebarsEngine};
+use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
@@ -87,6 +87,17 @@ const DEFAULT_BIND: &str = "0.0.0.0:3000";
 type PoolFactoryFn = dyn Fn() -> Pool + Send + Sync;
 type PoolFactory = Box<PoolFactoryFn>;
 
+fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
+    // TODO: Use DocBuilderOptions for paths
+    let mut hbse = HandlebarsEngine::new();
+    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+    // load templates
+    hbse.reload()?;
+
+    Ok(hbse)
+}
+
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
@@ -97,14 +108,7 @@ struct CratesfyiHandler {
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
-        // TODO: Use DocBuilderOptions for paths
-        let mut hbse = HandlebarsEngine::new();
-        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-        // load templates
-        if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e);
-        }
+        let hbse = handlebars_engine().expect("Failed to load handlebar templates");
 
         let mut chain = Chain::new(base);
         chain.link_before(pool_factory());
@@ -572,7 +576,7 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     use crate::test::*;
-    use crate::web::match_version;
+    use crate::web::{handlebars_engine, match_version};
     use html5ever::tendril::TendrilSink;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
@@ -778,5 +782,10 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_templates_are_valid() {
+        handlebars_engine().expect("Failed to load handlebar templates");
     }
 }
