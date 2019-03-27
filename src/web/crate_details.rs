@@ -40,6 +40,7 @@ pub struct CrateDetails {
     github_issues: Option<i32>,
     pub(crate) metadata: MetaData,
     is_library: bool,
+    yanked: bool,
     pub(crate) doc_targets: Vec<String>,
     license: Option<String>,
     documentation_url: Option<String>,
@@ -83,6 +84,7 @@ impl ToJson for CrateDetails {
         m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.insert("is_library".to_string(), self.is_library.to_json());
+        m.insert("yanked".to_string(), self.yanked.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
         m.insert(
@@ -134,6 +136,7 @@ impl CrateDetails {
                 crates.github_forks,
                 crates.github_issues,
                 releases.is_library,
+                releases.yanked,
                 releases.doc_targets,
                 releases.license,
                 releases.documentation_url,
@@ -180,11 +183,11 @@ impl CrateDetails {
             description: rows.get(0).get(4),
             rustdoc_status: rows.get(0).get(11),
             target_name: rows.get(0).get(16),
-            default_target: rows.get(0).get(25),
+            default_target: rows.get(0).get(26),
         };
 
         let doc_targets = {
-            let data: Json = rows.get(0).get(22);
+            let data: Json = rows.get(0).get(23);
             data.as_array()
                 .map(|array| {
                     array
@@ -221,9 +224,10 @@ impl CrateDetails {
             github_issues: rows.get(0).get(20),
             metadata,
             is_library: rows.get(0).get(21),
+            yanked: rows.get(0).get(22),
             doc_targets,
-            license: rows.get(0).get(23),
-            documentation_url: rows.get(0).get(24),
+            license: rows.get(0).get(24),
+            documentation_url: rows.get(0).get(25),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
