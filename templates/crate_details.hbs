@@ -61,6 +61,9 @@
       {{#unless is_library}}
       <div class="warning">{{name}}-{{version}} is not a library.</div>
       {{else}}
+      {{#if yanked}}
+      <div class="warning">{{name}}-{{version}} has been yanked.</div>
+      {{else}}
       {{#unless build_status}}
       <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and if you believe this is docs.rs' fault, report into <a href="https://github.com/rust-lang/docs.rs/issues/23">this issue report</a>.</div>
       {{else}}
@@ -68,6 +71,7 @@
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>
       {{/unless}}
       {{/unless}}
+      {{/if}}
       {{/unless}}
       {{#if readme}}
         {{{readme}}}

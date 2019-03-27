@@ -44,6 +44,7 @@ pub struct CrateDetails {
     github_issues: Option<i32>,
     metadata: MetaData,
     is_library: bool,
+    yanked: bool,
     doc_targets: Option<Json>,
     license: Option<String>,
     documentation_url: Option<String>,
@@ -82,6 +83,7 @@ impl ToJson for CrateDetails {
         m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.insert("is_library".to_string(), self.is_library.to_json());
+        m.insert("yanked".to_string(), self.yanked.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
         m.insert("documentation_url".to_string(), self.documentation_url.to_json());
@@ -116,6 +118,7 @@ impl CrateDetails {
                             crates.github_forks,
                             crates.github_issues,
                             releases.is_library,
+                            releases.yanked,
                             releases.doc_targets,
                             releases.license,
                             releases.documentation_url
@@ -185,9 +188,10 @@ impl CrateDetails {
             github_issues: rows.get(0).get(20),
             metadata: metadata,
             is_library: rows.get(0).get(21),
-            doc_targets: rows.get(0).get(22),
-            license: rows.get(0).get(23),
-            documentation_url: rows.get(0).get(24),
+            yanked: rows.get(0).get(22),
+            doc_targets: rows.get(0).get(23),
+            license: rows.get(0).get(24),
+            documentation_url: rows.get(0).get(25),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
