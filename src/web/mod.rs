@@ -54,7 +54,7 @@ use iron::{self, Handler, status};
 use iron::headers::{CacheControl, CacheDirective, ContentType};
 use router::{Router, NoRoute};
 use staticfile::Static;
-use handlebars_iron::{HandlebarsEngine, DirectorySource};
+use handlebars_iron::{HandlebarsEngine, DirectorySource, SourceError};
 use time;
 use postgres::Connection;
 use semver::{Version, VersionReq};
@@ -66,6 +66,16 @@ const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
+fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
+    // TODO: Use DocBuilderOptions for paths
+    let mut hbse = HandlebarsEngine::new();
+    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+    // load templates
+    try!(hbse.reload());
+
+    Ok(hbse)
+}
 
 struct CratesfyiHandler {
     shared_resource_handler: Box<Handler>,
@@ -77,14 +87,10 @@ struct CratesfyiHandler {
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(base: H) -> Chain {
-        // TODO: Use DocBuilderOptions for paths
-        let mut hbse = HandlebarsEngine::new();
-        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-        // load templates
-        if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e.description());
-        }
+        let hbse = match handlebars_engine() {
+            Ok(hbse) => hbse,
+            Err(e) => panic!("Failed to load handlebar templates: {}", e.description()),
+        };
 
         let mut chain = Chain::new(base);
         chain.link_before(pool::Pool::new());
@@ -559,5 +565,12 @@ mod test {
         assert_eq!(latest_version(&versions, "1.0.0"), Some("1.1.0".to_owned()));
         assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
         assert_eq!(latest_version(&versions, "invalidversion"), None);
+    }
+
+    #[test]
+    fn test_templates_are_valid() {
+        if let Err(e) = handlebars_engine() {
+            panic!("Failed to load handlebar templates: {}", e.description());
+        }
     }
 }
