@@ -1,11 +1,20 @@
 {{> header}}
 
+<script type="text/javascript" charset="utf-8">
+  function getKey(ev) {
+    if ("key" in ev && typeof ev.key != "undefined") {
+       return ev.key;
+    }
+    return String.fromCharCode(ev.charCode || ev.keyCode);
+  }
+</script>
+
 {{#if varsb.show_search_form}}
 <div class="container landing">
   <h1 class="brand"><i class="fa fa-cubes fa-fw"></i> Docs.rs</h1>
 
   <form action="/releases/search" method="GET" class="landing-search-form">
-    <div><input class="search-input" name="query" type="text" placeholder="Search" autofocus></div>
+    <div><input class="search-input" id="search" name="query" type="text" placeholder="Click or press 'S' to search" autofocus></div>
     <div class="buttons">
       <button type="submit" class="pure-button pure-button-normal">Search</button>
       <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button">I'm Feeling Lucky</button>
@@ -21,6 +30,20 @@
       document.getElementsByClassName("landing-search-form")[0].appendChild(input);
       return true;
     };
+    function handleShortcut(ev) {
+      if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+        return;
+      }
+      switch (getKey(ev)) {
+        case "s":
+        case "S":
+          ev.preventDefault();
+          document.getElementById("search").focus();
+          break;
+      }
+    }
+    document.onkeypress = handleShortcut;
+    document.onkeydown = handleShortcut;
   </script>
 </div>
 {{/if}}
@@ -31,6 +54,59 @@
     <div class="release">
       <a href="/releases"><strong>Recent Releases</strong></a> <a href="/releases/feed" title="Atom feed"><i class="fa fa-rss-square"></i></a>
     </div>
+    {{else}}
+    <script type="text/javascript" charset="utf-8">
+    var active = null;
+
+    function handleKey(ev) {
+      if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+        return;
+      }
+      if (ev.which === 38) { // Down arrow
+        if (active === null) {
+          active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+        } else if (active.nextElementSibling) {
+          active.classList.remove("selected");
+          active = active.nextElementSibling;
+        }
+        active.classList.add("selected");
+      } else if (ev.which === 40) { // Up arrow
+        if (active === null) {
+          active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+        } else if (active.previousElementSibling) {
+          active.classList.remove("selected");
+          active = active.previousElementSibling;
+        }
+        active.classList.add("selected");
+        active.focus();
+      } else if (e.which === 13) { // Return
+        if (active !== null) {
+          document.location.href = active.getElementsByTagName("a")[0].href;
+        }
+      } else {
+        switch (getKey(ev)) {
+          case "s":
+          case "S":
+            ev.preventDefault();
+            document.getElementsByClassName("search-input-nav")[0].focus();
+            break;
+        }
+      }
+    }
+    document.onkeypress = handleKey;
+    document.onkeydown = handleKey;
+    var crates = Array.prototype.slice.call(document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li"));
+    for (var i = 0; i < crates.length; ++i) {
+      crates[i].addEventListener("mouseover", function(event) {
+        this.classList.remove("selected");
+        active = null;
+      });
+      crates[i].addEventListener("mouseout", function(event) {
+        this.classList.remove("selected");
+        active = null;
+      });
+    }
+    </script>
     {{/if}}
 
     <ul>

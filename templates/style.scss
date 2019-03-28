@@ -292,7 +292,7 @@ div.recent-releases-container {
         }
     }
 
-    .release:hover {
+    .release:hover, li.selected > .release {
         background-color: $color-background-code;
     }
 
