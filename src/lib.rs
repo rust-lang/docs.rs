@@ -29,6 +29,8 @@ extern crate crates_index_diff;
 extern crate git2;
 extern crate toml;
 extern crate html5ever;
+extern crate schemamama;
+extern crate schemamama_postgres;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;
