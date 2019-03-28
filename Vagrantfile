@@ -37,6 +37,11 @@ Vagrant.configure("2") do |config|
     set -ev
 
     ############################################################
+    # Removing jessie-backports                                #
+    ############################################################
+    sed -i '/jessie-backports/d' /etc/apt/sources.list
+
+    ############################################################
     # Installing docs.rs dependencies                          #
     ############################################################
     apt-get update
