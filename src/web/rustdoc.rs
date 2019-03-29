@@ -87,6 +87,23 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     }
 
+    fn redirect_to_crate(req: &Request,
+                         name: &str,
+                         vers: &str)
+                         -> IronResult<Response> {
+        let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
+                                            req.url.scheme(),
+                                            req.url.host(),
+                                            req.url.port(),
+                                            name,
+                                            vers)[..]));
+
+        let mut resp = Response::with((status::Found, Redirect(url)));
+        resp.headers.set(Expires(HttpDate(time::now())));
+
+        Ok(resp)
+    }
+
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
@@ -99,18 +116,23 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     };
 
-    // get target name
+    // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
-    let target_name: String =
-        ctry!(conn.query("SELECT target_name
-                          FROM releases
-                          INNER JOIN crates ON crates.id = releases.crate_id
-                          WHERE crates.name = $1 AND releases.version = $2",
-                         &[&crate_name, &version]))
-            .get(0)
-            .get(0);
+    let (target_name, has_docs): (String, bool) = {
+        let rows = ctry!(conn.query("SELECT target_name, rustdoc_status
+                                     FROM releases
+                                     INNER JOIN crates ON crates.id = releases.crate_id
+                                     WHERE crates.name = $1 AND releases.version = $2",
+                                    &[&crate_name, &version]));
 
-    redirect_to_doc(req, &crate_name, &version, &target_name)
+        (rows.get(0).get(0), rows.get(0).get(1))
+    };
+
+    if has_docs {
+        redirect_to_doc(req, &crate_name, &version, &target_name)
+    } else {
+        redirect_to_crate(req, &crate_name, &version)
+    }
 }
 
 
