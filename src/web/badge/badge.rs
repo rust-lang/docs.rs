@@ -53,6 +53,9 @@ impl Badge {
         };
         let v_metrics = font.v_metrics(scale);
         let offset = point(0.0, v_metrics.ascent);
+        if options.status.is_empty() || options.subject.is_empty() {
+            return Err(String::from("status and subject must not be empty"));
+        }
         Ok(Badge {
             options: options,
             font: font,
@@ -145,6 +148,14 @@ mod tests {
     #[test]
     fn test_new() {
         assert!(Badge::new(options()).is_ok());
+
+        let mut bad_options_status = options();
+        bad_options_status.status = "".to_owned();
+        assert!(Badge::new(bad_options_status).is_err());
+        
+        let mut bad_options_subject = options();
+        bad_options_subject.subject = "".to_owned();
+        assert!(Badge::new(bad_options_subject).is_err());
     }
 
     #[test]
