@@ -63,6 +63,7 @@
         return;
       }
       if (ev.which === 40) { // Down arrow
+        ev.preventDefault();
         if (active === null) {
           active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
         } else if (active.nextElementSibling) {
@@ -71,6 +72,7 @@
         }
         active.classList.add("selected");
       } else if (ev.which === 38) { // Up arrow
+        ev.preventDefault();
         if (active === null) {
           active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
         } else if (active.previousElementSibling) {
