@@ -62,7 +62,7 @@
       if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
         return;
       }
-      if (ev.which === 38) { // Down arrow
+      if (ev.which === 40) { // Down arrow
         if (active === null) {
           active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
         } else if (active.nextElementSibling) {
@@ -70,7 +70,7 @@
           active = active.nextElementSibling;
         }
         active.classList.add("selected");
-      } else if (ev.which === 40) { // Up arrow
+      } else if (ev.which === 38) { // Up arrow
         if (active === null) {
           active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
         } else if (active.previousElementSibling) {
