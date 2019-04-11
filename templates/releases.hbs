@@ -79,7 +79,7 @@
         }
         active.classList.add("selected");
         active.focus();
-      } else if (e.which === 13) { // Return
+      } else if (ev.which === 13) { // Return
         if (active !== null) {
           document.location.href = active.getElementsByTagName("a")[0].href;
         }
