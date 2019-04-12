@@ -229,7 +229,6 @@ impl Handler for CratesfyiHandler {
                 self.static_handler.handle(req).or(Err(e))
             })
             .or_else(|e| {
-                debug!("{}", e.description());
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
                 } else if e.error.downcast::<NoRoute>().is_some() {
@@ -260,7 +259,7 @@ impl Handler for CratesfyiHandler {
                             }
                         }
 
-                        debug!("Path: {}", DebugPath(&req.url));
+                        debug!("Path not found: {}", DebugPath(&req.url));
                     }
                     _ => {}
                 }
