@@ -49,6 +49,27 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
 
     let head = head.ok_or_else(|| err_msg("couldn't find <head> tag in rustdoc output"))?;
     let body = body.ok_or_else(|| err_msg("couldn't find <body> tag in rustdoc output"))?;
+
+    {
+        head.children.borrow_mut().retain(|node| {
+            match node.data {
+                NodeData::Element { ref name, ref attrs, .. } => {
+                    // `<link rel="shortcut icon">` is rustdoc's custom favicon, but we want to
+                    // use our own, so ditch it so browsers request the favicon at the domain root
+                    // instead
+                    !(name.local == *"link" &&
+                      attrs.borrow()
+                           .iter()
+                           .any(|attr| {
+                               attr.name.local == *"rel" &&
+                               &*attr.value == "shortcut icon"
+                           }))
+                }
+                _ => true,
+            }
+        });
+    }
+
     Ok((head, body))
 }
 
