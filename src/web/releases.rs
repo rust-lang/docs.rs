@@ -485,37 +485,14 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 
             if let Some(version) = match_version(&conn, &query, None) {
-                // FIXME: This is a super dirty way to check if crate have rustdocs generated.
-                //        match_version should handle this instead of this code block.
-                //        This block is introduced to fix #163
-                let rustdoc_status = {
-                    let rows = ctry!(conn.query("SELECT rustdoc_status
-                                                 FROM releases
-                                                 INNER JOIN crates
-                                                 ON crates.id = releases.crate_id
-                                                 WHERE crates.name = $1 AND releases.version = $2",
-                                                &[query, &version]));
-                    if rows.is_empty() {
-                        false
-                    } else {
-                        rows.get(0).get(0)
-                    }
-                };
-                let url = if rustdoc_status {
-                    ctry!(Url::parse(&format!("{}://{}:{}/{}/{}",
-                                              req.url.scheme(),
-                                              req.url.host(),
-                                              req.url.port(),
-                                              query,
-                                              version)[..]))
-                } else {
-                    ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                              req.url.scheme(),
-                                              req.url.host(),
-                                              req.url.port(),
-                                              query,
-                                              version)[..]))
-                };
+                // If the crate doesn't have docs, the `crate/version` route will redirect to the
+                // crate details page instead
+                let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}",
+                                                    req.url.scheme(),
+                                                    req.url.host(),
+                                                    req.url.port(),
+                                                    query,
+                                                    version)[..]));
                 let mut resp = Response::with((status::Found, Redirect(url)));
 
                 use iron::headers::{Expires, HttpDate};
