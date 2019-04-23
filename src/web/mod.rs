@@ -229,7 +229,6 @@ impl Handler for CratesfyiHandler {
                 self.static_handler.handle(req).or(Err(e))
             })
             .or_else(|e| {
-                debug!("{}", e.description());
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
                 } else if e.error.downcast::<NoRoute>().is_some() {
@@ -238,32 +237,30 @@ impl Handler for CratesfyiHandler {
                     panic!("all cratesfyi errors should be of type Nope");
                 };
 
-                match err {
-                    error::Nope::ResourceNotFound => {
-                        // print the path of the URL that triggered a 404 error
-                        struct DebugPath<'a>(&'a iron::Url);
-                        impl<'a> fmt::Display for DebugPath<'a> {
-                            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                                for path_elem in self.0.path() {
-                                    write!(f, "/{}", path_elem)?;
-                                }
-
-                                if let Some(query) = self.0.query() {
-                                    write!(f, "?{}", query)?;
-                                }
-
-                                if let Some(hash) = self.0.fragment() {
-                                    write!(f, "#{}", hash)?;
-                                }
-
-                                Ok(())
+                if let error::Nope::ResourceNotFound = err {
+                    // print the path of the URL that triggered a 404 error
+                    struct DebugPath<'a>(&'a iron::Url);
+                    impl<'a> fmt::Display for DebugPath<'a> {
+                        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                            for path_elem in self.0.path() {
+                                write!(f, "/{}", path_elem)?;
                             }
-                        }
 
-                        debug!("Path: {}", DebugPath(&req.url));
+                            if let Some(query) = self.0.query() {
+                                write!(f, "?{}", query)?;
+                            }
+
+                            if let Some(hash) = self.0.fragment() {
+                                write!(f, "#{}", hash)?;
+                            }
+
+                            Ok(())
+                        }
                     }
-                    _ => {}
+
+                    debug!("Path not found: {}", DebugPath(&req.url));
                 }
+
 
                 Self::chain(err).handle(req)
             })
