@@ -383,6 +383,7 @@ impl DocBuilder {
                       "normalize.css",
                       "rustdoc.css",
                       "settings.css",
+                      "settings.js",
                       "storage.js",
                       "theme.js",
                       "source-script.js",
