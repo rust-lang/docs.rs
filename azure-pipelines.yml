@@ -23,11 +23,13 @@ jobs:
     - script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
       displayName: 'Install rustc'
     - script: |
-        export PATH=$PATH:$HOME/.cargo/bin
+        . "$HOME"/.cargo/env
+        rustup component add rustfmt
+        cargo fmt --all -- --check
         cargo build --verbose
       displayName: 'Build docs.rs'
     - script: |
-        export PATH=$PATH:$HOME/.cargo/bin
+        . "$HOME"/.cargo/env
         cargo test --verbose -- --test-threads=1
       displayName: 'Test docs.rs'
 
@@ -47,7 +49,7 @@ jobs:
     - script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
       displayName: 'Install rustc'
     - script: |
-        export PATH=$PATH:$HOME/.cargo/bin
+        . "$HOME"/.cargo/env
         cargo build --verbose --release
       displayName: 'Build docs.rs'
     - task: CopyFiles@2
