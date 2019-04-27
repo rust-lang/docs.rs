@@ -2,9 +2,7 @@
 
 use iron::prelude::*;
 use iron::{BeforeMiddleware, typemap};
-use r2d2;
-use r2d2_postgres;
-use db::create_pool;
+use crate::db::create_pool;
 
 
 pub struct Pool {
@@ -22,7 +20,7 @@ impl Pool {
 }
 
 impl BeforeMiddleware for Pool {
-    fn before(&self, req: &mut Request) -> IronResult<()> {
+    fn before(&self, req: &mut Request<'_, '_>) -> IronResult<()> {
         req.extensions.insert::<Pool>(self.pool.get().unwrap());
         Ok(())
     }

@@ -4,9 +4,8 @@ use iron::headers::ContentType;
 use rustc_serialize::json::Json;
 use super::page::Page;
 use super::pool::Pool;
-use time;
 
-pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
+pub fn sitemap_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let mut releases: Vec<(String, String)> = Vec::new();
     for row in &conn.query("SELECT DISTINCT ON (crates.name)
@@ -25,13 +24,13 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
+pub fn robots_txt_handler(_: &mut Request<'_, '_>) -> IronResult<Response> {
     let mut resp = Response::with("Sitemap: https://docs.rs/sitemap.xml");
     resp.headers.set(ContentType("text/plain".parse().unwrap()));
     Ok(resp)
 }
 
-pub fn about_handler(req: &mut Request) -> IronResult<Response> {
+pub fn about_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let mut content = BTreeMap::new();
 
     let conn = extension!(req, Pool);

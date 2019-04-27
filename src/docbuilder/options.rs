@@ -2,7 +2,7 @@
 
 use std::{env, fmt};
 use std::path::PathBuf;
-use error::Result;
+use crate::error::Result;
 
 #[derive(Clone)]
 pub struct DocBuilderOptions {
@@ -51,7 +51,7 @@ impl Default for DocBuilderOptions {
 
 
 impl fmt::Debug for DocBuilderOptions {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f,
                "DocBuilderOptions {{ destination: {:?}, chroot_path: {:?}, \
                 crates_io_index_path: {:?}, \

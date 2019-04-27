@@ -2,9 +2,9 @@
 use super::DocBuilder;
 use super::crates::crates_from_path;
 use super::metadata::Metadata;
-use utils::{get_package, source_path, copy_doc_dir,
+use crate::utils::{get_package, source_path, copy_doc_dir,
             update_sources, parse_rustc_version, command_result};
-use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
+use crate::db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
 use cargo::util::CargoResultExt;
 use std::process::Command;
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::fs::remove_dir_all;
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
-use error::Result;
+use crate::error::Result;
 
 
 /// List of targets supported by docs.rs
@@ -41,7 +41,7 @@ pub struct ChrootBuilderResult {
 impl DocBuilder {
     /// Builds every package documentation in chroot environment
     pub fn build_world(&mut self) -> Result<()> {
-        try!(update_sources());
+        r#try!(update_sources());
 
         let mut count = 0;
 
@@ -73,42 +73,42 @@ impl DocBuilder {
         info!("Building package {}-{}", name, version);
 
         // Start with clean documentation directory
-        try!(self.remove_build_dir());
+        r#try!(self.remove_build_dir());
 
         // Database connection
-        let conn = try!(connect_db());
+        let conn = r#try!(connect_db());
 
         // get_package (and cargo) is using semver, add '=' in front of version.
-        let pkg = try!(get_package(name, Some(&format!("={}", version)[..])));
+        let pkg = r#try!(get_package(name, Some(&format!("={}", version)[..])));
         let metadata = Metadata::from_package(&pkg)?;
         let res = self.build_package_in_chroot(&pkg, metadata.default_target.clone());
 
         // copy sources and documentation
-        let file_list = try!(self.add_sources_into_database(&conn, &pkg));
+        let file_list = r#try!(self.add_sources_into_database(&conn, &pkg));
         let successfully_targets = if res.have_doc {
-            try!(self.copy_documentation(&pkg,
+            r#try!(self.copy_documentation(&pkg,
                                          &res.rustc_version,
                                          metadata.default_target.as_ref().map(String::as_str),
                                          true));
             let successfully_targets = self.build_package_for_all_targets(&pkg);
             for target in &successfully_targets {
-                try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target), false));
+                r#try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target), false));
             }
-            try!(self.add_documentation_into_database(&conn, &pkg));
+            r#try!(self.add_documentation_into_database(&conn, &pkg));
             successfully_targets
         } else {
             Vec::new()
         };
 
-        let release_id = try!(add_package_into_database(&conn,
+        let release_id = r#try!(add_package_into_database(&conn,
                                                         &pkg,
                                                         &res,
                                                         Some(file_list),
                                                         successfully_targets));
-        try!(add_build_into_database(&conn, &release_id, &res));
+        r#try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove documentation, source and build directory after we are done
-        try!(self.clean(&pkg));
+        r#try!(self.clean(&pkg));
 
         // add package into build cache
         self.cache.insert(format!("{}-{}", name, version));
@@ -244,7 +244,6 @@ impl DocBuilder {
     /// Remove documentation, build directory and sources directory of a package
     fn clean(&self, package: &Package) -> Result<()> {
         debug!("Cleaning package");
-        use std::fs::remove_dir_all;
         let documentation_path = PathBuf::from(&self.options.destination)
             .join(package.manifest().name().as_str());
         let source_path = source_path(&package).unwrap();
@@ -363,7 +362,7 @@ impl DocBuilder {
         use std::fs::{copy, create_dir_all};
 
         // acme-client-0.0.0 is an empty library crate and it will always build
-        let pkg = try!(get_package("acme-client", Some("=0.0.0")));
+        let pkg = r#try!(get_package("acme-client", Some("=0.0.0")));
         let res = self.build_package_in_chroot(&pkg, None);
         let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
@@ -409,32 +408,32 @@ impl DocBuilder {
         // we are done
         let destination = PathBuf::from(&self.options.destination)
             .join(format!("{}/{}", pkg.manifest().name(), pkg.manifest().version()));
-        try!(create_dir_all(&destination));
+        r#try!(create_dir_all(&destination));
 
         for file in files.0.iter() {
             let spl: Vec<&str> = file.split('.').collect();
             let file_name = format!("{}-{}.{}", spl[0], rustc_version, spl[1]);
             let source_path = source.join(&file_name);
             let destination_path = destination.join(&file_name);
-            try!(copy(&source_path, &destination_path)
+            r#try!(copy(&source_path, &destination_path)
                 .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
         }
 
         for file in files.1.iter() {
             let source_path = source.join(file);
             let destination_path = destination.join(file);
-            try!(copy(&source_path, &destination_path)
+            r#try!(copy(&source_path, &destination_path)
                 .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
         }
 
-        let conn = try!(connect_db());
-        try!(add_path_into_database(&conn, "", destination));
+        let conn = r#try!(connect_db());
+        r#try!(add_path_into_database(&conn, "", destination));
 
-        try!(self.clean(&pkg));
+        r#try!(self.clean(&pkg));
 
         let (vers, _) = self.get_versions();
 
-        try!(conn.query("INSERT INTO config (name, value) VALUES ('rustc_version', $1)",
+        r#try!(conn.query("INSERT INTO config (name, value) VALUES ('rustc_version', $1)",
                    &[&vers.to_json()])
             .or_else(|_| {
                 conn.query("UPDATE config SET value = $1 WHERE name = 'rustc_version'",
@@ -470,9 +469,8 @@ fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use std::path::PathBuf;
-    use {DocBuilder, DocBuilderOptions};
+    use crate::{DocBuilder, DocBuilderOptions};
 
     #[test]
     #[ignore]

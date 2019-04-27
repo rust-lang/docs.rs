@@ -10,7 +10,6 @@ use iron::status;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use time;
 use postgres::Connection;
 
 
@@ -311,7 +310,7 @@ fn get_search_results(conn: &Connection,
 
 
 
-pub fn home_page(req: &mut Request) -> IronResult<Response> {
+pub fn home_page(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
     Page::new(packages)
@@ -321,7 +320,7 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_feed_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
     let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
@@ -359,7 +358,7 @@ pub fn releases_handler(packages: Vec<Release>,
 
 
 // Following functions caused a code repeat due to design of our /releases/ URL routes
-pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
+pub fn recent_releases_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
@@ -367,7 +366,7 @@ pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_by_stars_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
@@ -375,7 +374,7 @@ pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_recent_failures_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::RecentFailures);
@@ -383,7 +382,7 @@ pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Respons
 }
 
 
-pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_failures_by_stars_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
     let conn = extension!(req, Pool);
     let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::FailuresByGithubStars);
@@ -391,7 +390,7 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
 }
 
 
-pub fn author_handler(req: &mut Request) -> IronResult<Response> {
+pub fn author_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let router = extension!(req, Router);
     // page number of releases
     let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
@@ -433,7 +432,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn search_handler(req: &mut Request) -> IronResult<Response> {
+pub fn search_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     use params::{Params, Value};
 
     let params = ctry!(req.get::<Params>());
@@ -478,7 +477,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
                 use iron::headers::{Expires, HttpDate};
-                use time;
                 resp.headers.set(Expires(HttpDate(time::now())));
                 return Ok(resp);
             }
@@ -521,7 +519,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 let mut resp = Response::with((status::Found, Redirect(url)));
 
                 use iron::headers::{Expires, HttpDate};
-                use time;
                 resp.headers.set(Expires(HttpDate(time::now())));
                 return Ok(resp);
             }
@@ -544,7 +541,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
+pub fn activity_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let release_activity_data: Json =
         ctry!(conn.query("SELECT value FROM config WHERE name = 'release_activity'",
@@ -561,7 +558,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
+pub fn build_queue_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
     let mut crates: Vec<(String, String)> = Vec::new();
     for krate in &conn.query("SELECT name, version

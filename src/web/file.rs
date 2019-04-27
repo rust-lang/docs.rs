@@ -1,7 +1,6 @@
 //! Database based file handler
 
 use super::pool::Pool;
-use time;
 use postgres::Connection;
 use iron::{Handler, Request, IronResult, Response, IronError};
 use iron::status;
@@ -68,7 +67,7 @@ impl File {
 pub struct DatabaseFileHandler;
 
 impl Handler for DatabaseFileHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request<'_, '_>) -> IronResult<Response> {
         let path = req.url.path().join("/");
         let conn = extension!(req, Pool);
         if let Some(file) = File::from_path(&conn, &path) {

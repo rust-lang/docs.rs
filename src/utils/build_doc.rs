@@ -18,10 +18,10 @@ use cargo::util::{CargoResult, Config, internal, Filesystem};
 use cargo::sources::SourceConfigMap;
 use cargo::ops::{self, Packages, LibRule, FilterRule};
 
-use utils::{get_current_versions, parse_rustc_version};
-use error::Result;
+use crate::utils::{get_current_versions, parse_rustc_version};
+use crate::error::Result;
 
-use Metadata;
+use crate::Metadata;
 
 
 /// Builds documentation of a crate and version.
@@ -34,18 +34,18 @@ use Metadata;
 // instead of doing it manually like in the previous version of cratesfyi
 pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result<Package> {
     core::enable_nightly_features();
-    let config = try!(Config::default());
-    let source_id = try!(SourceId::crates_io(&config));
+    let config = r#try!(Config::default());
+    let source_id = r#try!(SourceId::crates_io(&config));
 
-    let source_cfg_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_cfg_map.load(source_id, &HashSet::new()));
+    let source_cfg_map = r#try!(SourceConfigMap::new(&config));
+    let mut source = r#try!(source_cfg_map.load(source_id, &HashSet::new()));
 
     // update crates.io-index registry
-    try!(source.update());
+    r#try!(source.update());
 
-    let dep = try!(Dependency::parse_no_deprecated(name, vers, source_id));
-    let deps = try!(source.query_vec(&dep));
-    let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
+    let dep = r#try!(Dependency::parse_no_deprecated(name, vers, source_id));
+    let deps = r#try!(source.query_vec(&dep));
+    let pkgid = r#try!(deps.iter().map(|p| p.package_id()).max()
                      // FIXME: This is probably not a rusty way to handle options and results
                      //        or maybe it is who knows...
                      .ok_or(internal("no package id available")));
@@ -53,11 +53,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let mut source_map = SourceMap::new();
     source_map.insert(source);
 
-    let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
+    let pkg_set = r#try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
 
-    let pkg = try!(pkg_set.get_one(pkgid)).clone();
+    let pkg = r#try!(pkg_set.get_one(pkgid)).clone();
 
-    let current_dir = try!(env::current_dir());
+    let current_dir = r#try!(env::current_dir());
     let target_dir = PathBuf::from(current_dir).join("cratesfyi");
 
     let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.to_string()))?;
@@ -82,8 +82,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
     // force rustdoc to link to other docs.rs docs for dependencies
-    let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
-    for (name, dep) in try!(resolve_deps(&pkg, &config, source)) {
+    let source = r#try!(source_cfg_map.load(source_id, &HashSet::new()));
+    for (name, dep) in r#try!(resolve_deps(&pkg, &config, source)) {
         rustdoc_args.push("--extern-html-root-url".to_string());
         rustdoc_args.push(format!("{}=https://docs.rs/{}/{}",
                                   name.replace("-", "_"), dep.name(), dep.version()));
@@ -93,7 +93,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
         rustdoc_args.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
     }
 
-    let mut build_config = try!(BuildConfig::new(&config,
+    let mut build_config = r#try!(BuildConfig::new(&config,
                                                  None,
                                                  &target.map(|t| t.to_string()),
                                                  CompileMode::Doc { deps: false }));
@@ -118,22 +118,22 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
         export_dir: None,
     };
 
-    let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
-    let exec: Arc<Executor> = Arc::new(DefaultExecutor);
-    let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
-    try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
+    let ws = r#try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
+    let exec: Arc<dyn Executor> = Arc::new(DefaultExecutor);
+    let source = r#try!(source_cfg_map.load(source_id, &HashSet::new()));
+    r#try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
 
-    Ok(try!(ws.current()).clone())
+    Ok(r#try!(ws.current()).clone())
 }
 
-fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cfg>)
+fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source + 'cfg>)
     -> CargoResult<Vec<(String, Package)>>
 {
-    let mut registry = try!(PackageRegistry::new(config));
+    let mut registry = r#try!(PackageRegistry::new(config));
     registry.add_preloaded(src);
     registry.lock_patches();
 
-    let resolver = try!(resolver::resolve(
+    let resolver = r#try!(resolver::resolve(
         &[(pkg.summary().clone(), resolver::Method::Everything)],
         pkg.manifest().replace(),
         &mut registry,
@@ -143,8 +143,8 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cf
         false,
     ));
     let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).collect::<Vec<_>>();
-    let pkg_set = try!(registry.get(&dep_ids));
-    let deps = try!(pkg_set.get_many(dep_ids));
+    let pkg_set = r#try!(registry.get(&dep_ids));
+    let deps = r#try!(pkg_set.get_many(dep_ids));
 
     let mut ret = Vec::new();
     for dep in deps {
@@ -160,17 +160,17 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cf
 pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     core::enable_nightly_features();
     debug!("Getting package with cargo");
-    let config = try!(Config::default());
-    let source_id = try!(SourceId::crates_io(&config));
+    let config = r#try!(Config::default());
+    let source_id = r#try!(SourceId::crates_io(&config));
 
-    let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(source_id, &HashSet::new()));
+    let source_map = r#try!(SourceConfigMap::new(&config));
+    let mut source = r#try!(source_map.load(source_id, &HashSet::new()));
 
-    try!(source.update());
+    r#try!(source.update());
 
-    let dep = try!(Dependency::parse_no_deprecated(name, vers, source_id));
-    let deps = try!(source.query_vec(&dep));
-    let pkgid = try!(deps.iter().map(|p| p.package_id()).max()
+    let dep = r#try!(Dependency::parse_no_deprecated(name, vers, source_id));
+    let deps = r#try!(source.query_vec(&dep));
+    let pkgid = r#try!(deps.iter().map(|p| p.package_id()).max()
                      // FIXME: This is probably not a rusty way to handle options and results
                      //        or maybe it is who knows...
                      .ok_or(internal("no package id available")));
@@ -178,9 +178,9 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let mut source_map = SourceMap::new();
     source_map.insert(source);
 
-    let pkg_set = try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
+    let pkg_set = r#try!(PackageSet::new(&[pkgid.clone()], source_map, &config));
 
-    let pkg = try!(pkg_set.get_one(pkgid)).clone();
+    let pkg = r#try!(pkg_set.get_one(pkgid)).clone();
 
     Ok(pkg)
 }
@@ -188,11 +188,11 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
 /// Updates central crates-io.index repository
 pub fn update_sources() -> CargoResult<()> {
-    let config = try!(Config::default());
-    let source_id = try!(SourceId::crates_io(&config));
+    let config = r#try!(Config::default());
+    let source_id = r#try!(SourceId::crates_io(&config));
 
-    let source_map = try!(SourceConfigMap::new(&config));
-    let mut source = try!(source_map.load(source_id, &HashSet::new()));
+    let source_map = r#try!(SourceConfigMap::new(&config));
+    let mut source = r#try!(source_map.load(source_id, &HashSet::new()));
 
     source.update()
 }

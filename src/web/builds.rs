@@ -6,7 +6,6 @@ use super::pool::Pool;
 use super::duration_to_str;
 use super::page::Page;
 use iron::prelude::*;
-use time;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 
@@ -59,7 +58,7 @@ impl ToJson for BuildsPage {
 }
 
 
-pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
+pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
 
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));

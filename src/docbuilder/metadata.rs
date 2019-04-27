@@ -2,7 +2,7 @@
 use std::path::Path;
 use cargo::core::Package;
 use toml::Value;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 /// Metadata for custom builds
@@ -136,7 +136,6 @@ impl Metadata {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::Metadata;
 
     #[test]

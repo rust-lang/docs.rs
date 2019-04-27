@@ -90,9 +90,9 @@ impl<T: ToJson> ToJson for Page<T> {
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
-        tree.insert("cratesfyi_version".to_owned(), ::BUILD_VERSION.to_json());
+        tree.insert("cratesfyi_version".to_owned(), crate::BUILD_VERSION.to_json());
         tree.insert("cratesfyi_version_safe".to_owned(),
-                    ::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
+                    crate::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
         tree.insert("varss".to_owned(), self.varss.to_json());
         tree.insert("varsb".to_owned(), self.varsb.to_json());
         tree.insert("varsi".to_owned(), self.varsi.to_json());

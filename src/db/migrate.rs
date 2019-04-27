@@ -1,7 +1,7 @@
 //! Database migrations
 
-use db::connect_db;
-use error::Result as CratesfyiResult;
+use crate::db::connect_db;
+use crate::error::Result as CratesfyiResult;
 use postgres::error::Error as PostgresError;
 use postgres::transaction::Transaction;
 use schemamama::{Migration, Migrator, Version};
@@ -31,11 +31,11 @@ macro_rules! migration {
             }
         }
         impl PostgresMigration for Amigration {
-            fn up(&self, transaction: &Transaction) -> Result<(), PostgresError> {
+            fn up(&self, transaction: &Transaction<'_>) -> Result<(), PostgresError> {
                 info!("Applying migration {}: {}", self.version(), self.description());
                 transaction.batch_execute($up).map(|_| ())
             }
-            fn down(&self, transaction: &Transaction) -> Result<(), PostgresError> {
+            fn down(&self, transaction: &Transaction<'_>) -> Result<(), PostgresError> {
                 info!("Removing migration {}: {}", self.version(), self.description());
                 transaction.batch_execute($down).map(|_| ())
             }
@@ -52,7 +52,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
 
     let mut migrator = Migrator::new(adapter);
 
-    let migrations: Vec<Box<PostgresMigration>> = vec![
+    let migrations: Vec<Box<dyn PostgresMigration>> = vec![
         migration!(
             // version
             1,

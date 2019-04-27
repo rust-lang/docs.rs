@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 use html5ever::serialize::{serialize, SerializeOpts};

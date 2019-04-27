@@ -4,14 +4,14 @@ use std::io::BufReader;
 use std::fs;
 use std::path::PathBuf;
 use rustc_serialize::json::Json;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
 {
 
-    let reader = try!(fs::File::open(path).map(|f| BufReader::new(f)));
+    let reader = r#try!(fs::File::open(path).map(|f| BufReader::new(f)));
 
     let mut name = String::new();
     let mut versions = Vec::new();
@@ -28,11 +28,11 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
             Err(_) => continue,
         };
 
-        let obj = try!(data.as_object().ok_or_else(|| err_msg("Not a JSON object")));
-        let crate_name = try!(obj.get("name")
+        let obj = r#try!(data.as_object().ok_or_else(|| err_msg("Not a JSON object")));
+        let crate_name = r#try!(obj.get("name")
             .and_then(|n| n.as_string())
             .ok_or_else(|| err_msg("`name` not found in JSON object")));
-        let vers = try!(obj.get("vers")
+        let vers = r#try!(obj.get("vers")
             .and_then(|n| n.as_string())
             .ok_or_else(|| err_msg("`vers` not found in JSON object")));
 
@@ -66,8 +66,8 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         return Err(err_msg("Not a directory"));
     }
 
-    for file in try!(path.read_dir()) {
-        let file = try!(file);
+    for file in r#try!(path.read_dir()) {
+        let file = r#try!(file);
         let path = file.path();
         // skip files under .git and config.json
         if path.to_str().unwrap().contains(".git") || path.file_name().unwrap() == "config.json" {
@@ -75,9 +75,9 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         }
 
         if path.is_dir() {
-            try!(crates_from_path(&path, func));
+            r#try!(crates_from_path(&path, func));
         } else {
-            try!(crates_from_file(&path, func));
+            r#try!(crates_from_file(&path, func));
         }
     }
 

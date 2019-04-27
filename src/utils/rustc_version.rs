@@ -1,7 +1,7 @@
 
 use std::process::{Command, Output};
 use regex::Regex;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 /// Parses rustc commit hash from rustc version string

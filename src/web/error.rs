@@ -2,7 +2,7 @@ use std::error::Error;
 use iron::prelude::*;
 use iron::Handler;
 use iron::status;
-use web::page::Page;
+use crate::web::page::Page;
 use std::fmt;
 
 #[derive(Debug, Copy, Clone)]
@@ -13,7 +13,7 @@ pub enum Nope {
 }
 
 impl fmt::Display for Nope {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.description())
     }
 }
@@ -29,7 +29,7 @@ impl Error for Nope {
 }
 
 impl Handler for Nope {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request<'_, '_>) -> IronResult<Response> {
         match *self {
             Nope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
