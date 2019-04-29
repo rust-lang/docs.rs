@@ -170,21 +170,12 @@ impl CratesfyiHandler {
         router.get("/:crate/:version/",
                    rustdoc::rustdoc_redirector_handler,
                    "crate_version_");
-        router.get("/:crate/:version/search-index.js",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_search_index_js");
         router.get("/:crate/:version/settings.html",
                    rustdoc::rustdoc_html_server_handler,
                    "crate_version_settings_html");
         router.get("/:crate/:version/all.html",
                    rustdoc::rustdoc_html_server_handler,
                    "crate_version_all_html");
-        router.get("/:crate/:version/aliases.js",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_aliases_js");
-        router.get("/:crate/:version/source-files.js",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_source_files_js");
         router.get("/:crate/:version/:target",
                    rustdoc::rustdoc_redirector_handler,
                    "crate_version_target");
