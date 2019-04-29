@@ -170,9 +170,6 @@ impl CratesfyiHandler {
         router.get("/:crate/:version/",
                    rustdoc::rustdoc_redirector_handler,
                    "crate_version_");
-        router.get("/:crate/:version/*.js",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version_js");
         router.get("/:crate/:version/settings.html",
                    rustdoc::rustdoc_html_server_handler,
                    "crate_version_settings_html");

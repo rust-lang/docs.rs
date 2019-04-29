@@ -104,6 +104,15 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     }
 
+    // this unwrap is safe because iron urls are always able to use `path_segments`
+    // i'm using this instead of `req.url.path()` to avoid allocating the Vec, and also to avoid
+    // keeping the borrow alive into the return statement
+    if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".js")) {
+        // javascript files should be handled by the file server instead of erroneously
+        // redirecting to the crate root page
+        return rustdoc_html_server_handler(req);
+    }
+
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
