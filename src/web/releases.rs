@@ -484,7 +484,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             }
 
 
-            if let Some(version) = match_version(&conn, &query, None) {
+            if let Some(version) = match_version(&conn, &query, None).into_option() {
                 // FIXME: This is a super dirty way to check if crate have rustdocs generated.
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163

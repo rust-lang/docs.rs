@@ -2,11 +2,11 @@
 
 
 use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown};
+use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion};
 use super::error::Nope;
 use super::page::Page;
 use iron::prelude::*;
-use iron::status;
+use iron::{Url, status};
 use std::collections::BTreeMap;
 use time;
 use rustc_serialize::json::{Json, ToJson};
@@ -229,14 +229,28 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool);
 
-    match_version(&conn, &name, req_version)
-        .and_then(|version| CrateDetails::new(&conn, &name, &version))
-        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound))
-        .and_then(|details| {
+    match match_version(&conn, &name, req_version) {
+        MatchVersion::Exact(version) => {
+            let details = CrateDetails::new(&conn, &name, &version);
+
             Page::new(details)
                 .set_true("show_package_navigation")
                 .set_true("javascript_highlightjs")
                 .set_true("package_navigation_crate_tab")
                 .to_resp("crate_details")
-        })
+        }
+        MatchVersion::Semver(version) => {
+            let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
+                                                req.url.scheme(),
+                                                req.url.host(),
+                                                req.url.port(),
+                                                name,
+                                                version)[..]));
+
+            Ok(super::redirect(url))
+        }
+        MatchVersion::None => {
+            Err(IronError::new(Nope::CrateNotFound, status::NotFound))
+        }
+    }
 }
