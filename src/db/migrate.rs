@@ -169,6 +169,16 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "DROP TABLE authors, author_rels, keyword_rels, keywords, owner_rels,
                         owners, releases, crates, builds, queue, files, config;"
         ),
+        migration!(
+            // version
+            2,
+            // description
+            "Added priority column to build queue",
+            // upgrade query
+            "ALTER TABLE queue ADD COLUMN priority INT DEFAULT 0;",
+            // downgrade query
+            "ALTER TABLE queue DROP COLUMN priority;"
+        ),
     ];
 
     for migration in migrations {

@@ -565,7 +565,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     for krate in &conn.query("SELECT name, version
                               FROM queue
                               WHERE attempt < 5
-                              ORDER BY id ASC",
+                              ORDER BY priority ASC, attempt ASC, id ASC",
                &[])
         .unwrap() {
         crates.push((krate.get(0), krate.get(1)));

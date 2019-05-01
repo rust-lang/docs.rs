@@ -20,7 +20,7 @@ impl DocBuilder {
         changes.reverse();
 
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
-            conn.execute("INSERT INTO queue (name, version) VALUES ($1, $2)",
+            conn.execute("INSERT INTO queue (name, version, priority) VALUES ($1, $2, 0)",
                          &[&krate.name, &krate.version])
                 .ok();
             debug!("{}-{} added into build queue", krate.name, krate.version);
@@ -46,7 +46,7 @@ impl DocBuilder {
         for row in &try!(conn.query("SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
-                                     ORDER BY id ASC",
+                                     ORDER BY priority ASC, attempt ASC, id ASC",
                                     &[])) {
             let id: i32 = row.get(0);
             let name: String = row.get(1);
@@ -79,7 +79,7 @@ impl DocBuilder {
         let query = try!(conn.query("SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
-                                     ORDER BY attempt ASC, id ASC
+                                     ORDER BY priority ASC, attempt ASC, id ASC
                                      LIMIT 1",
                                     &[]));
 
