@@ -65,8 +65,7 @@ pub fn start_daemon() {
 
     // build new crates every minute
     thread::spawn(move || {
-        let mut opts = opts();
-        opts.skip_if_exists = true;
+        let opts = opts();
         let mut doc_builder = DocBuilder::new(opts);
 
         /// Represents the current state of the builder thread.
