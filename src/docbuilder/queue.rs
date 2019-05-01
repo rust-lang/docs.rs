@@ -5,6 +5,7 @@ use super::DocBuilder;
 use db::connect_db;
 use error::Result;
 use crates_index_diff::{ChangeKind, Index};
+use utils::add_crate_to_queue;
 
 
 impl DocBuilder {
@@ -20,9 +21,7 @@ impl DocBuilder {
         changes.reverse();
 
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
-            conn.execute("INSERT INTO queue (name, version, priority) VALUES ($1, $2, 0)",
-                         &[&krate.name, &krate.version])
-                .ok();
+            add_crate_to_queue(&conn, &krate.name, &krate.version, 0).ok();
             debug!("{}-{} added into build queue", krate.name, krate.version);
             add_count += 1;
         }
