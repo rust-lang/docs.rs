@@ -52,10 +52,39 @@ div.rustdoc {
     font-family: $font-family-serif;
     padding: 10px 15px 20px 15px;
 
+    @media (max-width: 700px) {
+        padding-top: 0;
+    }
+
     .sidebar {
-        padding-top: 32px;
+        @media (min-width: 701px) {
+            padding-top: 32px;
+        }
+
         .block > ul > li {
             margin-right: -10px;
+        }
+    }
+
+    #source-sidebar {
+        top: 32px;
+    }
+
+    #sidebar-toggle {
+        top: 62px;
+    }
+
+    @media (max-width: 700px) {
+        .sidebar.mobile {
+            top: 32px;
+
+            .sidebar-elems.show-it {
+                top: 77px;
+            }
+
+            #sidebar-filler {
+                top: 32px;
+            }
         }
     }
 
@@ -69,6 +98,8 @@ div.rustdoc {
 body {
     padding: 0;
     margin: 0;
+    // Since top navbar is fixed, we need to add padding to the body content.
+    padding-top: 32px;
 }
 
 
@@ -114,11 +145,14 @@ div.container-rustdoc {
 }
 
 div.nav-container {
+    // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
+    z-index: 999;
     height: 32px;
     border-bottom: 1px solid $color-border;
     background-color: #fff;
     left: 0;
     right: 0;
+    top: 0;
     position: fixed;
 
     li {
