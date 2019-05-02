@@ -66,6 +66,14 @@ div.rustdoc {
         }
     }
 
+    #source-sidebar {
+        top: 32px;
+    }
+
+    #sidebar-toggle {
+        top: 62px;
+    }
+
     @media (max-width: 700px) {
         .sidebar.mobile {
             top: 32px;
