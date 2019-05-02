@@ -117,6 +117,9 @@ div.nav-container {
     height: 32px;
     border-bottom: 1px solid $color-border;
     background-color: #fff;
+    left: 0;
+    right: 0;
+    position: fixed;
 
     li {
         border-left: 1px solid $color-border;
@@ -200,7 +203,7 @@ div.nav-container {
             div.right-border {
                 border-right: 1px solid $color-border;
             }
-            
+
             a.pure-menu-link {
                 word-wrap: normal;
                 white-space: normal;
@@ -223,7 +226,7 @@ div.nav-container {
 }
 
 div.nav-container-rustdoc {
-    position: absolute;
+    position: fixed;
     left: 0;
     right: 0;
     top: 0;
