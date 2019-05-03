@@ -37,40 +37,6 @@ impl DocBuilder {
             .get(0))
     }
 
-    /// Builds packages from queue
-    pub fn build_packages_queue(&mut self) -> Result<usize> {
-        let conn = try!(connect_db());
-        let mut build_count = 0;
-
-        for row in &try!(conn.query("SELECT id, name, version
-                                     FROM queue
-                                     WHERE attempt < 5
-                                     ORDER BY priority ASC, attempt ASC, id ASC",
-                                    &[])) {
-            let id: i32 = row.get(0);
-            let name: String = row.get(1);
-            let version: String = row.get(2);
-
-            match self.build_package(&name[..], &version[..]) {
-                Ok(_) => {
-                    build_count += 1;
-                    let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-                }
-                Err(e) => {
-                    // Increase attempt count
-                    let _ = conn.execute("UPDATE queue SET attempt = attempt + 1 WHERE id = $1",
-                                         &[&id]);
-                    error!("Failed to build package {}-{} from queue: {}",
-                           name,
-                           version,
-                           e)
-                }
-            }
-        }
-
-        Ok(build_count)
-    }
-
     /// Builds the top package from the queue. Returns whether the queue was empty.
     pub fn build_next_queue_package(&mut self) -> Result<bool> {
         let conn = try!(connect_db());
@@ -127,15 +93,5 @@ mod test {
             error!("{:?}", res);
         }
         assert!(res.is_ok());
-    }
-
-
-    #[test]
-    #[ignore]
-    fn test_build_packages_queue() {
-        let _ = env_logger::try_init();
-        let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let mut docbuilder = DocBuilder::new(options);
-        assert!(docbuilder.build_packages_queue().is_ok());
     }
 }
