@@ -66,7 +66,8 @@ impl ToJson for RustdocPage {
 }
 
 
-
+/// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
+/// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     fn redirect_to_doc(req: &Request,
@@ -120,6 +121,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool);
 
+    // it doesn't matter if the version that was given was exact or not, since we're redirecting
+    // anyway
     let version = match match_version(&conn, &crate_name, req_version).into_option() {
         Some(v) => v,
         None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
