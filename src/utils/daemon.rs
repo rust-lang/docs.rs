@@ -95,7 +95,7 @@ pub fn start_daemon() {
                 continue;
             }
 
-            if status.count() > 10 {
+            if status.count() >= 10 {
                 // periodically, we need to flush our caches and ping the hubs
                 debug!("10 builds in a row; flushing caches");
                 status = BuilderState::QueueInProgress(0);
