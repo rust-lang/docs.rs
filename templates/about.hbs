@@ -101,22 +101,44 @@
     </tbody>
   </table>
 
-  <h4>Metadata for custom builds</h4>
+  <h4 id="metadata"><a href="#metadata">Metadata for custom builds</a></h4>
 
   <p>You can customize docs.rs builds by defining <code>[package.metadata.docs.rs]</code> table in your crates' `Cargo.toml`.</p>
 
-  <p>An example metadata:</p>
+  <p>The available configuration flags you can customize are:</p>
 
   <pre><code>[package]
 name = "test"
 
 [package.metadata.docs.rs]
+
+# Features to pass to Cargo (default: none)
 features = [ "feature1", "feature2" ]
+
+# Whether to pass `--all-features` to Cargo (default: false)
 all-features = true
+
+# Whether to pass `--no-default-features` to Cargo (default: false)
 no-default-features = true
+
+# Target to test build on, used as the default landing page (default: "x86_64-unknown-linux-gnu")
+#
+# Available targets:
+# - x86_64-unknown-linux-gnu
+# - x86_64-apple-darwin
+# - x86_64-pc-windows-msvc
+# - i686-unknown-linux-gnu
+# - i686-apple-darwin
+# - i686-pc-windows-msvc
 default-target = "x86_64-unknown-linux-gnu"
+
+# Extra targets to build, same available targets as `default-target` (default: none)
 extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+
+# Additional `RUSTFLAGS` to set (default: none)
 rustc-args = [ "--example-rustc-arg" ]
+
+# Additional `RUSTDOCFLAGS` to set (default: none)
 rustdoc-args = [ "--example-rustdoc-arg" ]</pre></code>
 
   <h4>Version</h4>
