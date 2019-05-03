@@ -50,8 +50,9 @@ use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use iron::prelude::*;
-use iron::{self, Handler, status};
-use iron::headers::{CacheControl, CacheDirective, ContentType};
+use iron::{self, Handler, Url, status};
+use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
+use iron::modifiers::Redirect;
 use router::{Router, NoRoute};
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
@@ -258,9 +259,34 @@ impl Handler for CratesfyiHandler {
     }
 }
 
+/// Represents the possible results of attempting to load a version requirement.
+enum MatchVersion {
+    /// `match_version` was given an exact version, which matched a saved crate version.
+    Exact(String),
+    /// `match_version` was given a semver version requirement, which matched the given saved crate
+    /// version.
+    Semver(String),
+    /// `match_version` was given a version requirement which did not match any saved crate
+    /// versions.
+    None,
+}
 
+impl MatchVersion {
+    /// Convert this `MatchVersion` into an `Option`, discarding whether the matched version came
+    /// from an exact version number or a semver requirement.
+    pub fn into_option(self) -> Option<String> {
+        match self {
+            MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
+            MatchVersion::None => None,
+        }
+    }
+}
 
-fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<String> {
+/// Checks the database for crate releases that match the given name and version.
+///
+/// `version` may be an exact version number or loose semver version requirement. The return value
+/// will indicate whether the given version exactly matched a version number from the database.
+fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchVersion {
 
     // version is an Option<&str> from router::Router::get
     // need to decode first
@@ -278,7 +304,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         let mut versions = Vec::new();
         let rows = conn.query("SELECT versions FROM crates WHERE name = $1", &[&name]).unwrap();
         if rows.len() == 0 {
-            return None;
+            return MatchVersion::None;
         }
         let versions_json: Json = rows.get(0).get(0);
         for version in versions_json.as_array().unwrap() {
@@ -293,14 +319,14 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     // we can't expect users to use semver in query
     for version in &versions {
         if version == &req_version {
-            return Some(version.clone());
+            return MatchVersion::Exact(version.clone());
         }
     }
 
     // Now try to match with semver
     let req_sem_ver = match VersionReq::parse(&req_version) {
         Ok(v) => v,
-        Err(_) => return None,
+        Err(_) => return MatchVersion::None,
     };
 
     // we need to sort versions first
@@ -312,7 +338,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
             // but check result just in case
             let version = match Version::parse(&version) {
                 Ok(v) => v,
-                Err(_) => return None,
+                Err(_) => return MatchVersion::None,
             };
             versions_sem.push(version);
         }
@@ -325,16 +351,16 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first version if requested version is '*'
     if req_version == "*" && !versions_sem.is_empty() {
-        return Some(format!("{}", versions_sem[0]));
+        return MatchVersion::Semver(format!("{}", versions_sem[0]));
     }
 
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
-            return Some(format!("{}", version));
+            return MatchVersion::Semver(format!("{}", version));
         }
     }
 
-    None
+    MatchVersion::None
 }
 
 
@@ -431,7 +457,14 @@ fn duration_to_str(ts: time::Timespec) -> String {
 
 }
 
+/// Creates a `Response` which redirects to the given path on the scheme/host/port from the given
+/// `Request`.
+fn redirect(url: Url) -> Response {
+    let mut resp = Response::with((status::Found, Redirect(url)));
+    resp.headers.set(Expires(HttpDate(time::now())));
 
+    resp
+}
 
 fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, STYLE_CSS));

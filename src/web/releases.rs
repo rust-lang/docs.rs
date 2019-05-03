@@ -483,8 +483,10 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 return Ok(resp);
             }
 
-
-            if let Some(version) = match_version(&conn, &query, None) {
+            // since we never pass a version into `match_version` here, we'll never get
+            // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
+            // matter
+            if let Some(version) = match_version(&conn, &query, None).into_option() {
                 // FIXME: This is a super dirty way to check if crate have rustdocs generated.
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163

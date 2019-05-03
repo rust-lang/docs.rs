@@ -9,7 +9,7 @@ use iron::prelude::*;
 use iron::{status, Url};
 use iron::modifiers::Redirect;
 use router::Router;
-use super::match_version;
+use super::{match_version, MatchVersion};
 use super::error::Nope;
 use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
@@ -66,7 +66,8 @@ impl ToJson for RustdocPage {
 }
 
 
-
+/// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
+/// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     fn redirect_to_doc(req: &Request,
@@ -120,7 +121,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool);
 
-    let version = match match_version(&conn, &crate_name, req_version) {
+    // it doesn't matter if the version that was given was exact or not, since we're redirecting
+    // anyway
+    let version = match match_version(&conn, &crate_name, req_version).into_option() {
         Some(v) => v,
         None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     };
@@ -153,16 +156,34 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let router = extension!(req, Router);
     let name = router.find("crate").unwrap_or("").to_string();
-    let version = router.find("version");
+    let url_version = router.find("version");
+    let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool);
-    let version = try!(match_version(&conn, &name, version)
-        .ok_or(IronError::new(Nope::ResourceNotFound, status::NotFound)));
+
     let mut req_path = req.url.path();
 
     // remove name and version from path
     for _ in 0..2 {
         req_path.remove(0);
     }
+
+    version = match match_version(&conn, &name, url_version) {
+        MatchVersion::Exact(v) => v,
+        MatchVersion::Semver(v) => {
+            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+            // versions, redirect the browser to the returned version instead of loading it
+            // immediately
+            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
+                                                req.url.scheme(),
+                                                req.url.host(),
+                                                req.url.port(),
+                                                name,
+                                                v,
+                                                req_path.join("/"))[..]));
+            return Ok(super::redirect(url));
+        }
+        MatchVersion::None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+    };
 
     // docs have "rustdoc" prefix in database
     req_path.insert(0, "rustdoc");
@@ -240,7 +261,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool);
 
     let options = match match_version(&conn, &name, Some(&version)) {
-        Some(version) => {
+        MatchVersion::Exact(version) => {
             let rows = ctry!(conn.query("SELECT rustdoc_status
                                          FROM releases
                                          INNER JOIN crates ON crates.id = releases.crate_id
@@ -260,7 +281,17 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
-        None => {
+        MatchVersion::Semver(version) => {
+            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/badge.svg?version={}",
+                                                req.url.scheme(),
+                                                req.url.host(),
+                                                req.url.port(),
+                                                name,
+                                                version)[..]));
+
+            return Ok(super::redirect(url));
+        }
+        MatchVersion::None => {
             BadgeOptions {
                 subject: "docs".to_owned(),
                 status: "no builds".to_owned(),
