@@ -21,6 +21,7 @@ use failure::err_msg;
 /// all-features = true
 /// no-default-features = true
 /// default-target = "x86_64-unknown-linux-gnu"
+/// extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
 /// dependencies = [ "example-system-dependency" ]
@@ -44,6 +45,11 @@ pub struct Metadata {
     /// Docs.rs is running on `x86_64-unknown-linux-gnu` target system and default documentation
     /// is always built on this target. You can change default target by setting this.
     pub default_target: Option<String>,
+
+    /// Docs.rs doesn't automatically build extra targets for crates. If you want a crate to build
+    /// for multiple targets, set `extra-targets` to the list of targets to build, in addition to
+    /// `default-target`.
+    pub extra_targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
     pub rustc_args: Option<Vec<String>>,
@@ -93,6 +99,7 @@ impl Metadata {
             all_features: false,
             no_default_features: false,
             default_target: None,
+            extra_targets: None,
             rustc_args: None,
             rustdoc_args: None,
             dependencies: None,
@@ -120,6 +127,8 @@ impl Metadata {
                         .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
                     metadata.default_target = table.get("default-target")
                         .and_then(|v| v.as_str()).map(|v| v.to_owned());
+                    metadata.extra_targets = table.get("extra-targets").and_then(|f| f.as_array())
+                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())
@@ -151,6 +160,7 @@ mod test {
             all-features = true
             no-default-features = true
             default-target = "x86_64-unknown-linux-gnu"
+            extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
             rustc-args = [ "--example-rustc-arg" ]
             rustdoc-args = [ "--example-rustdoc-arg" ]
             dependencies = [ "example-system-dependency" ]
@@ -170,6 +180,11 @@ mod test {
         assert_eq!(features[1], "feature2".to_owned());
 
         assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
+
+        let extra_targets = metadata.extra_targets.unwrap();
+        assert_eq!(extra_targets.len(), 2);
+        assert_eq!(extra_targets[0], "x86_64-apple-darwin".to_owned());
+        assert_eq!(extra_targets[1], "x86_64-pc-windows-msvc".to_owned());
 
         let rustc_args = metadata.rustc_args.unwrap();
         assert_eq!(rustc_args.len(), 1);

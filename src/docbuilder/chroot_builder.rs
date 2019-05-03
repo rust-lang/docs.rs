@@ -86,11 +86,18 @@ impl DocBuilder {
         // copy sources and documentation
         let file_list = try!(self.add_sources_into_database(&conn, &pkg));
         let successfully_targets = if res.have_doc {
+            let default_target = metadata.default_target.as_ref().map(String::as_str);
+            let mut build_targets = metadata.extra_targets.clone().unwrap_or_default();
+            if let Some(default_target) = default_target {
+                if !build_targets.iter().any(|t| t == default_target) {
+                    build_targets.push(default_target.to_owned());
+                }
+            }
             try!(self.copy_documentation(&pkg,
                                          &res.rustc_version,
-                                         metadata.default_target.as_ref().map(String::as_str),
+                                         default_target,
                                          true));
-            let successfully_targets = self.build_package_for_all_targets(&pkg);
+            let successfully_targets = self.build_package_for_all_targets(&pkg, &build_targets);
             for target in &successfully_targets {
                 try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target), false));
             }
@@ -151,11 +158,16 @@ impl DocBuilder {
 
 
 
-    /// Builds documentation of crate for every target and returns Vec of successfully targets
-    fn build_package_for_all_targets(&self, package: &Package) -> Vec<String> {
+    /// Builds documentation of the given crate for the given targets and returns a Vec of the ones
+    /// that were successful.
+    fn build_package_for_all_targets(&self, package: &Package, targets: &[String]) -> Vec<String> {
         let mut successfuly_targets = Vec::new();
 
-        for target in TARGETS.iter() {
+        for target in targets.iter() {
+            if !TARGETS.contains(&&**target) {
+                // we only support building for win/mac/linux 32-/64-bit
+                continue;
+            }
             debug!("Building {} for {}", canonical_name(&package), target);
             let cmd = format!("cratesfyi doc {} ={} {}",
                               package.manifest().name(),
