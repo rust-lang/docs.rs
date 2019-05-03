@@ -25,7 +25,7 @@ const TARGETS: [&'static str; 6] = [
     "x86_64-unknown-linux-gnu"
 ];
 
-
+const DEFAULT_TARGET: &'static str = "x86_64-unknown-linux-gnu";
 
 #[derive(Debug)]
 pub struct ChrootBuilderResult {
@@ -88,7 +88,10 @@ impl DocBuilder {
         let successfully_targets = if res.have_doc {
             let default_target = metadata.default_target.as_ref().map(String::as_str);
             let mut build_targets = metadata.extra_targets.clone().unwrap_or_default();
-            if let Some(default_target) = default_target {
+            {
+                // FIXME: skip the second build for `default_target` by copying its documentation
+                // in twice
+                let default_target = default_target.unwrap_or(DEFAULT_TARGET);
                 if !build_targets.iter().any(|t| t == default_target) {
                     build_targets.push(default_target.to_owned());
                 }
