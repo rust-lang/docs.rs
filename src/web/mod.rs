@@ -9,7 +9,7 @@ macro_rules! ctry {
     ($result:expr) => (match $result {
         Ok(v) => v,
         Err(e) => {
-            return super::page::Page::new(format!("{:?}", e)).title("An error has occured")
+            return $crate::web::page::Page::new(format!("{:?}", e)).title("An error has occured")
                 .set_status(::iron::status::BadRequest).to_resp("resp");
         }
     })
@@ -21,7 +21,7 @@ macro_rules! cexpect {
     ($option:expr) => (match $option {
         Some(v) => v,
         None => {
-            return super::page::Page::new("Resource not found".to_owned())
+            return $crate::web::page::Page::new("Resource not found".to_owned())
                 .title("An error has occured")
                 .set_status(::iron::status::BadRequest).to_resp("resp");
         }
@@ -483,6 +483,25 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     response.headers.set(ContentType("application/opensearchdescription+xml".parse().unwrap()));
     response.headers.set(CacheControl(cache));
     Ok(response)
+}
+
+fn ico_handler(req: &mut Request) -> IronResult<Response> {
+    use iron::Url;
+
+    if let Some(&"favicon.ico") = req.url.path().last() {
+        // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
+        // from `public_html`, so return a 404 here to make the main handler carry on
+        Err(IronError::new(error::Nope::ResourceNotFound, status::NotFound))
+    } else {
+        // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
+        // redirect to the plain one so that the above branch can trigger with the correct filename
+        let url = ctry!(Url::parse(&format!("{}://{}:{}/favicon.ico",
+                                            req.url.scheme(),
+                                            req.url.host(),
+                                            req.url.port())[..]));
+
+        Ok(redirect(url))
+    }
 }
 
 /// MetaData used in header
