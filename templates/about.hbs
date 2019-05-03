@@ -162,6 +162,9 @@ no-default-features = true
 # - i686-pc-windows-msvc
 default-target = "x86_64-unknown-linux-gnu"
 
+# Extra targets to build, same available targets as `default-target` (default: none)
+extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+
 # Additional `RUSTFLAGS` to set (default: none)
 rustc-args = [ "--example-rustc-arg" ]
 
