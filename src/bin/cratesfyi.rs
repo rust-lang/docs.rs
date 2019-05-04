@@ -14,130 +14,164 @@ pub fn main() {
     let matches = App::new("cratesfyi")
         .version(cratesfyi::BUILD_VERSION)
         .about(env!("CARGO_PKG_DESCRIPTION"))
-        .subcommand(SubCommand::with_name("doc")
-            .about("Builds documentation of a crate")
-            .arg(Arg::with_name("CRATE_NAME")
-                .index(1)
-                .required(true)
-                .help("Crate name"))
-            .arg(Arg::with_name("CRATE_VERSION")
-                .index(2)
-                .required(false)
-                .help("Crate version"))
-            .arg(Arg::with_name("TARGET")
-                .index(3)
-                .required(false)
-                .help("The target platform to compile for")))
-        .subcommand(SubCommand::with_name("build")
-            .about("Builds documentation in a chroot environment")
-            .arg(Arg::with_name("PREFIX")
-                .short("P")
-                .long("prefix")
-                .takes_value(true))
-            .arg(Arg::with_name("DESTINATION")
-                .short("d")
-                .long("destination")
-                .help("Sets destination path")
-                .takes_value(true))
-            .arg(Arg::with_name("CHROOT_PATH")
-                .short("c")
-                .long("chroot-path")
-                .help("Sets chroot path")
-                .takes_value(true))
-            .arg(Arg::with_name("CHROOT_USER")
-                .short("u")
-                .long("chroot-user")
-                .help("Sets chroot user name")
-                .takes_value(true))
-            .arg(Arg::with_name("CONTAINER_NAME")
-                .short("n")
-                .long("container-name")
-                .help("Sets name of the container")
-                .takes_value(true))
-            .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
-                .long("crates-io-index-path")
-                .help("Sets crates.io-index path")
-                .takes_value(true))
-            .arg(Arg::with_name("SKIP_IF_EXISTS")
-                .short("s")
-                .long("skip")
-                .help("Skips building documentation if \
-                                                      documentation exists"))
-            .arg(Arg::with_name("SKIP_IF_LOG_EXISTS")
-                .long("skip-if-log-exists")
-                .help("Skips building documentation if build \
-                                                      log exists"))
-            .arg(Arg::with_name("KEEP_BUILD_DIRECTORY")
-                .short("-k")
-                .long("keep-build-directory")
-                .help("Keeps build directory after build."))
-            .subcommand(SubCommand::with_name("world").about("Builds documentation of every \
-                                                              crate"))
-            .subcommand(SubCommand::with_name("crate")
-                .about("Builds documentation for a crate")
-                .arg(Arg::with_name("CRATE_NAME")
-                    .index(1)
-                    .required(true)
-                    .help("Crate name"))
-                .arg(Arg::with_name("CRATE_VERSION")
-                    .index(2)
-                    .required(true)
-                    .help("Version of crate")))
-            .subcommand(SubCommand::with_name("add-essential-files")
-                .about("Adds essential files for rustc"))
-            .subcommand(SubCommand::with_name("lock").about("Locks cratesfyi daemon to stop \
-                                                              building new crates"))
-            .subcommand(SubCommand::with_name("unlock")
-                .about("Unlocks cratesfyi daemon to continue \
-                                                              building new crates"))
-            .subcommand(SubCommand::with_name("print-options")))
-        .subcommand(SubCommand::with_name("start-web-server")
-            .about("Starts web server")
-            .arg(Arg::with_name("SOCKET_ADDR")
-                .index(1)
-                .required(false)
-                .help("Socket address to listen to")))
+        .subcommand(
+            SubCommand::with_name("doc")
+                .about("Builds documentation of a crate")
+                .arg(
+                    Arg::with_name("CRATE_NAME")
+                        .index(1)
+                        .required(true)
+                        .help("Crate name"),
+                )
+                .arg(
+                    Arg::with_name("CRATE_VERSION")
+                        .index(2)
+                        .required(false)
+                        .help("Crate version"),
+                )
+                .arg(
+                    Arg::with_name("TARGET")
+                        .index(3)
+                        .required(false)
+                        .help("The target platform to compile for"),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("build")
+                .about("Builds documentation in a chroot environment")
+                .arg(
+                    Arg::with_name("PREFIX")
+                        .short("P")
+                        .long("prefix")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("DESTINATION")
+                        .short("d")
+                        .long("destination")
+                        .help("Sets destination path")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("CHROOT_PATH")
+                        .short("c")
+                        .long("chroot-path")
+                        .help("Sets chroot path")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("CHROOT_USER")
+                        .short("u")
+                        .long("chroot-user")
+                        .help("Sets chroot user name")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("CONTAINER_NAME")
+                        .short("n")
+                        .long("container-name")
+                        .help("Sets name of the container")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("CRATES_IO_INDEX_PATH")
+                        .long("crates-io-index-path")
+                        .help("Sets crates.io-index path")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("SKIP_IF_EXISTS")
+                        .short("s")
+                        .long("skip")
+                        .help("Skips building documentation if documentation exists"),
+                )
+                .arg(
+                    Arg::with_name("SKIP_IF_LOG_EXISTS")
+                        .long("skip-if-log-exists")
+                        .help("Skips building documentation if build log exists"),
+                )
+                .arg(
+                    Arg::with_name("KEEP_BUILD_DIRECTORY")
+                        .short("-k")
+                        .long("keep-build-directory")
+                        .help("Keeps build directory after build."),
+                )
+                .subcommand(
+                    SubCommand::with_name("world").about("Builds documentation of every crate"),
+                )
+                .subcommand(
+                    SubCommand::with_name("crate")
+                        .about("Builds documentation for a crate")
+                        .arg(
+                            Arg::with_name("CRATE_NAME")
+                                .index(1)
+                                .required(true)
+                                .help("Crate name"),
+                        )
+                        .arg(
+                            Arg::with_name("CRATE_VERSION")
+                                .index(2)
+                                .required(true)
+                                .help("Version of crate"),
+                        ),
+                )
+                .subcommand(
+                    SubCommand::with_name("add-essential-files")
+                        .about("Adds essential files for rustc"),
+                )
+                .subcommand(
+                    SubCommand::with_name("lock")
+                        .about("Locks cratesfyi daemon to stop building new crates"),
+                )
+                .subcommand(
+                    SubCommand::with_name("unlock")
+                        .about("Unlocks cratesfyi daemon to continue building new crates"),
+                )
+                .subcommand(SubCommand::with_name("print-options")),
+        )
+        .subcommand(
+            SubCommand::with_name("start-web-server")
+                .about("Starts web server")
+                .arg(
+                    Arg::with_name("SOCKET_ADDR")
+                        .index(1)
+                        .required(false)
+                        .help("Socket address to listen to"),
+                ),
+        )
         .subcommand(SubCommand::with_name("daemon").about("Starts cratesfyi daemon"))
-        .subcommand(SubCommand::with_name("database")
-            .about("Database operations")
-            .subcommand(SubCommand::with_name("migrate")
-                .about("Run database migrations")
-                .arg(Arg::with_name("VERSION")))
-            .subcommand(SubCommand::with_name("update-github-fields")
-                .about("Updates github stats for crates."))
-            .subcommand(SubCommand::with_name("add-directory")
-                .about("Adds a directory into database")
-                .arg(Arg::with_name("DIRECTORY")
-                    .index(1)
-                    .required(true)
-                    .help("Path of file or \
-                                                                      directory"))
-                .arg(Arg::with_name("PREFIX")
-                    .index(2)
-                    .help("Prefix of files in \
-                                                                      database")))
-            .subcommand(SubCommand::with_name("update-release-activity"))
-            .about("Updates montly release activity \
-                                                              chart")
-            .subcommand(SubCommand::with_name("update-search-index"))
-            .about("Updates search index"))
-        .subcommand(SubCommand::with_name("queue")
-            .about("Interactions with the build queue")
-            .subcommand(SubCommand::with_name("add")
-                .about("Add a crate to the build queue")
-                .arg(Arg::with_name("CRATE_NAME")
-                    .index(1)
-                    .required(true)
-                    .help("Name of crate to build"))
-                .arg(Arg::with_name("CRATE_VERSION")
-                    .index(2)
-                    .required(true)
-                    .help("Version of crate to build"))
-                .arg(Arg::with_name("BUILD_PRIORITY")
-                    .short("p")
-                    .long("priority")
-                    .help("Priority of build (default: 5) (new crate builds get priority 0)")
-                    .takes_value(true))))
+        .subcommand(
+            SubCommand::with_name("database")
+                .about("Database operations")
+                .subcommand(
+                    SubCommand::with_name("migrate")
+                        .about("Run database migrations")
+                        .arg(Arg::with_name("VERSION")),
+                )
+                .subcommand(
+                    SubCommand::with_name("update-github-fields")
+                        .about("Updates github stats for crates."),
+                )
+                .subcommand(
+                    SubCommand::with_name("add-directory")
+                        .about("Adds a directory into database")
+                        .arg(
+                            Arg::with_name("DIRECTORY")
+                                .index(1)
+                                .required(true)
+                                .help("Path of file or directory"),
+                        )
+                        .arg(
+                            Arg::with_name("PREFIX")
+                                .index(2)
+                                .help("Prefix of files in database"),
+                        ),
+                )
+                .subcommand(SubCommand::with_name("update-release-activity"))
+                .about("Updates montly release activity chart")
+                .subcommand(SubCommand::with_name("update-search-index"))
+                .about("Updates search index"),
+        )
         .get_matches();
 
 

@@ -15,12 +15,12 @@ pub fn update_release_activity() -> Result<()> {
 
     for day in 0..30 {
         let rows = conn.query(&format!("SELECT COUNT(*)
-                                             FROM releases
-                                             WHERE release_time < NOW() - INTERVAL '{} day' AND
-                                                   release_time > NOW() - INTERVAL '{} day'",
+                                        FROM releases
+                                        WHERE release_time < NOW() - INTERVAL '{} day' AND
+                                              release_time > NOW() - INTERVAL '{} day'",
                                             day,
                                             day + 1),
-                                   &[])?;
+                             &[])?;
         let failures_count_rows = conn.query(
                                    &format!("SELECT COUNT(*)
                                              FROM releases
