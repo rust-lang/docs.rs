@@ -4,15 +4,13 @@
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 
-
-use std::path::Path;
+use crate::error::Result;
+use failure::err_msg;
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
 use std::io::Read;
-use crate::error::Result;
-use failure::err_msg;
-
+use std::path::Path;
 
 fn file_path(prefix: &str, name: &str) -> String {
     match prefix.is_empty() {
@@ -21,18 +19,20 @@ fn file_path(prefix: &str, name: &str) -> String {
     }
 }
 
-
-fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
-                                          prefix: &str,
-                                          files: &mut Vec<String>)
-                                          -> Result<()> {
+fn get_file_list_from_dir<P: AsRef<Path>>(
+    path: P,
+    prefix: &str,
+    files: &mut Vec<String>,
+) -> Result<()> {
     let path = path.as_ref();
 
     for file in path.read_dir()? {
         let file = file?;
 
         if file.file_type()?.is_file() {
-            file.file_name().to_str().map(|name| files.push(file_path(prefix, name)));
+            file.file_name()
+                .to_str()
+                .map(|name| files.push(file_path(prefix, name)));
         } else if file.file_type()?.is_dir() {
             file.file_name()
                 .to_str()
@@ -42,7 +42,6 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 
     Ok(())
 }
-
 
 pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
     let path = path.as_ref();
@@ -61,13 +60,13 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
     Ok(files)
 }
 
-
 /// Adds files into database and returns list of files with their mime type in Json
-pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
-                                              prefix: &str,
-                                              path: P)
-                                              -> Result<Json> {
-    use magic::{Cookie, flags};
+pub fn add_path_into_database<P: AsRef<Path>>(
+    conn: &Connection,
+    prefix: &str,
+    path: P,
+) -> Result<Json> {
+    use magic::{flags, Cookie};
     let cookie = Cookie::open(flags::MIME_TYPE)?;
     cookie.load::<&str>(&[])?;
 
@@ -114,12 +113,16 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
         let rows = conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path])?;
 
         if rows.get(0).get::<usize, i64>(0) == 0 {
-            trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                             &[&path, &mime, &content])?;
+            trans.query(
+                "INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                &[&path, &mime, &content],
+            )?;
         } else {
-            trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
-                              WHERE path = $1",
-                             &[&path, &mime, &content])?;
+            trans.query(
+                "UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+                 WHERE path = $1",
+                &[&path, &mime, &content],
+            )?;
         }
     }
 
@@ -128,10 +131,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-
-
 fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
-
     let mut file_list_json: Vec<Json> = Vec::new();
 
     for file in file_list {
@@ -144,13 +144,11 @@ fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
     Ok(file_list_json.to_json())
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use std::env;
-    use super::{get_file_list, add_path_into_database};
     use super::super::connect_db;
+    use super::{add_path_into_database, get_file_list};
+    use std::env;
 
     #[test]
     fn test_get_file_list() {

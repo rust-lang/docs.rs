@@ -2,29 +2,29 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-
-use std::{env, thread};
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::process::exit;
+use crate::db::{connect_db, update_search_index};
+use crate::utils::{github_updater, pubsubhubbub, update_release_activity, update_sources};
+use crate::DocBuilder;
+use crate::DocBuilderOptions;
+use libc::fork;
 use std::fs::File;
 use std::io::Write;
-use std::time::Duration;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use libc::fork;
-use crate::DocBuilderOptions;
-use crate::DocBuilder;
-use crate::utils::{update_sources, update_release_activity, github_updater, pubsubhubbub};
-use crate::db::{connect_db, update_search_index};
-
-
+use std::process::exit;
+use std::time::Duration;
+use std::{env, thread};
 
 pub fn start_daemon() {
     // first check required environment variables
-    for v in ["CRATESFYI_PREFIX",
-              "CRATESFYI_PREFIX",
-              "CRATESFYI_GITHUB_USERNAME",
-              "CRATESFYI_GITHUB_ACCESSTOKEN"]
-        .iter() {
+    for v in [
+        "CRATESFYI_PREFIX",
+        "CRATESFYI_PREFIX",
+        "CRATESFYI_GITHUB_USERNAME",
+        "CRATESFYI_GITHUB_ACCESSTOKEN",
+    ]
+    .iter()
+    {
         env::var(v).expect("Environment variable not found");
     }
 
@@ -36,11 +36,15 @@ pub fn start_daemon() {
     // fork the process
     let pid = unsafe { fork() };
     if pid > 0 {
-        let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
-            .expect("Failed to create pid file");
+        let mut file =
+            File::create(dbopts.prefix.join("cratesfyi.pid")).expect("Failed to create pid file");
         writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
-        info!("cratesfyi {} daemon started on: {}", crate::BUILD_VERSION, pid);
+        info!(
+            "cratesfyi {} daemon started on: {}",
+            crate::BUILD_VERSION,
+            pid
+        );
         exit(0);
     }
 
@@ -101,7 +105,7 @@ pub fn start_daemon() {
 
                 match pubsubhubbub::ping_hubs() {
                     Err(e) => error!("Failed to ping hub: {}", e),
-                    Ok(n) => debug!("Succesfully pinged {} hubs", n)
+                    Ok(n) => debug!("Succesfully pinged {} hubs", n),
                 }
 
                 if let Err(e) = doc_builder.load_cache() {
@@ -130,7 +134,7 @@ pub fn start_daemon() {
                         // ping the hubs before continuing
                         match pubsubhubbub::ping_hubs() {
                             Err(e) => error!("Failed to ping hub: {}", e),
-                            Ok(n) => debug!("Succesfully pinged {} hubs", n)
+                            Ok(n) => debug!("Succesfully pinged {} hubs", n),
                         }
 
                         if let Err(e) = doc_builder.save_cache() {
@@ -142,8 +146,11 @@ pub fn start_daemon() {
                     continue;
                 }
                 Ok(queue_count) => {
-                    info!("Starting build with {} crates in queue (currently on a {} crate streak)",
-                          queue_count, status.count());
+                    info!(
+                        "Starting build with {} crates in queue (currently on a {} crate streak)",
+                        queue_count,
+                        status.count()
+                    );
                 }
             }
 
@@ -166,10 +173,11 @@ pub fn start_daemon() {
             let res = catch_unwind(AssertUnwindSafe(|| {
                 match doc_builder.build_next_queue_package() {
                     Err(e) => error!("Failed to build crate from queue: {}", e),
-                    Ok(crate_built) => if crate_built {
-                        status.increment();
+                    Ok(crate_built) => {
+                        if crate_built {
+                            status.increment();
+                        }
                     }
-
                 }
             }));
 
@@ -199,41 +207,32 @@ pub fn start_daemon() {
         }
     });
 
-
     // update release activity everyday at 23:55
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(60));
-            let now = time::now();
-            if now.tm_hour == 23 && now.tm_min == 55 {
-                info!("Updating release activity");
-                if let Err(e) = update_release_activity() {
-                    error!("Failed to update release activity: {}", e);
-                }
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(60));
+        let now = time::now();
+        if now.tm_hour == 23 && now.tm_min == 55 {
+            info!("Updating release activity");
+            if let Err(e) = update_release_activity() {
+                error!("Failed to update release activity: {}", e);
             }
         }
     });
-
 
     // update search index every 3 hours
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(60 * 60 * 3));
-            let conn = connect_db().expect("Failed to connect database");
-            if let Err(e) = update_search_index(&conn) {
-                error!("Failed to update search index: {}", e);
-            }
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(60 * 60 * 3));
+        let conn = connect_db().expect("Failed to connect database");
+        if let Err(e) = update_search_index(&conn) {
+            error!("Failed to update search index: {}", e);
         }
     });
 
-
     // update github stats every 6 hours
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(60 * 60 * 6));
-            if let Err(e) = github_updater() {
-                error!("Failed to update github fields: {}", e);
-            }
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(60 * 60 * 6));
+        if let Err(e) = github_updater() {
+            error!("Failed to update github fields: {}", e);
         }
     });
 
@@ -244,10 +243,9 @@ pub fn start_daemon() {
     crate::start_web_server(None);
 }
 
-
-
 fn opts() -> DocBuilderOptions {
-    let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX")
-        .expect("CRATESFYI_PREFIX environment variable not found"));
+    let prefix = PathBuf::from(
+        env::var("CRATESFYI_PREFIX").expect("CRATESFYI_PREFIX environment variable not found"),
+    );
     DocBuilderOptions::from_prefix(prefix)
 }

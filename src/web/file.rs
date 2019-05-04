@@ -1,10 +1,9 @@
 //! Database based file handler
 
 use super::pool::Pool;
-use postgres::Connection;
-use iron::{Handler, Request, IronResult, Response, IronError};
 use iron::status;
-
+use iron::{Handler, IronError, IronResult, Request, Response};
+use postgres::Connection;
 
 pub struct File {
     pub path: String,
@@ -14,15 +13,16 @@ pub struct File {
     pub content: Vec<u8>,
 }
 
-
 impl File {
     /// Gets file from database
     pub fn from_path(conn: &Connection, path: &str) -> Option<File> {
-
-        let rows = conn.query("SELECT path, mime, date_added, date_updated, content
+        let rows = conn
+            .query(
+                "SELECT path, mime, date_added, date_updated, content
                                FROM files
                                WHERE path = $1",
-                   &[&path])
+                &[&path],
+            )
             .unwrap();
 
         if rows.len() == 0 {
@@ -39,27 +39,30 @@ impl File {
         }
     }
 
-
     /// Consumes File and creates a iron response
     pub fn serve(self) -> Response {
-        use iron::headers::{CacheControl, LastModified, CacheDirective, HttpDate, ContentType};
+        use iron::headers::{CacheControl, CacheDirective, ContentType, HttpDate, LastModified};
 
         let mut response = Response::with((status::Ok, self.content));
-        let cache = vec![CacheDirective::Public,
-                         CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32)];
-        response.headers.set(ContentType(self.mime.parse().unwrap()));
+        let cache = vec![
+            CacheDirective::Public,
+            CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32),
+        ];
+        response
+            .headers
+            .set(ContentType(self.mime.parse().unwrap()));
         response.headers.set(CacheControl(cache));
-        response.headers.set(LastModified(HttpDate(time::at(self.date_updated))));
+        response
+            .headers
+            .set(LastModified(HttpDate(time::at(self.date_updated))));
         response
     }
-
 
     /// Checks if mime type of file is "application/x-empty"
     pub fn is_empty(&self) -> bool {
         self.mime == "application/x-empty"
     }
 }
-
 
 /// Database based file handler for iron
 ///
@@ -73,7 +76,10 @@ impl Handler for DatabaseFileHandler {
         if let Some(file) = File::from_path(&conn, &path) {
             Ok(file.serve())
         } else {
-            Err(IronError::new(super::error::Nope::CrateNotFound, status::NotFound))
+            Err(IronError::new(
+                super::error::Nope::CrateNotFound,
+                status::NotFound,
+            ))
         }
     }
 }

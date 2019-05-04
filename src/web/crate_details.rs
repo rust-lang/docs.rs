@@ -1,20 +1,15 @@
-
-
-
-use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion};
 use super::error::Nope;
 use super::page::Page;
+use super::pool::Pool;
+use super::{duration_to_str, match_version, render_markdown, MatchVersion, MetaData};
 use iron::prelude::*;
-use iron::{Url, status};
-use std::collections::BTreeMap;
-use rustc_serialize::json::{Json, ToJson};
-use router::Router;
+use iron::{status, Url};
 use postgres::Connection;
-
+use router::Router;
+use rustc_serialize::json::{Json, ToJson};
+use std::collections::BTreeMap;
 
 // TODO: Add target name and versions
-
 
 #[derive(Debug)]
 pub struct CrateDetails {
@@ -47,7 +42,6 @@ pub struct CrateDetails {
     documentation_url: Option<String>,
 }
 
-
 impl ToJson for CrateDetails {
     fn to_json(&self) -> Json {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
@@ -64,8 +58,10 @@ impl ToJson for CrateDetails {
         if let Some(ref rustdoc) = self.rustdoc {
             m.insert("rustdoc".to_string(), render_markdown(&rustdoc).to_json());
         }
-        m.insert("release_time".to_string(),
-                 duration_to_str(self.release_time).to_json());
+        m.insert(
+            "release_time".to_string(),
+            duration_to_str(self.release_time).to_json(),
+        );
         m.insert("build_status".to_string(), self.build_status.to_json());
         m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
         m.insert("repository_url".to_string(), self.repository_url.to_json());
@@ -82,15 +78,16 @@ impl ToJson for CrateDetails {
         m.insert("is_library".to_string(), self.is_library.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
-        m.insert("documentation_url".to_string(), self.documentation_url.to_json());
+        m.insert(
+            "documentation_url".to_string(),
+            self.documentation_url.to_json(),
+        );
         m.to_json()
     }
 }
 
-
 impl CrateDetails {
     pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
-
         // get all stuff, I love you rustfmt
         let query = "SELECT crates.id,
                             releases.id,
@@ -147,7 +144,10 @@ impl CrateDetails {
 
             versions.sort();
             versions.reverse();
-            versions.iter().map(|semver| format!("{}", semver)).collect()
+            versions
+                .iter()
+                .map(|semver| format!("{}", semver))
+                .collect()
         };
 
         let metadata = MetaData {
@@ -189,35 +189,41 @@ impl CrateDetails {
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
-            crate_details.github = repository_url.starts_with("http://github.com") ||
-                                   repository_url.starts_with("https://github.com");
+            crate_details.github = repository_url.starts_with("http://github.com")
+                || repository_url.starts_with("https://github.com");
         }
 
         // get authors
-        for row in &conn.query("SELECT name, slug
+        for row in &conn
+            .query(
+                "SELECT name, slug
                                 FROM authors
                                 INNER JOIN author_rels ON author_rels.aid = authors.id
                                 WHERE rid = $1",
-                   &[&release_id])
-            .unwrap() {
+                &[&release_id],
+            )
+            .unwrap()
+        {
             crate_details.authors.push((row.get(0), row.get(1)));
         }
 
         // get owners
-        for row in &conn.query("SELECT login, avatar
+        for row in &conn
+            .query(
+                "SELECT login, avatar
                                 FROM owners
                                 INNER JOIN owner_rels ON owner_rels.oid = owners.id
                                 WHERE cid = $1",
-                   &[&crate_id])
-            .unwrap() {
+                &[&crate_id],
+            )
+            .unwrap()
+        {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
         Some(crate_details)
     }
 }
-
-
 
 pub fn crate_details_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let router = extension!(req, Router);
@@ -238,17 +244,19 @@ pub fn crate_details_handler(req: &mut Request<'_, '_>) -> IronResult<Response> 
                 .to_resp("crate_details")
         }
         MatchVersion::Semver(version) => {
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
-                                                name,
-                                                version)[..]));
+            let url = ctry!(Url::parse(
+                &format!(
+                    "{}://{}:{}/crate/{}/{}",
+                    req.url.scheme(),
+                    req.url.host(),
+                    req.url.port(),
+                    name,
+                    version
+                )[..]
+            ));
 
             Ok(super::redirect(url))
         }
-        MatchVersion::None => {
-            Err(IronError::new(Nope::CrateNotFound, status::NotFound))
-        }
+        MatchVersion::None => Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     }
 }

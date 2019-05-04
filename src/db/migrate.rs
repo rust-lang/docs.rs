@@ -7,7 +7,6 @@ use postgres::transaction::Transaction;
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 
-
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
 /// Downgrade query should return database to previous state.
 ///
@@ -32,18 +31,25 @@ macro_rules! migration {
         }
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &Transaction<'_>) -> Result<(), PostgresError> {
-                info!("Applying migration {}: {}", self.version(), self.description());
+                info!(
+                    "Applying migration {}: {}",
+                    self.version(),
+                    self.description()
+                );
                 transaction.batch_execute($up).map(|_| ())
             }
             fn down(&self, transaction: &Transaction<'_>) -> Result<(), PostgresError> {
-                info!("Removing migration {}: {}", self.version(), self.description());
+                info!(
+                    "Removing migration {}: {}",
+                    self.version(),
+                    self.description()
+                );
                 transaction.batch_execute($down).map(|_| ())
             }
         }
         Box::new(Amigration)
     }};
 }
-
 
 pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
     let conn = connect_db()?;

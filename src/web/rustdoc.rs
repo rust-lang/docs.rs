@@ -1,23 +1,21 @@
 //! rustdoc handler
 
-
-use super::pool::Pool;
+use super::crate_details::CrateDetails;
+use super::error::Nope;
 use super::file::File;
 use super::latest_version;
-use super::crate_details::CrateDetails;
-use iron::prelude::*;
-use iron::{status, Url};
-use iron::modifiers::Redirect;
-use router::Router;
-use super::{match_version, MatchVersion};
-use super::error::Nope;
 use super::page::Page;
+use super::pool::Pool;
+use super::{match_version, MatchVersion};
+use crate::utils;
+use iron::headers::{CacheControl, CacheDirective, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::Handler;
+use iron::{status, Url};
+use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
-use iron::Handler;
-use crate::utils;
-
 
 #[derive(Debug)]
 struct RustdocPage {
@@ -30,7 +28,6 @@ struct RustdocPage {
     pub description: Option<String>,
     pub crate_details: Option<CrateDetails>,
 }
-
 
 impl Default for RustdocPage {
     fn default() -> RustdocPage {
@@ -46,7 +43,6 @@ impl Default for RustdocPage {
         }
     }
 }
-
 
 impl ToJson for RustdocPage {
     fn to_json(&self) -> Json {
@@ -64,39 +60,43 @@ impl ToJson for RustdocPage {
     }
 }
 
-
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
-
-    fn redirect_to_doc(req: &Request<'_, '_>,
-                       name: &str,
-                       vers: &str,
-                       target_name: &str)
-                       -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
-                                            req.url.scheme(),
-                                            req.url.host(),
-                                            req.url.port(),
-                                            name,
-                                            vers,
-                                            target_name)[..]));
+    fn redirect_to_doc(
+        req: &Request<'_, '_>,
+        name: &str,
+        vers: &str,
+        target_name: &str,
+    ) -> IronResult<Response> {
+        let url = ctry!(Url::parse(
+            &format!(
+                "{}://{}:{}/{}/{}/{}/",
+                req.url.scheme(),
+                req.url.host(),
+                req.url.port(),
+                name,
+                vers,
+                target_name
+            )[..]
+        ));
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
         Ok(resp)
     }
 
-    fn redirect_to_crate(req: &Request<'_, '_>,
-                         name: &str,
-                         vers: &str)
-                         -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                            req.url.scheme(),
-                                            req.url.host(),
-                                            req.url.port(),
-                                            name,
-                                            vers)[..]));
+    fn redirect_to_crate(req: &Request<'_, '_>, name: &str, vers: &str) -> IronResult<Response> {
+        let url = ctry!(Url::parse(
+            &format!(
+                "{}://{}:{}/crate/{}/{}",
+                req.url.scheme(),
+                req.url.host(),
+                req.url.port(),
+                name,
+                vers
+            )[..]
+        ));
 
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
@@ -107,11 +107,25 @@ pub fn rustdoc_redirector_handler(req: &mut Request<'_, '_>) -> IronResult<Respo
     // this unwrap is safe because iron urls are always able to use `path_segments`
     // i'm using this instead of `req.url.path()` to avoid allocating the Vec, and also to avoid
     // keeping the borrow alive into the return statement
-    if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".js")) {
+    if req
+        .url
+        .as_ref()
+        .path_segments()
+        .unwrap()
+        .last()
+        .map_or(false, |s| s.ends_with(".js"))
+    {
         // javascript files should be handled by the file server instead of erroneously
         // redirecting to the crate root page
         return rustdoc_html_server_handler(req);
-    } else if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".ico")) {
+    } else if req
+        .url
+        .as_ref()
+        .path_segments()
+        .unwrap()
+        .last()
+        .map_or(false, |s| s.ends_with(".ico"))
+    {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
         return super::ico_handler(req);
@@ -134,11 +148,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request<'_, '_>) -> IronResult<Respo
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(conn.query("SELECT target_name, rustdoc_status
+        let rows = ctry!(conn.query(
+            "SELECT target_name, rustdoc_status
                                      FROM releases
                                      INNER JOIN crates ON crates.id = releases.crate_id
                                      WHERE crates.name = $1 AND releases.version = $2",
-                                    &[&crate_name, &version]));
+            &[&crate_name, &version]
+        ));
 
         (rows.get(0).get(0), rows.get(0).get(1))
     };
@@ -150,13 +166,11 @@ pub fn rustdoc_redirector_handler(req: &mut Request<'_, '_>) -> IronResult<Respo
     }
 }
 
-
 /// Serves documentation generated by rustdoc.
 ///
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
-
     let router = extension!(req, Router);
     let name = router.find("crate").unwrap_or("").to_string();
     let url_version = router.find("version");
@@ -176,13 +190,17 @@ pub fn rustdoc_html_server_handler(req: &mut Request<'_, '_>) -> IronResult<Resp
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
-                                                name,
-                                                v,
-                                                req_path.join("/"))[..]));
+            let url = ctry!(Url::parse(
+                &format!(
+                    "{}://{}:{}/{}/{}/{}",
+                    req.url.scheme(),
+                    req.url.host(),
+                    req.url.port(),
+                    name,
+                    v,
+                    req_path.join("/")
+                )[..]
+            ));
             return Ok(super::redirect(url));
         }
         MatchVersion::None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
@@ -245,12 +263,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request<'_, '_>) -> IronResult<Resp
         .to_resp("rustdoc")
 }
 
-
-
 pub fn badge_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
+    use badge::{Badge, BadgeOptions};
     use iron::headers::ContentType;
     use params::{Params, Value};
-    use badge::{Badge, BadgeOptions};
 
     let version = {
         let params = ctry!(req.get_ref::<Params>());
@@ -265,11 +281,13 @@ pub fn badge_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
 
     let options = match match_version(&conn, &name, Some(&version)) {
         MatchVersion::Exact(version) => {
-            let rows = ctry!(conn.query("SELECT rustdoc_status
+            let rows = ctry!(conn.query(
+                "SELECT rustdoc_status
                                          FROM releases
                                          INNER JOIN crates ON crates.id = releases.crate_id
                                          WHERE crates.name = $1 AND releases.version = $2",
-                                        &[&name, &version]));
+                &[&name, &version]
+            ));
             if rows.len() > 0 && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
@@ -285,30 +303,35 @@ pub fn badge_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
             }
         }
         MatchVersion::Semver(version) => {
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/badge.svg?version={}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
-                                                name,
-                                                version)[..]));
+            let url = ctry!(Url::parse(
+                &format!(
+                    "{}://{}:{}/{}/badge.svg?version={}",
+                    req.url.scheme(),
+                    req.url.host(),
+                    req.url.port(),
+                    name,
+                    version
+                )[..]
+            ));
 
             return Ok(super::redirect(url));
         }
-        MatchVersion::None => {
-            BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "no builds".to_owned(),
-                color: "#e05d44".to_owned(),
-            }
-        }
+        MatchVersion::None => BadgeOptions {
+            subject: "docs".to_owned(),
+            status: "no builds".to_owned(),
+            color: "#e05d44".to_owned(),
+        },
     };
 
     let mut resp = Response::with((status::Ok, ctry!(Badge::new(options)).to_svg()));
-    resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
+    resp.headers
+        .set(ContentType("image/svg+xml".parse().unwrap()));
     resp.headers.set(Expires(HttpDate(time::now())));
-    resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
-                                       CacheDirective::NoStore,
-                                       CacheDirective::MustRevalidate]));
+    resp.headers.set(CacheControl(vec![
+        CacheDirective::NoCache,
+        CacheDirective::NoStore,
+        CacheDirective::MustRevalidate,
+    ]));
     Ok(resp)
 }
 
@@ -322,8 +345,8 @@ pub struct SharedResourceHandler;
 impl Handler for SharedResourceHandler {
     fn handle(&self, req: &mut Request<'_, '_>) -> IronResult<Response> {
         let path = req.url.path();
-        let filename = path.last().unwrap();  // unwrap is fine: vector is non-empty
-        let suffix = filename.split('.').last().unwrap();  // unwrap is fine: split always works
+        let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
+        let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
             let conn = extension!(req, Pool);
 

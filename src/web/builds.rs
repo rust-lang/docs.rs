@@ -1,15 +1,11 @@
-
-
-use std::collections::BTreeMap;
-use super::MetaData;
-use super::pool::Pool;
 use super::duration_to_str;
 use super::page::Page;
+use super::pool::Pool;
+use super::MetaData;
 use iron::prelude::*;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
-
-
+use std::collections::BTreeMap;
 
 #[derive(Clone)]
 struct Build {
@@ -21,31 +17,34 @@ struct Build {
     output: Option<String>,
 }
 
-
 struct BuildsPage {
     metadata: Option<MetaData>,
     builds: Vec<Build>,
     build_details: Option<Build>,
 }
 
-
 impl ToJson for Build {
     fn to_json(&self) -> Json {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("id".to_owned(), self.id.to_json());
         m.insert("rustc_version".to_owned(), self.rustc_version.to_json());
-        m.insert("cratesfyi_version".to_owned(),
-                 self.cratesfyi_version.to_json());
+        m.insert(
+            "cratesfyi_version".to_owned(),
+            self.cratesfyi_version.to_json(),
+        );
         m.insert("build_status".to_owned(), self.build_status.to_json());
-        m.insert("build_time".to_owned(),
-                 format!("{}", time::at(self.build_time).rfc3339()).to_json());
-        m.insert("build_time_relative".to_owned(),
-                 duration_to_str(self.build_time).to_json());
+        m.insert(
+            "build_time".to_owned(),
+            format!("{}", time::at(self.build_time).rfc3339()).to_json(),
+        );
+        m.insert(
+            "build_time_relative".to_owned(),
+            duration_to_str(self.build_time).to_json(),
+        );
         m.insert("output".to_owned(), self.output.to_json());
         m.to_json()
     }
 }
-
 
 impl ToJson for BuildsPage {
     fn to_json(&self) -> Json {
@@ -57,9 +56,7 @@ impl ToJson for BuildsPage {
     }
 }
 
-
 pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
-
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));
     let version = cexpect!(router.find("version"));
@@ -71,7 +68,8 @@ pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let mut build_details = None;
 
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    for row in &ctry!(conn.query("SELECT crates.name,
+    for row in &ctry!(conn.query(
+        "SELECT crates.name,
                                          releases.version,
                                          releases.description,
                                          releases.rustdoc_status,
@@ -87,8 +85,8 @@ pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
                                   INNER JOIN crates ON releases.crate_id = crates.id
                                   WHERE crates.name = $1 AND releases.version = $2
                                   ORDER BY id DESC",
-                                 &[&name, &version])) {
-
+        &[&name, &version]
+    )) {
         let id: i32 = row.get(5);
 
         let build = Build {
@@ -108,9 +106,10 @@ pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     }
 
     if req.url.path().join("/").ends_with(".json") {
+        use iron::headers::{
+            AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
+        };
         use iron::status;
-        use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType,
-                            AccessControlAllowOrigin};
 
         // Remove build output from build list for json output
         for build in build_list.as_mut_slice() {
@@ -118,11 +117,14 @@ pub fn build_list_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
         }
 
         let mut resp = Response::with((status::Ok, build_list.to_json().to_string()));
-        resp.headers.set(ContentType("application/json".parse().unwrap()));
+        resp.headers
+            .set(ContentType("application/json".parse().unwrap()));
         resp.headers.set(Expires(HttpDate(time::now())));
-        resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
-                                           CacheDirective::NoStore,
-                                           CacheDirective::MustRevalidate]));
+        resp.headers.set(CacheControl(vec![
+            CacheDirective::NoCache,
+            CacheDirective::NoStore,
+            CacheDirective::MustRevalidate,
+        ]));
         resp.headers.set(AccessControlAllowOrigin::Any);
         Ok(resp)
     } else {

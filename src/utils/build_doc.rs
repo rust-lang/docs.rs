@@ -4,25 +4,24 @@
 //! documentation of a crate and not installing anything.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::env;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cargo::core::{self, SourceId, Dependency, Source, Package, Workspace};
-use cargo::core::compiler::{DefaultExecutor, CompileMode, MessageFormat, BuildConfig, Executor};
+use cargo::core::compiler::{BuildConfig, CompileMode, DefaultExecutor, Executor, MessageFormat};
 use cargo::core::package::PackageSet;
 use cargo::core::registry::PackageRegistry;
 use cargo::core::resolver;
 use cargo::core::source::SourceMap;
-use cargo::util::{CargoResult, Config, internal, Filesystem};
+use cargo::core::{self, Dependency, Package, Source, SourceId, Workspace};
+use cargo::ops::{self, FilterRule, LibRule, Packages};
 use cargo::sources::SourceConfigMap;
-use cargo::ops::{self, Packages, LibRule, FilterRule};
+use cargo::util::{internal, CargoResult, Config, Filesystem};
 
-use crate::utils::{get_current_versions, parse_rustc_version};
 use crate::error::Result;
+use crate::utils::{get_current_versions, parse_rustc_version};
 
 use crate::Metadata;
-
 
 /// Builds documentation of a crate and version.
 ///
@@ -45,10 +44,13 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     let dep = Dependency::parse_no_deprecated(name, vers, source_id)?;
     let deps = source.query_vec(&dep)?;
-    let pkgid = deps.iter().map(|p| p.package_id()).max()
-                     // FIXME: This is probably not a rusty way to handle options and results
-                     //        or maybe it is who knows...
-                     .ok_or(internal("no package id available"))?;
+    let pkgid = deps
+        .iter()
+        .map(|p| p.package_id())
+        .max()
+        // FIXME: This is probably not a rusty way to handle options and results
+        //        or maybe it is who knows...
+        .ok_or(internal("no package id available"))?;
 
     let mut source_map = SourceMap::new();
     source_map.insert(source);
@@ -73,30 +75,39 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     // since https://github.com/rust-lang/rust/pull/48511 we can pass --resource-suffix to
     // add correct version numbers to css and javascript files
-    let mut rustdoc_args: Vec<String> =
-        vec!["-Z".to_string(), "unstable-options".to_string(),
-             "--resource-suffix".to_string(),
-             format!("-{}", parse_rustc_version(get_current_versions()?.0)?),
-             "--static-root-path".to_string(), "/".to_string(),
-             "--disable-per-crate-search".to_string()];
+    let mut rustdoc_args: Vec<String> = vec![
+        "-Z".to_string(),
+        "unstable-options".to_string(),
+        "--resource-suffix".to_string(),
+        format!("-{}", parse_rustc_version(get_current_versions()?.0)?),
+        "--static-root-path".to_string(),
+        "/".to_string(),
+        "--disable-per-crate-search".to_string(),
+    ];
 
     // since https://github.com/rust-lang/rust/pull/51384, we can pass --extern-html-root-url to
     // force rustdoc to link to other docs.rs docs for dependencies
     let source = source_cfg_map.load(source_id, &HashSet::new())?;
     for (name, dep) in resolve_deps(&pkg, &config, source)? {
         rustdoc_args.push("--extern-html-root-url".to_string());
-        rustdoc_args.push(format!("{}=https://docs.rs/{}/{}",
-                                  name.replace("-", "_"), dep.name(), dep.version()));
+        rustdoc_args.push(format!(
+            "{}=https://docs.rs/{}/{}",
+            name.replace("-", "_"),
+            dep.name(),
+            dep.version()
+        ));
     }
 
     if let Some(package_rustdoc_args) = metadata.rustdoc_args {
         rustdoc_args.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
     }
 
-    let mut build_config = BuildConfig::new(&config,
-                                                 None,
-                                                 &target.map(|t| t.to_string()),
-                                                 CompileMode::Doc { deps: false })?;
+    let mut build_config = BuildConfig::new(
+        &config,
+        None,
+        &target.map(|t| t.to_string()),
+        CompileMode::Doc { deps: false },
+    )?;
     build_config.release = false;
     build_config.message_format = MessageFormat::Human;
 
@@ -107,11 +118,13 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
         all_features: metadata.all_features,
         no_default_features: metadata.no_default_features,
         spec: Packages::Packages(Vec::new()),
-        filter: ops::CompileFilter::new(LibRule::True,
-                                        FilterRule::none(),
-                                        FilterRule::none(),
-                                        FilterRule::none(),
-                                        FilterRule::none()),
+        filter: ops::CompileFilter::new(
+            LibRule::True,
+            FilterRule::none(),
+            FilterRule::none(),
+            FilterRule::none(),
+            FilterRule::none(),
+        ),
         target_rustc_args: None,
         target_rustdoc_args: Some(rustdoc_args),
         local_rustdoc_args: None,
@@ -126,9 +139,11 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     Ok(ws.current()?.clone())
 }
 
-fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source + 'cfg>)
-    -> CargoResult<Vec<(String, Package)>>
-{
+fn resolve_deps<'cfg>(
+    pkg: &Package,
+    config: &'cfg Config,
+    src: Box<dyn Source + 'cfg>,
+) -> CargoResult<Vec<(String, Package)>> {
     let mut registry = PackageRegistry::new(config)?;
     registry.add_preloaded(src);
     registry.lock_patches();
@@ -142,13 +157,20 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source +
         false,
         false,
     )?;
-    let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).collect::<Vec<_>>();
+    let dep_ids = resolver
+        .deps(pkg.package_id())
+        .map(|p| p.0)
+        .collect::<Vec<_>>();
     let pkg_set = registry.get(&dep_ids)?;
     let deps = pkg_set.get_many(dep_ids)?;
 
     let mut ret = Vec::new();
     for dep in deps {
-        if let Some(d) = pkg.dependencies().iter().find(|d| d.package_name() == dep.name()) {
+        if let Some(d) = pkg
+            .dependencies()
+            .iter()
+            .find(|d| d.package_name() == dep.name())
+        {
             ret.push((d.name_in_toml().to_string(), dep.clone()));
         }
     }
@@ -170,10 +192,13 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
     let dep = Dependency::parse_no_deprecated(name, vers, source_id)?;
     let deps = source.query_vec(&dep)?;
-    let pkgid = deps.iter().map(|p| p.package_id()).max()
-                     // FIXME: This is probably not a rusty way to handle options and results
-                     //        or maybe it is who knows...
-                     .ok_or(internal("no package id available"))?;
+    let pkgid = deps
+        .iter()
+        .map(|p| p.package_id())
+        .max()
+        // FIXME: This is probably not a rusty way to handle options and results
+        //        or maybe it is who knows...
+        .ok_or(internal("no package id available"))?;
 
     let mut source_map = SourceMap::new();
     source_map.insert(source);
@@ -184,7 +209,6 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 
     Ok(pkg)
 }
-
 
 /// Updates central crates-io.index repository
 pub fn update_sources() -> CargoResult<()> {
@@ -197,20 +221,16 @@ pub fn update_sources() -> CargoResult<()> {
     source.update()
 }
 
-
 /// Gets source path of a downloaded package.
 pub fn source_path(pkg: &Package) -> Option<&Path> {
     // parent of the manifest file is where source codes are stored
     pkg.manifest_path().parent()
 }
 
-
-
-
 #[cfg(test)]
 mod test {
-    use std::path::Path;
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_get_package() {
@@ -222,7 +242,6 @@ mod test {
         let manifest = pkg.manifest();
         assert_eq!(manifest.name().as_str(), "rand");
     }
-
 
     #[test]
     fn test_source_path() {

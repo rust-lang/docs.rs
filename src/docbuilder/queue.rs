@@ -1,12 +1,10 @@
 //! Updates crates.io index and builds new packages
 
-
 use super::DocBuilder;
 use crate::db::connect_db;
 use crate::error::Result;
 use crates_index_diff::{ChangeKind, Index};
 use utils::add_crate_to_queue;
-
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
@@ -31,7 +29,8 @@ impl DocBuilder {
 
     pub fn get_queue_count(&self) -> Result<i64> {
         let conn = connect_db()?;
-        Ok(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
+        Ok(conn
+            .query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
             .unwrap()
             .get(0)
             .get(0))
@@ -41,12 +40,14 @@ impl DocBuilder {
     pub fn build_next_queue_package(&mut self) -> Result<bool> {
         let conn = connect_db()?;
 
-        let query = conn.query("SELECT id, name, version
+        let query = conn.query(
+            "SELECT id, name, version
                                 FROM queue
                                 WHERE attempt < 5
                                 ORDER BY priority ASC, attempt ASC, id ASC
                                 LIMIT 1",
-                                &[])?;
+            &[],
+        )?;
 
         if query.is_empty() {
             // nothing in the queue; bail
@@ -63,12 +64,14 @@ impl DocBuilder {
             }
             Err(e) => {
                 // Increase attempt count
-                let _ = conn.execute("UPDATE queue SET attempt = attempt + 1 WHERE id = $1",
-                                     &[&id]);
-                error!("Failed to build package {}-{} from queue: {}",
-                       name,
-                       version,
-                       e)
+                let _ = conn.execute(
+                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1",
+                    &[&id],
+                );
+                error!(
+                    "Failed to build package {}-{} from queue: {}",
+                    name, version, e
+                )
             }
         }
 
@@ -78,8 +81,8 @@ impl DocBuilder {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
     use crate::{DocBuilder, DocBuilderOptions};
+    use std::path::PathBuf;
 
     #[test]
     #[ignore]

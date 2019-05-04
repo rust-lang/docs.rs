@@ -1,9 +1,8 @@
-
-use std::path::Path;
-use cargo::core::Package;
-use toml::Value;
 use crate::error::Result;
+use cargo::core::Package;
 use failure::err_msg;
+use std::path::Path;
+use toml::Value;
 
 /// Metadata for custom builds
 ///
@@ -57,11 +56,12 @@ pub struct Metadata {
     pub dependencies: Option<Vec<String>>,
 }
 
-
-
 impl Metadata {
     pub fn from_package(pkg: &Package) -> Result<Metadata> {
-        let src_path = pkg.manifest_path().parent().ok_or_else(|| err_msg("Source path not available"))?;
+        let src_path = pkg
+            .manifest_path()
+            .parent()
+            .ok_or_else(|| err_msg("Source path not available"))?;
         for c in ["Cargo.toml.orig", "Cargo.toml"].iter() {
             let manifest_path = src_path.clone().join(c);
             if manifest_path.exists() {
@@ -85,7 +85,6 @@ impl Metadata {
         Metadata::from_str(&s)
     }
 
-
     // This is similar to Default trait but it's private
     fn default() -> Metadata {
         Metadata {
@@ -99,7 +98,6 @@ impl Metadata {
         }
     }
 
-
     fn from_str(manifest: &str) -> Metadata {
         let mut metadata = Metadata::default();
 
@@ -108,31 +106,49 @@ impl Metadata {
             Err(_) => return metadata,
         };
 
-        if let Some(table) = manifest.get("package").and_then(|p| p.as_table())
-            .and_then(|p| p.get("metadata")).and_then(|p| p.as_table())
-                .and_then(|p| p.get("docs")).and_then(|p| p.as_table())
-                .and_then(|p| p.get("rs")).and_then(|p| p.as_table()) {
-                    metadata.features = table.get("features").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.no_default_features = table.get("no-default-features")
-                        .and_then(|v| v.as_bool()).unwrap_or(metadata.no_default_features);
-                    metadata.all_features = table.get("all-features")
-                        .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
-                    metadata.default_target = table.get("default-target")
-                        .and_then(|v| v.as_str()).map(|v| v.to_owned());
-                    metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.dependencies = table.get("dependencies").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                }
+        if let Some(table) = manifest
+            .get("package")
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("metadata"))
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("docs"))
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("rs"))
+            .and_then(|p| p.as_table())
+        {
+            metadata.features = table
+                .get("features")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.no_default_features = table
+                .get("no-default-features")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(metadata.no_default_features);
+            metadata.all_features = table
+                .get("all-features")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(metadata.all_features);
+            metadata.default_target = table
+                .get("default-target")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_owned());
+            metadata.rustc_args = table
+                .get("rustc-args")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.rustdoc_args = table
+                .get("rustdoc-args")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.dependencies = table
+                .get("dependencies")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+        }
 
         metadata
     }
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -168,7 +184,10 @@ mod test {
         assert_eq!(features[0], "feature1".to_owned());
         assert_eq!(features[1], "feature2".to_owned());
 
-        assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
+        assert_eq!(
+            metadata.default_target.unwrap(),
+            "x86_64-unknown-linux-gnu".to_owned()
+        );
 
         let rustc_args = metadata.rustc_args.unwrap();
         assert_eq!(rustc_args.len(), 1);

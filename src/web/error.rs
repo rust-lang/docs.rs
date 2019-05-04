@@ -1,8 +1,8 @@
-use std::error::Error;
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
 use crate::web::page::Page;
+use iron::prelude::*;
+use iron::status;
+use iron::Handler;
+use std::error::Error;
 use std::fmt;
 
 #[derive(Debug, Copy, Clone)]

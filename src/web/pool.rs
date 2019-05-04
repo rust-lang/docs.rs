@@ -1,9 +1,6 @@
-
-
-use iron::prelude::*;
-use iron::{BeforeMiddleware, typemap};
 use crate::db::create_pool;
-
+use iron::prelude::*;
+use iron::{typemap, BeforeMiddleware};
 
 pub struct Pool {
     pool: r2d2::Pool<r2d2_postgres::PostgresConnectionManager>,
@@ -15,7 +12,9 @@ impl typemap::Key for Pool {
 
 impl Pool {
     pub fn new() -> Pool {
-        Pool { pool: create_pool() }
+        Pool {
+            pool: create_pool(),
+        }
     }
 }
 

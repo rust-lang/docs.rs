@@ -1,20 +1,17 @@
-
-extern crate time;
-extern crate sass_rs;
 extern crate git2;
+extern crate sass_rs;
+extern crate time;
 
+use git2::Repository;
 use std::env;
-use std::path::Path;
 use std::fs::File;
 use std::io::Write;
-use git2::Repository;
-
+use std::path::Path;
 
 fn main() {
     write_git_version();
     compile_sass();
 }
-
 
 fn write_git_version() {
     let git_hash = get_git_hash().unwrap_or("???????".to_owned());
@@ -23,7 +20,6 @@ fn write_git_version() {
     let mut file = File::create(&dest_path).unwrap();
     write!(file, "({} {})", git_hash, build_date).unwrap();
 }
-
 
 fn get_git_hash() -> Option<String> {
     let repo = match Repository::open(env::current_dir().unwrap()) {
@@ -38,12 +34,11 @@ fn get_git_hash() -> Option<String> {
     })
 }
 
-
 fn compile_sass() {
     use sass_rs::Context;
 
-    let mut file_context = Context::new_file(concat!(env!("CARGO_MANIFEST_DIR"),
-                                                     "/templates/style.scss")).unwrap();
+    let mut file_context =
+        Context::new_file(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style.scss")).unwrap();
     let css = file_context.compile().unwrap();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("style.css");
     let mut file = File::create(&dest_path).unwrap();
