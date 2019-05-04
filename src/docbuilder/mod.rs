@@ -110,6 +110,11 @@ impl DocBuilder {
         Ok(())
     }
 
+    /// Checks for the lock file and returns whether it currently exists.
+    pub fn is_locked(&self) -> bool {
+        self.lock_path().exists()
+    }
+
     /// Returns a reference of options
     pub fn options(&self) -> &DocBuilderOptions {
         &self.options

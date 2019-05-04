@@ -12,9 +12,9 @@ use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
-use cratesfyi::utils::build_doc;
+use cratesfyi::utils::{build_doc, add_crate_to_queue};
 use cratesfyi::start_web_server;
-use cratesfyi::db::add_path_into_database;
+use cratesfyi::db::{add_path_into_database, connect_db};
 
 
 pub fn main() {
@@ -130,6 +130,23 @@ pub fn main() {
                                                               chart")
             .subcommand(SubCommand::with_name("update-search-index"))
             .about("Updates search index"))
+        .subcommand(SubCommand::with_name("queue")
+            .about("Interactions with the build queue")
+            .subcommand(SubCommand::with_name("add")
+                .about("Add a crate to the build queue")
+                .arg(Arg::with_name("CRATE_NAME")
+                    .index(1)
+                    .required(true)
+                    .help("Name of crate to build"))
+                .arg(Arg::with_name("CRATE_VERSION")
+                    .index(2)
+                    .required(true)
+                    .help("Version of crate to build"))
+                .arg(Arg::with_name("BUILD_PRIORITY")
+                    .short("p")
+                    .long("priority")
+                    .help("Priority of build (default: 5) (new crate builds get priority 0)")
+                    .takes_value(true))))
         .get_matches();
 
 
@@ -227,6 +244,17 @@ pub fn main() {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
     } else if let Some(_) = matches.subcommand_matches("daemon") {
         cratesfyi::utils::start_daemon();
+    } else if let Some(matches) = matches.subcommand_matches("queue") {
+        if let Some(matches) = matches.subcommand_matches("add") {
+            let priority = matches.value_of("BUILD_PRIORITY").unwrap_or("5");
+            let priority: i32 = priority.parse().expect("--priority was not a number");
+            let conn = connect_db().expect("Could not connect to database");
+
+            add_crate_to_queue(&conn,
+                               matches.value_of("CRATE_NAME").unwrap(),
+                               matches.value_of("CRATE_VERSION").unwrap(),
+                               priority).expect("Could not add crate to queue");
+        }
     } else {
         println!("{}", matches.usage());
     }
