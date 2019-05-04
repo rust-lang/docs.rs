@@ -127,7 +127,7 @@ pub fn start_daemon() {
                     continue;
                 }
                 Ok(0) => {
-                    if status.is_in_progress() {
+                    if status.count() > 0 {
                         // ping the hubs before continuing
                         match pubsubhubbub::ping_hubs() {
                             Err(e) => error!("Failed to ping hub: {}", e),
