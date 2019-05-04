@@ -46,7 +46,7 @@ impl Badge {
     pub fn new(options: BadgeOptions) -> Result<Badge, String> {
         let collection = FontCollection::from_bytes(FONT_DATA).expect("Failed to parse FONT_DATA");
         // this should never fail in practice
-        let font = try!(collection.into_font().map_err(|_| "Failed to load font data".to_owned()));
+        let font = collection.into_font().map_err(|_| "Failed to load font data".to_owned())?;
         let scale = Scale {
             x: FONT_SIZE,
             y: FONT_SIZE,
@@ -152,7 +152,7 @@ mod tests {
         let mut bad_options_status = options();
         bad_options_status.status = "".to_owned();
         assert!(Badge::new(bad_options_status).is_err());
-        
+
         let mut bad_options_subject = options();
         bad_options_subject.subject = "".to_owned();
         assert!(Badge::new(bad_options_subject).is_err());

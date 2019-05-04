@@ -8,20 +8,20 @@ use crate::error::Result;
 
 pub fn update_release_activity() -> Result<()> {
 
-    let conn = r#try!(connect_db());
+    let conn = connect_db()?;
     let mut dates = Vec::new();
     let mut crate_counts = Vec::new();
     let mut failure_counts = Vec::new();
 
     for day in 0..30 {
-        let rows = r#try!(conn.query(&format!("SELECT COUNT(*)
+        let rows = conn.query(&format!("SELECT COUNT(*)
                                              FROM releases
                                              WHERE release_time < NOW() - INTERVAL '{} day' AND
                                                    release_time > NOW() - INTERVAL '{} day'",
                                             day,
                                             day + 1),
-                                   &[]));
-        let failures_count_rows = r#try!(conn.query(
+                                   &[])?;
+        let failures_count_rows = conn.query(
                                    &format!("SELECT COUNT(*)
                                              FROM releases
                                              WHERE is_library = TRUE AND
@@ -30,7 +30,7 @@ pub fn update_release_activity() -> Result<()> {
                                                    release_time > NOW() - INTERVAL '{} day'",
                                             day,
                                             day + 1),
-                                   &[]));
+                                   &[])?;
         let release_count: i64 = rows.get(0).get(0);
         let failure_count: i64 = failures_count_rows.get(0).get(0);
         let now = now();
@@ -53,12 +53,12 @@ pub fn update_release_activity() -> Result<()> {
         map.to_json()
     };
 
-    r#try!(conn.query("INSERT INTO config (name, value) VALUES ('release_activity', $1)",
+    conn.query("INSERT INTO config (name, value) VALUES ('release_activity', $1)",
                &[&map])
         .or_else(|_| {
             conn.query("UPDATE config SET value = $1 WHERE name = 'release_activity'",
                        &[&map])
-        }));
+        })?;
 
     Ok(())
 }

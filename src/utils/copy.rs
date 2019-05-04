@@ -47,7 +47,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
     // Make sure destination directory is exists
     if !destination.exists() {
-        r#try!(fs::create_dir_all(&destination));
+        fs::create_dir_all(&destination)?;
     }
 
     // Avoid copying common files
@@ -55,24 +55,24 @@ fn copy_files_and_handle_html(source: PathBuf,
         r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
-    for file in r#try!(source.read_dir()) {
+    for file in source.read_dir()? {
 
-        let file = r#try!(file);
+        let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);
         destination_full_path.push(file.file_name());
 
-        let metadata = r#try!(file.metadata());
+        let metadata = file.metadata()?;
 
         if metadata.is_dir() {
-            r#try!(fs::create_dir_all(&destination_full_path));
-            r#try!(copy_files_and_handle_html(file.path(),
+            fs::create_dir_all(&destination_full_path)?;
+            copy_files_and_handle_html(file.path(),
                                             destination_full_path,
                                             handle_html,
-                                            &rustc_version))
+                                            &rustc_version)?
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
-            r#try!(fs::copy(&file.path(), &destination_full_path));
+            fs::copy(&file.path(), &destination_full_path)?;
         }
 
     }
@@ -83,7 +83,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
 #[cfg(test)]
 mod test {
-    
+
     use std::fs;
     use std::path::Path;
     use super::*;

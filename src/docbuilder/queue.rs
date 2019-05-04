@@ -12,9 +12,9 @@ impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
     /// Returns size of queue
     pub fn get_new_crates(&mut self) -> Result<usize> {
-        let conn = r#try!(connect_db());
-        let index = r#try!(Index::from_path_or_cloned(&self.options.crates_io_index_path));
-        let mut changes = r#try!(index.fetch_changes());
+        let conn = connect_db()?;
+        let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
+        let mut changes = index.fetch_changes()?;
         let mut add_count: usize = 0;
 
         // I belive this will fix ordering of queue if we get more than one crate from changes
@@ -30,7 +30,7 @@ impl DocBuilder {
     }
 
     pub fn get_queue_count(&self) -> Result<i64> {
-        let conn = try!(connect_db());
+        let conn = connect_db()?;
         Ok(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
             .unwrap()
             .get(0)
@@ -39,14 +39,14 @@ impl DocBuilder {
 
     /// Builds the top package from the queue. Returns whether the queue was empty.
     pub fn build_next_queue_package(&mut self) -> Result<bool> {
-        let conn = r#try!(connect_db());
+        let conn = connect_db()?;
 
-        let query = r#try!(conn.query("SELECT id, name, version
-                                     FROM queue
-                                     WHERE attempt < 5
-                                     ORDER BY priority ASC, attempt ASC, id ASC
-                                     LIMIT 1",
-                                    &[]));
+        let query = conn.query("SELECT id, name, version
+                                FROM queue
+                                WHERE attempt < 5
+                                ORDER BY priority ASC, attempt ASC, id ASC
+                                LIMIT 1",
+                                &[])?;
 
         if query.is_empty() {
             // nothing in the queue; bail

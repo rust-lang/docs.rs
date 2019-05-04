@@ -11,7 +11,7 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
 {
 
-    let reader = r#try!(fs::File::open(path).map(|f| BufReader::new(f)));
+    let reader = fs::File::open(path).map(|f| BufReader::new(f))?;
 
     let mut name = String::new();
     let mut versions = Vec::new();
@@ -28,13 +28,13 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
             Err(_) => continue,
         };
 
-        let obj = r#try!(data.as_object().ok_or_else(|| err_msg("Not a JSON object")));
-        let crate_name = r#try!(obj.get("name")
+        let obj = data.as_object().ok_or_else(|| err_msg("Not a JSON object"))?;
+        let crate_name = obj.get("name")
             .and_then(|n| n.as_string())
-            .ok_or_else(|| err_msg("`name` not found in JSON object")));
-        let vers = r#try!(obj.get("vers")
+            .ok_or_else(|| err_msg("`name` not found in JSON object"))?;
+        let vers = obj.get("vers")
             .and_then(|n| n.as_string())
-            .ok_or_else(|| err_msg("`vers` not found in JSON object")));
+            .ok_or_else(|| err_msg("`vers` not found in JSON object"))?;
 
         // Skip yanked crates
         if obj.get("yanked").and_then(|n| n.as_boolean()).unwrap_or(false) {
@@ -66,8 +66,8 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         return Err(err_msg("Not a directory"));
     }
 
-    for file in r#try!(path.read_dir()) {
-        let file = r#try!(file);
+    for file in path.read_dir()? {
+        let file = file?;
         let path = file.path();
         // skip files under .git and config.json
         if path.to_str().unwrap().contains(".git") || path.file_name().unwrap() == "config.json" {
@@ -75,9 +75,9 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         }
 
         if path.is_dir() {
-            r#try!(crates_from_path(&path, func));
+            crates_from_path(&path, func)?;
         } else {
-            r#try!(crates_from_file(&path, func));
+            crates_from_file(&path, func)?;
         }
     }
 

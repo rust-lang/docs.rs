@@ -28,12 +28,12 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
                                           -> Result<()> {
     let path = path.as_ref();
 
-    for file in r#try!(path.read_dir()) {
-        let file = r#try!(file);
+    for file in path.read_dir()? {
+        let file = file?;
 
-        if r#try!(file.file_type()).is_file() {
+        if file.file_type()?.is_file() {
             file.file_name().to_str().map(|name| files.push(file_path(prefix, name)));
-        } else if r#try!(file.file_type()).is_dir() {
+        } else if file.file_type()?.is_dir() {
             file.file_name()
                 .to_str()
                 .map(|name| get_file_list_from_dir(file.path(), &file_path(prefix, name), files));
@@ -55,7 +55,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
             .and_then(|name| name.to_str())
             .map(|name| files.push(format!("{}", name)));
     } else if path.is_dir() {
-        r#try!(get_file_list_from_dir(path, "", &mut files));
+        get_file_list_from_dir(path, "", &mut files)?;
     }
 
     Ok(files)
@@ -68,14 +68,14 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               path: P)
                                               -> Result<Json> {
     use magic::{Cookie, flags};
-    let cookie = r#try!(Cookie::open(flags::MIME_TYPE));
-    r#try!(cookie.load::<&str>(&[]));
+    let cookie = Cookie::open(flags::MIME_TYPE)?;
+    cookie.load::<&str>(&[])?;
 
-    let trans = r#try!(conn.transaction());
+    let trans = conn.transaction()?;
 
     let mut file_list_with_mimes: Vec<(String, String)> = Vec::new();
 
-    for file_path_str in r#try!(get_file_list(&path)) {
+    for file_path_str in get_file_list(&path)? {
         let (path, content, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path_str);
             // Some files have insufficient permissions (like .lock file created by cargo in
@@ -85,9 +85,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 Err(_) => continue,
             };
             let mut content: Vec<u8> = Vec::new();
-            r#try!(file.read_to_end(&mut content));
+            file.read_to_end(&mut content)?;
             let mime = {
-                let mime = r#try!(cookie.buffer(&content));
+                let mime = cookie.buffer(&content)?;
                 // css's are causing some problem in browsers
                 // magic will return text/plain for css file types
                 // convert them to text/css
@@ -111,19 +111,19 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
         };
 
         // check if file already exists in database
-        let rows = r#try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
+        let rows = conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path])?;
 
         if rows.get(0).get::<usize, i64>(0) == 0 {
-            r#try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                             &[&path, &mime, &content]));
+            trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                             &[&path, &mime, &content])?;
         } else {
-            r#try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+            trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
                               WHERE path = $1",
-                             &[&path, &mime, &content]));
+                             &[&path, &mime, &content])?;
         }
     }
 
-    r#try!(trans.commit());
+    trans.commit()?;
 
     file_list_to_json(file_list_with_mimes)
 }

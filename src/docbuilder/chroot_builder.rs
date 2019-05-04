@@ -41,7 +41,7 @@ pub struct ChrootBuilderResult {
 impl DocBuilder {
     /// Builds every package documentation in chroot environment
     pub fn build_world(&mut self) -> Result<()> {
-        r#try!(update_sources());
+        update_sources()?;
 
         let mut count = 0;
 
@@ -73,42 +73,42 @@ impl DocBuilder {
         info!("Building package {}-{}", name, version);
 
         // Start with clean documentation directory
-        r#try!(self.remove_build_dir());
+        self.remove_build_dir()?;
 
         // Database connection
-        let conn = r#try!(connect_db());
+        let conn = connect_db()?;
 
         // get_package (and cargo) is using semver, add '=' in front of version.
-        let pkg = r#try!(get_package(name, Some(&format!("={}", version)[..])));
+        let pkg = get_package(name, Some(&format!("={}", version)[..]))?;
         let metadata = Metadata::from_package(&pkg)?;
         let res = self.build_package_in_chroot(&pkg, metadata.default_target.clone());
 
         // copy sources and documentation
-        let file_list = r#try!(self.add_sources_into_database(&conn, &pkg));
+        let file_list = self.add_sources_into_database(&conn, &pkg)?;
         let successfully_targets = if res.have_doc {
-            r#try!(self.copy_documentation(&pkg,
+            self.copy_documentation(&pkg,
                                          &res.rustc_version,
                                          metadata.default_target.as_ref().map(String::as_str),
-                                         true));
+                                         true)?;
             let successfully_targets = self.build_package_for_all_targets(&pkg);
             for target in &successfully_targets {
-                r#try!(self.copy_documentation(&pkg, &res.rustc_version, Some(target), false));
+                self.copy_documentation(&pkg, &res.rustc_version, Some(target), false)?;
             }
-            r#try!(self.add_documentation_into_database(&conn, &pkg));
+            self.add_documentation_into_database(&conn, &pkg)?;
             successfully_targets
         } else {
             Vec::new()
         };
 
-        let release_id = r#try!(add_package_into_database(&conn,
+        let release_id = add_package_into_database(&conn,
                                                         &pkg,
                                                         &res,
                                                         Some(file_list),
-                                                        successfully_targets));
-        r#try!(add_build_into_database(&conn, &release_id, &res));
+                                                        successfully_targets)?;
+        add_build_into_database(&conn, &release_id, &res)?;
 
         // remove documentation, source and build directory after we are done
-        r#try!(self.clean(&pkg));
+        self.clean(&pkg)?;
 
         // add package into build cache
         self.cache.insert(format!("{}-{}", name, version));
@@ -362,7 +362,7 @@ impl DocBuilder {
         use std::fs::{copy, create_dir_all};
 
         // acme-client-0.0.0 is an empty library crate and it will always build
-        let pkg = r#try!(get_package("acme-client", Some("=0.0.0")));
+        let pkg = get_package("acme-client", Some("=0.0.0"))?;
         let res = self.build_package_in_chroot(&pkg, None);
         let rustc_version = parse_rustc_version(&res.rustc_version)?;
 
@@ -408,37 +408,37 @@ impl DocBuilder {
         // we are done
         let destination = PathBuf::from(&self.options.destination)
             .join(format!("{}/{}", pkg.manifest().name(), pkg.manifest().version()));
-        r#try!(create_dir_all(&destination));
+        create_dir_all(&destination)?;
 
         for file in files.0.iter() {
             let spl: Vec<&str> = file.split('.').collect();
             let file_name = format!("{}-{}.{}", spl[0], rustc_version, spl[1]);
             let source_path = source.join(&file_name);
             let destination_path = destination.join(&file_name);
-            r#try!(copy(&source_path, &destination_path)
-                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
+            copy(&source_path, &destination_path)
+                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display()))?;
         }
 
         for file in files.1.iter() {
             let source_path = source.join(file);
             let destination_path = destination.join(file);
-            r#try!(copy(&source_path, &destination_path)
-                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display())));
+            copy(&source_path, &destination_path)
+                .chain_err(|| format!("couldn't copy '{}' to '{}'", source_path.display(), destination_path.display()))?;
         }
 
-        let conn = r#try!(connect_db());
-        r#try!(add_path_into_database(&conn, "", destination));
+        let conn = connect_db()?;
+        add_path_into_database(&conn, "", destination)?;
 
-        r#try!(self.clean(&pkg));
+        self.clean(&pkg)?;
 
         let (vers, _) = self.get_versions();
 
-        r#try!(conn.query("INSERT INTO config (name, value) VALUES ('rustc_version', $1)",
+        conn.query("INSERT INTO config (name, value) VALUES ('rustc_version', $1)",
                    &[&vers.to_json()])
             .or_else(|_| {
                 conn.query("UPDATE config SET value = $1 WHERE name = 'rustc_version'",
                            &[&vers.to_json()])
-            }));
+            })?;
 
         Ok(())
     }
