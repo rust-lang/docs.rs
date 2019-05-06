@@ -120,8 +120,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
     let exec: Arc<Executor> = Arc::new(DefaultExecutor);
-    let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
-    try!(ops::compile_ws(&ws, Some(source), &opts, &exec));
+    try!(ops::compile_ws(&ws, &opts, &exec));
 
     Ok(try!(ws.current()).clone())
 }
@@ -139,7 +138,6 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cf
         &mut registry,
         &Default::default(),
         None,
-        false,
         false,
     ));
     let dep_ids = resolver.deps(pkg.package_id()).map(|p| p.0).collect::<Vec<_>>();
