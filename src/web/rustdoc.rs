@@ -111,7 +111,18 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".js")) {
         // javascript files should be handled by the file server instead of erroneously
         // redirecting to the crate root page
-        return rustdoc_html_server_handler(req);
+        if req.url.as_ref().path_segments().unwrap().count() > 2 {
+            // this URL is actually from a crate-internal path, serve it there instead
+            return rustdoc_html_server_handler(req);
+        } else {
+            let path = req.url.path();
+            let path = path.join("/");
+            let conn = extension!(req, Pool);
+            match File::from_path(&conn, &path) {
+                Some(f) => return Ok(f.serve()),
+                None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+            }
+        }
     } else if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".ico")) {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
