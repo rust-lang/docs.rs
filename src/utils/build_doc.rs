@@ -40,6 +40,8 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     let source_cfg_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_cfg_map.load(source_id, &HashSet::new()));
 
+    let _lock = try!(config.acquire_package_cache_lock());
+
     // update crates.io-index registry
     try!(source.update());
 
@@ -164,6 +166,8 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let source_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_map.load(source_id, &HashSet::new()));
 
+    let _lock = try!(config.acquire_package_cache_lock());
+
     try!(source.update());
 
     let dep = try!(Dependency::parse_no_deprecated(name, vers, source_id));
@@ -188,6 +192,8 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
 pub fn update_sources() -> CargoResult<()> {
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
+
+    let _lock = try!(config.acquire_package_cache_lock());
 
     let source_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_map.load(source_id, &HashSet::new()));
