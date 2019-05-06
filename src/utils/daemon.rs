@@ -53,10 +53,14 @@ pub fn start_daemon() {
             let opts = opts();
             let mut doc_builder = DocBuilder::new(opts);
 
-            debug!("Checking new crates");
-            match doc_builder.get_new_crates() {
-                Ok(n) => debug!("{} crates added to queue", n),
-                Err(e) => error!("Failed to get new crates: {}", e),
+            if doc_builder.is_locked() {
+                debug!("Lock file exists, skipping checking new crates");
+            } else {
+                debug!("Checking new crates");
+                match doc_builder.get_new_crates() {
+                    Ok(n) => debug!("{} crates added to queue", n),
+                    Err(e) => error!("Failed to get new crates: {}", e),
+                }
             }
 
             thread::sleep(Duration::from_secs(60));
