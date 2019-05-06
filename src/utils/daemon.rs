@@ -46,7 +46,7 @@ pub fn start_daemon() {
     }
 
     // check new crates every minute
-    thread::spawn(move || {
+    thread::Builder::new().name("crates.io reader".to_string()).spawn(move || {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         thread::sleep(Duration::from_secs(30));
         loop {
@@ -61,10 +61,10 @@ pub fn start_daemon() {
 
             thread::sleep(Duration::from_secs(60));
         }
-    });
+    }).unwrap();
 
     // build new crates every minute
-    thread::spawn(move || {
+    thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
         let opts = opts();
         let mut doc_builder = DocBuilder::new(opts);
 
@@ -198,11 +198,11 @@ pub fn start_daemon() {
                 *self = BuilderState::QueueInProgress(self.count() + 1);
             }
         }
-    });
+    }).unwrap();
 
 
     // update release activity everyday at 23:55
-    thread::spawn(move || {
+    thread::Builder::new().name("release activity updater".to_string()).spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(60));
             let now = time::now();
@@ -213,11 +213,11 @@ pub fn start_daemon() {
                 }
             }
         }
-    });
+    }).unwrap();
 
 
     // update search index every 3 hours
-    thread::spawn(move || {
+    thread::Builder::new().name("search index updater".to_string()).spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(60 * 60 * 3));
             let conn = connect_db().expect("Failed to connect database");
@@ -225,18 +225,18 @@ pub fn start_daemon() {
                 error!("Failed to update search index: {}", e);
             }
         }
-    });
+    }).unwrap();
 
 
     // update github stats every 6 hours
-    thread::spawn(move || {
+    thread::Builder::new().name("github stat updater".to_string()).spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(60 * 60 * 6));
             if let Err(e) = github_updater() {
                 error!("Failed to update github fields: {}", e);
             }
         }
-    });
+    }).unwrap();
 
     // TODO: update ssl certificate every 3 months
 
