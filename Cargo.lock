@@ -177,7 +177,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "cargo"
 version = "0.37.0"
-source = "git+https://github.com/rust-lang/cargo.git#afd240e016947079e7e4aea240a742fc098d1a3f"
+source = "git+https://github.com/rust-lang/cargo.git#759b6161a328db1d4863139e90875308ecd25a75"
 dependencies = [
  "atty 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -352,7 +352,7 @@ dependencies = [
 [[package]]
 name = "crates-io"
 version = "0.25.0"
-source = "git+https://github.com/rust-lang/cargo.git#afd240e016947079e7e4aea240a742fc098d1a3f"
+source = "git+https://github.com/rust-lang/cargo.git#759b6161a328db1d4863139e90875308ecd25a75"
 dependencies = [
  "curl 0.4.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
