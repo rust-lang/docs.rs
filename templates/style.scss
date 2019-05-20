@@ -19,7 +19,7 @@ $color-lifetime-incode: #B76514;   // orangish
 $color-comment-in-code: #8E908C;   // light gray
 $color-background-code: #F5F5F5;   // lighter gray
 $color-border: #ddd;               // gray
-
+$top-navbar-height: 32px;          // height of the floating top navbar
 
 
 // pure compatible media queries
@@ -58,7 +58,7 @@ div.rustdoc {
 
     .sidebar {
         @media (min-width: 701px) {
-            padding-top: 32px;
+            margin-top: $top-navbar-height;
         }
 
         .block > ul > li {
@@ -67,7 +67,7 @@ div.rustdoc {
     }
 
     #source-sidebar {
-        top: 32px;
+        top: $top-navbar-height;
     }
 
     #sidebar-toggle {
@@ -76,14 +76,14 @@ div.rustdoc {
 
     @media (max-width: 700px) {
         .sidebar.mobile {
-            top: 32px;
+            top: $top-navbar-height;
 
             .sidebar-elems.show-it {
                 top: 77px;
             }
 
             #sidebar-filler {
-                top: 32px;
+                top: $top-navbar-height;
             }
         }
     }
@@ -92,14 +92,16 @@ div.rustdoc {
     position: absolute;
     left: 0;
     right: 0;
-    top: 32px;
+    top: $top-navbar-height;
+    overflow-y: auto;
+    max-height: calc(100vh - #{$top-navbar-height});
 }
 
 body {
     padding: 0;
     margin: 0;
     // Since top navbar is fixed, we need to add padding to the body content.
-    padding-top: 32px;
+    padding-top: $top-navbar-height;
 }
 
 
@@ -148,7 +150,7 @@ div.container-rustdoc {
 div.nav-container {
     // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
     z-index: 999;
-    height: 32px;
+    height: $top-navbar-height;
     border-bottom: 1px solid $color-border;
     background-color: #fff;
     left: 0;
