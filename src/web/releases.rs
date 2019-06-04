@@ -1,7 +1,7 @@
 //! Releases web handlers
 
 
-use super::{duration_to_str, match_version};
+use super::{duration_to_str, match_version, redirect_base};
 use super::error::Nope;
 use super::page::Page;
 use super::pool::Pool;
@@ -468,10 +468,8 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 let name: String = rows.get(0).get(0);
                 let version: String = rows.get(0).get(1);
                 let target_name: String = rows.get(0).get(2);
-                let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
-                                                    req.url.scheme(),
-                                                    req.url.host(),
-                                                    req.url.port(),
+                let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
+                                                    redirect_base(req),
                                                     name,
                                                     version,
                                                     target_name)));
@@ -504,17 +502,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                     }
                 };
                 let url = if rustdoc_status {
-                    ctry!(Url::parse(&format!("{}://{}:{}/{}/{}",
-                                              req.url.scheme(),
-                                              req.url.host(),
-                                              req.url.port(),
+                    ctry!(Url::parse(&format!("{}/{}/{}",
+                                              redirect_base(req),
                                               query,
                                               version)[..]))
                 } else {
-                    ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                              req.url.scheme(),
-                                              req.url.host(),
-                                              req.url.port(),
+                    ctry!(Url::parse(&format!("{}/crate/{}/{}",
+                                              redirect_base(req),
                                               query,
                                               version)[..]))
                 };

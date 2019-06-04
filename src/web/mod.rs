@@ -466,6 +466,24 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
+pub fn redirect_base(req: &Request) -> String {
+    // Try to get the scheme from CloudFront first, and then from iron
+    let scheme = req.headers
+        .get_raw("cloudfront-forwarded-proto")
+        .and_then(|values| values.get(0))
+        .and_then(|value| std::str::from_utf8(value).ok())
+        .filter(|proto| *proto == "http" || *proto == "https")
+        .unwrap_or_else(|| req.url.scheme());
+
+    // Only include the port if it's needed
+    let port = req.url.port();
+    if port == 80 {
+        format!("{}://{}", scheme, req.url.host())
+    } else {
+        format!("{}://{}:{}", scheme, req.url.host(), port)
+    }
+}
+
 fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, STYLE_CSS));
     let cache = vec![CacheDirective::Public,
@@ -495,10 +513,7 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
     } else {
         // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
         // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(Url::parse(&format!("{}://{}:{}/favicon.ico",
-                                            req.url.scheme(),
-                                            req.url.host(),
-                                            req.url.port())[..]));
+        let url = ctry!(Url::parse(&format!("{}/favicon.ico", redirect_base(req))[..]));
 
         Ok(redirect(url))
     }

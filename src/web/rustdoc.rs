@@ -3,7 +3,7 @@
 
 use super::pool::Pool;
 use super::file::File;
-use super::latest_version;
+use super::{latest_version, redirect_base};
 use super::crate_details::CrateDetails;
 use iron::prelude::*;
 use iron::{status, Url};
@@ -75,10 +75,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        vers: &str,
                        target_name: &str)
                        -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}/",
-                                            req.url.scheme(),
-                                            req.url.host(),
-                                            req.url.port(),
+        let url = ctry!(Url::parse(&format!("{}/{}/{}/{}/",
+                                            redirect_base(req),
                                             name,
                                             vers,
                                             target_name)[..]));
@@ -92,10 +90,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                          name: &str,
                          vers: &str)
                          -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                            req.url.scheme(),
-                                            req.url.host(),
-                                            req.url.port(),
+        let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
+                                            redirect_base(req),
                                             name,
                                             vers)[..]));
 
@@ -188,10 +184,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/{}/{}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
+            let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
+                                                redirect_base(req),
                                                 name,
                                                 v,
                                                 req_path.join("/"))[..]));
@@ -297,10 +291,8 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
         MatchVersion::Semver(version) => {
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/{}/badge.svg?version={}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
+            let url = ctry!(Url::parse(&format!("{}/{}/badge.svg?version={}",
+                                                redirect_base(req),
                                                 name,
                                                 version)[..]));
 
