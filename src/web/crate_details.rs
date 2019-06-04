@@ -2,7 +2,7 @@
 
 
 use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion};
+use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion, redirect_base};
 use super::error::Nope;
 use super::page::Page;
 use iron::prelude::*;
@@ -240,10 +240,8 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .to_resp("crate_details")
         }
         MatchVersion::Semver(version) => {
-            let url = ctry!(Url::parse(&format!("{}://{}:{}/crate/{}/{}",
-                                                req.url.scheme(),
-                                                req.url.host(),
-                                                req.url.port(),
+            let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
+                                                redirect_base(req),
                                                 name,
                                                 version)[..]));
 
