@@ -18,6 +18,7 @@ use cratesfyi::db::{add_path_into_database, connect_db};
 
 
 pub fn main() {
+    dotenv::dotenv().ok();
     logger_init();
 
     let matches = App::new("cratesfyi")

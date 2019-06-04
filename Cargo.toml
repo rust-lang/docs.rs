@@ -32,6 +32,7 @@ html5ever = "0.22"
 cargo = { git = "https://github.com/rust-lang/cargo.git" }
 schemamama = "0.3"
 schemamama_postgres = "0.2"
+dotenv = "0.14.1"
 
 
 # iron dependencies
