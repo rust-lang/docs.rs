@@ -94,8 +94,11 @@ pub fn main() {
                     .help("Version of crate")))
             .subcommand(SubCommand::with_name("add-essential-files")
                 .about("Adds essential files for rustc"))
-            .subcommand(SubCommand::with_name("lock").about("Locks cratesfyi daemon to stop \
-                                                              building new crates"))
+            .subcommand(SubCommand::with_name("lock")
+                .about("Locks cratesfyi daemon to stop building new crates")
+                .arg(Arg::with_name("WAIT")
+                     .long("wait")
+                     .help("wait until the build queue finishes building a crate before exiting")))
             .subcommand(SubCommand::with_name("unlock")
                 .about("Unlocks cratesfyi daemon to continue \
                                                               building new crates"))
@@ -213,8 +216,12 @@ pub fn main() {
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
             docbuilder.add_essential_files().expect("Failed to add essential files");
-        } else if let Some(_) = matches.subcommand_matches("lock") {
+        } else if let Some(matches) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");
+            if matches.is_present("WAIT") {
+                println!("Waiting for build queue to lock...");
+                docbuilder.wait_for_signal().expect("Failed to set signal file");
+            }
         } else if let Some(_) = matches.subcommand_matches("unlock") {
             docbuilder.unlock().expect("Failed to unlock");
         } else if let Some(_) = matches.subcommand_matches("print-options") {

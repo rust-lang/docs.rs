@@ -11,6 +11,8 @@ pub use self::chroot_builder::ChrootBuilderResult;
 use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::thread;
+use std::time;
 use std::path::PathBuf;
 use std::collections::BTreeSet;
 use DocBuilderOptions;
@@ -113,6 +115,31 @@ impl DocBuilder {
     /// Checks for the lock file and returns whether it currently exists.
     pub fn is_locked(&self) -> bool {
         self.lock_path().exists()
+    }
+
+    fn signal_path(&self) -> PathBuf {
+        self.options.prefix.join("cratesfyi-signal.lock")
+    }
+
+    /// Creates a signal file and blocks the thread until it is deleted by the daemon.
+    pub fn wait_for_signal(&self) -> Result<()> {
+        let path = self.signal_path();
+        if !path.exists() {
+            try!(fs::OpenOptions::new().write(true).create(true).open(&path));
+        }
+        while path.exists() {
+            thread::sleep(time::Duration::from_secs(10));
+        }
+        Ok(())
+    }
+
+    /// Removes the signal file, if it exists.
+    pub fn signal(&self) -> Result<()> {
+        let path = self.signal_path();
+        if path.exists() {
+            try!(fs::remove_file(path));
+        }
+        Ok(())
     }
 
     /// Returns a reference of options

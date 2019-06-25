@@ -96,6 +96,9 @@ pub fn start_daemon() {
             if doc_builder.is_locked() {
                 warn!("Lock file exits, skipping building new crates");
                 status = BuilderState::Locked;
+                if let Err(e) = doc_builder.signal() {
+                    error!("Could not signal waiting locker: {}", e);
+                }
                 continue;
             }
 
