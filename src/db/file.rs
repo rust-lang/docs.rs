@@ -5,7 +5,7 @@
 //! filesystem. This module is adding files into database and retrieving them.
 
 
-use std::path::Path;
+use std::path::{PathBuf, Path};
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use std::fs::File;
@@ -14,17 +14,8 @@ use error::Result;
 use failure::err_msg;
 
 
-fn file_path(prefix: &str, name: &str) -> String {
-    match prefix.is_empty() {
-        true => name.to_owned(),
-        false => format!("{}/{}", prefix, name),
-    }
-}
-
-
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
-                                          prefix: &str,
-                                          files: &mut Vec<String>)
+                                          files: &mut Vec<PathBuf>)
                                           -> Result<()> {
     let path = path.as_ref();
 
@@ -32,11 +23,9 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
         let file = try!(file);
 
         if try!(file.file_type()).is_file() {
-            file.file_name().to_str().map(|name| files.push(file_path(prefix, name)));
+            files.push(file.path());
         } else if try!(file.file_type()).is_dir() {
-            file.file_name()
-                .to_str()
-                .map(|name| get_file_list_from_dir(file.path(), &file_path(prefix, name), files));
+            try!(get_file_list_from_dir(file.path(), files));
         }
     }
 
@@ -44,18 +33,20 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 }
 
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
+pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
-    let mut files: Vec<String> = Vec::new();
+    let mut files = Vec::new();
 
     if !path.exists() {
         return Err(err_msg("File not found"));
     } else if path.is_file() {
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| files.push(format!("{}", name)));
+        files.push(PathBuf::from(path.file_name().unwrap()));
     } else if path.is_dir() {
-        try!(get_file_list_from_dir(path, "", &mut files));
+        try!(get_file_list_from_dir(path, &mut files));
+        for file_path in &mut files {
+            // We want the paths in this list to not be {path}/bar.txt but just bar.txt
+            *file_path = PathBuf::from(file_path.strip_prefix(path).unwrap());
+        }
     }
 
     Ok(files)
@@ -73,11 +64,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
     let trans = try!(conn.transaction());
 
-    let mut file_list_with_mimes: Vec<(String, String)> = Vec::new();
+    let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
-    for file_path_str in try!(get_file_list(&path)) {
+    for file_path in try!(get_file_list(&path)) {
         let (path, content, mime) = {
-            let path = Path::new(path.as_ref()).join(&file_path_str);
+            let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
             // documentation directory). We are skipping this files.
             let mut file = match File::open(path) {
@@ -93,9 +84,10 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 // convert them to text/css
                 // do the same for javascript files
                 if mime == "text/plain" {
-                    if file_path_str.ends_with(".css") {
+                    let e = file_path.extension().unwrap_or_default();
+                    if e == "css" {
                         "text/css".to_owned()
-                    } else if file_path_str.ends_with(".js") {
+                    } else if e == "js" {
                         "application/javascript".to_owned()
                     } else {
                         mime.to_owned()
@@ -105,9 +97,13 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             };
 
-            file_list_with_mimes.push((mime.clone(), file_path_str.clone()));
+            file_list_with_mimes.push((mime.clone(), file_path.clone()));
 
-            (file_path(prefix, &file_path_str), content, mime)
+            (
+                Path::new(prefix).join(&file_path).into_os_string().into_string().unwrap(),
+                content,
+                mime,
+            )
         };
 
         // check if file already exists in database
@@ -130,14 +126,14 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
 
 
-fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
+fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
 
     let mut file_list_json: Vec<Json> = Vec::new();
 
     for file in file_list {
         let mut v: Vec<String> = Vec::new();
         v.push(file.0.clone());
-        v.push(file.1.clone());
+        v.push(file.1.into_os_string().into_string().unwrap());
         file_list_json.push(v.to_json());
     }
 
