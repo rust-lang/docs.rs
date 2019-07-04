@@ -32,6 +32,9 @@ html5ever = "0.22"
 cargo = { git = "https://github.com/rust-lang/cargo.git" }
 schemamama = "0.3"
 schemamama_postgres = "0.2"
+rusoto_s3 = "0.40"
+rusoto_core = "0.40"
+rusoto_credential = "0.40"
 
 
 # iron dependencies

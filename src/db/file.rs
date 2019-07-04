@@ -12,6 +12,9 @@ use std::fs;
 use std::io::Read;
 use error::Result;
 use failure::err_msg;
+use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
+use rusoto_core::region::Region;
+use rusoto_credential::EnvironmentProvider;
 
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
@@ -67,14 +70,35 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     if rows.len() == 0 {
         None
     } else {
+        let client = s3_client();
         let row = rows.get(0);
+        let content = client.get_object(GetObjectRequest {
+            bucket: "rust-docs-rs".into(),
+            key: path.into(),
+            ..Default::default()
+        }).sync().ok().and_then(|r| r.body).map(|b| {
+            let mut b = b.into_blocking_read();
+            let mut content = Vec::new();
+            b.read_to_end(&mut content).unwrap();
+            content
+        }).unwrap_or(row.get(3));
+
         Some(Blob {
             path: row.get(0),
             mime: row.get(1),
-            date_updated: row.get(3),
-            content: row.get(4),
+            date_updated: row.get(2),
+            content,
         })
     }
+}
+
+fn s3_client() -> S3Client {
+    let client = S3Client::new_with(
+        rusoto_core::request::HttpClient::new().unwrap(),
+        EnvironmentProvider::default(),
+        Region::UsWest1,
+    );
+    client
 }
 
 /// Adds files into database and returns list of files with their mime type in Json
@@ -87,11 +111,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     try!(cookie.load::<&str>(&[]));
 
     let trans = try!(conn.transaction());
-
+    let client = s3_client();
     let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
     for file_path in try!(get_file_list(&path)) {
-        let (path, content, mime) = {
+        let (path, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
             // documentation directory). We are skipping this files.
@@ -101,6 +125,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             };
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
+            let bucket_path = Path::new(prefix).join(&file_path)
+                .into_os_string().into_string().unwrap();
+
             let mime = {
                 let mime = try!(cookie.buffer(&content));
                 // css's are causing some problem in browsers
@@ -121,11 +148,19 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             };
 
+            client.put_object(PutObjectRequest {
+                acl: Some("public-read".into()),
+                bucket: "rust-docs-rs".into(),
+                key: bucket_path.clone(),
+                body: Some(content.clone().into()),
+                content_type: Some(mime.clone()),
+                ..Default::default()
+            }).sync().unwrap();
+
             file_list_with_mimes.push((mime.clone(), file_path.clone()));
 
             (
-                Path::new(prefix).join(&file_path).into_os_string().into_string().unwrap(),
-                content,
+                bucket_path,
                 mime,
             )
         };
@@ -135,11 +170,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
         if rows.get(0).get::<usize, i64>(0) == 0 {
             try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                             &[&path, &mime, &content]));
+                             &[&path, &mime, &"in-s3".to_owned()]));
         } else {
-            try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+            try!(trans.query("UPDATE files SET mime = $2, date_updated = NOW() \
                               WHERE path = $1",
-                             &[&path, &mime, &content]));
+                             &[&path, &mime]));
         }
     }
 
@@ -170,8 +205,7 @@ fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
 mod test {
     extern crate env_logger;
     use std::env;
-    use super::{get_file_list, add_path_into_database};
-    use super::super::connect_db;
+    use super::get_file_list;
 
     #[test]
     fn test_get_file_list() {
@@ -182,16 +216,6 @@ mod test {
         assert!(files.unwrap().len() > 0);
 
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
-        assert_eq!(files[0], "Cargo.toml");
-    }
-
-    #[test]
-    #[ignore]
-    fn test_add_path_into_database() {
-        let _ = env_logger::try_init();
-
-        let conn = connect_db().unwrap();
-        let res = add_path_into_database(&conn, "example", env::current_dir().unwrap().join("src"));
-        assert!(res.is_ok());
+        assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
 }
