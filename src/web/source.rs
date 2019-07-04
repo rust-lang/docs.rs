@@ -222,10 +222,10 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     let (content, is_rust_source) = if let Some(file) = file {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
-        if !file.mime.starts_with("text") && !file.is_empty() {
+        if !file.0.mime.starts_with("text") && !file.is_empty() {
             return Ok(file.serve());
-        } else if file.mime.starts_with("text") && !file.is_empty() {
-            (String::from_utf8(file.content).ok(), file.path.ends_with(".rs"))
+        } else if file.0.mime.starts_with("text") && !file.is_empty() {
+            (String::from_utf8(file.0.content).ok(), file.0.path.ends_with(".rs"))
         } else {
             (None, false)
         }

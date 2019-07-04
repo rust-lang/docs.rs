@@ -8,7 +8,7 @@
 use std::path::{PathBuf, Path};
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
-use std::fs::File;
+use std::fs;
 use std::io::Read;
 use error::Result;
 use failure::err_msg;
@@ -52,6 +52,32 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+pub struct Blob {
+    pub path: String,
+    pub mime: String,
+    pub date_added: time::Timespec,
+    pub date_updated: time::Timespec,
+    pub content: Vec<u8>,
+}
+
+pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
+    let rows = conn.query("SELECT path, mime, date_added, date_updated, content
+                           FROM files
+                           WHERE path = $1", &[&path]).unwrap();
+
+    if rows.len() == 0 {
+        None
+    } else {
+        let row = rows.get(0);
+        Some(Blob {
+            path: row.get(0),
+            mime: row.get(1),
+            date_added: row.get(2),
+            date_updated: row.get(3),
+            content: row.get(4),
+        })
+    }
+}
 
 /// Adds files into database and returns list of files with their mime type in Json
 pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
@@ -71,7 +97,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
             // documentation directory). We are skipping this files.
-            let mut file = match File::open(path) {
+            let mut file = match fs::File::open(path) {
                 Ok(f) => f,
                 Err(_) => continue,
             };
