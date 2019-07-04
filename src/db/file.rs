@@ -55,13 +55,12 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
 pub struct Blob {
     pub path: String,
     pub mime: String,
-    pub date_added: time::Timespec,
     pub date_updated: time::Timespec,
     pub content: Vec<u8>,
 }
 
 pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
-    let rows = conn.query("SELECT path, mime, date_added, date_updated, content
+    let rows = conn.query("SELECT path, mime, date_updated, content
                            FROM files
                            WHERE path = $1", &[&path]).unwrap();
 
@@ -72,7 +71,6 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
         Some(Blob {
             path: row.get(0),
             mime: row.get(1),
-            date_added: row.get(2),
             date_updated: row.get(3),
             content: row.get(4),
         })
