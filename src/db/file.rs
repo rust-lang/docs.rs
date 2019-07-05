@@ -96,7 +96,10 @@ fn s3_client() -> S3Client {
     let client = S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         EnvironmentProvider::default(),
-        Region::UsWest1,
+        std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
+            name: "us-west-1".to_owned(),
+            endpoint: e,
+        }).unwrap_or(Region::UsWest1),
     );
     client
 }
