@@ -244,7 +244,6 @@ impl DocBuilder {
     /// Remove documentation, build directory and sources directory of a package
     fn clean(&self, package: &Package) -> Result<()> {
         debug!("Cleaning package");
-        use std::fs::remove_dir_all;
         let documentation_path = PathBuf::from(&self.options.destination)
             .join(package.manifest().name().as_str());
         let source_path = source_path(&package).unwrap();

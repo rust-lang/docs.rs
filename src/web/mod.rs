@@ -504,8 +504,6 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
 }
 
 fn ico_handler(req: &mut Request) -> IronResult<Response> {
-    use iron::Url;
-
     if let Some(&"favicon.ico") = req.url.path().last() {
         // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
         // from `public_html`, so return a 404 here to make the main handler carry on
