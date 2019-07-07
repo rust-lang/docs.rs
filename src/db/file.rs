@@ -72,11 +72,11 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     } else {
         let client = s3_client();
         let row = rows.get(0);
-        let content = client.get_object(GetObjectRequest {
+        let content = client.and_then(|c| c.get_object(GetObjectRequest {
             bucket: "rust-docs-rs".into(),
             key: path.into(),
             ..Default::default()
-        }).sync().ok().and_then(|r| r.body).map(|b| {
+        }).sync().ok()).and_then(|r| r.body).map(|b| {
             let mut b = b.into_blocking_read();
             let mut content = Vec::new();
             b.read_to_end(&mut content).unwrap();
@@ -92,16 +92,20 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     }
 }
 
-fn s3_client() -> S3Client {
-    let client = S3Client::new_with(
+fn s3_client() -> Option<S3Client> {
+    // If AWS keys aren't configured, then presume we should use the DB exclusively
+    // for file storage.
+    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() {
+        return None;
+    }
+    Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         EnvironmentProvider::default(),
         std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
             name: "us-west-1".to_owned(),
             endpoint: e,
         }).unwrap_or(Region::UsWest1),
-    );
-    client
+    ))
 }
 
 /// Adds files into database and returns list of files with their mime type in Json
@@ -118,7 +122,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
     for file_path in try!(get_file_list(&path)) {
-        let (path, mime) = {
+        let (path, content, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
             // documentation directory). We are skipping this files.
@@ -151,19 +155,33 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             };
 
-            client.put_object(PutObjectRequest {
-                acl: Some("public-read".into()),
-                bucket: "rust-docs-rs".into(),
-                key: bucket_path.clone(),
-                body: Some(content.clone().into()),
-                content_type: Some(mime.clone()),
-                ..Default::default()
-            }).sync().unwrap();
+            let content: Option<Vec<u8>> = if let Some(client) = &client {
+                let s3_res = client.put_object(PutObjectRequest {
+                    acl: Some("public-read".into()),
+                    bucket: "rust-docs-rs".into(),
+                    key: bucket_path.clone(),
+                    body: Some(content.clone().into()),
+                    content_type: Some(mime.clone()),
+                    ..Default::default()
+                }).sync();
+                match s3_res {
+                    // we've successfully uploaded the content, so steal it;
+                    // we don't want to put it in the DB
+                    Ok(_) => None,
+                    // Since s3 was configured, we want to panic on failure to upload.
+                    Err(e) => {
+                        panic!("failed to upload to {}: {:?}", bucket_path, e)
+                    },
+                }
+            } else {
+                Some(content.clone().into())
+            };
 
             file_list_with_mimes.push((mime.clone(), file_path.clone()));
 
             (
                 bucket_path,
+                content,
                 mime,
             )
         };
@@ -171,13 +189,15 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
         // check if file already exists in database
         let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
 
+        let content = content.unwrap_or_else(|| "in-s3".to_owned().into());
+
         if rows.get(0).get::<usize, i64>(0) == 0 {
             try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                             &[&path, &mime, &"in-s3".to_owned()]));
+                             &[&path, &mime, &content]));
         } else {
-            try!(trans.query("UPDATE files SET mime = $2, date_updated = NOW() \
+            try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
                               WHERE path = $1",
-                             &[&path, &mime]));
+                             &[&path, &mime, &content]));
         }
     }
 
