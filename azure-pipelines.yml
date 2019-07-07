@@ -28,7 +28,7 @@ jobs:
       displayName: 'Build docs.rs'
     - script: |
         export PATH=$PATH:$HOME/.cargo/bin
-        cargo test --verbose -- --test-threads=1
+        RUST_BACKTRACE=full cargo test --verbose -- --test-threads=1
       displayName: 'Test docs.rs'
 
 
