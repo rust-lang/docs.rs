@@ -34,7 +34,8 @@ schemamama_postgres = "0.2"
 rusoto_s3 = "0.40"
 rusoto_core = "0.40"
 rusoto_credential = "0.40"
-
+futures = "0.1"
+tokio = "0.1"
 
 # iron dependencies
 iron = "0.5"

@@ -109,6 +109,7 @@ pub fn main() {
         .subcommand(SubCommand::with_name("daemon").about("Starts cratesfyi daemon"))
         .subcommand(SubCommand::with_name("database")
             .about("Database operations")
+            .subcommand(SubCommand::with_name("move-to-s3"))
             .subcommand(SubCommand::with_name("migrate")
                 .about("Run database migrations")
                 .arg(Arg::with_name("VERSION")))
@@ -239,6 +240,9 @@ pub fn main() {
         } else if let Some(_) = matches.subcommand_matches("update-search-index") {
             let conn = db::connect_db().unwrap();
             db::update_search_index(&conn).expect("Failed to update search index");
+        } else if let Some(_) = matches.subcommand_matches("move-to-s3") {
+            let conn = db::connect_db().unwrap();
+            db::file::move_to_s3(&conn, 5_000).expect("Failed to update search index");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
