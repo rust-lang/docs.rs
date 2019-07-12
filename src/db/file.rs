@@ -160,7 +160,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
             let content: Option<Vec<u8>> = if let Some(client) = &client {
                 let s3_res = client.put_object(PutObjectRequest {
-                    acl: Some("public-read".into()),
                     bucket: "rust-docs-rs".into(),
                     key: bucket_path.clone(),
                     body: Some(content.clone().into()),
