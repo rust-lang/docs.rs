@@ -5,39 +5,15 @@ use time;
 use postgres::Connection;
 use iron::{Handler, Request, IronResult, Response, IronError};
 use iron::status;
+use crate::db;
 
 
-pub struct File {
-    pub path: String,
-    pub mime: String,
-    pub date_added: time::Timespec,
-    pub date_updated: time::Timespec,
-    pub content: Vec<u8>,
-}
-
+pub struct File(pub db::file::Blob);
 
 impl File {
     /// Gets file from database
     pub fn from_path(conn: &Connection, path: &str) -> Option<File> {
-
-        let rows = conn.query("SELECT path, mime, date_added, date_updated, content
-                               FROM files
-                               WHERE path = $1",
-                   &[&path])
-            .unwrap();
-
-        if rows.len() == 0 {
-            None
-        } else {
-            let row = rows.get(0);
-            Some(File {
-                path: row.get(0),
-                mime: row.get(1),
-                date_added: row.get(2),
-                date_updated: row.get(3),
-                content: row.get(4),
-            })
-        }
+        Some(File(db::file::get_path(conn, path)?))
     }
 
 
@@ -45,19 +21,19 @@ impl File {
     pub fn serve(self) -> Response {
         use iron::headers::{CacheControl, LastModified, CacheDirective, HttpDate, ContentType};
 
-        let mut response = Response::with((status::Ok, self.content));
+        let mut response = Response::with((status::Ok, self.0.content));
         let cache = vec![CacheDirective::Public,
                          CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32)];
-        response.headers.set(ContentType(self.mime.parse().unwrap()));
+        response.headers.set(ContentType(self.0.mime.parse().unwrap()));
         response.headers.set(CacheControl(cache));
-        response.headers.set(LastModified(HttpDate(time::at(self.date_updated))));
+        response.headers.set(LastModified(HttpDate(time::at(self.0.date_updated))));
         response
     }
 
 
     /// Checks if mime type of file is "application/x-empty"
     pub fn is_empty(&self) -> bool {
-        self.mime == "application/x-empty"
+        self.0.mime == "application/x-empty"
     }
 }
 

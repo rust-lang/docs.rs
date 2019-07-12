@@ -5,26 +5,20 @@
 //! filesystem. This module is adding files into database and retrieving them.
 
 
-use std::path::Path;
+use std::path::{PathBuf, Path};
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
-use std::fs::File;
+use std::fs;
 use std::io::Read;
 use error::Result;
 use failure::err_msg;
-
-
-fn file_path(prefix: &str, name: &str) -> String {
-    match prefix.is_empty() {
-        true => name.to_owned(),
-        false => format!("{}/{}", prefix, name),
-    }
-}
+use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
+use rusoto_core::region::Region;
+use rusoto_credential::EnvironmentProvider;
 
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
-                                          prefix: &str,
-                                          files: &mut Vec<String>)
+                                          files: &mut Vec<PathBuf>)
                                           -> Result<()> {
     let path = path.as_ref();
 
@@ -32,11 +26,9 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
         let file = try!(file);
 
         if try!(file.file_type()).is_file() {
-            file.file_name().to_str().map(|name| files.push(file_path(prefix, name)));
+            files.push(file.path());
         } else if try!(file.file_type()).is_dir() {
-            file.file_name()
-                .to_str()
-                .map(|name| get_file_list_from_dir(file.path(), &file_path(prefix, name), files));
+            try!(get_file_list_from_dir(file.path(), files));
         }
     }
 
@@ -44,23 +36,80 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 }
 
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
+pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
-    let mut files: Vec<String> = Vec::new();
+    let mut files = Vec::new();
 
     if !path.exists() {
         return Err(err_msg("File not found"));
     } else if path.is_file() {
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| files.push(format!("{}", name)));
+        files.push(PathBuf::from(path.file_name().unwrap()));
     } else if path.is_dir() {
-        try!(get_file_list_from_dir(path, "", &mut files));
+        try!(get_file_list_from_dir(path, &mut files));
+        for file_path in &mut files {
+            // We want the paths in this list to not be {path}/bar.txt but just bar.txt
+            *file_path = PathBuf::from(file_path.strip_prefix(path).unwrap());
+        }
     }
 
     Ok(files)
 }
 
+pub struct Blob {
+    pub path: String,
+    pub mime: String,
+    pub date_updated: time::Timespec,
+    pub content: Vec<u8>,
+}
+
+pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
+    let rows = conn.query("SELECT path, mime, date_updated, content
+                           FROM files
+                           WHERE path = $1", &[&path]).unwrap();
+
+    if rows.len() == 0 {
+        None
+    } else {
+        let row = rows.get(0);
+        let mut content = row.get(3);
+        if content == b"in-s3" {
+            let client = s3_client();
+            content = client.and_then(|c| c.get_object(GetObjectRequest {
+                bucket: "rust-docs-rs".into(),
+                key: path.into(),
+                ..Default::default()
+            }).sync().ok()).and_then(|r| r.body).map(|b| {
+                let mut b = b.into_blocking_read();
+                let mut content = Vec::new();
+                b.read_to_end(&mut content).unwrap();
+                content
+            }).unwrap();
+        };
+
+        Some(Blob {
+            path: row.get(0),
+            mime: row.get(1),
+            date_updated: row.get(2),
+            content,
+        })
+    }
+}
+
+fn s3_client() -> Option<S3Client> {
+    // If AWS keys aren't configured, then presume we should use the DB exclusively
+    // for file storage.
+    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() {
+        return None;
+    }
+    Some(S3Client::new_with(
+        rusoto_core::request::HttpClient::new().unwrap(),
+        EnvironmentProvider::default(),
+        std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
+            name: "us-west-1".to_owned(),
+            endpoint: e,
+        }).unwrap_or(Region::UsWest1),
+    ))
+}
 
 /// Adds files into database and returns list of files with their mime type in Json
 pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
@@ -72,20 +121,23 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     try!(cookie.load::<&str>(&[]));
 
     let trans = try!(conn.transaction());
+    let client = s3_client();
+    let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
-    let mut file_list_with_mimes: Vec<(String, String)> = Vec::new();
-
-    for file_path_str in try!(get_file_list(&path)) {
+    for file_path in try!(get_file_list(&path)) {
         let (path, content, mime) = {
-            let path = Path::new(path.as_ref()).join(&file_path_str);
+            let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
             // documentation directory). We are skipping this files.
-            let mut file = match File::open(path) {
+            let mut file = match fs::File::open(path) {
                 Ok(f) => f,
                 Err(_) => continue,
             };
             let mut content: Vec<u8> = Vec::new();
             try!(file.read_to_end(&mut content));
+            let bucket_path = Path::new(prefix).join(&file_path)
+                .into_os_string().into_string().unwrap();
+
             let mime = {
                 let mime = try!(cookie.buffer(&content));
                 // css's are causing some problem in browsers
@@ -93,9 +145,10 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 // convert them to text/css
                 // do the same for javascript files
                 if mime == "text/plain" {
-                    if file_path_str.ends_with(".css") {
+                    let e = file_path.extension().unwrap_or_default();
+                    if e == "css" {
                         "text/css".to_owned()
-                    } else if file_path_str.ends_with(".js") {
+                    } else if e == "js" {
                         "application/javascript".to_owned()
                     } else {
                         mime.to_owned()
@@ -105,13 +158,41 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             };
 
-            file_list_with_mimes.push((mime.clone(), file_path_str.clone()));
+            let content: Option<Vec<u8>> = if let Some(client) = &client {
+                let s3_res = client.put_object(PutObjectRequest {
+                    acl: Some("public-read".into()),
+                    bucket: "rust-docs-rs".into(),
+                    key: bucket_path.clone(),
+                    body: Some(content.clone().into()),
+                    content_type: Some(mime.clone()),
+                    ..Default::default()
+                }).sync();
+                match s3_res {
+                    // we've successfully uploaded the content, so steal it;
+                    // we don't want to put it in the DB
+                    Ok(_) => None,
+                    // Since s3 was configured, we want to panic on failure to upload.
+                    Err(e) => {
+                        panic!("failed to upload to {}: {:?}", bucket_path, e)
+                    },
+                }
+            } else {
+                Some(content.clone().into())
+            };
 
-            (file_path(prefix, &file_path_str), content, mime)
+            file_list_with_mimes.push((mime.clone(), file_path.clone()));
+
+            (
+                bucket_path,
+                content,
+                mime,
+            )
         };
 
         // check if file already exists in database
         let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
+
+        let content = content.unwrap_or_else(|| "in-s3".to_owned().into());
 
         if rows.get(0).get::<usize, i64>(0) == 0 {
             try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
@@ -130,14 +211,14 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
 
 
-fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
+fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
 
     let mut file_list_json: Vec<Json> = Vec::new();
 
     for file in file_list {
         let mut v: Vec<String> = Vec::new();
         v.push(file.0.clone());
-        v.push(file.1.clone());
+        v.push(file.1.into_os_string().into_string().unwrap());
         file_list_json.push(v.to_json());
     }
 
@@ -150,8 +231,7 @@ fn file_list_to_json(file_list: Vec<(String, String)>) -> Result<Json> {
 mod test {
     extern crate env_logger;
     use std::env;
-    use super::{get_file_list, add_path_into_database};
-    use super::super::connect_db;
+    use super::get_file_list;
 
     #[test]
     fn test_get_file_list() {
@@ -162,16 +242,6 @@ mod test {
         assert!(files.unwrap().len() > 0);
 
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
-        assert_eq!(files[0], "Cargo.toml");
-    }
-
-    #[test]
-    #[ignore]
-    fn test_add_path_into_database() {
-        let _ = env_logger::try_init();
-
-        let conn = connect_db().unwrap();
-        let res = add_path_into_database(&conn, "example", env::current_dir().unwrap().join("src"));
-        assert!(res.is_ok());
+        assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
 }

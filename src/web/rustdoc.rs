@@ -222,7 +222,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut content = RustdocPage::default();
 
-    let file_content = ctry!(String::from_utf8(file.content));
+    let file_content = ctry!(String::from_utf8(file.0.content));
 
     let (head, body, mut body_class) = ctry!(utils::extract_head_and_body(&file_content));
     content.head = head;

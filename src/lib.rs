@@ -31,6 +31,9 @@ extern crate toml;
 extern crate html5ever;
 extern crate schemamama;
 extern crate schemamama_postgres;
+extern crate rusoto_s3;
+extern crate rusoto_core;
+extern crate rusoto_credential;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;

@@ -12,7 +12,7 @@ use r2d2;
 use r2d2_postgres;
 
 mod add_package;
-mod file;
+pub mod file;
 mod migrate;
 
 

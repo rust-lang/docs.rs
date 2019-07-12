@@ -476,7 +476,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
                 use iron::headers::{Expires, HttpDate};
-                use time;
                 resp.headers.set(Expires(HttpDate(time::now())));
                 return Ok(resp);
             }
@@ -515,7 +514,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 let mut resp = Response::with((status::Found, Redirect(url)));
 
                 use iron::headers::{Expires, HttpDate};
-                use time;
                 resp.headers.set(Expires(HttpDate(time::now())));
                 return Ok(resp);
             }
