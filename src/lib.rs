@@ -26,7 +26,6 @@ extern crate params;
 extern crate libc;
 extern crate badge;
 extern crate crates_index_diff;
-extern crate git2;
 extern crate toml;
 extern crate html5ever;
 extern crate schemamama;
