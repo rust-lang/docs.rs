@@ -70,18 +70,21 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     if rows.len() == 0 {
         None
     } else {
-        let client = s3_client();
         let row = rows.get(0);
-        let content = client.and_then(|c| c.get_object(GetObjectRequest {
-            bucket: "rust-docs-rs".into(),
-            key: path.into(),
-            ..Default::default()
-        }).sync().ok()).and_then(|r| r.body).map(|b| {
-            let mut b = b.into_blocking_read();
-            let mut content = Vec::new();
-            b.read_to_end(&mut content).unwrap();
-            content
-        }).unwrap_or(row.get(3));
+        let mut content = row.get(3);
+        if content == b"in-s3" {
+            let client = s3_client();
+            content = client.and_then(|c| c.get_object(GetObjectRequest {
+                bucket: "rust-docs-rs".into(),
+                key: path.into(),
+                ..Default::default()
+            }).sync().ok()).and_then(|r| r.body).map(|b| {
+                let mut b = b.into_blocking_read();
+                let mut content = Vec::new();
+                b.read_to_end(&mut content).unwrap();
+                content
+            }).unwrap();
+        };
 
         Some(Blob {
             path: row.get(0),
