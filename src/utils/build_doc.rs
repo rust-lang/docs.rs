@@ -121,13 +121,13 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     };
 
     let ws = try!(Workspace::ephemeral(pkg, &config, Some(Filesystem::new(target_dir)), false));
-    let exec: Arc<Executor> = Arc::new(DefaultExecutor);
+    let exec: Arc<dyn Executor> = Arc::new(DefaultExecutor);
     try!(ops::compile_ws(&ws, &opts, &exec));
 
     Ok(try!(ws.current()).clone())
 }
 
-fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<Source + 'cfg>)
+fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source + 'cfg>)
     -> CargoResult<Vec<(String, Package)>>
 {
     let mut registry = try!(PackageRegistry::new(config));

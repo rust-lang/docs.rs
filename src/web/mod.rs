@@ -69,10 +69,10 @@ const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 
 struct CratesfyiHandler {
-    shared_resource_handler: Box<Handler>,
-    router_handler: Box<Handler>,
-    database_file_handler: Box<Handler>,
-    static_handler: Box<Handler>,
+    shared_resource_handler: Box<dyn Handler>,
+    router_handler: Box<dyn Handler>,
+    database_file_handler: Box<dyn Handler>,
+    static_handler: Box<dyn Handler>,
 }
 
 

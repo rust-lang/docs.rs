@@ -52,7 +52,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
 
     let mut migrator = Migrator::new(adapter);
 
-    let migrations: Vec<Box<PostgresMigration>> = vec![
+    let migrations: Vec<Box<dyn PostgresMigration>> = vec![
         migration!(
             // version
             1,
