@@ -242,7 +242,16 @@ pub fn main() {
             db::update_search_index(&conn).expect("Failed to update search index");
         } else if let Some(_) = matches.subcommand_matches("move-to-s3") {
             let conn = db::connect_db().unwrap();
-            db::file::move_to_s3(&conn, 5_000).expect("Failed to update search index");
+            let mut count = 1;
+            let mut total = 0;
+            while count != 0 {
+                count = db::file::move_to_s3(&conn, 5_000).expect("Failed to upload batch to S3");
+                total += count;
+                eprintln!(
+                    "moved {} rows to s3 in this batch, total moved so far: {}",
+                    count, total
+                );
+            }
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));

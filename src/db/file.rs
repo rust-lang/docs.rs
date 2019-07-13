@@ -224,13 +224,14 @@ fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
     Ok(file_list_json.to_json())
 }
 
-pub fn move_to_s3(conn: &Connection, n: usize) -> Result<()> {
+pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
     let trans = try!(conn.transaction());
     let client = s3_client().expect("configured s3");
 
     let rows = try!(trans.query(
             &format!("SELECT path, mime, content FROM files WHERE content != E'in-s3' LIMIT {}", n),
             &[]));
+    let count = rows.len();
 
     let mut rt = ::tokio::runtime::current_thread::Runtime::new().unwrap();
     let mut futures = Vec::new();
@@ -268,7 +269,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<()> {
 
     try!(trans.commit());
 
-    Ok(())
+    Ok(count)
 }
 
 #[cfg(test)]
