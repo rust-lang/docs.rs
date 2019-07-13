@@ -426,7 +426,6 @@ dependencies = [
  "env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
- "git2 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "handlebars-iron 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "html5ever 0.22.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",

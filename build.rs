@@ -1,14 +1,12 @@
 
 extern crate time;
 extern crate sass_rs;
-extern crate git2;
 
 use std::env;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
-use git2::Repository;
-
+use std::process::Command;
 
 fn main() {
     write_git_version();
@@ -26,16 +24,13 @@ fn write_git_version() {
 
 
 fn get_git_hash() -> Option<String> {
-    let repo = match Repository::open(env::current_dir().unwrap()) {
-        Ok(repo) => repo,
-        Err(_) => return None,
-    };
-    let head = repo.head().unwrap();
-    head.target().map(|h| {
-        let mut h = format!("{}", h);
-        h.truncate(7);
-        h
-    })
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("--short=7")
+        .arg("HEAD")
+        .output()
+        .ok()?;
+    Some(String::from_utf8(output.stdout).ok()?)
 }
 
 

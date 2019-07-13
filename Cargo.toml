@@ -53,7 +53,6 @@ tempdir = "0.3"
 
 [build-dependencies]
 time = "0.1"
-git2 = "0.9"
 sass-rs = "0.2"
 
 [[bin]]
