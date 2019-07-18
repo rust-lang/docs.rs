@@ -121,7 +121,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     try!(cookie.load::<&str>(&[]));
 
     let trans = try!(conn.transaction());
-    let client = s3_client();
+    let mut client = s3_client();
     let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
     for file_path in try!(get_file_list(&path)) {
@@ -158,22 +158,35 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             };
 
-            let content: Option<Vec<u8>> = if let Some(client) = &client {
-                let s3_res = client.put_object(PutObjectRequest {
-                    bucket: "rust-docs-rs".into(),
-                    key: bucket_path.clone(),
-                    body: Some(content.clone().into()),
-                    content_type: Some(mime.clone()),
-                    ..Default::default()
-                }).sync();
-                match s3_res {
-                    // we've successfully uploaded the content, so steal it;
-                    // we don't want to put it in the DB
-                    Ok(_) => None,
-                    // Since s3 was configured, we want to panic on failure to upload.
-                    Err(e) => {
-                        panic!("failed to upload to {}: {:?}", bucket_path, e)
-                    },
+            let content: Option<Vec<u8>> = if let Some(client) = &mut client {
+                let mut attempts = 0;
+                loop {
+                    let s3_res = client.put_object(PutObjectRequest {
+                        bucket: "rust-docs-rs".into(),
+                        key: bucket_path.clone(),
+                        body: Some(content.clone().into()),
+                        content_type: Some(mime.clone()),
+                        ..Default::default()
+                    }).sync();
+                    attempts += 1;
+                    match s3_res {
+                        // we've successfully uploaded the content, so steal it;
+                        // we don't want to put it in the DB
+                        Ok(_) => break None,
+                        // Since s3 was configured, we want to panic on failure to upload.
+                        Err(e) => {
+                            log::error!("failed to upload to {}: {:?}", bucket_path, e);
+                            // Get a new client, in case the old one's connection is stale.
+                            // AWS will kill our connection if it's alive for too long; this avoids
+                            // that preventing us from building the crate entirely.
+                            *client = s3_client().unwrap();
+                            if attempts > 3 {
+                                panic!("failed to upload 3 times, exiting");
+                            } else {
+                                continue;
+                            }
+                        },
+                    }
                 }
             } else {
                 Some(content.clone().into())
