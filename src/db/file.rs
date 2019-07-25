@@ -63,35 +63,53 @@ pub struct Blob {
 }
 
 pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
-    let rows = conn.query("SELECT path, mime, date_updated, content
-                           FROM files
-                           WHERE path = $1", &[&path]).unwrap();
+    if let Some(client) = s3_client() {
+        let res = client.get_object(GetObjectRequest {
+            bucket: "rust-docs-rs".into(),
+            key: path.into(),
+            ..Default::default()
+        }).sync();
 
-    if rows.len() == 0 {
-        None
-    } else {
-        let row = rows.get(0);
-        let mut content = row.get(3);
-        if content == b"in-s3" {
-            let client = s3_client();
-            content = client.and_then(|c| c.get_object(GetObjectRequest {
-                bucket: "rust-docs-rs".into(),
-                key: path.into(),
-                ..Default::default()
-            }).sync().ok()).and_then(|r| r.body).map(|b| {
-                let mut b = b.into_blocking_read();
-                let mut content = Vec::new();
-                b.read_to_end(&mut content).unwrap();
-                content
-            }).unwrap();
+        let res = match res {
+            Ok(r) => r,
+            Err(err) => {
+                debug!("error fetching {}: {:?}", path, err);
+                return None;
+            }
         };
 
+        let mut b = res.body.unwrap().into_blocking_read();
+        let mut content = Vec::new();
+        b.read_to_end(&mut content).unwrap();
+
+        let last_modified = res.last_modified.unwrap();
+        let last_modified = time::strptime(&last_modified, "%a, %d %b %Y %H:%M:%S %Z")
+            .unwrap_or_else(|e| panic!("failed to parse {:?} as timespec: {:?}", last_modified, e))
+            .to_timespec();
+
         Some(Blob {
-            path: row.get(0),
-            mime: row.get(1),
-            date_updated: row.get(2),
+            path: path.into(),
+            mime: res.content_type.unwrap(),
+            date_updated: last_modified,
             content,
         })
+    } else {
+        let rows = conn.query("SELECT path, mime, date_updated, content
+                            FROM files
+                            WHERE path = $1", &[&path]).unwrap();
+
+        if rows.len() == 0 {
+            None
+        } else {
+            let row = rows.get(0);
+
+            Some(Blob {
+                path: row.get(0),
+                mime: row.get(1),
+                date_updated: row.get(2),
+                content: row.get(3),
+            })
+        }
     }
 }
 
@@ -201,18 +219,21 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             )
         };
 
-        // check if file already exists in database
-        let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
+        // If AWS credentials are configured, don't insert/update the database
+        if client.is_none() {
+            // check if file already exists in database
+            let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
 
-        let content = content.unwrap_or_else(|| "in-s3".to_owned().into());
+            let content = content.expect("content never None if client is None");
 
-        if rows.get(0).get::<usize, i64>(0) == 0 {
-            try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                             &[&path, &mime, &content]));
-        } else {
-            try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
-                              WHERE path = $1",
-                             &[&path, &mime, &content]));
+            if rows.get(0).get::<usize, i64>(0) == 0 {
+                try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                                &[&path, &mime, &content]));
+            } else {
+                try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+                                WHERE path = $1",
+                                &[&path, &mime, &content]));
+            }
         }
     }
 
@@ -269,8 +290,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
     use ::futures::future::Future;
     match rt.block_on(::futures::future::join_all(futures)) {
         Ok(paths) => {
-            let statement = trans.prepare("UPDATE files SET content = E'in-s3' WHERE path = $1")
-                .unwrap();
+            let statement = trans.prepare("DELETE FROM files WHERE path = $1").unwrap();
             for path in paths {
                 statement.execute(&[&path]).unwrap();
             }

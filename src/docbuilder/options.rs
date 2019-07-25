@@ -37,7 +37,7 @@ impl Default for DocBuilderOptions {
             crates_io_index_path: crates_io_index_path,
 
             chroot_user: "cratesfyi".to_string(),
-            container_name: "cratesfyi-container".to_string(),
+            container_name: env::var("CRATESFYI_CONTAINER_NAME").expect("CRATESFYI_CONTAINER_NAME"),
 
             keep_build_directory: false,
             skip_if_exists: false,
@@ -104,9 +104,9 @@ impl DocBuilderOptions {
 
 
 fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
-
+    let name = env::var_os("CRATESFYI_CONTAINER_NAME").expect("CRATESFYI_CONTAINER_NAME");
     let destination = PathBuf::from(&prefix).join("documentations");
-    let chroot_path = PathBuf::from(&prefix).join("cratesfyi-container/rootfs");
+    let chroot_path = PathBuf::from(&prefix).join(&name).join("rootfs");
     let crates_io_index_path = PathBuf::from(&prefix).join("crates.io-index");
 
     (prefix, destination, chroot_path, crates_io_index_path)
