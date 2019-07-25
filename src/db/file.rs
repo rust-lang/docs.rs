@@ -73,7 +73,6 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
         let res = match res {
             Ok(r) => r,
             Err(err) => {
-                debug!("error fetching {}: {:?}", path, err);
                 return None;
             }
         };
