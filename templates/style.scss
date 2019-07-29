@@ -93,7 +93,6 @@ div.rustdoc {
     left: 0;
     right: 0;
     top: $top-navbar-height;
-    overflow-y: auto;
     max-height: calc(100vh - #{$top-navbar-height});
 }
 
