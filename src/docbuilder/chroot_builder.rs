@@ -8,12 +8,14 @@ use db::{connect_db, add_package_into_database, add_build_into_database, add_pat
 use cargo::core::Package;
 use cargo::util::CargoResultExt;
 use std::process::Command;
-use std::path::PathBuf;
-use std::fs::remove_dir_all;
+use std::path::{Path, PathBuf};
+use std::fs::{self, remove_dir_all};
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use error::Result;
+use systemstat::{Platform, Filesystem, System};
 
+const MAX_DISK_USAGE: f32 = 80.0;
 
 /// List of targets supported by docs.rs
 const TARGETS: [&'static str; 6] = [
@@ -237,6 +239,20 @@ impl DocBuilder {
                 .join("doc");
             let _ = remove_dir_all(crate_doc_path);
         }
+
+        let crate_build_path = PathBuf::from(&self.options.chroot_path)
+            .join("home")
+            .join(&self.options.chroot_user)
+            .join("cratesfyi");
+        let fs = mount_for_path(&crate_build_path);
+        let disk_usage = 100.0 - 100.0 * (fs.free.as_usize() as f32 / fs.total.as_usize() as f32);
+        if disk_usage >= MAX_DISK_USAGE {
+            info!("Cleaning target directory, disk usage {:.2} exceeded {:.2}",
+                disk_usage, MAX_DISK_USAGE);
+            let _ = remove_dir_all(&crate_build_path);
+            let _ = fs::create_dir_all(&crate_build_path);
+        }
+
         Ok(())
     }
 
@@ -464,6 +480,24 @@ fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
 {
     crates_from_path(&path, &mut func)
+}
+
+fn mount_for_path(path: &Path) -> Filesystem {
+    let system = System::new();
+
+    let mut found = None;
+    let mut found_pos = std::usize::MAX;
+    for mount in system.mounts().expect("get all mounts").into_iter() {
+        let mount_path = Path::new(&mount.fs_mounted_on);
+        for (i, ancestor) in path.ancestors().enumerate() {
+            if ancestor == mount_path && i < found_pos {
+                found_pos = i;
+                found = Some(mount);
+                break;
+            }
+        }
+    }
+    found.expect("on a disk mount")
 }
 
 

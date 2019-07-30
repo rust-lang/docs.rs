@@ -36,6 +36,7 @@ rusoto_core = "0.40"
 rusoto_credential = "0.40"
 futures = "0.1"
 tokio = "0.1"
+systemstat = "0.1.4"
 
 # iron dependencies
 iron = "0.5"
