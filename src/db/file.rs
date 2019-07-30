@@ -266,7 +266,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
             &[]));
     let count = rows.len();
 
-    let mut rt = ::tokio::runtime::current_thread::Runtime::new().unwrap();
+    let mut rt = ::tokio::runtime::Runtime::new().unwrap();
     let mut futures = Vec::new();
     for row in &rows {
         let path: String = row.get(0);
