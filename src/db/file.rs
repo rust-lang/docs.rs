@@ -14,7 +14,7 @@ use error::Result;
 use failure::err_msg;
 use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;
-use rusoto_credential::EnvironmentProvider;
+use rusoto_credential::DefaultCredentialsProvider;
 
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
@@ -115,12 +115,19 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
 fn s3_client() -> Option<S3Client> {
     // If AWS keys aren't configured, then presume we should use the DB exclusively
     // for file storage.
-    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() {
+    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
         return None;
     }
+    let creds = match DefaultCredentialsProvider::new() {
+        Ok(creds) => creds,
+        Err(err) => {
+            warn!("failed to retrieve AWS credentials: {}", err);
+            return None;
+        }
+    };
     Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
-        EnvironmentProvider::default(),
+        creds,
         std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
             name: "us-west-1".to_owned(),
             endpoint: e,
