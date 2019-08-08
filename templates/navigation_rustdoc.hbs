@@ -3,7 +3,7 @@
         <div class="pure-menu pure-menu-horizontal">
           <form action="/releases/search" method="GET" class="landing-search-form-nav">
             {{#unless varsb.show_search_form}}
-            <input class="search-input-nav" name="query" tabindex="-1" type="text" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
+            <input class="search-input-nav" name="query" aria-label="Find crate by search query" tabindex="-1" type="text" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
             {{/unless}}
             <a href="/" class="pure-menu-heading pure-menu-link"><i class="fa fa-cubes fa-fw"></i><span class="title"> Docs.rs</span></a>
           {{#with content.crate_details}}
@@ -93,7 +93,7 @@
               <a href="/crate/{{name}}/{{version}}/source/" title="Browse source of {{name}}-{{version}}" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a>
             </li>
             <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-              <a href="#" class="pure-menu-link"><i class="fa fa-fw fa-gears"></i><span class="title"> Platform</span></a>
+              <a href="#" class="pure-menu-link" aria-label="Platform"><i class="fa fa-fw fa-gears"></i><span class="title"> Platform</span></a>
               <ul class="pure-menu-children">
                 {{#each doc_targets}}
                 <li class="pure-menu-item"><a href="/{{../../content.crate_details.name}}/{{../../content.crate_details.version}}/{{this}}/{{../../content.crate_details.target_name}}/" class="pure-menu-link">{{this}}</a></li>
