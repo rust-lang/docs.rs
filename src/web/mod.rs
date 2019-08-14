@@ -592,4 +592,16 @@ mod test {
         assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
         assert_eq!(latest_version(&versions, "invalidversion"), None);
     }
+    
+    #[test]
+    fn test_latest_version_yanked() {
+        let versions = vec!["0.3.0-docs-yank.2".to_string(),
+                            "0.3.0-docs-yank".to_string(),
+                            "0.2.0".to_string(),
+                            "0.1.0".to_string()];
+        assert_eq!(latest_version(&versions, "0.3.0-docs-yank.2"), Some("0.2.0".to_owned()));
+        assert_eq!(latest_version(&versions, "0.3.0-docs-yank"), Some("0.2.0".to_owned()));
+        assert_eq!(latest_version(&versions, "0.2.0"), None);
+        assert_eq!(latest_version(&versions, "0.1.0"), Some("0.2.0".to_owned()));
+    }
 }
