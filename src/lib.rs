@@ -40,6 +40,7 @@ extern crate rusoto_credential;
 extern crate futures;
 extern crate tokio;
 extern crate systemstat;
+extern crate rustwide;
 
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::ChrootBuilderResult;

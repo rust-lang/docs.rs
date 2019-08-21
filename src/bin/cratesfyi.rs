@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, DocBuilderOptions, db};
-use cratesfyi::utils::{build_doc, add_crate_to_queue};
+use cratesfyi::utils::{build_doc, build_doc_rustwide, add_crate_to_queue};
 use cratesfyi::start_web_server;
 use cratesfyi::db::{add_path_into_database, connect_db};
 
@@ -32,6 +32,20 @@ pub fn main() {
             .arg(Arg::with_name("CRATE_VERSION")
                 .index(2)
                 .required(false)
+                .help("Crate version"))
+            .arg(Arg::with_name("TARGET")
+                .index(3)
+                .required(false)
+                .help("The target platform to compile for")))
+        .subcommand(SubCommand::with_name("doc_rustwide")
+            .about("Builds documentation of a crate with rustwide")
+            .arg(Arg::with_name("CRATE_NAME")
+                .index(1)
+                .required(true)
+                .help("Crate name"))
+            .arg(Arg::with_name("CRATE_VERSION")
+                .index(2)
+                .required(true)
                 .help("Crate version"))
             .arg(Arg::with_name("TARGET")
                 .index(3)
@@ -158,6 +172,13 @@ pub fn main() {
         let version = matches.value_of("CRATE_VERSION");
         let target = matches.value_of("TARGET");
         if let Err(e) = build_doc(name, version, target) {
+            panic!("{:#?}", e);
+        }
+    } else if let Some(matches) = matches.subcommand_matches("doc_rustwide") {
+        let name = matches.value_of("CRATE_NAME").unwrap();
+        let version = matches.value_of("CRATE_VERSION").unwrap();
+        let target = matches.value_of("TARGET");
+        if let Err(e) = build_doc_rustwide(name, version, target) {
             panic!("{:#?}", e);
         }
     } else if let Some(matches) = matches.subcommand_matches("build") {

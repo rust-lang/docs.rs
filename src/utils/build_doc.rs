@@ -127,7 +127,7 @@ pub fn build_doc(name: &str, vers: Option<&str>, target: Option<&str>) -> Result
     Ok(try!(ws.current()).clone())
 }
 
-fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source + 'cfg>)
+pub fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source + 'cfg>)
     -> CargoResult<Vec<(String, Package)>>
 {
     let mut registry = try!(PackageRegistry::new(config));
