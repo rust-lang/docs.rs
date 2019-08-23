@@ -101,6 +101,7 @@ impl CratesfyiHandler {
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
+        router.get("/std", rustdoc::std_redirector_handler, "std");
         router.get("/releases", releases::recent_releases_handler, "releases");
         router.get("/releases/feed",
                    releases::releases_feed_handler,

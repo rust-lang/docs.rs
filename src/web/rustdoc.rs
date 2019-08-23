@@ -66,6 +66,12 @@ impl ToJson for RustdocPage {
 }
 
 
+/// Handler called for the `/std`. Redirects to the official standard library docs.
+pub fn std_redirector_handler(_req: &mut Request) -> IronResult<Response> {
+    let url = Url::parse("https://doc.rust-lang.org/std/").unwrap();
+    Ok(Response::with((status::Found, Redirect(url))))
+}
+
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
