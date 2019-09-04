@@ -163,6 +163,7 @@ pub fn get_package(name: &str, vers: Option<&str>) -> CargoResult<Package> {
     let config = try!(Config::default());
     let source_id = try!(SourceId::crates_io(&config));
 
+    let _lock = try!(config.acquire_package_cache_lock());
     let source_map = try!(SourceConfigMap::new(&config));
     let mut source = try!(source_map.load(source_id, &HashSet::new()));
 
