@@ -135,7 +135,7 @@ fn resolve_deps<'cfg>(pkg: &Package, config: &'cfg Config, src: Box<dyn Source +
     registry.lock_patches();
 
     let resolver = try!(resolver::resolve(
-        &[(pkg.summary().clone(), resolver::Method::Everything)],
+        &[(pkg.summary().clone(), resolver::ResolveOpts::everything())],
         pkg.manifest().replace(),
         &mut registry,
         &Default::default(),
