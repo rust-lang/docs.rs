@@ -44,6 +44,7 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
+mod metrics;
 
 use std::{env, fmt};
 use std::error::Error;
@@ -98,6 +99,7 @@ impl CratesfyiHandler {
         router.get("/", releases::home_page, "index");
         router.get("/style.css", style_css_handler, "style_css");
         router.get("/about", sitemap::about_handler, "about");
+        router.get("/about/metrics", metrics::metrics_handler, "metrics");
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");

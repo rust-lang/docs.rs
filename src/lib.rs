@@ -5,6 +5,10 @@
 extern crate log;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate prometheus;
+#[macro_use]
+extern crate lazy_static;
 extern crate cargo;
 extern crate regex;
 extern crate rustc_serialize;
