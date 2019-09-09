@@ -1,6 +1,7 @@
 use super::pool::Pool;
 use iron::headers::ContentType;
 use iron::prelude::*;
+use iron::status::Status;
 use prometheus::{Encoder, IntGauge, TextEncoder};
 
 lazy_static! {
@@ -35,6 +36,7 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     ctry!(TextEncoder::new().encode(&families, &mut buffer));
 
     let mut resp = Response::with(buffer);
+    resp.status = Some(Status::Ok);
     resp.headers
         .set(ContentType("text/plain; version=0.0.4".parse().unwrap()));
     Ok(resp)
