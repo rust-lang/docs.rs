@@ -483,6 +483,7 @@ fn crates<F>(path: PathBuf, mut func: F) -> Result<()>
 }
 
 fn mount_for_path(path: &Path) -> Filesystem {
+    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
     let system = System::new();
 
     let mut found = None;
