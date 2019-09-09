@@ -37,6 +37,8 @@ rusoto_credential = "0.40"
 futures = "0.1"
 tokio = "0.1"
 systemstat = "0.1.4"
+prometheus = { version = "0.7.0", default-features = false }
+lazy_static = "1.0.0"
 
 # iron dependencies
 iron = "0.5"
