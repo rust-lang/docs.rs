@@ -1,11 +1,14 @@
-use cargo::core::{enable_nightly_features, Package, SourceId, Workspace};
+use cargo::core::{enable_nightly_features, Package, SourceId, Workspace as CargoWorkspace};
 use cargo::sources::SourceConfigMap;
 use cargo::util::{internal, Config};
 use error::Result;
-use rustwide::{cmd::SandboxBuilder, Crate, Toolchain, WorkspaceBuilder};
+use rustwide::{
+    cmd::{Command, SandboxBuilder},
+    Crate, Toolchain, Workspace, WorkspaceBuilder,
+};
 use std::collections::HashSet;
 use std::path::Path;
-use utils::{get_current_versions, parse_rustc_version, resolve_deps};
+use utils::{parse_rustc_version, resolve_deps};
 use Metadata;
 
 pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Result<Package> {
@@ -36,7 +39,7 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
         let source_id = try!(SourceId::crates_io(&config));
         let source_cfg_map = try!(SourceConfigMap::new(&config));
         let manifest_path = build.host_source_dir().join("Cargo.toml");
-        let ws = Workspace::new(&manifest_path, &config)?;
+        let ws = CargoWorkspace::new(&manifest_path, &config)?;
         let pkg = ws.load(&manifest_path)?;
 
         let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.to_string()))?;
@@ -45,9 +48,10 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
             "-Z".to_string(),
             "unstable-options".to_string(),
             "--resource-suffix".to_string(),
-            // FIXME: We need to get rustc version inside of container.
-            //        Our get_current_versions gets rustc version from host system not container.
-            format!("-{}", parse_rustc_version(get_current_versions()?.0)?),
+            format!(
+                "-{}",
+                parse_rustc_version(rustc_version(&rustwide_workspace, &toolchain)?)?
+            ),
             "--static-root-path".to_string(),
             "/".to_string(),
             "--disable-per-crate-search".to_string(),
@@ -98,4 +102,19 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
     })?;
 
     Ok(pkg)
+}
+
+fn rustc_version(workspace: &Workspace, toolchain: &Toolchain) -> Result<String> {
+    let res = Command::new(workspace, toolchain.rustc())
+        .args(&["--version"])
+        .log_output(false)
+        .run_capture()?;
+
+    if let Some(line) = res.stdout_lines().iter().next() {
+        Ok(line.clone())
+    } else {
+        Err(::failure::err_msg(
+            "invalid output returned by `rustc --version`",
+        ))
+    }
 }
