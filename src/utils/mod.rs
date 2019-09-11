@@ -11,6 +11,7 @@ pub use self::rustc_version::{parse_rustc_version, get_current_versions, command
 pub use self::html::extract_head_and_body;
 pub use self::queue::add_crate_to_queue;
 
+mod cargo_metadata;
 mod github_updater;
 mod build_doc;
 mod build_doc_rustwide;

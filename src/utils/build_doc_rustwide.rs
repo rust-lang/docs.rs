@@ -1,21 +1,24 @@
-use cargo::core::{enable_nightly_features, Package, SourceId, Workspace as CargoWorkspace};
-use cargo::sources::SourceConfigMap;
+use cargo::core::{enable_nightly_features, Workspace as CargoWorkspace};
 use cargo::util::{internal, Config};
 use error::Result;
 use rustwide::{
     cmd::{Command, SandboxBuilder},
     Crate, Toolchain, Workspace, WorkspaceBuilder,
 };
-use std::collections::HashSet;
 use std::path::Path;
-use utils::{parse_rustc_version, resolve_deps};
+use utils::cargo_metadata::CargoMetadata;
+use utils::parse_rustc_version;
 use Metadata;
 
 // TODO: 1GB might not be enough
 const SANDBOX_MEMORY_LIMIT: usize = 1024 * 1025 * 1024; // 1GB
 const SANDBOX_NETWORKING: bool = false;
 
-pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Result<Package> {
+pub fn build_doc_rustwide(
+    name: &str,
+    version: &str,
+    target: Option<&str>,
+) -> Result<BuildDocOutput> {
     // TODO: Handle workspace path correctly
     let rustwide_workspace =
         WorkspaceBuilder::new(Path::new("/tmp/docs-builder"), "docsrs").init()?;
@@ -41,13 +44,14 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
     let pkg = build_dir.build(&toolchain, &krate, sandbox, |build| {
         enable_nightly_features();
         let config = Config::default()?;
-        let source_id = try!(SourceId::crates_io(&config));
-        let source_cfg_map = try!(SourceConfigMap::new(&config));
         let manifest_path = build.host_source_dir().join("Cargo.toml");
         let ws = CargoWorkspace::new(&manifest_path, &config)?;
         let pkg = ws.load(&manifest_path)?;
 
         let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.to_string()))?;
+
+        let cargo_metadata =
+            CargoMetadata::load(&rustwide_workspace, &toolchain, &build.host_source_dir())?;
 
         let mut rustdoc_flags: Vec<String> = vec![
             "-Z".to_string(),
@@ -62,14 +66,11 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
             "--disable-per-crate-search".to_string(),
         ];
 
-        let source = try!(source_cfg_map.load(source_id, &HashSet::new()));
-        let _lock = try!(config.acquire_package_cache_lock());
-
-        for (name, dep) in try!(resolve_deps(&pkg, &config, source)) {
+        for dep in &cargo_metadata.root_dependencies() {
             rustdoc_flags.push("--extern-html-root-url".to_string());
             rustdoc_flags.push(format!(
                 "{}=https://docs.rs/{}/{}",
-                name.replace("-", "_"),
+                dep.name().replace("-", "_"),
                 dep.name(),
                 dep.version()
             ));
@@ -107,10 +108,22 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
             .run();
 
         // TODO: We need to return build result as well
-        Ok(pkg)
+        Ok(BuildDocOutput {
+            package_version: cargo_metadata.root().version().to_string(),
+        })
     })?;
 
     Ok(pkg)
+}
+
+pub struct BuildDocOutput {
+    package_version: String,
+}
+
+impl BuildDocOutput {
+    pub fn package_version(&self) -> &str {
+        &self.package_version
+    }
 }
 
 fn rustc_version(workspace: &Workspace, toolchain: &Toolchain) -> Result<String> {
@@ -119,7 +132,8 @@ fn rustc_version(workspace: &Workspace, toolchain: &Toolchain) -> Result<String>
         .log_output(false)
         .run_capture()?;
 
-    if let Some(line) = res.stdout_lines().iter().next() {
+    let mut iter = res.stdout_lines().iter();
+    if let (Some(line), None) = (iter.next(), iter.next()) {
         Ok(line.clone())
     } else {
         Err(::failure::err_msg(
