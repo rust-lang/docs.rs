@@ -26,6 +26,9 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
         name: "nightly".into(),
     };
     toolchain.install(&rustwide_workspace)?;
+    if let Some(target) = target {
+        toolchain.add_target(&rustwide_workspace, target)?;
+    }
 
     let krate = Crate::crates_io(name, version);
     krate.fetch(&rustwide_workspace)?;
@@ -82,6 +85,10 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
         }
         if metadata.no_default_features {
             cargo_args.push("--no-default-features".to_owned());
+        }
+        if let Some(target) = target {
+            cargo_args.push("--target".into());
+            cargo_args.push(target.into());
         }
 
         // TODO: We need to use build result here
