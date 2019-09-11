@@ -11,6 +11,10 @@ use std::path::Path;
 use utils::{parse_rustc_version, resolve_deps};
 use Metadata;
 
+// TODO: 1GB might not be enough
+const SANDBOX_MEMORY_LIMIT: usize = 1024 * 1025 * 1024; // 1GB
+const SANDBOX_NETWORKING: bool = false;
+
 pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Result<Package> {
     // TODO: Handle workspace path correctly
     let rustwide_workspace =
@@ -26,11 +30,9 @@ pub fn build_doc_rustwide(name: &str, version: &str, target: Option<&str>) -> Re
     let krate = Crate::crates_io(name, version);
     krate.fetch(&rustwide_workspace)?;
 
-    // Configure a sandbox with 1GB of RAM and no network access
-    // TODO: 1GB might not be enough
     let sandbox = SandboxBuilder::new()
-        .memory_limit(Some(1024 * 1024 * 1024))
-        .enable_networking(false);
+        .memory_limit(Some(SANDBOX_MEMORY_LIMIT))
+        .enable_networking(SANDBOX_NETWORKING);
 
     let mut build_dir = rustwide_workspace.build_dir(&format!("{}-{}", name, version));
     let pkg = build_dir.build(&toolchain, &krate, sandbox, |build| {
