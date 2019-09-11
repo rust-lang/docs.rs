@@ -1,6 +1,8 @@
 use error::Result;
+use log::LevelFilter;
 use rustwide::{
     cmd::{Command, SandboxBuilder},
+    logging::{self, LogStorage},
     Crate, Toolchain, Workspace, WorkspaceBuilder,
 };
 use std::path::Path;
@@ -9,8 +11,10 @@ use utils::parse_rustc_version;
 use Metadata;
 
 // TODO: 1GB might not be enough
-const SANDBOX_MEMORY_LIMIT: usize = 1024 * 1025 * 1024; // 1GB
+const SANDBOX_MEMORY_LIMIT: usize = 1024 * 1024 * 1024; // 1GB
 const SANDBOX_NETWORKING: bool = false;
+const SANDBOX_MAX_LOG_SIZE: usize = 1024 * 1024; // 1MB
+const SANDBOX_MAX_LOG_LINES: usize = 10_000;
 
 pub fn build_doc_rustwide(
     name: &str,
@@ -81,24 +85,29 @@ pub fn build_doc_rustwide(
             cargo_args.push(target.into());
         }
 
-        // TODO: We need to use build result here
-        // FIXME: We also need build log (basically stderr message)
-        let result = build
-            .cargo()
-            .env(
-                "RUSTFLAGS",
-                metadata
-                    .rustc_args
-                    .map(|args| args.join(""))
-                    .unwrap_or("".to_owned()),
-            )
-            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
-            .args(&cargo_args)
-            .run();
+        let mut storage = LogStorage::new(LevelFilter::Info);
+        storage.set_max_size(SANDBOX_MAX_LOG_SIZE);
+        storage.set_max_lines(SANDBOX_MAX_LOG_LINES);
+
+        logging::capture(&storage, || {
+            build
+                .cargo()
+                .env(
+                    "RUSTFLAGS",
+                    metadata
+                        .rustc_args
+                        .map(|args| args.join(""))
+                        .unwrap_or("".to_owned()),
+                )
+                .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
+                .args(&cargo_args)
+                .run()
+        })?;
 
         // TODO: We need to return build result as well
         Ok(BuildDocOutput {
             package_version: cargo_metadata.root().version().to_string(),
+            build_log: storage.to_string(),
         })
     })?;
 
@@ -107,11 +116,16 @@ pub fn build_doc_rustwide(
 
 pub struct BuildDocOutput {
     package_version: String,
+    build_log: String,
 }
 
 impl BuildDocOutput {
     pub fn package_version(&self) -> &str {
         &self.package_version
+    }
+
+    pub fn build_log(&self) -> &str {
+        &self.build_log
     }
 }
 

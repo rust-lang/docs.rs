@@ -5,6 +5,7 @@ extern crate clap;
 extern crate log;
 extern crate env_logger;
 extern crate time;
+extern crate rustwide;
 
 
 use std::env;
@@ -308,5 +309,6 @@ fn logger_init() {
                 record.args())
     });
     builder.parse(&env::var("RUST_LOG").unwrap_or("cratesfyi=info".to_owned()));
-    builder.init();
+
+    rustwide::logging::init_with(builder.build());
 }
