@@ -1,5 +1,3 @@
-use cargo::core::{enable_nightly_features, Workspace as CargoWorkspace};
-use cargo::util::{internal, Config};
 use error::Result;
 use rustwide::{
     cmd::{Command, SandboxBuilder},
@@ -20,38 +18,29 @@ pub fn build_doc_rustwide(
     target: Option<&str>,
 ) -> Result<BuildDocOutput> {
     // TODO: Handle workspace path correctly
-    let rustwide_workspace =
-        WorkspaceBuilder::new(Path::new("/tmp/docs-builder"), "docsrs").init()?;
+    let workspace = WorkspaceBuilder::new(Path::new("/tmp/docs-builder"), "docsrs").init()?;
 
     // TODO: Instead of using just nightly, we can pin a version.
     //       Docs.rs can only use nightly (due to unstable docs.rs features in rustdoc)
     let toolchain = Toolchain::Dist {
         name: "nightly".into(),
     };
-    toolchain.install(&rustwide_workspace)?;
+    toolchain.install(&workspace)?;
     if let Some(target) = target {
-        toolchain.add_target(&rustwide_workspace, target)?;
+        toolchain.add_target(&workspace, target)?;
     }
 
     let krate = Crate::crates_io(name, version);
-    krate.fetch(&rustwide_workspace)?;
+    krate.fetch(&workspace)?;
 
     let sandbox = SandboxBuilder::new()
         .memory_limit(Some(SANDBOX_MEMORY_LIMIT))
         .enable_networking(SANDBOX_NETWORKING);
 
-    let mut build_dir = rustwide_workspace.build_dir(&format!("{}-{}", name, version));
+    let mut build_dir = workspace.build_dir(&format!("{}-{}", name, version));
     let pkg = build_dir.build(&toolchain, &krate, sandbox, |build| {
-        enable_nightly_features();
-        let config = Config::default()?;
-        let manifest_path = build.host_source_dir().join("Cargo.toml");
-        let ws = CargoWorkspace::new(&manifest_path, &config)?;
-        let pkg = ws.load(&manifest_path)?;
-
-        let metadata = Metadata::from_package(&pkg).map_err(|e| internal(e.to_string()))?;
-
-        let cargo_metadata =
-            CargoMetadata::load(&rustwide_workspace, &toolchain, &build.host_source_dir())?;
+        let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
+        let cargo_metadata = CargoMetadata::load(&workspace, &toolchain, &build.host_source_dir())?;
 
         let mut rustdoc_flags: Vec<String> = vec![
             "-Z".to_string(),
@@ -59,7 +48,7 @@ pub fn build_doc_rustwide(
             "--resource-suffix".to_string(),
             format!(
                 "-{}",
-                parse_rustc_version(rustc_version(&rustwide_workspace, &toolchain)?)?
+                parse_rustc_version(rustc_version(&workspace, &toolchain)?)?
             ),
             "--static-root-path".to_string(),
             "/".to_string(),
