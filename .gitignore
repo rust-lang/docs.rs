@@ -3,3 +3,4 @@ target
 *.css.map
 .sass-cache
 .vagrant
+/rustwide

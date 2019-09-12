@@ -84,7 +84,6 @@ fn copy_files_and_handle_html(source: PathBuf,
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    extern crate tempdir;
     use std::fs;
     use std::path::Path;
     use super::*;

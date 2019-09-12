@@ -1,7 +1,6 @@
 //! Updates crates.io index and builds new packages
 
-
-use super::DocBuilder;
+use super::{DocBuilder, RustwideBuilder};
 use db::connect_db;
 use error::Result;
 use crates_index_diff::{ChangeKind, Index};
@@ -38,7 +37,10 @@ impl DocBuilder {
     }
 
     /// Builds the top package from the queue. Returns whether the queue was empty.
-    pub fn build_next_queue_package(&mut self) -> Result<bool> {
+    pub(crate) fn build_next_queue_package(
+        &mut self,
+        builder: &mut RustwideBuilder,
+    ) -> Result<bool> {
         let conn = try!(connect_db());
 
         let query = try!(conn.query("SELECT id, name, version
@@ -57,7 +59,7 @@ impl DocBuilder {
         let name: String = query.get(0).get(1);
         let version: String = query.get(0).get(2);
 
-        match self.build_package(&name[..], &version[..]) {
+        match builder.build_package(self, &name, &version) {
             Ok(_) => {
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
             }

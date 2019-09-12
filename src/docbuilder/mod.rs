@@ -1,11 +1,12 @@
 
 pub mod options;
 pub mod metadata;
-mod chroot_builder;
+mod rustwide_builder;
 mod crates;
 mod queue;
 
-pub use self::chroot_builder::ChrootBuilderResult;
+pub use self::rustwide_builder::RustwideBuilder;
+pub(crate) use self::rustwide_builder::BuildResult;
 
 
 use std::fs;

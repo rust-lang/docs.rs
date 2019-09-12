@@ -9,11 +9,11 @@ extern crate rustwide;
 
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Arg, App, SubCommand};
-use cratesfyi::{DocBuilder, DocBuilderOptions, db};
-use cratesfyi::utils::{build_doc, build_doc_rustwide, add_crate_to_queue};
+use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
+use cratesfyi::utils::add_crate_to_queue;
 use cratesfyi::start_web_server;
 use cratesfyi::db::{add_path_into_database, connect_db};
 
@@ -24,34 +24,6 @@ pub fn main() {
     let matches = App::new("cratesfyi")
         .version(cratesfyi::BUILD_VERSION)
         .about(env!("CARGO_PKG_DESCRIPTION"))
-        .subcommand(SubCommand::with_name("doc")
-            .about("Builds documentation of a crate")
-            .arg(Arg::with_name("CRATE_NAME")
-                .index(1)
-                .required(true)
-                .help("Crate name"))
-            .arg(Arg::with_name("CRATE_VERSION")
-                .index(2)
-                .required(false)
-                .help("Crate version"))
-            .arg(Arg::with_name("TARGET")
-                .index(3)
-                .required(false)
-                .help("The target platform to compile for")))
-        .subcommand(SubCommand::with_name("doc_rustwide")
-            .about("Builds documentation of a crate with rustwide")
-            .arg(Arg::with_name("CRATE_NAME")
-                .index(1)
-                .required(true)
-                .help("Crate name"))
-            .arg(Arg::with_name("CRATE_VERSION")
-                .index(2)
-                .required(true)
-                .help("Crate version"))
-            .arg(Arg::with_name("TARGET")
-                .index(3)
-                .required(false)
-                .help("The target platform to compile for")))
         .subcommand(SubCommand::with_name("build")
             .about("Builds documentation in a chroot environment")
             .arg(Arg::with_name("PREFIX")
@@ -167,22 +139,7 @@ pub fn main() {
 
 
 
-    // doc subcommand
-    if let Some(matches) = matches.subcommand_matches("doc") {
-        let name = matches.value_of("CRATE_NAME").unwrap();
-        let version = matches.value_of("CRATE_VERSION");
-        let target = matches.value_of("TARGET");
-        if let Err(e) = build_doc(name, version, target) {
-            panic!("{:#?}", e);
-        }
-    } else if let Some(matches) = matches.subcommand_matches("doc_rustwide") {
-        let name = matches.value_of("CRATE_NAME").unwrap();
-        let version = matches.value_of("CRATE_VERSION").unwrap();
-        let target = matches.value_of("TARGET");
-        if let Err(e) = build_doc_rustwide(name, version, target) {
-            panic!("{:#?}", e);
-        }
-    } else if let Some(matches) = matches.subcommand_matches("build") {
+    if let Some(matches) = matches.subcommand_matches("build") {
         let docbuilder_opts = {
             let mut docbuilder_opts = if let Some(prefix) = matches.value_of("PREFIX") {
                 DocBuilderOptions::from_prefix(PathBuf::from(prefix))
@@ -226,16 +183,19 @@ pub fn main() {
 
         if let Some(_) = matches.subcommand_matches("world") {
             docbuilder.load_cache().expect("Failed to load cache");
-            docbuilder.build_world().expect("Failed to build world");
+            let mut builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            builder.build_world(&mut docbuilder).expect("Failed to build world");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
             docbuilder.load_cache().expect("Failed to load cache");
-            docbuilder.build_package(matches.value_of("CRATE_NAME").unwrap(),
-                               matches.value_of("CRATE_VERSION").unwrap())
+            let mut builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            builder.build_package(&mut docbuilder, matches.value_of("CRATE_NAME").unwrap(),
+                                  matches.value_of("CRATE_VERSION").unwrap())
                 .expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
-            docbuilder.add_essential_files().expect("Failed to add essential files");
+            let builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            builder.add_essential_files().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");
         } else if let Some(_) = matches.subcommand_matches("unlock") {

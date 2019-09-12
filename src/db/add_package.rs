@@ -1,7 +1,7 @@
 
-use ChrootBuilderResult;
 use Metadata;
 use utils::MetadataPackage;
+use docbuilder::BuildResult;
 use regex::Regex;
 
 use std::io::prelude::*;
@@ -25,9 +25,11 @@ use failure::err_msg;
 pub(crate) fn add_package_into_database(conn: &Connection,
                                  metadata_pkg: &MetadataPackage,
                                  source_dir: &Path,
-                                 res: &ChrootBuilderResult,
+                                 res: &BuildResult,
                                  files: Option<Json>,
-                                 doc_targets: Vec<String>)
+                                 doc_targets: Vec<String>,
+                                 has_docs: bool,
+                                 has_examples: bool)
                                  -> Result<i32> {
     debug!("Adding package into database");
     let crate_id = try!(initialize_package_in_database(&conn, metadata_pkg));
@@ -66,8 +68,8 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                          &dependencies.to_json(),
                                          &metadata_pkg.targets[0].name.replace("-", "_"),
                                          &yanked,
-                                         &res.build_success,
-                                         &res.have_doc,
+                                         &res.successful,
+                                         &has_docs,
                                          &false, // TODO: Add test status somehow
                                          &metadata_pkg.license,
                                          &metadata_pkg.repository,
@@ -77,7 +79,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                          &readme,
                                          &metadata_pkg.authors.to_json(),
                                          &metadata_pkg.keywords.to_json(),
-                                         &res.have_examples,
+                                         &has_examples,
                                          &downloads,
                                          &files,
                                          &doc_targets.to_json(),
@@ -120,8 +122,8 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                               &dependencies.to_json(),
                               &metadata_pkg.targets[0].name.replace("-", "_"),
                               &yanked,
-                              &res.build_success,
-                              &res.have_doc,
+                              &res.successful,
+                              &has_docs,
                               &false, // TODO: Add test status somehow
                               &metadata_pkg.license,
                               &metadata_pkg.repository,
@@ -131,7 +133,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                               &readme,
                               &metadata_pkg.authors.to_json(),
                               &metadata_pkg.keywords.to_json(),
-                              &res.have_examples,
+                              &has_examples,
                               &downloads,
                               &files,
                               &doc_targets.to_json(),
@@ -177,7 +179,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
 /// Adds a build into database
 pub(crate) fn add_build_into_database(conn: &Connection,
                                release_id: &i32,
-                               res: &ChrootBuilderResult)
+                               res: &BuildResult)
                                -> Result<i32> {
     debug!("Adding build into database");
     let rows = try!(conn.query("INSERT INTO builds (rid, rustc_version,
@@ -187,9 +189,9 @@ pub(crate) fn add_build_into_database(conn: &Connection,
                                 RETURNING id",
                                &[release_id,
                                  &res.rustc_version,
-                                 &res.cratesfyi_version,
-                                 &res.build_success,
-                                 &res.output]));
+                                 &res.docsrs_version,
+                                 &res.successful,
+                                 &res.build_log]));
     Ok(rows.get(0).get(0))
 }
 
@@ -243,6 +245,7 @@ fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>
 
 fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
     if let Some(src_path) = &pkg.targets[0].src_path {
+        let src_path = Path::new(src_path);
         if src_path.is_absolute() {
             read_rust_doc(src_path)
         } else {

@@ -41,9 +41,10 @@ extern crate futures;
 extern crate tokio;
 extern crate systemstat;
 extern crate rustwide;
+extern crate tempdir;
 
+pub use self::docbuilder::RustwideBuilder;
 pub use self::docbuilder::DocBuilder;
-pub use self::docbuilder::ChrootBuilderResult;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::metadata::Metadata;
 pub use self::web::start_web_server;

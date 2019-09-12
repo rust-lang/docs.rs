@@ -1,8 +1,6 @@
 //! Various utilities for cratesfyi
 
 
-pub use self::build_doc::{build_doc, get_package, source_path, update_sources, resolve_deps};
-pub use self::build_doc_rustwide::build_doc_rustwide;
 pub use self::copy::{copy_dir, copy_doc_dir};
 pub use self::github_updater::github_updater;
 pub use self::release_activity_updater::update_release_activity;
@@ -14,8 +12,6 @@ pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage}
 
 mod cargo_metadata;
 mod github_updater;
-mod build_doc;
-mod build_doc_rustwide;
 mod copy;
 mod release_activity_updater;
 mod daemon;
