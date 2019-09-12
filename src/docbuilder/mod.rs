@@ -119,4 +119,15 @@ impl DocBuilder {
     pub fn options(&self) -> &DocBuilderOptions {
         &self.options
     }
+
+    fn add_to_cache(&mut self, name: &str, version: &str) {
+        self.cache.insert(format!("{}-{}", name, version));
+    }
+
+    fn should_build(&self, name: &str, version: &str) -> bool {
+        let name = format!("{}-{}", name, version);
+        let local = self.options.skip_if_log_exists && self.cache.contains(&name);
+        let db = self.options.skip_if_exists && self.db_cache.contains(&name);
+        !(local || db)
+    }
 }

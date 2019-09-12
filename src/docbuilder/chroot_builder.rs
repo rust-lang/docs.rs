@@ -65,10 +65,7 @@ impl DocBuilder {
     /// Builds package documentation in chroot environment and adds into cratesfyi database
     pub fn build_package(&mut self, name: &str, version: &str) -> Result<bool> {
         // Skip crates according to options
-        if (self.options.skip_if_log_exists &&
-            self.cache.contains(&format!("{}-{}", name, version)[..])) ||
-           (self.options.skip_if_exists &&
-            self.db_cache.contains(&format!("{}-{}", name, version)[..])) {
+        if !self.should_build(name, version) {
             return Ok(false);
         }
 
@@ -113,7 +110,7 @@ impl DocBuilder {
         try!(self.clean(&pkg));
 
         // add package into build cache
-        self.cache.insert(format!("{}-{}", name, version));
+        self.add_to_cache(name, version);
 
         Ok(res.build_success)
     }
