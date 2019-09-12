@@ -1,16 +1,14 @@
 
 use ChrootBuilderResult;
 use Metadata;
-use utils::source_path;
+use utils::MetadataPackage;
 use regex::Regex;
 
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
 
-use cargo::core::{Package, TargetKind};
-use cargo::core::dependency::Kind;
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
@@ -24,27 +22,28 @@ use failure::err_msg;
 /// Adds a package into database.
 ///
 /// Package must be built first.
-pub fn add_package_into_database(conn: &Connection,
-                                 pkg: &Package,
+pub(crate) fn add_package_into_database(conn: &Connection,
+                                 metadata_pkg: &MetadataPackage,
+                                 source_dir: &Path,
                                  res: &ChrootBuilderResult,
                                  files: Option<Json>,
                                  doc_targets: Vec<String>)
                                  -> Result<i32> {
     debug!("Adding package into database");
-    let crate_id = try!(initialize_package_in_database(&conn, &pkg));
-    let dependencies = convert_dependencies(&pkg);
-    let rustdoc = get_rustdoc(&pkg).unwrap_or(None);
-    let readme = get_readme(&pkg).unwrap_or(None);
-    let (release_time, yanked, downloads) = try!(get_release_time_yanked_downloads(&pkg));
-    let is_library = match pkg.targets()[0].kind() {
-        &TargetKind::Lib(_) => true,
+    let crate_id = try!(initialize_package_in_database(&conn, metadata_pkg));
+    let dependencies = convert_dependencies(metadata_pkg);
+    let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
+    let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
+    let (release_time, yanked, downloads) = try!(get_release_time_yanked_downloads(metadata_pkg));
+    let is_library = match metadata_pkg.targets[0].kind.as_slice() {
+        &[ref kind] if kind == "lib" => true,
         _ => false,
     };
-    let metadata = Metadata::from_package(pkg)?;
+    let metadata = Metadata::from_source_dir(source_dir)?;
 
     let release_id: i32 = {
         let rows = try!(conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
-                                   &[&crate_id, &format!("{}", pkg.manifest().version())]));
+                                   &[&crate_id, &format!("{}", metadata_pkg.version)]));
 
         if rows.len() == 0 {
             let rows = try!(conn.query("INSERT INTO releases (
@@ -62,29 +61,29 @@ pub fn add_package_into_database(conn: &Connection,
                                         )
                                         RETURNING id",
                                        &[&crate_id,
-                                         &format!("{}", pkg.manifest().version()),
+                                         &metadata_pkg.version,
                                          &release_time,
                                          &dependencies.to_json(),
-                                         &pkg.targets()[0].name().replace("-", "_"),
+                                         &metadata_pkg.targets[0].name.replace("-", "_"),
                                          &yanked,
                                          &res.build_success,
                                          &res.have_doc,
                                          &false, // TODO: Add test status somehow
-                                         &pkg.manifest().metadata().license,
-                                         &pkg.manifest().metadata().repository,
-                                         &pkg.manifest().metadata().homepage,
-                                         &pkg.manifest().metadata().description,
+                                         &metadata_pkg.license,
+                                         &metadata_pkg.repository,
+                                         &metadata_pkg.homepage,
+                                         &metadata_pkg.description,
                                          &rustdoc,
                                          &readme,
-                                         &pkg.manifest().metadata().authors.to_json(),
-                                         &pkg.manifest().metadata().keywords.to_json(),
+                                         &metadata_pkg.authors.to_json(),
+                                         &metadata_pkg.keywords.to_json(),
                                          &res.have_examples,
                                          &downloads,
                                          &files,
                                          &doc_targets.to_json(),
                                          &is_library,
                                          &res.rustc_version,
-                                         &pkg.manifest().metadata().documentation,
+                                         &metadata_pkg.documentation,
                                          &metadata.default_target]));
             // return id
             rows.get(0).get(0)
@@ -116,38 +115,38 @@ pub fn add_package_into_database(conn: &Connection,
                                  default_target = $25
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
-                              &format!("{}", pkg.manifest().version()),
+                              &format!("{}", metadata_pkg.version),
                               &release_time,
                               &dependencies.to_json(),
-                              &pkg.targets()[0].name().replace("-", "_"),
+                              &metadata_pkg.targets[0].name.replace("-", "_"),
                               &yanked,
                               &res.build_success,
                               &res.have_doc,
                               &false, // TODO: Add test status somehow
-                              &pkg.manifest().metadata().license,
-                              &pkg.manifest().metadata().repository,
-                              &pkg.manifest().metadata().homepage,
-                              &pkg.manifest().metadata().description,
+                              &metadata_pkg.license,
+                              &metadata_pkg.repository,
+                              &metadata_pkg.homepage,
+                              &metadata_pkg.description,
                               &rustdoc,
                               &readme,
-                              &pkg.manifest().metadata().authors.to_json(),
-                              &pkg.manifest().metadata().keywords.to_json(),
+                              &metadata_pkg.authors.to_json(),
+                              &metadata_pkg.keywords.to_json(),
                               &res.have_examples,
                               &downloads,
                               &files,
                               &doc_targets.to_json(),
                               &is_library,
                               &res.rustc_version,
-                              &pkg.manifest().metadata().documentation,
+                              &metadata_pkg.documentation,
                               &metadata.default_target]));
             rows.get(0).get(0)
         }
     };
 
 
-    try!(add_keywords_into_database(&conn, &pkg, &release_id));
-    try!(add_authors_into_database(&conn, &pkg, &release_id));
-    try!(add_owners_into_database(&conn, &pkg, &crate_id));
+    try!(add_keywords_into_database(&conn, &metadata_pkg, &release_id));
+    try!(add_authors_into_database(&conn, &metadata_pkg, &release_id));
+    try!(add_owners_into_database(&conn, &metadata_pkg, &crate_id));
 
 
     // Update versions
@@ -159,13 +158,12 @@ pub fn add_package_into_database(conn: &Connection,
         if let Some(versions_array) = versions.as_array_mut() {
             let mut found = false;
             for version in versions_array.clone() {
-                if &semver::Version::parse(version.as_string().unwrap()).unwrap() ==
-                   pkg.manifest().version() {
+                if version.as_string().unwrap() == metadata_pkg.version {
                     found = true;
                 }
             }
             if !found {
-                versions_array.push(format!("{}", &pkg.manifest().version()).to_json());
+                versions_array.push(format!("{}", &metadata_pkg.version).to_json());
             }
         }
         let _ = conn.query("UPDATE crates SET versions = $1 WHERE id = $2",
@@ -177,7 +175,7 @@ pub fn add_package_into_database(conn: &Connection,
 
 
 /// Adds a build into database
-pub fn add_build_into_database(conn: &Connection,
+pub(crate) fn add_build_into_database(conn: &Connection,
                                release_id: &i32,
                                res: &ChrootBuilderResult)
                                -> Result<i32> {
@@ -196,13 +194,12 @@ pub fn add_build_into_database(conn: &Connection,
 }
 
 
-fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i32> {
-    let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1",
-                                   &[&pkg.manifest().name().as_str()]));
+fn initialize_package_in_database(conn: &Connection, pkg: &MetadataPackage) -> Result<i32> {
+    let mut rows = try!(conn.query("SELECT id FROM crates WHERE name = $1", &[&pkg.name]));
     // insert crate into database if it is not exists
     if rows.len() == 0 {
         rows = try!(conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
-                               &[&pkg.manifest().name().as_str()]));
+                               &[&pkg.name]));
     }
     Ok(rows.get(0).get(0))
 }
@@ -210,16 +207,12 @@ fn initialize_package_in_database(conn: &Connection, pkg: &Package) -> Result<i3
 
 
 /// Convert dependencies into Vec<(String, String, String)>
-fn convert_dependencies(pkg: &Package) -> Vec<(String, String, String)> {
+fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> {
     let mut dependencies: Vec<(String, String, String)> = Vec::new();
-    for dependency in pkg.manifest().dependencies() {
-        let name = dependency.package_name().to_string();
-        let version = format!("{}", dependency.version_req());
-        let kind = match dependency.kind() {
-            Kind::Normal => "normal",
-            Kind::Development => "dev",
-            Kind::Build => "build",
-        };
+    for dependency in &pkg.dependencies {
+        let name = dependency.name.clone();
+        let version = dependency.req.clone();
+        let kind = dependency.kind.as_ref().map(|s| s.clone()).unwrap_or_else(|| "normal".into());
         dependencies.push((name, version, kind.to_string()));
     }
     dependencies
@@ -227,9 +220,8 @@ fn convert_dependencies(pkg: &Package) -> Vec<(String, String, String)> {
 
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
-fn get_readme(pkg: &Package) -> Result<Option<String>> {
-    let readme_path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))))
-        .join(pkg.manifest().metadata().readme.clone().unwrap_or("README.md".to_owned()));
+fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
+    let readme_path = source_dir.join(pkg.readme.clone().unwrap_or("README.md".to_owned()));
 
     if !readme_path.exists() {
         return Ok(None);
@@ -249,14 +241,12 @@ fn get_readme(pkg: &Package) -> Result<Option<String>> {
 }
 
 
-fn get_rustdoc(pkg: &Package) -> Result<Option<String>> {
-    if let Some(src_path) = pkg.manifest().targets()[0].src_path().path() {
+fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
+    if let Some(src_path) = &pkg.targets[0].src_path {
         if src_path.is_absolute() {
             read_rust_doc(src_path)
         } else {
-            let mut path = PathBuf::from(try!(source_path(&pkg).ok_or_else(|| err_msg("File not found"))));
-            path.push(src_path);
-            read_rust_doc(path.as_path())
+            read_rust_doc(&source_dir.join(src_path))
         }
     } else {
         // FIXME: should we care about metabuild targets?
@@ -294,11 +284,10 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
 
 
 /// Get release_time, yanked and downloads from crates.io
-fn get_release_time_yanked_downloads
-    (pkg: &Package)
-     -> Result<(Option<time::Timespec>, Option<bool>, Option<i32>)> {
-    let url = format!("https://crates.io/api/v1/crates/{}/versions",
-                      pkg.manifest().name());
+fn get_release_time_yanked_downloads(
+    pkg: &MetadataPackage,
+) -> Result<(Option<time::Timespec>, Option<bool>, Option<i32>)> {
+    let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
     let client = Client::new();
@@ -321,7 +310,7 @@ fn get_release_time_yanked_downloads
             .and_then(|v| v.as_string())
             .ok_or_else(|| err_msg("Not a JSON object")));
 
-        if &semver::Version::parse(version_num).unwrap() == pkg.manifest().version() {
+        if semver::Version::parse(version_num).unwrap().to_string() == pkg.version {
             let release_time_raw = try!(version.get("created_at")
                 .and_then(|c| c.as_string())
                 .ok_or_else(|| err_msg("Not a JSON object")));
@@ -346,8 +335,8 @@ fn get_release_time_yanked_downloads
 
 
 /// Adds keywords into database
-fn add_keywords_into_database(conn: &Connection, pkg: &Package, release_id: &i32) -> Result<()> {
-    for keyword in &pkg.manifest().metadata().keywords {
+fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: &i32) -> Result<()> {
+    for keyword in &pkg.keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
             let rows = try!(conn.query("SELECT id FROM keywords WHERE slug = $1", &[&slug]));
@@ -371,10 +360,10 @@ fn add_keywords_into_database(conn: &Connection, pkg: &Package, release_id: &i32
 
 
 /// Adds authors into database
-fn add_authors_into_database(conn: &Connection, pkg: &Package, release_id: &i32) -> Result<()> {
+fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: &i32) -> Result<()> {
 
     let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
-    for author in &pkg.manifest().metadata().authors {
+    for author in &pkg.authors {
         if let Some(author_captures) = author_capture_re.captures(&author[..]) {
             let author = author_captures.get(1).map(|m| m.as_str()).unwrap_or("").trim();
             let email = author_captures.get(2).map(|m| m.as_str()).unwrap_or("").trim();
@@ -405,10 +394,9 @@ fn add_authors_into_database(conn: &Connection, pkg: &Package, release_id: &i32)
 
 
 /// Adds owners into database
-fn add_owners_into_database(conn: &Connection, pkg: &Package, crate_id: &i32) -> Result<()> {
+fn add_owners_into_database(conn: &Connection, pkg: &MetadataPackage, crate_id: &i32) -> Result<()> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
-    let owners_url = format!("https://crates.io/api/v1/crates/{}/owners",
-                             &pkg.manifest().name());
+    let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", pkg.name);
     let client = Client::new();
     let mut res = try!(client.get(&owners_url[..])
         .header(ACCEPT, "application/json")

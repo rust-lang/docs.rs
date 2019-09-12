@@ -63,9 +63,9 @@ pub fn build_doc_rustwide(
             rustdoc_flags.push("--extern-html-root-url".to_string());
             rustdoc_flags.push(format!(
                 "{}=https://docs.rs/{}/{}",
-                dep.name().replace("-", "_"),
-                dep.name(),
-                dep.version()
+                dep.name.replace("-", "_"),
+                dep.name,
+                dep.version
             ));
         }
 
@@ -106,7 +106,7 @@ pub fn build_doc_rustwide(
 
         // TODO: We need to return build result as well
         Ok(BuildDocOutput {
-            package_version: cargo_metadata.root().version().to_string(),
+            package_version: cargo_metadata.root().version.to_string(),
             build_log: storage.to_string(),
         })
     })?;

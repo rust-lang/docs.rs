@@ -3,7 +3,7 @@ use super::DocBuilder;
 use super::crates::crates_from_path;
 use super::metadata::Metadata;
 use utils::{get_package, source_path, copy_doc_dir,
-            update_sources, parse_rustc_version, command_result};
+            update_sources, parse_rustc_version, command_result, CargoMetadata};
 use db::{connect_db, add_package_into_database, add_build_into_database, add_path_into_database};
 use cargo::core::Package;
 use cargo::util::CargoResultExt;
@@ -99,11 +99,17 @@ impl DocBuilder {
             Vec::new()
         };
 
-        let release_id = try!(add_package_into_database(&conn,
-                                                        &pkg,
-                                                        &res,
-                                                        Some(file_list),
-                                                        successfully_targets));
+        let src_path = pkg.manifest_path()
+            .parent()
+            .ok_or_else(|| ::failure::err_msg("Source path not available"))?;
+        let release_id = try!(add_package_into_database(
+            &conn,
+            &CargoMetadata::from_cargo_lib_package(&pkg).root(),
+            src_path,
+            &res,
+            Some(file_list),
+            successfully_targets
+        ));
         try!(add_build_into_database(&conn, &release_id, &res));
 
         // remove documentation, source and build directory after we are done
