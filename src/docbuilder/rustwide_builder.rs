@@ -380,7 +380,7 @@ impl RustwideBuilder {
         Ok(BuildResult {
             build_log: storage.to_string(),
             rustc_version: self.rustc_version.clone(),
-            docsrs_version: String::new(), // FIXME(pietro): fix
+            docsrs_version: format!("docsrs {}", ::BUILD_VERSION),
             successful,
             cargo_metadata,
             target: target.to_string(),
