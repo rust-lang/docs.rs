@@ -35,21 +35,6 @@ pub fn main() {
                 .long("destination")
                 .help("Sets destination path")
                 .takes_value(true))
-            .arg(Arg::with_name("CHROOT_PATH")
-                .short("c")
-                .long("chroot-path")
-                .help("Sets chroot path")
-                .takes_value(true))
-            .arg(Arg::with_name("CHROOT_USER")
-                .short("u")
-                .long("chroot-user")
-                .help("Sets chroot user name")
-                .takes_value(true))
-            .arg(Arg::with_name("CONTAINER_NAME")
-                .short("n")
-                .long("container-name")
-                .help("Sets name of the container")
-                .takes_value(true))
             .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
                 .long("crates-io-index-path")
                 .help("Sets crates.io-index path")
@@ -152,18 +137,6 @@ pub fn main() {
             // set options
             if let Some(destination) = matches.value_of("DESTINATION") {
                 docbuilder_opts.destination = PathBuf::from(destination);
-            }
-
-            if let Some(chroot_path) = matches.value_of("CHROOT_PATH") {
-                docbuilder_opts.chroot_path = PathBuf::from(chroot_path);
-            }
-
-            if let Some(chroot_user) = matches.value_of("CHROOT_USER") {
-                docbuilder_opts.chroot_user = chroot_user.to_string();
-            }
-
-            if let Some(container_name) = matches.value_of("CONTAINER_NAME") {
-                docbuilder_opts.container_name = container_name.to_string();
             }
 
             if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
