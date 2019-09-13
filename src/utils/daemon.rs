@@ -27,7 +27,7 @@ pub fn start_daemon() {
               "CRATESFYI_GITHUB_USERNAME",
               "CRATESFYI_GITHUB_ACCESSTOKEN"]
         .iter() {
-        env::var(v).expect("Environment variable not found");
+        env::var(v).expect(&format!("Environment variable {} not found", v));
     }
 
     let dbopts = opts();
