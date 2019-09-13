@@ -77,13 +77,11 @@ impl RustwideBuilder {
             name: "nightly".into(),
         };
 
-        let mut builder = RustwideBuilder {
+        Ok(RustwideBuilder {
             workspace,
             toolchain,
             rustc_version: String::new(),
-        };
-        builder.update_toolchain()?;
-        Ok(builder)
+        })
     }
 
     fn update_toolchain(&mut self) -> Result<()> {
@@ -215,6 +213,9 @@ impl RustwideBuilder {
         if !doc_builder.should_build(name, version) {
             return Ok(false);
         }
+
+        self.update_toolchain()?;
+
         info!("building package {} {}", name, version);
 
         let conn = connect_db()?;
