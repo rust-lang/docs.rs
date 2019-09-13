@@ -31,6 +31,30 @@
   no README will be displayed.
   </p>
 
+  <h4>Global sandbox limits</h4>
+
+  <p>
+  All the builds on docs.rs are executed inside a sandbox with limited
+  resources. The current limits are the following:
+  </p>
+
+  <table class="pure-table pure-table-horizontal">
+    <tbody>
+      {{#each content.limits}}
+      <tr>
+        <td>{{{@key}}}</td>
+        <td>{{this}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <p>
+  If a build fails because it hit one of those limits please
+  <a href="https://github.com/rust-lang/docs.rs/issues/new">open an issue</a>
+  to get them increased for your crate.
+  </p>
+
   <h4>Redirections</h4>
 
   <p>

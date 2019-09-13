@@ -8,14 +8,12 @@
     <div class="release">
       <strong>Build #{{build_details.id}} {{build_details.build_time}}</strong>
     </div>
-    <pre>
-$ rustc --version
+    <pre>$ rustc --version
 {{build_details.rustc_version}}
 $ cratesfyi --version
 {{build_details.cratesfyi_version}}
 $ cratesfyi ...
-{{build_details.output}}
-    </pre>
+{{build_details.output}}</pre>
     {{/if}}
 
     <div class="release">
@@ -36,6 +34,31 @@ $ cratesfyi ...
     </li>
     {{/each}}
     </ul>
+
+    <div class="about">
+      <h4>{{metadata.name}}'s sandbox limits</h4>
+
+      <p>
+      All the builds on docs.rs are executed inside a sandbox with limited
+      resources. The limits for this crate are the following:
+      </p>
+
+      <table class="pure-table pure-table-horizontal">
+        <tbody>
+          {{#each limits}}
+          <tr>
+            <td>{{{@key}}}</td>
+            <td>{{this}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+      <p>
+      If a build fails because it hit one of those limits please
+      <a href="https://github.com/rust-lang/docs.rs/issues/new">open an issue</a>
+      to get them increased.
+      </p>
+    </div>
   </div>
 </div>
 {{/with}}

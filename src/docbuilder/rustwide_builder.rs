@@ -1,7 +1,7 @@
 use super::DocBuilder;
 use db::file::add_path_into_database;
 use db::{add_build_into_database, add_package_into_database, connect_db};
-use docbuilder::crates::crates_from_path;
+use docbuilder::{crates::crates_from_path, Limits};
 use error::Result;
 use failure::ResultExt;
 use log::LevelFilter;
@@ -11,17 +11,8 @@ use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::path::Path;
-use std::time::Duration;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
-
-// TODO: 1GB might not be enough
-const SANDBOX_MEMORY_LIMIT: usize = 1024 * 1024 * 1024; // 1GB
-const SANDBOX_NETWORKING: bool = false;
-const SANDBOX_MAX_LOG_SIZE: usize = 1024 * 1024; // 1MB
-const SANDBOX_MAX_LOG_LINES: usize = 10_000;
-const COMMAND_TIMEOUT: Option<Duration> = Some(Duration::from_secs(60 * 60)); // 1 hour
-const COMMAND_NO_OUTPUT_TIMEOUT: Option<Duration> = None;
 
 static USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 static TARGETS: &[&str] = &[
@@ -61,6 +52,9 @@ static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "SourceSerifPro-It.ttf.woff",
 ];
 
+static DUMMY_CRATE_NAME: &str = "acme-client";
+static DUMMY_CRATE_VERSION: &str = "0.0.0";
+
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
@@ -69,10 +63,7 @@ pub struct RustwideBuilder {
 
 impl RustwideBuilder {
     pub fn init(workspace_path: &Path) -> Result<Self> {
-        let workspace = WorkspaceBuilder::new(workspace_path, USER_AGENT)
-            .command_timeout(COMMAND_TIMEOUT)
-            .command_no_output_timeout(COMMAND_NO_OUTPUT_TIMEOUT)
-            .init()?;
+        let workspace = WorkspaceBuilder::new(workspace_path, USER_AGENT).init()?;
         workspace.purge_all_build_dirs()?;
 
         let toolchain = Toolchain::Dist {
@@ -126,21 +117,24 @@ impl RustwideBuilder {
         info!("building a dummy crate to get essential files");
         let rustc_version = parse_rustc_version(&self.rustc_version)?;
 
+        let conn = connect_db()?;
+        let limits = Limits::for_crate(&conn, DUMMY_CRATE_NAME)?;
+
         let mut build_dir = self
             .workspace
             .build_dir(&format!("essential-files-{}", rustc_version));
         build_dir.purge()?;
 
         // acme-client-0.0.0 is an empty library crate and it will always build
-        let krate = Crate::crates_io("acme-client", "0.0.0");
+        let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
         let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(SANDBOX_MEMORY_LIMIT))
-            .enable_networking(SANDBOX_NETWORKING);
+            .memory_limit(Some(limits.memory()))
+            .enable_networking(limits.networking());
 
         build_dir.build(&self.toolchain, &krate, sandbox, |build| {
-            let res = self.execute_build(None, build)?;
+            let res = self.execute_build(None, build, &limits)?;
             if !res.successful {
                 bail!("failed to build dummy crate for {}", self.rustc_version);
             }
@@ -171,7 +165,6 @@ impl RustwideBuilder {
                 })?;
             }
 
-            let conn = connect_db()?;
             add_path_into_database(&conn, "", &dest)?;
             conn.query(
                 "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
@@ -218,6 +211,7 @@ impl RustwideBuilder {
         info!("building package {} {}", name, version);
 
         let conn = connect_db()?;
+        let limits = Limits::for_crate(&conn, name)?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
         build_dir.purge()?;
@@ -226,8 +220,8 @@ impl RustwideBuilder {
         krate.fetch(&self.workspace)?;
 
         let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(SANDBOX_MEMORY_LIMIT))
-            .enable_networking(SANDBOX_NETWORKING);
+            .memory_limit(Some(limits.memory()))
+            .enable_networking(limits.networking());
 
         let res = build_dir.build(&self.toolchain, &krate, sandbox, |build| {
             let mut files_list = None;
@@ -235,7 +229,7 @@ impl RustwideBuilder {
             let mut successful_targets = Vec::new();
 
             // Do an initial build and then copy the sources in the database
-            let res = self.execute_build(None, &build)?;
+            let res = self.execute_build(None, &build, &limits)?;
             if res.successful {
                 debug!("adding sources into database");
                 let prefix = format!("sources/{}/{}", name, version);
@@ -267,7 +261,7 @@ impl RustwideBuilder {
                 // Then build the documentation for all the targets
                 for target in TARGETS {
                     debug!("building package {} {} for {}", name, version, target);
-                    let target_res = self.execute_build(Some(target), &build)?;
+                    let target_res = self.execute_build(Some(target), &build, &limits)?;
                     if target_res.successful {
                         // Cargo is not giving any error and not generating documentation of some crates
                         // when we use a target compile options. Check documentation exists before
@@ -312,7 +306,7 @@ impl RustwideBuilder {
         Ok(res.successful)
     }
 
-    fn execute_build(&self, target: Option<&str>, build: &Build) -> Result<BuildResult> {
+    fn execute_build(&self, target: Option<&str>, build: &Build, limits: &Limits) -> Result<BuildResult> {
         let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
@@ -363,12 +357,13 @@ impl RustwideBuilder {
         }
 
         let mut storage = LogStorage::new(LevelFilter::Info);
-        storage.set_max_size(SANDBOX_MAX_LOG_SIZE);
-        storage.set_max_lines(SANDBOX_MAX_LOG_LINES);
+        storage.set_max_size(limits.max_log_size());
 
         let successful = logging::capture(&storage, || {
             build
                 .cargo()
+                .timeout(Some(limits.timeout()))
+                .no_output_timeout(None)
                 .env(
                     "RUSTFLAGS",
                     metadata

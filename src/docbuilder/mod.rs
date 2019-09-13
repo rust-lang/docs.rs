@@ -1,12 +1,14 @@
 
 pub mod options;
 pub mod metadata;
+mod limits;
 mod rustwide_builder;
 mod crates;
 mod queue;
 
 pub use self::rustwide_builder::RustwideBuilder;
 pub(crate) use self::rustwide_builder::BuildResult;
+pub(crate) use self::limits::Limits;
 
 
 use std::fs;
