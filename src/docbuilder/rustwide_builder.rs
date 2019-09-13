@@ -73,6 +73,7 @@ impl RustwideBuilder {
             .command_timeout(COMMAND_TIMEOUT)
             .command_no_output_timeout(COMMAND_NO_OUTPUT_TIMEOUT)
             .init()?;
+        workspace.purge_all_build_dirs()?;
 
         let toolchain = Toolchain::Dist {
             name: "nightly".into(),
@@ -180,6 +181,9 @@ impl RustwideBuilder {
 
             Ok(())
         })?;
+
+        build_dir.purge()?;
+        krate.purge_from_cache(&self.workspace)?;
         Ok(())
     }
 
@@ -304,6 +308,7 @@ impl RustwideBuilder {
         })?;
 
         build_dir.purge()?;
+        krate.purge_from_cache(&self.workspace)?;
         Ok(res.successful)
     }
 
