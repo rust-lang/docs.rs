@@ -9,7 +9,7 @@ extern crate rustwide;
 
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
@@ -156,18 +156,18 @@ pub fn main() {
 
         if let Some(_) = matches.subcommand_matches("world") {
             docbuilder.load_cache().expect("Failed to load cache");
-            let mut builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            let mut builder = RustwideBuilder::init().unwrap();
             builder.build_world(&mut docbuilder).expect("Failed to build world");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
             docbuilder.load_cache().expect("Failed to load cache");
-            let mut builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            let mut builder = RustwideBuilder::init().unwrap();
             builder.build_package(&mut docbuilder, matches.value_of("CRATE_NAME").unwrap(),
                                   matches.value_of("CRATE_VERSION").unwrap())
                 .expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
-            let builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+            let builder = RustwideBuilder::init().unwrap();
             builder.add_essential_files().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");

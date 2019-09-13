@@ -15,6 +15,8 @@ use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
 
 static USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
+static DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
+
 static TARGETS: &[&str] = &[
     "i686-apple-darwin",
     "i686-pc-windows-msvc",
@@ -62,8 +64,13 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init(workspace_path: &Path) -> Result<Self> {
-        let workspace = WorkspaceBuilder::new(workspace_path, USER_AGENT).init()?;
+    pub fn init() -> Result<Self> {
+        let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
+        let workspace_path = env_workspace_path
+            .as_ref()
+            .map(|v| v.as_str())
+            .unwrap_or(DEFAULT_RUSTWIDE_WORKSPACE);
+        let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT).init()?;
         workspace.purge_all_build_dirs()?;
 
         let toolchain = Toolchain::Dist {
@@ -306,7 +313,12 @@ impl RustwideBuilder {
         Ok(res.successful)
     }
 
-    fn execute_build(&self, target: Option<&str>, build: &Build, limits: &Limits) -> Result<BuildResult> {
+    fn execute_build(
+        &self,
+        target: Option<&str>,
+        build: &Build,
+        limits: &Limits,
+    ) -> Result<BuildResult> {
         let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;

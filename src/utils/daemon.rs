@@ -9,7 +9,7 @@ use std::process::exit;
 use std::fs::File;
 use std::io::Write;
 use std::time::Duration;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use libc::fork;
 use time;
 use docbuilder::RustwideBuilder;
@@ -86,7 +86,7 @@ pub fn start_daemon() {
             QueueInProgress(usize),
         }
 
-        let mut builder = RustwideBuilder::init(&Path::new("rustwide")).unwrap();
+        let mut builder = RustwideBuilder::init().unwrap();
 
         let mut status = BuilderState::Fresh;
 
