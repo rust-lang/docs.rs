@@ -3,11 +3,6 @@ use postgres::Connection;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const DEFAULT_MEMORY_LIMIT: usize = 3 * 1024 * 1024 * 1024; // 3 GB
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15 * 60); // 15 minutes
-const DEFAULT_NETWORKING: bool = false;
-const DEFAULT_MAX_LOG_SIZE: usize = 100 * 1024; // 100 KB
-
 pub(crate) struct Limits {
     memory: usize,
     timeout: Duration,
@@ -18,10 +13,10 @@ pub(crate) struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            memory: DEFAULT_MEMORY_LIMIT,
-            timeout: DEFAULT_TIMEOUT,
-            networking: DEFAULT_NETWORKING,
-            max_log_size: DEFAULT_MAX_LOG_SIZE,
+            memory: 3 * 1024 * 1024 * 1024,  // 3 GB
+            timeout: Duration::from_secs(15 * 60),  // 15 minutes
+            networking: false,
+            max_log_size: 100 * 1024, // 100 KB
         }
     }
 }
