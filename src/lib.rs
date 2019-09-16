@@ -53,6 +53,15 @@ pub mod utils;
 mod docbuilder;
 mod web;
 
+use web::page::GlobalAlert;
+
+
+// Warning message shown in the navigation bar of every page. Set to `None` to hide it.
+pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
+    url: "https://blog.rust-lang.org/2019/09/18/upcoming-docsrs-changes.html",
+    text: "Upcoming docs.rs breaking changes!",
+});
+
 
 /// Version string generated at build time contains last git
 /// commit hash and build date
