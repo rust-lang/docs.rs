@@ -60,6 +60,8 @@ use web::page::GlobalAlert;
 pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
     url: "https://blog.rust-lang.org/2019/09/18/upcoming-docsrs-changes.html",
     text: "Upcoming docs.rs breaking changes!",
+    css_class: "error",
+    fa_icon: "warning",
 });
 
 

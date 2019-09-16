@@ -10,6 +10,8 @@ use handlebars_iron::Template;
 pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,
     pub(crate) text: &'static str,
+    pub(crate) css_class: &'static str,
+    pub(crate) fa_icon: &'static str,
 }
 
 impl ToJson for GlobalAlert {
@@ -17,6 +19,8 @@ impl ToJson for GlobalAlert {
         let mut map = BTreeMap::new();
         map.insert("url".to_string(), self.url.to_json());
         map.insert("text".to_string(), self.text.to_json());
+        map.insert("css_class".to_string(), self.css_class.to_json());
+        map.insert("fa_icon".to_string(), self.fa_icon.to_json());
         Json::Object(map)
     }
 }
