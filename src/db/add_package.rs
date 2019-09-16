@@ -13,7 +13,7 @@ use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
 use reqwest::header::ACCEPT;
-use semver;
+use semver::Version;
 use postgres::Connection;
 use time;
 use error::Result;
@@ -153,6 +153,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
 
     // Update versions
     {
+        let metadata_version = Version::parse(&metadata_pkg.version)?;
         let mut versions: Json = try!(conn.query("SELECT versions FROM crates WHERE id = $1",
                                                  &[&crate_id]))
             .get(0)
@@ -160,7 +161,8 @@ pub(crate) fn add_package_into_database(conn: &Connection,
         if let Some(versions_array) = versions.as_array_mut() {
             let mut found = false;
             for version in versions_array.clone() {
-                if version.as_string().unwrap() == metadata_pkg.version {
+                let version = Version::parse(version.as_string().unwrap())?;
+                if version != metadata_version {
                     found = true;
                 }
             }
