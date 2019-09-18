@@ -19,6 +19,7 @@ $color-lifetime-incode: #B76514;   // orangish
 $color-comment-in-code: #8E908C;   // light gray
 $color-background-code: #F5F5F5;   // lighter gray
 $color-border: #ddd;               // gray
+$color-red: #d93d3d;               // red
 $top-navbar-height: 32px;          // height of the floating top navbar
 
 
@@ -212,6 +213,15 @@ div.nav-container {
 
     .warn:hover {
         color: darken($color-type, 10%);
+    }
+
+    // used for global alerts
+    .error {
+        color: $color-red;
+
+        &:hover {
+            color: darken($color-red, 10%);
+        }
     }
 
     div.rustdoc-navigation {

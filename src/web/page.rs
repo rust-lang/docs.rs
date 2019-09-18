@@ -7,6 +7,25 @@ use iron::response::Response;
 use handlebars_iron::Template;
 
 
+pub(crate) struct GlobalAlert {
+    pub(crate) url: &'static str,
+    pub(crate) text: &'static str,
+    pub(crate) css_class: &'static str,
+    pub(crate) fa_icon: &'static str,
+}
+
+impl ToJson for GlobalAlert {
+    fn to_json(&self) -> Json {
+        let mut map = BTreeMap::new();
+        map.insert("url".to_string(), self.url.to_json());
+        map.insert("text".to_string(), self.text.to_json());
+        map.insert("css_class".to_string(), self.css_class.to_json());
+        map.insert("fa_icon".to_string(), self.fa_icon.to_json());
+        Json::Object(map)
+    }
+}
+
+
 pub struct Page<T: ToJson> {
     title: Option<String>,
     content: T,
@@ -87,6 +106,11 @@ impl<T: ToJson> ToJson for Page<T> {
 
         if let Some(ref title) = self.title {
             tree.insert("title".to_owned(), title.to_json());
+        }
+
+        tree.insert("has_global_alert".to_owned(), ::GLOBAL_ALERT.is_some().to_json());
+        if let Some(ref global_alert) = ::GLOBAL_ALERT {
+            tree.insert("global_alert".to_owned(), global_alert.to_json());
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
