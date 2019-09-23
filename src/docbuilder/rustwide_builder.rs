@@ -138,47 +138,49 @@ impl RustwideBuilder {
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking());
 
-        build_dir.build(&self.toolchain, &krate, sandbox, |build| {
-            let res = self.execute_build(None, build, &limits)?;
-            if !res.successful {
-                bail!("failed to build dummy crate for {}", self.rustc_version);
-            }
+        build_dir
+            .build(&self.toolchain, &krate, sandbox)
+            .run(|build| {
+                let res = self.execute_build(None, build, &limits)?;
+                if !res.successful {
+                    bail!("failed to build dummy crate for {}", self.rustc_version);
+                }
 
-            info!("copying essential files for {}", self.rustc_version);
-            let source = build.host_target_dir().join(&res.target).join("doc");
-            let dest = ::tempdir::TempDir::new("essential-files")?;
+                info!("copying essential files for {}", self.rustc_version);
+                let source = build.host_target_dir().join(&res.target).join("doc");
+                let dest = ::tempdir::TempDir::new("essential-files")?;
 
-            let files = ESSENTIAL_FILES_VERSIONED
-                .iter()
-                .map(|f| (f, true))
-                .chain(ESSENTIAL_FILES_UNVERSIONED.iter().map(|f| (f, false)));
-            for (file, versioned) in files {
-                let segments = file.rsplitn(2, '.').collect::<Vec<_>>();
-                let file_name = if versioned {
-                    format!("{}-{}.{}", segments[1], rustc_version, segments[0])
-                } else {
-                    file.to_string()
-                };
-                let source_path = source.join(&file_name);
-                let dest_path = dest.path().join(&file_name);
-                ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
-                    format!(
-                        "couldn't copy '{}' to '{}'",
-                        source_path.display(),
-                        dest_path.display()
-                    )
-                })?;
-            }
+                let files = ESSENTIAL_FILES_VERSIONED
+                    .iter()
+                    .map(|f| (f, true))
+                    .chain(ESSENTIAL_FILES_UNVERSIONED.iter().map(|f| (f, false)));
+                for (file, versioned) in files {
+                    let segments = file.rsplitn(2, '.').collect::<Vec<_>>();
+                    let file_name = if versioned {
+                        format!("{}-{}.{}", segments[1], rustc_version, segments[0])
+                    } else {
+                        file.to_string()
+                    };
+                    let source_path = source.join(&file_name);
+                    let dest_path = dest.path().join(&file_name);
+                    ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
+                        format!(
+                            "couldn't copy '{}' to '{}'",
+                            source_path.display(),
+                            dest_path.display()
+                        )
+                    })?;
+                }
 
-            add_path_into_database(&conn, "", &dest)?;
-            conn.query(
-                "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
-                 ON CONFLICT (name) DO UPDATE SET value = $1;",
-                &[&self.rustc_version.to_json()],
-            )?;
+                add_path_into_database(&conn, "", &dest)?;
+                conn.query(
+                    "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
+                     ON CONFLICT (name) DO UPDATE SET value = $1;",
+                    &[&self.rustc_version.to_json()],
+                )?;
 
-            Ok(())
-        })?;
+                Ok(())
+            })?;
 
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
@@ -231,83 +233,88 @@ impl RustwideBuilder {
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking());
 
-        let res = build_dir.build(&self.toolchain, &krate, sandbox, |build| {
-            let mut files_list = None;
-            let mut has_docs = false;
-            let mut successful_targets = Vec::new();
+        let res = build_dir
+            .build(&self.toolchain, &krate, sandbox)
+            .run(|build| {
+                let mut files_list = None;
+                let mut has_docs = false;
+                let mut successful_targets = Vec::new();
 
-            // Do an initial build and then copy the sources in the database
-            let res = self.execute_build(None, &build, &limits)?;
-            if res.successful {
-                debug!("adding sources into database");
-                let prefix = format!("sources/{}/{}", name, version);
-                files_list = Some(add_path_into_database(
-                    &conn,
-                    &prefix,
-                    build.host_source_dir(),
-                )?);
+                // Do an initial build and then copy the sources in the database
+                let res = self.execute_build(None, &build, &limits)?;
+                if res.successful {
+                    debug!("adding sources into database");
+                    let prefix = format!("sources/{}/{}", name, version);
+                    files_list = Some(add_path_into_database(
+                        &conn,
+                        &prefix,
+                        build.host_source_dir(),
+                    )?);
 
-                has_docs = build
-                    .host_target_dir()
-                    .join(&res.target)
-                    .join("doc")
-                    .join(name.replace("-", "_"))
-                    .is_dir();
-            }
-
-            if has_docs {
-                debug!("adding documentation for the default target to the database");
-                self.copy_docs(
-                    &doc_builder,
-                    &build.host_target_dir(),
-                    name,
-                    version,
-                    &res.target,
-                    true,
-                )?;
-
-                // Then build the documentation for all the targets
-                for target in TARGETS {
-                    debug!("building package {} {} for {}", name, version, target);
-                    let target_res = self.execute_build(Some(target), &build, &limits)?;
-                    if target_res.successful {
-                        // Cargo is not giving any error and not generating documentation of some crates
-                        // when we use a target compile options. Check documentation exists before
-                        // adding target to successfully_targets.
-                        if build.host_target_dir().join(target).join("doc").is_dir() {
-                            debug!("adding documentation for target {} to the database", target);
-                            self.copy_docs(
-                                &doc_builder,
-                                &build.host_target_dir(),
-                                name,
-                                version,
-                                target,
-                                false,
-                            )?;
-                            successful_targets.push(target.to_string());
-                        }
-                    }
+                    has_docs = build
+                        .host_target_dir()
+                        .join(&res.target)
+                        .join("doc")
+                        .join(name.replace("-", "_"))
+                        .is_dir();
                 }
 
-                self.upload_docs(doc_builder, &conn, name, version)?;
-            }
+                if has_docs {
+                    debug!("adding documentation for the default target to the database");
+                    self.copy_docs(
+                        &doc_builder,
+                        &build.host_target_dir(),
+                        name,
+                        version,
+                        &res.target,
+                        true,
+                    )?;
 
-            let has_examples = build.host_source_dir().join("examples").is_dir();
-            let release_id = add_package_into_database(
-                &conn,
-                res.cargo_metadata.root(),
-                &build.host_source_dir(),
-                &res,
-                files_list,
-                successful_targets,
-                has_docs,
-                has_examples,
-            )?;
-            add_build_into_database(&conn, &release_id, &res)?;
+                    // Then build the documentation for all the targets
+                    for target in TARGETS {
+                        debug!("building package {} {} for {}", name, version, target);
+                        let target_res = self.execute_build(Some(target), &build, &limits)?;
+                        if target_res.successful {
+                            // Cargo is not giving any error and not generating documentation of some crates
+                            // when we use a target compile options. Check documentation exists before
+                            // adding target to successfully_targets.
+                            if build.host_target_dir().join(target).join("doc").is_dir() {
+                                debug!(
+                                    "adding documentation for target {} to the database",
+                                    target
+                                );
+                                self.copy_docs(
+                                    &doc_builder,
+                                    &build.host_target_dir(),
+                                    name,
+                                    version,
+                                    target,
+                                    false,
+                                )?;
+                                successful_targets.push(target.to_string());
+                            }
+                        }
+                    }
 
-            doc_builder.add_to_cache(name, version);
-            Ok(res)
-        })?;
+                    self.upload_docs(doc_builder, &conn, name, version)?;
+                }
+
+                let has_examples = build.host_source_dir().join("examples").is_dir();
+                let release_id = add_package_into_database(
+                    &conn,
+                    res.cargo_metadata.root(),
+                    &build.host_source_dir(),
+                    &res,
+                    files_list,
+                    successful_targets,
+                    has_docs,
+                    has_examples,
+                )?;
+                add_build_into_database(&conn, &release_id, &res)?;
+
+                doc_builder.add_to_cache(name, version);
+                Ok(res)
+            })?;
 
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
