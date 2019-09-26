@@ -216,7 +216,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
     for dependency in &pkg.dependencies {
         let name = dependency.name.clone();
         let version = dependency.req.clone();
-        let kind = dependency.kind.as_ref().map(|s| s.clone()).unwrap_or_else(|| "normal".into());
+        let kind = dependency.kind.clone().unwrap_or_else(|| "normal".into());
         dependencies.push((name, version, kind.to_string()));
     }
     dependencies
