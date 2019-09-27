@@ -730,28 +730,6 @@ div.search-page-search-form {
 }
 
 
-footer {
-    margin-top: 60px;
-    margin-bottom: 10px;
-    text-align: center;
-    ul {
-        list-style-type: none;
-        li {
-            list-style-type: none;
-            margin-bottom: 10px;
-
-            a {
-                font-weight: 500;
-                color: $color-url;
-            }
-        }
-        li.hosting {
-            font-size: .8em;
-        }
-    }
-}
-
-
 .about {
     font-family: $font-family-serif;
     padding: .4em 1em;
