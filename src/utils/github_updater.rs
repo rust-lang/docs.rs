@@ -1,8 +1,7 @@
 
-use ::db::connect_db;
+use crate::db::connect_db;
 use regex::Regex;
-use time;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 
@@ -19,11 +18,11 @@ struct GitHubFields {
 
 /// Updates github fields in crates table
 pub fn github_updater() -> Result<()> {
-    let conn = try!(connect_db());
+    let conn = connect_db()?;
 
     // TODO: This query assumes repository field in Cargo.toml is
     //       always the same across all versions of a crate
-    for row in &try!(conn.query("SELECT DISTINCT ON (crates.name)
+    for row in &conn.query("SELECT DISTINCT ON (crates.name)
                                         crates.name,
                                         crates.id,
                                         releases.repository_url
@@ -33,7 +32,7 @@ pub fn github_updater() -> Result<()> {
                                        (crates.github_last_update < NOW() - INTERVAL '1 day' OR
                                         crates.github_last_update IS NULL)
                                  ORDER BY crates.name, releases.release_time DESC",
-                                &[])) {
+                                &[])? {
         let crate_name: String = row.get(0);
         let crate_id: i32 = row.get(1);
         let repository_url: String = row.get(2);
@@ -80,7 +79,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
         let client = Client::new();
         let mut body = String::new();
 
-        let mut resp = try!(client.get(&format!("https://api.github.com/repos/{}", path)[..])
+        let mut resp = client.get(&format!("https://api.github.com/repos/{}", path)[..])
             .header(USER_AGENT, format!("cratesfyi/{}", env!("CARGO_PKG_VERSION")))
             .basic_auth(
                 env::var("CRATESFYI_GITHUB_USERNAME")
@@ -89,17 +88,17 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
                     .unwrap_or("".to_string()),
                 env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
             )
-            .send());
+            .send()?;
 
         if resp.status() != StatusCode::OK {
             return Err(err_msg("Failed to get github data"));
         }
 
-        try!(resp.read_to_string(&mut body));
+        resp.read_to_string(&mut body)?;
         body
     };
 
-    let json = try!(Json::from_str(&body[..]));
+    let json = Json::from_str(&body[..])?;
     let obj = json.as_object().unwrap();
 
     Ok(GitHubFields {
@@ -140,7 +139,6 @@ fn get_github_path(url: &str) -> Option<String> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::{get_github_path, get_github_fields, github_updater};
 
     #[test]
@@ -171,7 +169,6 @@ mod test {
         assert!(fields.forks >= 0);
         assert!(fields.issues >= 0);
 
-        use time;
         assert!(fields.last_commit <= time::now().to_timespec());
     }
 

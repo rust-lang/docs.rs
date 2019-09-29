@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::fs;
-use error::Result;
+use crate::error::Result;
 
 use regex::Regex;
 
@@ -47,7 +47,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
     // Make sure destination directory is exists
     if !destination.exists() {
-        try!(fs::create_dir_all(&destination));
+        fs::create_dir_all(&destination)?;
     }
 
     // Avoid copying common files
@@ -55,24 +55,24 @@ fn copy_files_and_handle_html(source: PathBuf,
         r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
-    for file in try!(source.read_dir()) {
+    for file in source.read_dir()? {
 
-        let file = try!(file);
+        let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);
         destination_full_path.push(file.file_name());
 
-        let metadata = try!(file.metadata());
+        let metadata = file.metadata()?;
 
         if metadata.is_dir() {
-            try!(fs::create_dir_all(&destination_full_path));
-            try!(copy_files_and_handle_html(file.path(),
+            fs::create_dir_all(&destination_full_path)?;
+            copy_files_and_handle_html(file.path(),
                                             destination_full_path,
                                             handle_html,
-                                            &rustc_version))
+                                            &rustc_version)?
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
-            try!(fs::copy(&file.path(), &destination_full_path));
+            fs::copy(&file.path(), &destination_full_path)?;
         }
 
     }
@@ -83,8 +83,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
-    extern crate tempdir;
+
     use std::fs;
     use std::path::Path;
     use super::*;
@@ -107,7 +106,7 @@ mod test {
     #[ignore]
     fn test_copy_doc_dir() {
         // lets build documentation of rand crate
-        use utils::build_doc;
+        use crate::utils::build_doc;
         let pkg = build_doc("rand", None, None).unwrap();
 
         let pkg_dir = format!("rand-{}", pkg.manifest().version());

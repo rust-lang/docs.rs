@@ -57,7 +57,6 @@ use iron::modifiers::Redirect;
 use router::{Router, NoRoute};
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
-use time;
 use postgres::Connection;
 use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
@@ -206,7 +205,7 @@ impl CratesfyiHandler {
 
 
 impl Handler for CratesfyiHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request<'_, '_>) -> IronResult<Response> {
         // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
         self.shared_resource_handler
@@ -235,7 +234,7 @@ impl Handler for CratesfyiHandler {
                     // print the path of the URL that triggered a 404 error
                     struct DebugPath<'a>(&'a iron::Url);
                     impl<'a> fmt::Display for DebugPath<'a> {
-                        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                             for path_elem in self.0.path() {
                                 write!(f, "/{}", path_elem)?;
                             }
@@ -468,7 +467,7 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
-pub fn redirect_base(req: &Request) -> String {
+pub fn redirect_base(req: &Request<'_, '_>) -> String {
     // Try to get the scheme from CloudFront first, and then from iron
     let scheme = req.headers
         .get_raw("cloudfront-forwarded-proto")
@@ -486,7 +485,7 @@ pub fn redirect_base(req: &Request) -> String {
     }
 }
 
-fn style_css_handler(_: &mut Request) -> IronResult<Response> {
+fn style_css_handler(_: &mut Request<'_, '_>) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, STYLE_CSS));
     let cache = vec![CacheDirective::Public,
                      CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
@@ -496,7 +495,7 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
 }
 
 
-fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
+fn opensearch_xml_handler(_: &mut Request<'_, '_>) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
     let cache = vec![CacheDirective::Public,
                      CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
@@ -505,7 +504,7 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     Ok(response)
 }
 
-fn ico_handler(req: &mut Request) -> IronResult<Response> {
+fn ico_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     if let Some(&"favicon.ico") = req.url.path().last() {
         // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
         // from `public_html`, so return a 404 here to make the main handler carry on
@@ -572,7 +571,6 @@ impl ToJson for MetaData {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::*;
 
     #[test]

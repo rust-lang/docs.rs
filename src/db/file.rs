@@ -10,7 +10,7 @@ use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
 use std::fs;
 use std::io::Read;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;
@@ -22,13 +22,13 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
                                           -> Result<()> {
     let path = path.as_ref();
 
-    for file in try!(path.read_dir()) {
-        let file = try!(file);
+    for file in path.read_dir()? {
+        let file = file?;
 
-        if try!(file.file_type()).is_file() {
+        if file.file_type()?.is_file() {
             files.push(file.path());
-        } else if try!(file.file_type()).is_dir() {
-            try!(get_file_list_from_dir(file.path(), files));
+        } else if file.file_type()?.is_dir() {
+            get_file_list_from_dir(file.path(), files)?;
         }
     }
 
@@ -45,7 +45,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     } else if path.is_file() {
         files.push(PathBuf::from(path.file_name().unwrap()));
     } else if path.is_dir() {
-        try!(get_file_list_from_dir(path, &mut files));
+        get_file_list_from_dir(path, &mut files)?;
         for file_path in &mut files {
             // We want the paths in this list to not be {path}/bar.txt but just bar.txt
             *file_path = PathBuf::from(file_path.strip_prefix(path).unwrap());
@@ -134,14 +134,14 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               path: P)
                                               -> Result<Json> {
     use magic::{Cookie, flags};
-    let cookie = try!(Cookie::open(flags::MIME_TYPE));
-    try!(cookie.load::<&str>(&[]));
+    let cookie = Cookie::open(flags::MIME_TYPE)?;
+    cookie.load::<&str>(&[])?;
 
-    let trans = try!(conn.transaction());
+    let trans = conn.transaction()?;
     let mut client = s3_client();
     let mut file_list_with_mimes: Vec<(String, PathBuf)> = Vec::new();
 
-    for file_path in try!(get_file_list(&path)) {
+    for file_path in get_file_list(&path)? {
         let (path, content, mime) = {
             let path = Path::new(path.as_ref()).join(&file_path);
             // Some files have insufficient permissions (like .lock file created by cargo in
@@ -151,12 +151,12 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 Err(_) => continue,
             };
             let mut content: Vec<u8> = Vec::new();
-            try!(file.read_to_end(&mut content));
+            file.read_to_end(&mut content)?;
             let bucket_path = Path::new(prefix).join(&file_path)
                 .into_os_string().into_string().unwrap();
 
             let mime = {
-                let mime = try!(cookie.buffer(&content));
+                let mime = cookie.buffer(&content)?;
                 // css's are causing some problem in browsers
                 // magic will return text/plain for css file types
                 // convert them to text/css
@@ -221,22 +221,22 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
         // If AWS credentials are configured, don't insert/update the database
         if client.is_none() {
             // check if file already exists in database
-            let rows = try!(conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path]));
+            let rows = conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&path])?;
 
             let content = content.expect("content never None if client is None");
 
             if rows.get(0).get::<usize, i64>(0) == 0 {
-                try!(trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
-                                &[&path, &mime, &content]));
+                trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                                &[&path, &mime, &content])?;
             } else {
-                try!(trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+                trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
                                 WHERE path = $1",
-                                &[&path, &mime, &content]));
+                                &[&path, &mime, &content])?;
             }
         }
     }
 
-    try!(trans.commit());
+    trans.commit()?;
 
     file_list_to_json(file_list_with_mimes)
 }
@@ -258,12 +258,12 @@ fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
 }
 
 pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
-    let trans = try!(conn.transaction());
+    let trans = conn.transaction()?;
     let client = s3_client().expect("configured s3");
 
-    let rows = try!(trans.query(
+    let rows = trans.query(
             &format!("SELECT path, mime, content FROM files WHERE content != E'in-s3' LIMIT {}", n),
-            &[]));
+            &[])?;
     let count = rows.len();
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
@@ -299,14 +299,13 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
         }
     }
 
-    try!(trans.commit());
+    trans.commit()?;
 
     Ok(count)
 }
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use std::env;
     use super::get_file_list;
 

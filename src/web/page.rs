@@ -108,15 +108,15 @@ impl<T: ToJson> ToJson for Page<T> {
             tree.insert("title".to_owned(), title.to_json());
         }
 
-        tree.insert("has_global_alert".to_owned(), ::GLOBAL_ALERT.is_some().to_json());
-        if let Some(ref global_alert) = ::GLOBAL_ALERT {
+        tree.insert("has_global_alert".to_owned(), crate::GLOBAL_ALERT.is_some().to_json());
+        if let Some(ref global_alert) = crate::GLOBAL_ALERT {
             tree.insert("global_alert".to_owned(), global_alert.to_json());
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
-        tree.insert("cratesfyi_version".to_owned(), ::BUILD_VERSION.to_json());
+        tree.insert("cratesfyi_version".to_owned(), crate::BUILD_VERSION.to_json());
         tree.insert("cratesfyi_version_safe".to_owned(),
-                    ::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
+                    crate::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
         tree.insert("varss".to_owned(), self.varss.to_json());
         tree.insert("varsb".to_owned(), self.varsb.to_json());
         tree.insert("varsi".to_owned(), self.varsi.to_json());

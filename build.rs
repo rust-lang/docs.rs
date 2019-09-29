@@ -1,7 +1,4 @@
-
-extern crate time;
-extern crate sass_rs;
-extern crate git2;
+#![deny(rust_2018_idioms)]
 
 use std::env;
 use std::path::Path;

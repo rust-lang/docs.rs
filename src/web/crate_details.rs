@@ -8,11 +8,9 @@ use super::page::Page;
 use iron::prelude::*;
 use iron::{Url, status};
 use std::collections::BTreeMap;
-use time;
 use rustc_serialize::json::{Json, ToJson};
 use router::Router;
 use postgres::Connection;
-use semver;
 
 
 // TODO: Add target name and versions
@@ -221,7 +219,7 @@ impl CrateDetails {
 
 
 
-pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
+pub fn crate_details_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler must always called with a crate name
     let name = cexpect!(router.find("name"));

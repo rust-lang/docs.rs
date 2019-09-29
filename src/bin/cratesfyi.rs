@@ -1,12 +1,3 @@
-
-
-extern crate cratesfyi;
-extern crate clap;
-extern crate log;
-extern crate env_logger;
-extern crate time;
-
-
 use std::env;
 use std::path::PathBuf;
 

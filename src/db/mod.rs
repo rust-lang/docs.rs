@@ -8,8 +8,6 @@ pub use self::migrate::migrate;
 use postgres::{Connection, TlsMode};
 use postgres::error::Error;
 use std::env;
-use r2d2;
-use r2d2_postgres;
 
 mod add_package;
 pub mod file;
@@ -74,7 +72,6 @@ pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::*;
 
     #[test]

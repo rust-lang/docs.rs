@@ -15,9 +15,8 @@ use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
-use time;
 use iron::Handler;
-use utils;
+use crate::utils;
 
 
 #[derive(Debug)]
@@ -68,9 +67,9 @@ impl ToJson for RustdocPage {
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
-pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
+pub fn rustdoc_redirector_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
 
-    fn redirect_to_doc(req: &Request,
+    fn redirect_to_doc(req: &Request<'_, '_>,
                        name: &str,
                        vers: &str,
                        target_name: &str)
@@ -86,7 +85,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     }
 
-    fn redirect_to_crate(req: &Request,
+    fn redirect_to_crate(req: &Request<'_, '_>,
                          name: &str,
                          vers: &str)
                          -> IronResult<Response> {
@@ -163,7 +162,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 ///
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
-pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
+pub fn rustdoc_html_server_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
 
     let router = extension!(req, Router);
     let name = router.find("crate").unwrap_or("").to_string();
@@ -253,7 +252,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
 
 
-pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
+pub fn badge_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     use iron::headers::ContentType;
     use params::{Params, Value};
     use badge::{Badge, BadgeOptions};
@@ -324,7 +323,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 pub struct SharedResourceHandler;
 
 impl Handler for SharedResourceHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request<'_, '_>) -> IronResult<Response> {
         let path = req.url.path();
         let filename = path.last().unwrap();  // unwrap is fine: vector is non-empty
         let suffix = filename.split('.').last().unwrap();  // unwrap is fine: split always works

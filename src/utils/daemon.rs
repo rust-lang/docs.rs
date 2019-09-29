@@ -11,11 +11,10 @@ use std::io::Write;
 use std::time::Duration;
 use std::path::PathBuf;
 use libc::fork;
-use time;
-use DocBuilderOptions;
-use DocBuilder;
-use utils::{update_sources, update_release_activity, github_updater, pubsubhubbub};
-use db::{connect_db, update_search_index};
+use crate::DocBuilderOptions;
+use crate::DocBuilder;
+use crate::utils::{update_sources, update_release_activity, github_updater, pubsubhubbub};
+use crate::db::{connect_db, update_search_index};
 
 
 
@@ -41,7 +40,7 @@ pub fn start_daemon() {
             .expect("Failed to create pid file");
         writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
-        info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
+        info!("cratesfyi {} daemon started on: {}", crate::BUILD_VERSION, pid);
         exit(0);
     }
 
@@ -246,7 +245,7 @@ pub fn start_daemon() {
 
     // at least start web server
     info!("Starting web server");
-    ::start_web_server(None);
+    crate::start_web_server(None);
 }
 
 

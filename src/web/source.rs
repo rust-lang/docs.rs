@@ -180,7 +180,7 @@ impl FileList {
 }
 
 
-pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
+pub fn source_browser_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));
     let version = cexpect!(router.find("version"));

@@ -1,11 +1,12 @@
 [package]
 name = "badge"
 version = "0.2.0"
-description = "Simple badge generator"
 authors = ["Onur Aslan <onur@onur.im>"]
+documentation = "https://docs.rs/badge"
+edition = "2018"
 license-file = "LICENSE"
 repository = "https://github.com/rust-lang/docs.rs"
-documentation = "https://docs.rs/badge"
+description = "Simple badge generator"
 
 [lib]
 path = "badge.rs"

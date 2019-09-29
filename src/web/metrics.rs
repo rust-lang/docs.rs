@@ -17,7 +17,7 @@ lazy_static! {
     .unwrap();
 }
 
-pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
+pub fn metrics_handler(req: &mut Request<'_, '_>) -> IronResult<Response> {
     let conn = extension!(req, Pool);
 
     QUEUED_CRATES_COUNT.set(
