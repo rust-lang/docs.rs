@@ -59,12 +59,15 @@ use web::page::GlobalAlert;
 
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
+pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;
+/*
 pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
     url: "https://blog.rust-lang.org/2019/09/18/upcoming-docsrs-changes.html",
     text: "Upcoming docs.rs breaking changes!",
     css_class: "error",
     fa_icon: "warning",
 });
+*/
 
 
 /// Version string generated at build time contains last git
