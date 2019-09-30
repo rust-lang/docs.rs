@@ -167,7 +167,7 @@ pub fn main() {
                 .expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
-            let builder = RustwideBuilder::init().unwrap();
+            let mut builder = RustwideBuilder::init().unwrap();
             builder.add_essential_files().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");
