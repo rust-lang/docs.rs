@@ -179,6 +179,20 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             // downgrade query
             "ALTER TABLE queue DROP COLUMN priority;"
         ),
+        migration!(
+            // version
+            3,
+            // description
+            "Added sandbox_overrides table",
+            // upgrade query
+            "CREATE TABLE sandbox_overrides (
+                 crate_name VARCHAR NOT NULL PRIMARY KEY,
+                 max_memory_bytes INTEGER,
+                 timeout_seconds INTEGER
+             );",
+            // downgrade query
+            "DROP TABLE sandbox_overrides;"
+        ),
     ];
 
     for migration in migrations {

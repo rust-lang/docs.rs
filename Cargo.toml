@@ -39,6 +39,8 @@ tokio = "0.1"
 systemstat = "0.1.4"
 prometheus = { version = "0.7.0", default-features = false }
 lazy_static = "1.0.0"
+rustwide = "0.3.0"
+tempdir = "0.3"
 
 # iron dependencies
 iron = "0.5"
@@ -50,9 +52,6 @@ staticfile = { version = "0.4", features = [ "cache" ] }
 [dependencies.postgres]
 version = "0.15"
 features = [ "with-time", "with-rustc-serialize" ]
-
-[dev-dependencies]
-tempdir = "0.3"
 
 [build-dependencies]
 time = "0.1"

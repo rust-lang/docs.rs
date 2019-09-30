@@ -1,11 +1,14 @@
 
 pub mod options;
 pub mod metadata;
-mod chroot_builder;
+mod limits;
+mod rustwide_builder;
 mod crates;
 mod queue;
 
-pub use self::chroot_builder::ChrootBuilderResult;
+pub use self::rustwide_builder::RustwideBuilder;
+pub(crate) use self::rustwide_builder::BuildResult;
+pub(crate) use self::limits::Limits;
 
 
 use std::fs;
@@ -118,5 +121,16 @@ impl DocBuilder {
     /// Returns a reference of options
     pub fn options(&self) -> &DocBuilderOptions {
         &self.options
+    }
+
+    fn add_to_cache(&mut self, name: &str, version: &str) {
+        self.cache.insert(format!("{}-{}", name, version));
+    }
+
+    fn should_build(&self, name: &str, version: &str) -> bool {
+        let name = format!("{}-{}", name, version);
+        let local = self.options.skip_if_log_exists && self.cache.contains(&name);
+        let db = self.options.skip_if_exists && self.db_cache.contains(&name);
+        !(local || db)
     }
 }

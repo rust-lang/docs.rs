@@ -9,9 +9,6 @@ pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
     pub prefix: PathBuf,
     pub destination: PathBuf,
-    pub chroot_path: PathBuf,
-    pub chroot_user: String,
-    pub container_name: String,
     pub crates_io_index_path: PathBuf,
     pub skip_if_exists: bool,
     pub skip_if_log_exists: bool,
@@ -27,17 +24,13 @@ impl Default for DocBuilderOptions {
 
         let cwd = env::current_dir().unwrap();
 
-        let (prefix, destination, chroot_path, crates_io_index_path) =
+        let (prefix, destination, crates_io_index_path) =
             generate_paths(cwd);
 
         DocBuilderOptions {
             prefix: prefix,
             destination: destination,
-            chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
-
-            chroot_user: "cratesfyi".to_string(),
-            container_name: env::var("CRATESFYI_CONTAINER_NAME").expect("CRATESFYI_CONTAINER_NAME"),
 
             keep_build_directory: false,
             skip_if_exists: false,
@@ -53,16 +46,12 @@ impl Default for DocBuilderOptions {
 impl fmt::Debug for DocBuilderOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-               "DocBuilderOptions {{ destination: {:?}, chroot_path: {:?}, \
+               "DocBuilderOptions {{ destination: {:?}, \
                 crates_io_index_path: {:?}, \
-                container_name: {:?}, chroot_user: {:?}, \
                 keep_build_directory: {:?}, skip_if_exists: {:?}, \
                 skip_if_log_exists: {:?}, debug: {:?} }}",
                self.destination,
-               self.chroot_path,
                self.crates_io_index_path,
-               self.container_name,
-               self.chroot_user,
                self.keep_build_directory,
                self.skip_if_exists,
                self.skip_if_log_exists,
@@ -74,12 +63,11 @@ impl fmt::Debug for DocBuilderOptions {
 impl DocBuilderOptions {
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (prefix, destination, chroot_path, crates_io_index_path) =
+        let (prefix, destination, crates_io_index_path) =
             generate_paths(prefix);
         DocBuilderOptions {
             prefix: prefix,
             destination: destination,
-            chroot_path: chroot_path,
             crates_io_index_path: crates_io_index_path,
 
             ..Default::default()
@@ -91,9 +79,6 @@ impl DocBuilderOptions {
         if !self.destination.exists() {
             bail!("destination path '{}' does not exist", self.destination.display());
         }
-        if !self.chroot_path.exists() {
-            bail!("chroot path '{}' does not exist", self.chroot_path.display());
-        }
         if !self.crates_io_index_path.exists() {
             bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
         }
@@ -103,11 +88,9 @@ impl DocBuilderOptions {
 
 
 
-fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
-    let name = env::var_os("CRATESFYI_CONTAINER_NAME").expect("CRATESFYI_CONTAINER_NAME");
+fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf, PathBuf) {
     let destination = PathBuf::from(&prefix).join("documentations");
-    let chroot_path = PathBuf::from(&prefix).join(&name).join("rootfs");
     let crates_io_index_path = PathBuf::from(&prefix).join("crates.io-index");
 
-    (prefix, destination, chroot_path, crates_io_index_path)
+    (prefix, destination, crates_io_index_path)
 }

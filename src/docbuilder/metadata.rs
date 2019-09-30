@@ -1,6 +1,5 @@
 
 use std::path::Path;
-use cargo::core::Package;
 use toml::Value;
 use error::Result;
 use failure::err_msg;
@@ -60,10 +59,9 @@ pub struct Metadata {
 
 
 impl Metadata {
-    pub fn from_package(pkg: &Package) -> Result<Metadata> {
-        let src_path = pkg.manifest_path().parent().ok_or_else(|| err_msg("Source path not available"))?;
+    pub(crate) fn from_source_dir(source_dir: &Path) -> Result<Metadata> {
         for c in ["Cargo.toml.orig", "Cargo.toml"].iter() {
-            let manifest_path = src_path.clone().join(c);
+            let manifest_path = source_dir.clone().join(c);
             if manifest_path.exists() {
                 return Ok(Metadata::from_manifest(manifest_path));
             }

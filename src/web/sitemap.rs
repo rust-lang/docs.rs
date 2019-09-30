@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use iron::prelude::*;
 use iron::headers::ContentType;
-use rustc_serialize::json::Json;
+use rustc_serialize::json::{Json, ToJson};
 use super::page::Page;
 use super::pool::Pool;
 use time;
@@ -40,10 +40,12 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     if let Some(row) = res.iter().next() {
         if let Some(Ok::<Json, _>(res)) = row.get_opt(0) {
             if let Some(vers) = res.as_string() {
-                content.insert("rustc_version".to_string(), vers.to_string());
+                content.insert("rustc_version".to_string(), vers.to_json());
             }
         }
     }
+
+    content.insert("limits".to_string(), ::docbuilder::Limits::default().for_website().to_json());
 
     Page::new(content).title("About Docs.rs").to_resp("about")
 }

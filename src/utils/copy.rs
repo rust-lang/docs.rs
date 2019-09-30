@@ -84,7 +84,6 @@ fn copy_files_and_handle_html(source: PathBuf,
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    extern crate tempdir;
     use std::fs;
     use std::path::Path;
     use super::*;
@@ -97,26 +96,6 @@ mod test {
         // lets try to copy a src directory to tempdir
         let res = copy_dir(Path::new("src"), destination.path());
         // remove temp dir
-        fs::remove_dir_all(destination.path()).unwrap();
-
-        assert!(res.is_ok());
-    }
-
-
-    #[test]
-    #[ignore]
-    fn test_copy_doc_dir() {
-        // lets build documentation of rand crate
-        use utils::build_doc;
-        let pkg = build_doc("rand", None, None).unwrap();
-
-        let pkg_dir = format!("rand-{}", pkg.manifest().version());
-        let target = Path::new(&pkg_dir);
-        let destination = tempdir::TempDir::new("cratesfyi").unwrap();
-        let res = copy_doc_dir(target, destination.path(), "UNKNOWN");
-
-        // remove build and temp dir
-        fs::remove_dir_all(target).unwrap();
         fs::remove_dir_all(destination.path()).unwrap();
 
         assert!(res.is_ok());

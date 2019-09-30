@@ -5,14 +5,15 @@ extern crate clap;
 extern crate log;
 extern crate env_logger;
 extern crate time;
+extern crate rustwide;
 
 
 use std::env;
 use std::path::PathBuf;
 
 use clap::{Arg, App, SubCommand};
-use cratesfyi::{DocBuilder, DocBuilderOptions, db};
-use cratesfyi::utils::{build_doc, add_crate_to_queue};
+use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
+use cratesfyi::utils::add_crate_to_queue;
 use cratesfyi::start_web_server;
 use cratesfyi::db::{add_path_into_database, connect_db};
 
@@ -23,20 +24,6 @@ pub fn main() {
     let matches = App::new("cratesfyi")
         .version(cratesfyi::BUILD_VERSION)
         .about(env!("CARGO_PKG_DESCRIPTION"))
-        .subcommand(SubCommand::with_name("doc")
-            .about("Builds documentation of a crate")
-            .arg(Arg::with_name("CRATE_NAME")
-                .index(1)
-                .required(true)
-                .help("Crate name"))
-            .arg(Arg::with_name("CRATE_VERSION")
-                .index(2)
-                .required(false)
-                .help("Crate version"))
-            .arg(Arg::with_name("TARGET")
-                .index(3)
-                .required(false)
-                .help("The target platform to compile for")))
         .subcommand(SubCommand::with_name("build")
             .about("Builds documentation in a chroot environment")
             .arg(Arg::with_name("PREFIX")
@@ -47,21 +34,6 @@ pub fn main() {
                 .short("d")
                 .long("destination")
                 .help("Sets destination path")
-                .takes_value(true))
-            .arg(Arg::with_name("CHROOT_PATH")
-                .short("c")
-                .long("chroot-path")
-                .help("Sets chroot path")
-                .takes_value(true))
-            .arg(Arg::with_name("CHROOT_USER")
-                .short("u")
-                .long("chroot-user")
-                .help("Sets chroot user name")
-                .takes_value(true))
-            .arg(Arg::with_name("CONTAINER_NAME")
-                .short("n")
-                .long("container-name")
-                .help("Sets name of the container")
                 .takes_value(true))
             .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
                 .long("crates-io-index-path")
@@ -152,15 +124,7 @@ pub fn main() {
 
 
 
-    // doc subcommand
-    if let Some(matches) = matches.subcommand_matches("doc") {
-        let name = matches.value_of("CRATE_NAME").unwrap();
-        let version = matches.value_of("CRATE_VERSION");
-        let target = matches.value_of("TARGET");
-        if let Err(e) = build_doc(name, version, target) {
-            panic!("{:#?}", e);
-        }
-    } else if let Some(matches) = matches.subcommand_matches("build") {
+    if let Some(matches) = matches.subcommand_matches("build") {
         let docbuilder_opts = {
             let mut docbuilder_opts = if let Some(prefix) = matches.value_of("PREFIX") {
                 DocBuilderOptions::from_prefix(PathBuf::from(prefix))
@@ -173,18 +137,6 @@ pub fn main() {
             // set options
             if let Some(destination) = matches.value_of("DESTINATION") {
                 docbuilder_opts.destination = PathBuf::from(destination);
-            }
-
-            if let Some(chroot_path) = matches.value_of("CHROOT_PATH") {
-                docbuilder_opts.chroot_path = PathBuf::from(chroot_path);
-            }
-
-            if let Some(chroot_user) = matches.value_of("CHROOT_USER") {
-                docbuilder_opts.chroot_user = chroot_user.to_string();
-            }
-
-            if let Some(container_name) = matches.value_of("CONTAINER_NAME") {
-                docbuilder_opts.container_name = container_name.to_string();
             }
 
             if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
@@ -204,16 +156,19 @@ pub fn main() {
 
         if let Some(_) = matches.subcommand_matches("world") {
             docbuilder.load_cache().expect("Failed to load cache");
-            docbuilder.build_world().expect("Failed to build world");
+            let mut builder = RustwideBuilder::init().unwrap();
+            builder.build_world(&mut docbuilder).expect("Failed to build world");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
             docbuilder.load_cache().expect("Failed to load cache");
-            docbuilder.build_package(matches.value_of("CRATE_NAME").unwrap(),
-                               matches.value_of("CRATE_VERSION").unwrap())
+            let mut builder = RustwideBuilder::init().unwrap();
+            builder.build_package(&mut docbuilder, matches.value_of("CRATE_NAME").unwrap(),
+                                  matches.value_of("CRATE_VERSION").unwrap())
                 .expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
-            docbuilder.add_essential_files().expect("Failed to add essential files");
+            let builder = RustwideBuilder::init().unwrap();
+            builder.add_essential_files().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");
         } else if let Some(_) = matches.subcommand_matches("unlock") {
@@ -287,5 +242,6 @@ fn logger_init() {
                 record.args())
     });
     builder.parse(&env::var("RUST_LOG").unwrap_or("cratesfyi=info".to_owned()));
-    builder.init();
+
+    rustwide::logging::init_with(builder.build());
 }

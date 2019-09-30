@@ -12,9 +12,10 @@ use std::time::Duration;
 use std::path::PathBuf;
 use libc::fork;
 use time;
+use docbuilder::RustwideBuilder;
 use DocBuilderOptions;
 use DocBuilder;
-use utils::{update_sources, update_release_activity, github_updater, pubsubhubbub};
+use utils::{update_release_activity, github_updater, pubsubhubbub};
 use db::{connect_db, update_search_index};
 
 
@@ -26,7 +27,7 @@ pub fn start_daemon() {
               "CRATESFYI_GITHUB_USERNAME",
               "CRATESFYI_GITHUB_ACCESSTOKEN"]
         .iter() {
-        env::var(v).expect("Environment variable not found");
+        env::var(v).expect(&format!("Environment variable {} not found", v));
     }
 
     let dbopts = opts();
@@ -85,6 +86,8 @@ pub fn start_daemon() {
             QueueInProgress(usize),
         }
 
+        let mut builder = RustwideBuilder::init().unwrap();
+
         let mut status = BuilderState::Fresh;
 
         loop {
@@ -115,11 +118,6 @@ pub fn start_daemon() {
 
                 if let Err(e) = doc_builder.save_cache() {
                     error!("Failed to save cache: {}", e);
-                }
-
-                if let Err(e) = update_sources() {
-                    error!("Failed to update sources: {}", e);
-                    continue;
                 }
             }
 
@@ -158,18 +156,13 @@ pub fn start_daemon() {
                     error!("Failed to load cache: {}", e);
                     continue;
                 }
-
-                if let Err(e) = update_sources() {
-                    error!("Failed to update sources: {}", e);
-                    continue;
-                }
             }
 
             // Run build_packages_queue under `catch_unwind` to catch panics
             // This only panicked twice in the last 6 months but its just a better
             // idea to do this.
             let res = catch_unwind(AssertUnwindSafe(|| {
-                match doc_builder.build_next_queue_package() {
+                match doc_builder.build_next_queue_package(&mut builder) {
                     Err(e) => error!("Failed to build crate from queue: {}", e),
                     Ok(crate_built) => if crate_built {
                         status.increment();

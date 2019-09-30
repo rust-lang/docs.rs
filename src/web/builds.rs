@@ -1,5 +1,6 @@
 
 
+use docbuilder::Limits;
 use std::collections::BTreeMap;
 use super::MetaData;
 use super::pool::Pool;
@@ -27,6 +28,7 @@ struct BuildsPage {
     metadata: Option<MetaData>,
     builds: Vec<Build>,
     build_details: Option<Build>,
+    limits: Limits,
 }
 
 
@@ -54,6 +56,7 @@ impl ToJson for BuildsPage {
         m.insert("metadata".to_owned(), self.metadata.to_json());
         m.insert("builds".to_owned(), self.builds.to_json());
         m.insert("build_details".to_owned(), self.build_details.to_json());
+        m.insert("limits".into(), self.limits.for_website().to_json());
         m.to_json()
     }
 }
@@ -67,6 +70,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let req_build_id: i32 = router.find("id").unwrap_or("0").parse().unwrap_or(0);
 
     let conn = extension!(req, Pool);
+    let limits = ctry!(Limits::for_crate(&conn, name));
 
     let mut build_list: Vec<Build> = Vec::new();
     let mut build_details = None;
@@ -131,6 +135,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             metadata: MetaData::from_crate(&conn, &name, &version),
             builds: build_list,
             build_details: build_details,
+            limits,
         };
         Page::new(builds_page)
             .set_true("show_package_navigation")
