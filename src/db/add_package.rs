@@ -162,7 +162,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
             let mut found = false;
             for version in versions_array.clone() {
                 let version = Version::parse(version.as_string().unwrap())?;
-                if version != metadata_version {
+                if version == metadata_version {
                     found = true;
                 }
             }
