@@ -59,7 +59,7 @@ div.rustdoc {
 
     .sidebar {
         @media (min-width: 701px) {
-            margin-top: $top-navbar-height;
+            top: $top-navbar-height;
         }
 
         .block > ul > li {
