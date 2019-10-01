@@ -10,6 +10,7 @@ use rustc_serialize::json::ToJson;
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use std::borrow::Cow;
 use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
@@ -73,8 +74,12 @@ impl RustwideBuilder {
         let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT).init()?;
         workspace.purge_all_build_dirs()?;
 
+        let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
+            .map(|t| Cow::Owned(t))
+            .unwrap_or_else(|_| Cow::Borrowed("nightly"));
+
         let toolchain = Toolchain::Dist {
-            name: "nightly".into(),
+            name: toolchain_name,
         };
 
         Ok(RustwideBuilder {
@@ -118,9 +123,11 @@ impl RustwideBuilder {
         }
     }
 
-    pub fn add_essential_files(&self) -> Result<()> {
-        info!("building a dummy crate to get essential files");
+    pub fn add_essential_files(&mut self) -> Result<()> {
+        self.rustc_version = self.detect_rustc_version()?;
         let rustc_version = parse_rustc_version(&self.rustc_version)?;
+
+        info!("building a dummy crate to get essential files");
 
         let conn = connect_db()?;
         let limits = Limits::for_crate(&conn, DUMMY_CRATE_NAME)?;
