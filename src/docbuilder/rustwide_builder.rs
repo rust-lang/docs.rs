@@ -365,6 +365,9 @@ impl RustwideBuilder {
                 dep.version
             ));
         }
+        if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
+            rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
+        }
         let mut cargo_args = vec![
             "doc".to_owned(),
             "--lib".to_owned(),
