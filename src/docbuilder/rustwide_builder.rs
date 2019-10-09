@@ -398,7 +398,7 @@ impl RustwideBuilder {
                     "RUSTFLAGS",
                     metadata
                         .rustc_args
-                        .map(|args| args.join(""))
+                        .map(|args| args.join(" "))
                         .unwrap_or("".to_owned()),
                 )
                 .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
