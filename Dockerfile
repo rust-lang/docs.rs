@@ -9,8 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ### STEP 2: Create user ###
 RUN adduser --home /home/cratesfyi --disabled-login --disabled-password --gecos "" cratesfyi
 
-### STEP 3: Setup build environment as new user ###
-ENV CRATESFYI_PREFIX="$CRATESFYI_PREFIX"
+### STEP 3: Setup the database ###
+RUN /etc/init.d/postgresql start && ls -a /var/run/postgresql
+RUN psql -c "CREATE USER cratesfyi WITH PASSWORD 'password';"
+RUN psql -c "CREATE DATABASE cratesfyi OWNER cratesfyi;"
+
+### STEP 4: Setup build environment as new user ###
+ENV CRATESFYI_PREFIX=/home/cratesfyi/prefix
 ENV CRATESFYI_DATABASE_URL=postgresql://cratesfyi:password@localhost
 ENV CRATESFYI_CONTAINER_NAME=cratesfyi-container
 ENV CRATESFYI_GITHUB_USERNAME=
@@ -26,14 +31,9 @@ RUN mkdir -vp "$CRATESFYI_PREFIX"/documentations "$CRATESFYI_PREFIX"/public_html
 RUN git clone https://github.com/rust-lang/crates.io-index.git "$CRATESFYI_PREFIX"/crates.io-index
 RUN git --git-dir="$CRATESFYI_PREFIX"/crates.io-index/.git branch crates-index-diff_last-seen
 
-### STEP 4: Build the project ###
-RUN cargo build --release
-
-### STEP 5: Setup the database ###
-RUN psql -c "CREATE USER cratesfyi WITH PASSWORD 'password';"
-RUN psql -c "CREATE DATABASE cratesfyi OWNER cratesfyi;"
-
+### STEP 5: Build the project ###
 WORKDIR ~/docs.rs
+RUN cargo build --release
 RUN cargo run --release -- database init
 RUN cargo run --release -- build add-essential-files
 RUN cargo run --release -- build crate rand 0.5.5
