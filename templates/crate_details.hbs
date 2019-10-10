@@ -62,7 +62,7 @@
       <div class="warning">{{name}}-{{version}} is not a library.</div>
       {{else}}
       {{#unless build_status}}
-      <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and if you believe this is docs.rs' fault, report into <a href="https://github.com/rust-lang/docs.rs/issues/23">this issue report</a>.</div>
+      <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check the <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and, if you believe this is docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.</div>
       {{else}}
       {{#unless rustdoc_status}}
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>
