@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ### STEP 2: Create user ###
 ENV HOME=/home/cratesfyi
 RUN adduser --home $HOME --disabled-login --disabled-password --gecos "" cratesfyi
-RUN usermod -a -G docker cratesfyi
 
 ### STEP 3: Setup build environment as new user ###
 ENV CRATESFYI_PREFIX=/home/cratesfyi/prefix
