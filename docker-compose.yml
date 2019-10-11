@@ -8,6 +8,9 @@ services:
             - "3000:3000"
         volumes:
             - "/var/run/docker.sock:/var/run/docker.sock"
+            - ".rustwide:/home/cratesfyi/rustwide"
+        environment:
+            CRATESFYI_RUSTWIDE_WORKSPACE: /home/cratesfyi/rustwide
     db:
         image: postgres:alpine
         environment:

@@ -44,13 +44,10 @@ RUN cargo build --release
 
 ### STEP 5: Install docker on the container ###
 # this is necessary for rustwide
+# TODO: this is in the wrong order for caching, it should be just after step 2
 USER root
-RUN apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg2 software-properties-common
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
-RUN add-apt-repository \
-       "deb [arch=amd64] https://download.docker.com/linux/debian \
-       $(lsb_release -cs) stable"
-RUN apt-get update && apt-get install -y --no-install-recommends docker-ce
+# sudo is needed so rustwide can run docker containers
+RUN apt-get install -y --no-install-recommends docker.io sudo
 RUN usermod -a -G docker cratesfyi
 
 ### STEP 6: Build the website ###
@@ -65,10 +62,7 @@ COPY --chown=cratesfyi build.rs build.rs
 COPY --chown=cratesfyi templates templates/
 RUN find . -name "*.rs" -exec touch {} \; && cargo build --release
 
-USER root
-RUN /etc/init.d/docker start
-
-USER cratesfyi
 ENV DOCS_RS_DOCKER=true
-COPY --chown=cratesfyi docker-entrypoint.sh ./
+COPY docker-entrypoint.sh ./
+USER root
 ENTRYPOINT ./docker-entrypoint.sh
