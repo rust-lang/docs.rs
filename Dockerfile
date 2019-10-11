@@ -70,14 +70,5 @@ RUN /etc/init.d/docker start
 
 USER cratesfyi
 ENV DOCS_RS_DOCKER=true
-RUN RUST_LOG=debug cargo run --release -- build add-essential-files
-
-RUN cargo run --release -- database migrate
-RUN cargo run --release -- build crate rand 0.5.5
-RUN cargo run --release -- database update-search-index
-RUN cargo run --release -- database update-release-activity
-
-### STEP 7: Start the webserver ###
-USER root
-COPY setup/cratesfyi.server /etc/systemd/system/cratesfyi.service
-RUN systemctl start cratesfyi.server
+COPY --chown=cratesfyi docker-entrypoint.sh ./
+ENTRYPOINT ./docker-entrypoint.sh
