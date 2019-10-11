@@ -45,6 +45,8 @@ COPY --chown=cratesfyi build.rs build.rs
 COPY --chown=cratesfyi templates templates/
 RUN touch build.rs && find src -name "*.rs" -exec touch {} \; && cargo build --release
 
+ADD css $CRATESFYI_PREFIX/public_html
+
 ENV DOCS_RS_DOCKER=true
 COPY docker-entrypoint.sh ./
 USER root
