@@ -4,23 +4,16 @@ FROM rust:slim
 # Install packaged dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-  libssl-dev zlib1g-dev
+  libssl-dev zlib1g-dev sudo docker.io
 
 ### STEP 2: Create user ###
 ENV HOME=/home/cratesfyi
 RUN adduser --home $HOME --disabled-login --disabled-password --gecos "" cratesfyi
+RUN usermod -a -G docker cratesfyi
 
 ### STEP 3: Setup build environment as new user ###
 ENV CRATESFYI_PREFIX=/home/cratesfyi/prefix
-ENV CRATESFYI_DATABASE_URL=postgresql://cratesfyi:password@db
-ENV CRATESFYI_CONTAINER_NAME=cratesfyi-container
-ENV CRATESFYI_GITHUB_USERNAME=
-ENV CRATESFYI_GITHUB_ACCESSTOKEN=
-ENV RUST_LOG=cratesfyi
-ENV PATH="$PATH:$HOME/docs.rs/target/release"
-
-RUN mkdir $CRATESFYI_PREFIX
-RUN chown cratesfyi:cratesfyi "$CRATESFYI_PREFIX"
+RUN mkdir $CRATESFYI_PREFIX && chown cratesfyi:cratesfyi "$CRATESFYI_PREFIX"
 
 USER cratesfyi
 RUN mkdir -vp "$CRATESFYI_PREFIX"/documentations "$CRATESFYI_PREFIX"/public_html "$CRATESFYI_PREFIX"/sources
@@ -42,17 +35,7 @@ RUN echo "fn main() {}" > src/main.rs && \
 RUN cargo fetch
 RUN cargo build --release
 
-### STEP 5: Install docker on the container ###
-# this is necessary for rustwide
-# TODO: this is in the wrong order for caching, it should be just after step 2
-USER root
-# sudo is needed so rustwide can run docker containers
-RUN apt-get install -y --no-install-recommends docker.io sudo
-RUN usermod -a -G docker cratesfyi
-
-### STEP 6: Build the website ###
-USER cratesfyi
-
+### STEP 5: Build the website ###
 # Dependencies are now cached, copy the actual source code and do another full
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
 # source code didn't change thanks to mtime weirdness.

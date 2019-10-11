@@ -5,7 +5,6 @@ set -euv
 USER=cratesfyi
 BIN=target/release/cratesfyi
 
-export CRATESFYI_PREFIX=/home/cratesfyi/prefix
 export CRATESFYI_DATABASE_URL=postgresql://cratesfyi:password@db
 export CRATESFYI_CONTAINER_NAME=cratesfyi-container
 export CRATESFYI_GITHUB_USERNAME=
