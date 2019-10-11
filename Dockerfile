@@ -60,7 +60,7 @@ RUN rm -rf src build.rs
 COPY --chown=cratesfyi src src/
 COPY --chown=cratesfyi build.rs build.rs
 COPY --chown=cratesfyi templates templates/
-RUN find . -name "*.rs" -exec touch {} \; && cargo build --release
+RUN touch build.rs && find src -name "*.rs" -exec touch {} \; && cargo build --release
 
 ENV DOCS_RS_DOCKER=true
 COPY docker-entrypoint.sh ./
