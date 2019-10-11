@@ -78,7 +78,11 @@ pub fn main() {
                 .index(1)
                 .required(false)
                 .help("Socket address to listen to")))
-        .subcommand(SubCommand::with_name("daemon").about("Starts cratesfyi daemon"))
+        .subcommand(SubCommand::with_name("daemon").about("Starts cratesfyi daemon")
+            .arg(Arg::with_name("FOREGROUND")
+                .short("-f")
+                .long("foreground")
+                .help("run the server in the foreground instead of detaching a child")))
         .subcommand(SubCommand::with_name("database")
             .about("Database operations")
             .subcommand(SubCommand::with_name("move-to-s3"))
@@ -211,7 +215,9 @@ pub fn main() {
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
     } else if let Some(_) = matches.subcommand_matches("daemon") {
-        cratesfyi::utils::start_daemon();
+        let foreground = matches.subcommand_matches("daemon")
+            .map_or(false, |opts| opts.is_present("FOREGROUND"));
+        cratesfyi::utils::start_daemon(!foreground);
     } else if let Some(matches) = matches.subcommand_matches("queue") {
         if let Some(matches) = matches.subcommand_matches("add") {
             let priority = matches.value_of("BUILD_PRIORITY").unwrap_or("5");

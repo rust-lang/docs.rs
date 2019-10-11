@@ -19,4 +19,4 @@ $BIN build crate rand 0.5.5
 
 sudo -E -u $USER $BIN database update-search-index
 sudo -E -u $USER $BIN database update-release-activity
-exec $BIN daemon
+exec $BIN daemon --foreground
