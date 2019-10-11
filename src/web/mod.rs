@@ -426,7 +426,7 @@ fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<Stri
 /// Starts cratesfyi web server
 pub fn start_web_server(sock_addr: Option<&str>) {
     let cratesfyi = CratesfyiHandler::new();
-    Iron::new(cratesfyi).http(sock_addr.unwrap_or("localhost:3000")).unwrap();
+    Iron::new(cratesfyi).http(sock_addr.unwrap_or("0.0.0.0:3000")).unwrap();
 }
 
 
