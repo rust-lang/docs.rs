@@ -68,7 +68,7 @@ impl ToJson for RustdocPage {
 
 /// Handler called for the `/std`. Redirects to the official standard library docs.
 pub fn std_redirector_handler(_req: &mut Request) -> IronResult<Response> {
-    let url = Url::parse("https://doc.rust-lang.org/std/").unwrap();
+    let url = Url::parse("https://doc.rust-lang.org/stable/std/").unwrap();
     Ok(Response::with((status::Found, Redirect(url))))
 }
 
