@@ -78,10 +78,11 @@ impl RustLangRedirector {
 impl iron::Handler for RustLangRedirector {
     fn handle(&self, _req: &mut Request) -> IronResult<Response> {
         let url = url::Url::parse("https://doc.rust-lang.org/stable/")
-            .unwrap()
+            .expect("failed to parse rust-lang.org base URL")
             .join(self.target)
-            .unwrap();
-        let url = Url::from_generic_url(url).unwrap();
+            .expect("failed to append crate name to rust-lang.org base URL");
+        let url = Url::from_generic_url(url)
+            .expect("failed to convert url::Url to iron::Url");
         Ok(Response::with((status::Found, Redirect(url))))
     }
 }
