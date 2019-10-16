@@ -65,11 +65,25 @@ impl ToJson for RustdocPage {
     }
 }
 
+pub struct RustLangRedirector {
+    target: &'static str,
+}
 
-/// Handler called for the `/std`. Redirects to the official standard library docs.
-pub fn std_redirector_handler(_req: &mut Request) -> IronResult<Response> {
-    let url = Url::parse("https://doc.rust-lang.org/stable/std/").unwrap();
-    Ok(Response::with((status::Found, Redirect(url))))
+impl RustLangRedirector {
+    pub fn new(target: &'static str) -> Self {
+        Self { target }
+    }
+}
+
+impl iron::Handler for RustLangRedirector {
+    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+        let url = url::Url::parse("https://doc.rust-lang.org/stable/")
+            .unwrap()
+            .join(self.target)
+            .unwrap();
+        let url = Url::from_generic_url(url).unwrap();
+        Ok(Response::with((status::Found, Redirect(url))))
+    }
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
