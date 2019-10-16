@@ -103,11 +103,14 @@ impl CratesfyiHandler {
         router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
         router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
+
+        // Redirect standard library crates to rust-lang.org
         router.get("/alloc", rustdoc::RustLangRedirector::new("alloc"), "alloc");
         router.get("/core", rustdoc::RustLangRedirector::new("core"), "core");
         router.get("/proc_macro", rustdoc::RustLangRedirector::new("proc_macro"), "proc_macro");
         router.get("/std", rustdoc::RustLangRedirector::new("std"), "std");
         router.get("/test", rustdoc::RustLangRedirector::new("test"), "test");
+
         router.get("/releases", releases::recent_releases_handler, "releases");
         router.get("/releases/feed",
                    releases::releases_feed_handler,
