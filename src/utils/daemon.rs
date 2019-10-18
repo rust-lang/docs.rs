@@ -20,7 +20,7 @@ use db::{connect_db, update_search_index};
 
 
 
-pub fn start_daemon() {
+pub fn start_daemon(background: bool) {
     // first check required environment variables
     for v in ["CRATESFYI_PREFIX",
               "CRATESFYI_PREFIX",
@@ -35,15 +35,17 @@ pub fn start_daemon() {
     // check paths once
     dbopts.check_paths().unwrap();
 
-    // fork the process
-    let pid = unsafe { fork() };
-    if pid > 0 {
-        let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
-            .expect("Failed to create pid file");
-        writeln!(&mut file, "{}", pid).expect("Failed to write pid");
+    if background {
+        // fork the process
+        let pid = unsafe { fork() };
+        if pid > 0 {
+            let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
+                .expect("Failed to create pid file");
+            writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
-        info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
-        exit(0);
+            info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
+            exit(0);
+        }
     }
 
     // check new crates every minute

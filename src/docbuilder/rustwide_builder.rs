@@ -71,7 +71,12 @@ impl RustwideBuilder {
             .as_ref()
             .map(|v| v.as_str())
             .unwrap_or(DEFAULT_RUSTWIDE_WORKSPACE);
-        let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT).init()?;
+        let is_docker = std::env::var("DOCS_RS_DOCKER")
+            .map(|s| s == "true")
+            .unwrap_or(false);
+        let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
+            .running_inside_docker(is_docker)
+            .init()?;
         workspace.purge_all_build_dirs()?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
