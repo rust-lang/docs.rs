@@ -15,4 +15,5 @@ export PATH="$PATH:$HOME/docs.rs/target/release"
 sudo -E -u $USER $BIN database migrate
 sudo -E -u $USER $BIN database update-search-index
 sudo -E -u $USER $BIN database update-release-activity
-exec $BIN daemon --foreground
+
+$BIN "$@"

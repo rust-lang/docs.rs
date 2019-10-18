@@ -49,4 +49,5 @@ ADD css $CRATESFYI_PREFIX/public_html
 ENV DOCS_RS_DOCKER=true
 COPY docker-entrypoint.sh ./
 USER root
-ENTRYPOINT ./docker-entrypoint.sh
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["daemon", "--foreground"]
