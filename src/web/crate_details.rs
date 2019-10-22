@@ -2,7 +2,7 @@
 
 
 use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion, redirect_base};
+use super::{MetaData, duration_to_str, match_version, render_markdown, MatchSemver, redirect_base};
 use super::error::Nope;
 use super::page::Page;
 use iron::prelude::*;
@@ -229,8 +229,8 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool);
 
-    match match_version(&conn, &name, req_version) {
-        MatchVersion::Exact(version) => {
+    match match_version(&conn, &name, req_version).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact(version)) => {
             let details = CrateDetails::new(&conn, &name, &version);
 
             Page::new(details)
@@ -239,7 +239,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .set_true("package_navigation_crate_tab")
                 .to_resp("crate_details")
         }
-        MatchVersion::Semver(version) => {
+        Some(MatchSemver::Semver(version)) => {
             let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
                                                 redirect_base(req),
                                                 name,
@@ -247,7 +247,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
             Ok(super::redirect(url))
         }
-        MatchVersion::None => {
+        _ => {
             Err(IronError::new(Nope::CrateNotFound, status::NotFound))
         }
     }

@@ -483,7 +483,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             // since we never pass a version into `match_version` here, we'll never get
             // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
             // matter
-            if let Some(version) = match_version(&conn, &query, None).into_option() {
+            if let Some(matchver) = match_version(&conn, &query, None) {
+                let version = matchver.version.into_string();
+                let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
                 // FIXME: This is a super dirty way to check if crate have rustdocs generated.
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163
@@ -493,7 +495,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                                                  INNER JOIN crates
                                                  ON crates.id = releases.crate_id
                                                  WHERE crates.name = $1 AND releases.version = $2",
-                                                &[query, &version]));
+                                                &[&query, &version]));
                     if rows.is_empty() {
                         false
                     } else {

@@ -9,7 +9,7 @@ use iron::prelude::*;
 use iron::{status, Url};
 use iron::modifiers::Redirect;
 use router::Router;
-use super::{match_version, MatchVersion};
+use super::{match_version, MatchSemver};
 use super::error::Nope;
 use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
@@ -148,16 +148,25 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
-    let crate_name = cexpect!(router.find("crate"));
+    let mut crate_name = cexpect!(router.find("crate")).to_string();
     let req_version = router.find("version");
 
     let conn = extension!(req, Pool);
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let version = match match_version(&conn, &crate_name, req_version).into_option() {
-        Some(v) => v,
-        None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
+    let version = match match_version(&conn, &crate_name, req_version) {
+        Some(v) => {
+            if let Some(new_name) = v.corrected_name {
+                // `match_version` checked against -/_ typos, so if we have a name here we should
+                // use that instead
+                crate_name = new_name;
+            }
+            v.version.into_string()
+        },
+        None => {
+            return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
+        }
     };
 
     // get target name and whether it has docs
@@ -199,9 +208,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.remove(0);
     }
 
-    version = match match_version(&conn, &name, url_version) {
-        MatchVersion::Exact(v) => v,
-        MatchVersion::Semver(v) => {
+    version = match match_version(&conn, &name, url_version).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact(v)) => v,
+        Some(MatchSemver::Semver(v)) => {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
@@ -212,7 +221,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                                                 req_path.join("/"))[..]));
             return Ok(super::redirect(url));
         }
-        MatchVersion::None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        _ => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
 
     // docs have "rustdoc" prefix in database
@@ -290,8 +299,8 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(extension!(req, Router).find("crate"));
     let conn = extension!(req, Pool);
 
-    let options = match match_version(&conn, &name, Some(&version)) {
-        MatchVersion::Exact(version) => {
+    let options = match match_version(&conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact(version)) => {
             let rows = ctry!(conn.query("SELECT rustdoc_status
                                          FROM releases
                                          INNER JOIN crates ON crates.id = releases.crate_id
@@ -311,7 +320,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
-        MatchVersion::Semver(version) => {
+        Some(MatchSemver::Semver(version)) => {
             let url = ctry!(Url::parse(&format!("{}/{}/badge.svg?version={}",
                                                 redirect_base(req),
                                                 name,
@@ -319,7 +328,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 
             return Ok(super::redirect(url));
         }
-        MatchVersion::None => {
+        _ => {
             BadgeOptions {
                 subject: "docs".to_owned(),
                 status: "no builds".to_owned(),
