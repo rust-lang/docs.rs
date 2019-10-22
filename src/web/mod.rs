@@ -191,27 +191,45 @@ impl Handler for CratesfyiHandler {
     }
 }
 
+struct MatchVersion {
+    /// Represents the crate name that was found when attempting to load a crate release.
+    ///
+    /// `match_version` will attempt to match a provided crate name against similar crate names with
+    /// dashes (`-`) replaced with underscores (`_`) and vice versa. If
+    pub corrected_name: Option<String>,
+    pub version: MatchSemver,
+}
+
+impl MatchVersion {
+    /// If the matched version was an exact match to the requested crate name, returns the
+    /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
+    /// `None`.
+    fn assume_exact(self) -> Option<MatchSemver> {
+        if self.corrected_name.is_none() {
+            Some(self.version)
+        } else {
+            None
+        }
+    }
+}
+
 /// Represents the possible results of attempting to load a version requirement.
 /// The id (i32) of the release is stored to simplify successive queries.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum MatchVersion {
+enum MatchSemver {
     /// `match_version` was given an exact version, which matched a saved crate version.
     Exact((String, i32)),
     /// `match_version` was given a semver version requirement, which matched the given saved crate
     /// version.
     Semver((String, i32)),
-    /// `match_version` was given a version requirement which did not match any saved crate
-    /// versions.
-    None,
 }
 
-impl MatchVersion {
-    /// Convert this `MatchVersion` into an `Option`, discarding whether the matched version came
-    /// from an exact version number or a semver requirement.
-    fn into_option(self) -> Option<(String, i32)> {
+impl MatchSemver {
+    /// Discard information about whether the loaded version was an exact match, and return the
+    /// matched version string and id.
+    pub fn into_parts(self) -> (String, i32) {
         match self {
-            MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
-            MatchVersion::None => None,
+            MatchSemver::Exact((v, i)) | MatchSemver::Semver((v, i)) => (v, i),
         }
     }
 }
@@ -220,7 +238,11 @@ impl MatchVersion {
 ///
 /// `version` may be an exact version number or loose semver version requirement. The return value
 /// will indicate whether the given version exactly matched a version number from the database.
-fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchVersion {
+///
+/// This function will also check for crates where dashes in the name (`-`) have been replaced with
+/// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
+/// been matched exactly, or if there has been a "correction" in the name that matched instead.
+fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
     // version is an Option<&str> from router::Router::get
     // need to decode first
     use url::percent_encoding::percent_decode;
@@ -238,29 +260,54 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         })
         .unwrap_or_else(|| "*".into());
 
-    let versions: Vec<(String, i32)> = {
+    let (versions, corrected_name): (Vec<(String, i32)>, Option<String>) = {
         let query = "SELECT version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE name = $1 AND yanked = false";
-        let rows = conn.query(query, &[&name]).unwrap();
-        if rows.is_empty() {
-            return MatchVersion::None;
+        let mut rows = conn.query(query, &[&name]).unwrap();
+        let name_replace = if rows.len() == 0 {
+            // try looking up again with dashes and underscores replaced
+            if name.contains('-') {
+                Some(name.replace('-', "_"))
+            } else if name.contains('_') {
+                Some(name.replace('_', "-"))
+            } else {
+                return None;
+            }
+        } else {
+            // if we returned rows, then we don't need to check a replaced name
+            None
+        };
+
+        if let Some(new_name) = &name_replace {
+            rows = conn.query(query, &[&new_name]).unwrap();
+
+            if rows.len() == 0 {
+                // even with the new name, there was nothing, so bail
+                return None;
+            }
         }
-        rows.iter().map(|row| (row.get(0), row.get(1))).collect()
+        (
+            rows.iter().map(|row| (row.get(0), row.get(1))).collect(),
+            name_replace,
+        )
     };
 
     // first check for exact match
     // we can't expect users to use semver in query
     for version in &versions {
         if version.0 == req_version {
-            return MatchVersion::Exact(version.clone());
+            return Some(MatchVersion {
+                corrected_name,
+                version: MatchSemver::Exact(version.clone()),
+            });
         }
     }
 
     // Now try to match with semver
     let req_sem_ver = match VersionReq::parse(&req_version) {
         Ok(v) => v,
-        Err(_) => return MatchVersion::None,
+        Err(_) => return None,
     };
 
     // we need to sort versions first
@@ -272,7 +319,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
             // but check result just in case
             let version = match Version::parse(&version.0) {
                 Ok(v) => (v, version.1),
-                Err(_) => return MatchVersion::None,
+                Err(_) => return None,
             };
             versions_sem.push(version);
         }
@@ -284,17 +331,23 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
 
     for version in &versions_sem {
         if req_sem_ver.matches(&version.0) {
-            return MatchVersion::Semver((version.0.to_string(), version.1));
+            return Some(MatchVersion {
+                corrected_name,
+                version: MatchSemver::Semver((version.0.to_string(), version.1)),
+            });
         }
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first version if requested version is '*'
     if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver((versions_sem[0].0.to_string(), versions_sem[0].1));
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Semver((versions_sem[0].0.to_string(), versions_sem[0].1)),
+        });
     }
 
-    MatchVersion::None
+    None
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
@@ -539,16 +592,8 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     use crate::test::*;
-    use crate::web::{match_version, MatchVersion};
+    use crate::web::match_version;
     use html5ever::tendril::TendrilSink;
-
-    impl MatchVersion {
-        fn strip_id(self) -> Option<String> {
-            self.into_option().map(|(version, _id)| version)
-        }
-    }
-
-    const DEFAULT_ID: i32 = 0;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
         db.fake_release()
@@ -557,16 +602,18 @@ mod test {
             .create()
             .unwrap()
     }
+
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        match_version(&db.conn(), "foo", v).strip_id()
+        match_version(&db.conn(), "foo", v)
+            .and_then(|version| version.assume_exact().map(|semver| semver.into_parts().0))
     }
 
     fn semver(version: &'static str) -> Option<String> {
-        MatchVersion::Semver((version.into(), DEFAULT_ID)).strip_id()
+        Some(version.into())
     }
 
     fn exact(version: &'static str) -> Option<String> {
-        MatchVersion::Exact((version.into(), DEFAULT_ID)).strip_id()
+        Some(version.into())
     }
 
     fn clipboard_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
