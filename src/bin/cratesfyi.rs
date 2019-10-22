@@ -30,11 +30,6 @@ pub fn main() {
                 .short("P")
                 .long("prefix")
                 .takes_value(true))
-            .arg(Arg::with_name("DESTINATION")
-                .short("d")
-                .long("destination")
-                .help("Sets destination path")
-                .takes_value(true))
             .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
                 .long("crates-io-index-path")
                 .help("Sets crates.io-index path")
@@ -137,11 +132,6 @@ pub fn main() {
             } else {
                 DocBuilderOptions::default()
             };
-
-            // set options
-            if let Some(destination) = matches.value_of("DESTINATION") {
-                docbuilder_opts.destination = PathBuf::from(destination);
-            }
 
             if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
                 docbuilder_opts.crates_io_index_path = PathBuf::from(crates_io_index_path);

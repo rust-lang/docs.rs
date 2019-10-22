@@ -245,6 +245,8 @@ impl RustwideBuilder {
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking());
 
+        let local_storage = ::tempdir::TempDir::new("docsrs-docs")?;
+
         let res = build_dir
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
@@ -274,10 +276,8 @@ impl RustwideBuilder {
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
                     self.copy_docs(
-                        &doc_builder,
                         &build.host_target_dir(),
-                        name,
-                        version,
+                        local_storage.path(),
                         &res.target,
                         true,
                     )?;
@@ -296,10 +296,8 @@ impl RustwideBuilder {
                                     target
                                 );
                                 self.copy_docs(
-                                    &doc_builder,
                                     &build.host_target_dir(),
-                                    name,
-                                    version,
+                                    local_storage.path(),
                                     target,
                                     false,
                                 )?;
@@ -308,7 +306,7 @@ impl RustwideBuilder {
                         }
                     }
 
-                    self.upload_docs(doc_builder, &conn, name, version)?;
+                    self.upload_docs(&conn, name, version, local_storage.path())?;
                 }
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
@@ -330,6 +328,7 @@ impl RustwideBuilder {
 
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
+        local_storage.close()?;
         Ok(res.successful)
     }
 
@@ -424,16 +423,14 @@ impl RustwideBuilder {
 
     fn copy_docs(
         &self,
-        doc_builder: &DocBuilder,
         target_dir: &Path,
-        name: &str,
-        version: &str,
+        local_storage: &Path,
         target: &str,
         is_default_target: bool,
     ) -> Result<()> {
         let source = target_dir.join(target);
 
-        let mut dest = doc_builder.options().destination.join(name).join(version);
+        let mut dest = local_storage.to_path_buf();
         // only add target name to destination directory when we are copying a non-default target.
         // this is allowing us to host documents in the root of the crate documentation directory.
         // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
@@ -450,16 +447,17 @@ impl RustwideBuilder {
 
     fn upload_docs(
         &self,
-        doc_builder: &DocBuilder,
         conn: &Connection,
         name: &str,
         version: &str,
+        local_storage: &Path,
     ) -> Result<()> {
         debug!("Adding documentation into database");
-        let prefix = format!("rustdoc/{}/{}", name, version);
-        let database_prefix =
-            Path::new(&doc_builder.options().destination).join(format!("{}/{}", name, version));
-        add_path_into_database(conn, &prefix, database_prefix)?;
+        add_path_into_database(
+            conn,
+            &format!("rustdoc/{}/{}", name, version),
+            local_storage,
+        )?;
         Ok(())
     }
 }
