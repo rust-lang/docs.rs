@@ -1,3 +1,2 @@
 /.rustwide
 **/target
-/postgres-data

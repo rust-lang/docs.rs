@@ -49,59 +49,48 @@ Example badges for `mio` crate:
 
 ## Development
 
-We strongly recommend using vagrant, this will give you a virtual machine
-already configured and ready to start developing on.
+We strongly recommend using docker-compose, which will make it easier to get started
+without adding new users and packages to your host machine.
 
 ### Getting started
 
-Make sure you have vagrant, virtualbox and a ssh client and you need
-to able to download ~800MB data on the first run.
+Make sure you have docker-compose and are able to download ~10GB data on the first run.
 
 
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
-vagrant up  # This may take a little while on the first run
+docker-compose up  # This may take a half hour or more on the first run
 ```
-
-You can always run `vagrant provision` to reconfigure virtual machine.
-Provision will install required dependencies and nightly rust compiler
-into virtual machine. It will also configure lxc-container inside
-virtual machine.
 
 ### CLI
 
-Make sure you are running every listed command inside `/vagrant` directory
-in virtual machine. You can connect to virtual machine with `vagrant ssh` and
-switch current working directory with: `cd /vagrant` inside virtual machine.
-
+Make sure you are running every listed command prefixed with
+`docker-compose run web`. If you want to run the web server, you will also need
+the flag `-p 3000:3000` to allow connections to the container.
 
 #### Starting web server
 
 This command will start web interface of docs.rs and you can access it from:
-`http://localhost:3000/`
-
-```
-cargo run -- start-web-server
-```
-
+`http://localhost:3000/`: `start-web-server`
 
 #### `build` subcommand
 
 ```sh
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
-cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
+# For example, `docker-compose run web build crate regex 1.1.6`
+build crate <CRATE_NAME> <CRATE_VERSION>
 
 
 # Adds essential files (css and fonts) into database to avoid duplication
 # This command needs to be run after each rustc update
-cargo run -- build add-essential-files
+build add-essential-files
 
 
 # Builds every crate and adds them into database
 # (beware: this may take months to finish)
-cargo run -- build world
+build world
 ```
 
 
@@ -109,18 +98,18 @@ cargo run -- build world
 
 ```sh
 # Migrate database to recent version
-cargo run -- database migrate
+database migrate
 
 
 # Adds a directory into database to serve with `staticfile` crate.
-cargo run -- database add-directory <DIRECTORY> [PREFIX]
+database add-directory <DIRECTORY> [PREFIX]
 
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # You can set this environment variables in ~/.cratesfyi.env file.
-cargo run -- database update-github-fields
+database update-github-fields
 
 
 # Updates search-index.
@@ -128,11 +117,11 @@ cargo run -- database update-github-fields
 # run to update recent-version of a crate index and search index.
 # If you are having any trouble with accessing right version of a crate,
 # run this command. Otherwise it's not required.
-cargo run -- database update-search-index
+database update-search-index
 
 
 # Updates release activitiy chart
-cargo run -- database update-release-activity
+database update-release-activity
 ```
 
 If you want to explore or edit database manually, you can connect database
@@ -145,7 +134,7 @@ This subcommand will only build documentation of a crate.
 It is designed to run inside a secure container.
 
 ```
-cargo run -- doc <CRATE_NAME>
+doc <CRATE_NAME>
 ```
 
 #### Contact
