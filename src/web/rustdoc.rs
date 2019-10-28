@@ -224,7 +224,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let path = {
         let mut path = req_path.join("/");
-        if path.ends_with("/") {
+        if path.ends_with('/') {
+            req_path.pop(); // get rid of empty string
             path.push_str("index.html");
             req_path.push("index.html");
         }
@@ -263,12 +264,32 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.crate_details = Some(crate_details);
 
+    let (path, version) = if let Some(version) = latest_version {
+        req_path[2] = &version;
+        let path = if File::from_path(&conn, &req_path.join("/")).is_some() {
+            req_path[3..].join("/") // NOTE: this adds 'index.html' if it wasn't there before
+        } else { // this page doesn't exist in the latest version
+            let search_item = if *req_path.last().unwrap() == "index.html" { // this is a module
+                req_path[&req_path.len() - 2]
+            } else { // this is an item
+                req_path.last().unwrap().split('.').nth(1)
+                    .expect("paths should be of the form <class>.<name>.html")
+            };
+            // TODO: check if req_path[3] is the platform choice or the name of the crate
+            format!("{}/?search={}", req_path[3], search_item)
+        };
+        (path, version)
+    } else {
+        (String::new(), String::new())
+    };
+
     Page::new(content)
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
-        .set_bool("is_latest_version", latest_version.is_none())
-        .set("latest_version", &latest_version.unwrap_or(String::new()))
+        .set_bool("is_latest_version", path.is_empty())
+        .set("path_in_latest", &path)
+        .set("latest_version", &version)
         .to_resp("rustdoc")
 }
 
