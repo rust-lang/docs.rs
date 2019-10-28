@@ -90,31 +90,14 @@ docker-compose run web build world
 #### `database` subcommand
 
 ```sh
-# Migrate database to recent version
-docker-compose run web database migrate
-
-
 # Adds a directory into database to serve with `staticfile` crate.
 docker-compose run web database add-directory <DIRECTORY> [PREFIX]
-
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # You can set this environment variables in ~/.cratesfyi.env file.
 docker-compose run web database update-github-fields
-
-
-# Updates search-index.
-# daemon is running this command occasionally, and this command must be
-# run to update recent-version of a crate index and search index.
-# If you are having any trouble with accessing right version of a crate,
-# run this command. Otherwise it's not required.
-docker-compose run web database update-search-index
-
-
-# Updates release activity chart
-docker-compose run web database update-release-activity
 ```
 
 If you want to explore or edit database manually, you can connect database
