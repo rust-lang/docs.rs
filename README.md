@@ -75,7 +75,7 @@ Docker.
 ```sh
 # This command will start web interface of docs.rs and you can access it from
 # http://localhost:3000/`
-docker-compose run web -p 3000:3000 start-web-server
+docker-compose run -p 3000:3000 web start-web-server
 ```
 
 #### `build` subcommand
