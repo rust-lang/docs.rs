@@ -41,9 +41,10 @@ RUN cargo build --release
 RUN rm -rf src build.rs
 COPY --chown=cratesfyi src src/
 COPY --chown=cratesfyi build.rs build.rs
-COPY --chown=cratesfyi templates templates/
+COPY --chown=cratesfyi templates/style.scss templates/
 RUN touch build.rs && find src -name "*.rs" -exec touch {} \; && cargo build --release
 
+ADD templates templates/
 ADD css $CRATESFYI_PREFIX/public_html
 
 ENV DOCS_RS_DOCKER=true
