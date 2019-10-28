@@ -81,12 +81,6 @@ docker-compose run web -p 3000:3000 start-web-server
 # For example, `docker-compose run web build crate regex 1.1.6`
 docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
 
-
-# Adds essential files (css and fonts) into database to avoid duplication
-# This command needs to be run after each rustc update
-build add-essential-files
-
-
 # Builds every crate and adds them into database
 # (beware: this may take months to finish)
 docker-compose run web build world
