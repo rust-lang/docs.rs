@@ -65,14 +65,13 @@ docker-compose up  # This may take a half hour or more on the first run
 
 ### CLI
 
-Make sure you are running every listed command prefixed with
-`docker-compose run web`. If you want to run the web server, you will also need
-the flag `-p 3000:3000` to allow connections to the container.
-
 #### Starting web server
 
-This command will start web interface of docs.rs and you can access it from:
-`http://localhost:3000/`: `start-web-server`
+```sh
+# This command will start web interface of docs.rs and you can access it from
+# http://localhost:3000/`
+docker-compose run web -p 3000:3000 start-web-server
+```
 
 #### `build` subcommand
 
@@ -80,7 +79,7 @@ This command will start web interface of docs.rs and you can access it from:
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
 # For example, `docker-compose run web build crate regex 1.1.6`
-build crate <CRATE_NAME> <CRATE_VERSION>
+docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
 
 
 # Adds essential files (css and fonts) into database to avoid duplication
@@ -90,7 +89,7 @@ build add-essential-files
 
 # Builds every crate and adds them into database
 # (beware: this may take months to finish)
-build world
+docker-compose run web build world
 ```
 
 
@@ -98,18 +97,18 @@ build world
 
 ```sh
 # Migrate database to recent version
-database migrate
+docker-compose run web database migrate
 
 
 # Adds a directory into database to serve with `staticfile` crate.
-database add-directory <DIRECTORY> [PREFIX]
+docker-compose run web database add-directory <DIRECTORY> [PREFIX]
 
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # You can set this environment variables in ~/.cratesfyi.env file.
-database update-github-fields
+docker-compose run web database update-github-fields
 
 
 # Updates search-index.
@@ -117,16 +116,21 @@ database update-github-fields
 # run to update recent-version of a crate index and search index.
 # If you are having any trouble with accessing right version of a crate,
 # run this command. Otherwise it's not required.
-database update-search-index
+docker-compose run web database update-search-index
 
 
-# Updates release activitiy chart
-database update-release-activity
+# Updates release activity chart
+docker-compose run web database update-release-activity
 ```
 
 If you want to explore or edit database manually, you can connect database
 with `psql` command.
 
+```sh
+# this will print the name of the container it starts
+docker-compose run -d db
+docker exec -it <the container name goes here> psql -U cratesfyi
+```
 
 #### `doc` subcommand
 
