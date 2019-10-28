@@ -126,15 +126,6 @@ docker-compose run -d db
 docker exec -it <the container name goes here> psql -U cratesfyi
 ```
 
-#### `doc` subcommand
-
-This subcommand will only build documentation of a crate.
-It is designed to run inside a secure container.
-
-```
-doc <CRATE_NAME>
-```
-
 #### Contact
 
 Docs.rs is run and maintained by [Rustdoc team](https://www.rust-lang.org/governance/teams/dev-tools#rustdoc).
