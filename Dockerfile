@@ -39,10 +39,14 @@ RUN cargo build --release
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
 # source code didn't change thanks to mtime weirdness.
 RUN rm -rf src build.rs
-COPY --chown=cratesfyi src src/
+
 COPY --chown=cratesfyi build.rs build.rs
+RUN touch build.rs
+COPY --chown=cratesfyi src src/
+RUN find src -name "*.rs" -exec touch {} \;
 COPY --chown=cratesfyi templates/style.scss templates/
-RUN touch build.rs && find src -name "*.rs" -exec touch {} \; && cargo build --release
+
+RUN cargo build --release
 
 ADD templates templates/
 ADD css $CRATESFYI_PREFIX/public_html
