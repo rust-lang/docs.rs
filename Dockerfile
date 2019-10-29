@@ -7,12 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libssl-dev zlib1g-dev sudo docker.io
 
 ### STEP 2: Setup build environment as new user ###
-ENV CRATESFYI_PREFIX=/opt/docsrs/prefix
-RUN mkdir -p $CRATESFYI_PREFIX
-
-RUN mkdir -vp "$CRATESFYI_PREFIX"/documentations "$CRATESFYI_PREFIX"/public_html "$CRATESFYI_PREFIX"/sources
-RUN git clone https://github.com/rust-lang/crates.io-index.git "$CRATESFYI_PREFIX"/crates.io-index
-RUN git --git-dir="$CRATESFYI_PREFIX"/crates.io-index/.git branch crates-index-diff_last-seen
+RUN mkdir -p /opt/docsrs/prefix
 
 ### STEP 3: Build the project ###
 # Build the dependencies in a separate step to avoid rebuilding all of them
@@ -44,7 +39,7 @@ COPY templates/style.scss templates/
 RUN cargo build --release
 
 ADD templates templates/
-ADD css $CRATESFYI_PREFIX/public_html
+COPY css /opt/docsrs/prefix/public_html
 
 COPY docker-entrypoint.sh ./
 ENTRYPOINT ["./docker-entrypoint.sh"]
