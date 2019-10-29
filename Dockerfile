@@ -11,8 +11,8 @@ ENV HOME=/home/cratesfyi
 RUN adduser --home $HOME --disabled-login --disabled-password --gecos "" cratesfyi
 
 ### STEP 3: Setup build environment as new user ###
-ENV CRATESFYI_PREFIX=/home/cratesfyi/prefix
-RUN mkdir $CRATESFYI_PREFIX && chown cratesfyi:cratesfyi "$CRATESFYI_PREFIX"
+ENV CRATESFYI_PREFIX=/opt/docsrs/prefix
+RUN mkdir -p $CRATESFYI_PREFIX && chown cratesfyi:cratesfyi "$CRATESFYI_PREFIX"
 
 USER cratesfyi
 RUN mkdir -vp "$CRATESFYI_PREFIX"/documentations "$CRATESFYI_PREFIX"/public_html "$CRATESFYI_PREFIX"/sources
@@ -24,8 +24,10 @@ RUN git --git-dir="$CRATESFYI_PREFIX"/crates.io-index/.git branch crates-index-d
 # every time the source code changes. This takes advantage of Docker's layer
 # caching, and it works by copying the Cargo.{toml,lock} with dummy source code
 # and doing a full build with it.
-RUN mkdir -p ~/docs.rs ~/docs.rs/src/web/badge
-WORKDIR $HOME/docs.rs
+USER root
+RUN mkdir -p /build/docs.rs /build/src/web/badge && chown -R cratesfyi:cratesfyi /build
+USER cratesfyi
+WORKDIR /build
 COPY --chown=cratesfyi Cargo.lock Cargo.toml ./
 COPY --chown=cratesfyi src/web/badge src/web/badge/
 RUN echo "fn main() {}" > src/main.rs && \
