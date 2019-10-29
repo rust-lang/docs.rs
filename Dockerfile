@@ -41,6 +41,7 @@ RUN cargo build --release
 # source code didn't change thanks to mtime weirdness.
 RUN rm -rf src build.rs
 
+COPY .git .git
 COPY build.rs build.rs
 RUN touch build.rs
 COPY src src/
