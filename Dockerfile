@@ -1,10 +1,16 @@
-FROM rust:slim
+FROM ubuntu:bionic
 
 ### STEP 1: Install dependencies ###
 # Install packaged dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-  libssl-dev zlib1g-dev sudo docker.io
+  libssl-dev zlib1g-dev sudo ca-certificates docker.io
+
+# Install the stable toolchain with rustup
+RUN curl https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init >/tmp/rustup-init && \
+    chmod +x /tmp/rustup-init && \
+    /tmp/rustup-init -y --no-modify-path --default-toolchain stable
+ENV PATH=/root/.cargo/bin:$PATH
 
 ### STEP 2: Setup build environment as new user ###
 RUN mkdir -p /opt/docsrs/prefix
