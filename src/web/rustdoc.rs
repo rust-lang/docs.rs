@@ -262,8 +262,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     let latest_version = latest_version(&crate_details.versions, &version);
 
-    content.crate_details = Some(crate_details);
-
     let (path, version) = if let Some(version) = latest_version {
         req_path[2] = &version;
         let path = if File::from_path(&conn, &req_path.join("/")).is_some() {
@@ -275,13 +273,22 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 req_path.last().unwrap().split('.').nth(1)
                     .expect("paths should be of the form <class>.<name>.html")
             };
-            // TODO: check if req_path[3] is the platform choice or the name of the crate
-            format!("{}/?search={}", req_path[3], search_item)
+            // check if req_path[3] is the platform choice or the name of the crate
+            let concat_path;
+            let crate_root = if req_path[3] != crate_details.target_name {
+                concat_path = format!("{}/{}", req_path[3], req_path[4]);
+                &concat_path
+            } else {
+                req_path[3]
+            };
+            format!("{}/?search={}", crate_root, search_item)
         };
         (path, version)
     } else {
         (String::new(), String::new())
     };
+
+    content.crate_details = Some(crate_details);
 
     Page::new(content)
         .set_true("show_package_navigation")
