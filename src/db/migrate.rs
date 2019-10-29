@@ -20,7 +20,7 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 ///                               "DROP TABLE test;");
 /// ```
 macro_rules! migration {
-    ($version:expr, $description:expr, $up:expr, $down:expr) => {{
+    ($version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
         struct Amigration;
         impl Migration for Amigration {
             fn version(&self) -> Version {
