@@ -11,6 +11,9 @@ services:
             - ".rustwide:/home/cratesfyi/rustwide"
         environment:
             CRATESFYI_RUSTWIDE_WORKSPACE: /home/cratesfyi/rustwide
+            CRATESFYI_DATABASE_URL: postgresql://cratesfyi:password@db
+        env_file:
+            - .env
     db:
         image: postgres:alpine
         volumes:

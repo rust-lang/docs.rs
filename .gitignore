@@ -1,4 +1,5 @@
 /ignored
+/.env
 target
 *.css
 *.css.map

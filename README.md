@@ -60,6 +60,7 @@ Make sure you have docker-compose and are able to download ~10GB data on the fir
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
+cp .env.sample .env
 docker-compose up  # This may take a half hour or more on the first run
 ```
 

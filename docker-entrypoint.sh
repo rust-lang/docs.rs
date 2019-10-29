@@ -2,10 +2,7 @@
 
 set -euv
 
-export CRATESFYI_DATABASE_URL=postgresql://cratesfyi:password@db
-export CRATESFYI_CONTAINER_NAME=cratesfyi-container
-export CRATESFYI_GITHUB_USERNAME=
-export CRATESFYI_GITHUB_ACCESSTOKEN=
+export DOCS_RS_DOCKER=true
 export RUST_LOG=cratesfyi,rustwide=info
 export PATH="$PATH:/build/target/release"
 
