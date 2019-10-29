@@ -1,0 +1,23 @@
+---
+
+on: [push, pull_request]
+name: CI
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@master
+        with:
+          fetch-depth: 2
+
+      - name: Install stable Rust
+        run: rustup update stable && rustup default stable
+
+      - name: Build docs.rs
+        run: cargo build
+
+      - name: Test docs.rs
+        run: cargo test -- --test-threads=1
