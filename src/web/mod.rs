@@ -44,7 +44,7 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
-mod metrics;
+pub mod metrics;
 
 use std::{env, fmt};
 use std::error::Error;
