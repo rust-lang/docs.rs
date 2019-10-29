@@ -7,7 +7,26 @@ export DOCS_RS_DOCKER=true
 export RUST_LOG=cratesfyi,rustwide=info
 export PATH="$PATH:/build/target/release"
 
-cratesfyi database migrate
+# Try migrating the database multiple times if it fails
+# This avoids the docker container crashing the first time it's started with
+# docker-compose, as PostgreSQL needs some time to initialize.
+set +e
+failed=0
+while true; do
+    if ! cratesfyi database migrate; then
+        ((failed=failed + 1))
+        if [ "${failed}" -eq 5 ]; then
+            exit 1
+        fi
+        echo "failed to migrate the database"
+        echo "waiting 1 second..."
+        sleep 1
+    else
+        break
+    fi
+done
+set -e
+
 cratesfyi database update-search-index
 cratesfyi database update-release-activity
 
