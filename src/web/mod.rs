@@ -44,7 +44,7 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
-mod metrics;
+pub mod metrics;
 
 use std::{env, fmt};
 use std::error::Error;
@@ -433,6 +433,12 @@ fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<Stri
 
 /// Starts cratesfyi web server
 pub fn start_web_server(sock_addr: Option<&str>) {
+    // poke all the metrics counters to instantiate and register them
+    metrics::TOTAL_BUILDS.inc_by(0);
+    metrics::SUCCESSFUL_BUILDS.inc_by(0);
+    metrics::FAILED_BUILDS.inc_by(0);
+    metrics::NON_LIBRARY_BUILDS.inc_by(0);
+
     let cratesfyi = CratesfyiHandler::new();
     Iron::new(cratesfyi).http(sock_addr.unwrap_or("0.0.0.0:3000")).unwrap();
 }

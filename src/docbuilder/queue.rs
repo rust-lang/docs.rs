@@ -62,11 +62,17 @@ impl DocBuilder {
         match builder.build_package(self, &name, &version) {
             Ok(_) => {
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
+                ::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
                 // Increase attempt count
-                let _ = conn.execute("UPDATE queue SET attempt = attempt + 1 WHERE id = $1",
-                                     &[&id]);
+                let rows = try!(conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                                           &[&id]));
+                let attempt: i32 = rows.get(0).get(0);
+                if attempt >= 5 {
+                    ::web::metrics::FAILED_BUILDS.inc();
+                    ::web::metrics::TOTAL_BUILDS.inc();
+                }
                 error!("Failed to build package {}-{} from queue: {}",
                        name,
                        version,

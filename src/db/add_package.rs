@@ -37,10 +37,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let (release_time, yanked, downloads) = try!(get_release_time_yanked_downloads(metadata_pkg));
-    let is_library = match metadata_pkg.targets[0].kind.as_slice() {
-        &[ref kind] if kind == "lib" || kind == "proc-macro" => true,
-        _ => false,
-    };
+    let is_library = metadata_pkg.is_library();
     let metadata = Metadata::from_source_dir(source_dir)?;
 
     let release_id: i32 = {

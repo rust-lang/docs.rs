@@ -310,6 +310,13 @@ impl RustwideBuilder {
                 }
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
+                if res.successful {
+                    ::web::metrics::SUCCESSFUL_BUILDS.inc();
+                } else if res.cargo_metadata.root().is_library() {
+                    ::web::metrics::FAILED_BUILDS.inc();
+                } else {
+                    ::web::metrics::NON_LIBRARY_BUILDS.inc();
+                }
                 let release_id = add_package_into_database(
                     &conn,
                     res.cargo_metadata.root(),
