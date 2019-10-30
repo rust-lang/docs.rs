@@ -78,6 +78,15 @@ pub(crate) struct Package {
     pub(crate) authors: Vec<String>,
 }
 
+impl Package {
+    pub(crate) fn is_library(&self) -> bool {
+        match self.targets[0].kind.as_slice() {
+            &[ref kind] if kind == "lib" || kind == "proc-macro" => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(RustcDecodable)]
 pub(crate) struct Target {
     pub(crate) name: String,

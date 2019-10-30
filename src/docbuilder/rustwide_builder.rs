@@ -310,19 +310,12 @@ impl RustwideBuilder {
                 }
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
-                let metadata = res.cargo_metadata.root();
-                let is_library = match metadata.targets[0].kind.as_slice() {
-                    &[ref kind] if kind == "lib" || kind == "proc-macro" => true,
-                    _ => false,
-                };
                 if res.successful {
                     ::web::metrics::SUCCESSFUL_BUILDS.inc();
+                } else if res.cargo_metadata.root().is_library() {
+                    ::web::metrics::FAILED_BUILDS.inc();
                 } else {
-                    if is_library {
-                        ::web::metrics::FAILED_BUILDS.inc();
-                    } else {
-                        ::web::metrics::NON_LIBRARY_BUILDS.inc();
-                    }
+                    ::web::metrics::NON_LIBRARY_BUILDS.inc();
                 }
                 let release_id = add_package_into_database(
                     &conn,
