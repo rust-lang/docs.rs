@@ -66,24 +66,24 @@ impl ToJson for RustdocPage {
 }
 
 pub struct RustLangRedirector {
-    target: &'static str,
+    url: Url,
 }
 
 impl RustLangRedirector {
     pub fn new(target: &'static str) -> Self {
-        Self { target }
+        let url = url::Url::parse("https://doc.rust-lang.org/stable/")
+            .expect("failed to parse rust-lang.org base URL")
+            .join(target)
+            .expect("failed to append crate name to rust-lang.org base URL");
+        let url = Url::from_generic_url(url)
+            .expect("failed to convert url::Url to iron::Url");
+        Self { url }
     }
 }
 
 impl iron::Handler for RustLangRedirector {
     fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-        let url = url::Url::parse("https://doc.rust-lang.org/stable/")
-            .expect("failed to parse rust-lang.org base URL")
-            .join(self.target)
-            .expect("failed to append crate name to rust-lang.org base URL");
-        let url = Url::from_generic_url(url)
-            .expect("failed to convert url::Url to iron::Url");
-        Ok(Response::with((status::Found, Redirect(url))))
+        Ok(Response::with((status::Found, Redirect(self.url.clone()))))
     }
 }
 
