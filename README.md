@@ -64,6 +64,10 @@ cp .env.sample .env
 docker-compose up  # This may take a half hour or more on the first run
 ```
 
+If you need to store big files in the repository's directory is recommended to
+put them in the `ignored/` subdirectory, which is ignored both by git and
+Docker.
+
 ### CLI
 
 #### Starting web server

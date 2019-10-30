@@ -14,7 +14,7 @@ FROM ubuntu:bionic AS build
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-  libssl-dev zlib1g-dev sudo ca-certificates docker.io
+  libssl-dev zlib1g-dev ca-certificates
 
 # Install the stable toolchain with rustup
 RUN curl https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init >/tmp/rustup-init && \
@@ -26,7 +26,7 @@ ENV PATH=/root/.cargo/bin:$PATH
 # every time the source code changes. This takes advantage of Docker's layer
 # caching, and it works by copying the Cargo.{toml,lock} with dummy source code
 # and doing a full build with it.
-RUN mkdir -p /build/docs.rs /build/src/web/badge
+RUN mkdir -p /build/src/web/badge
 WORKDIR /build
 COPY Cargo.lock Cargo.toml ./
 COPY src/web/badge src/web/badge/
