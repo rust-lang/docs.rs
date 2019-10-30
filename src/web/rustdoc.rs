@@ -15,6 +15,7 @@ use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
+use postgres::Connection;
 use time;
 use iron::Handler;
 use utils;
@@ -260,32 +261,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let latest_version = latest_version(&crate_details.versions, &version);
-
-    let (path, version) = if let Some(version) = latest_version {
+    let (path, version) = if let Some(version) = latest_version(&crate_details.versions, &version) {
         req_path[2] = &version;
-        let path = if File::from_path(&conn, &req_path.join("/")).is_some() {
-            req_path[3..].join("/") // NOTE: this adds 'index.html' if it wasn't there before
-        } else { // this page doesn't exist in the latest version
-            let search_item = if *req_path.last().unwrap() == "index.html" { // this is a module
-                req_path[&req_path.len() - 2]
-            } else { // this is an item
-                req_path.last().unwrap().split('.').nth(1)
-                    .expect("paths should be of the form <class>.<name>.html")
-            };
-            // check if req_path[3] is the platform choice or the name of the crate
-            let concat_path;
-            let crate_root = if req_path[3] != crate_details.target_name {
-                concat_path = format!("{}/{}", req_path[3], req_path[4]);
-                &concat_path
-            } else {
-                req_path[3]
-            };
-            format!("{}/?search={}", crate_root, search_item)
-        };
-        (path, version)
+        (path_for_version(&req_path, &crate_details.target_name, &conn), version)
     } else {
-        (String::new(), String::new())
+        Default::default()
     };
 
     content.crate_details = Some(crate_details);
@@ -300,7 +280,27 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .to_resp("rustdoc")
 }
 
-
+fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> String {
+    if File::from_path(&conn, &req_path.join("/")).is_some() {
+        req_path[3..].join("/") // NOTE: this adds 'index.html' if it wasn't there before
+    } else { // this page doesn't exist in the latest version
+        let search_item = if *req_path.last().unwrap() == "index.html" { // this is a module
+            req_path[req_path.len() - 2]
+        } else { // this is an item
+            req_path.last().unwrap().split('.').nth(1)
+                .expect("paths should be of the form <class>.<name>.html")
+        };
+        // check if req_path[3] is the platform choice or the name of the crate
+        let concat_path;
+        let crate_root = if req_path[3] != target_name {
+            concat_path = format!("{}/{}", req_path[3], req_path[4]);
+            &concat_path
+        } else {
+            req_path[3]
+        };
+        format!("{}/?search={}", crate_root, search_item)
+    }
+}
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     use iron::headers::ContentType;
