@@ -43,7 +43,7 @@ impl DocBuilder {
     ) -> Result<bool> {
         let conn = try!(connect_db());
 
-        let query = try!(conn.query("SELECT id, name, version, attempt
+        let query = try!(conn.query("SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
                                      ORDER BY priority ASC, attempt ASC, id ASC
@@ -58,7 +58,6 @@ impl DocBuilder {
         let id: i32 = query.get(0).get(0);
         let name: String = query.get(0).get(1);
         let version: String = query.get(0).get(2);
-        let attempt: i32 = query.get(0).get(3);
 
         match builder.build_package(self, &name, &version) {
             Ok(_) => {
@@ -66,9 +65,9 @@ impl DocBuilder {
             }
             Err(e) => {
                 // Increase attempt count
-                let attempt = attempt + 1;
-                let _ = conn.execute("UPDATE queue SET attempt = $1 WHERE id = $2",
-                                     &[&attempt, &id]);
+                let rows = try!(conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                                           &[&id]));
+                let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
                     ::web::metrics::FAILED_BUILDS.inc();
                 }
