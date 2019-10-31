@@ -438,6 +438,7 @@ pub fn start_web_server(sock_addr: Option<&str>) {
     metrics::SUCCESSFUL_BUILDS.inc_by(0);
     metrics::FAILED_BUILDS.inc_by(0);
     metrics::NON_LIBRARY_BUILDS.inc_by(0);
+    metrics::UPLOADED_FILES_TOTAL.inc_by(0);
 
     let cratesfyi = CratesfyiHandler::new();
     Iron::new(cratesfyi).http(sock_addr.unwrap_or("0.0.0.0:3000")).unwrap();

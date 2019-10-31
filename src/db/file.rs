@@ -196,7 +196,10 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                     match s3_res {
                         // we've successfully uploaded the content, so steal it;
                         // we don't want to put it in the DB
-                        Ok(_) => break None,
+                        Ok(_) => {
+                            crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
+                            break None;
+                        },
                         // Since s3 was configured, we want to panic on failure to upload.
                         Err(e) => {
                             log::error!("failed to upload to {}: {:?}", bucket_path, e);
@@ -240,6 +243,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                 WHERE path = $1",
                                 &[&path, &mime, &content]));
             }
+            crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
         }
     }
 
