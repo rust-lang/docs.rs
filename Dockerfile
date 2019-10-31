@@ -1,58 +1,74 @@
-FROM rust:slim
+# To produce a smaller image this Dockerfile contains two separate stages: in
+# the first one all the build dependencies are installed and docs.rs is built,
+# while in the second one just the runtime dependencies are installed, with the
+# binary built in the previous stage copied there.
+#
+# As of 2019-10-29 this reduces the image from 2.8GB to 500 MB.
 
-### STEP 1: Install dependencies ###
+#################
+#  Build stage  #
+#################
+
+FROM ubuntu:bionic AS build
+
 # Install packaged dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-  libssl-dev zlib1g-dev sudo docker.io
+  libssl-dev zlib1g-dev ca-certificates
 
-### STEP 2: Create user ###
-ENV HOME=/home/cratesfyi
-RUN adduser --home $HOME --disabled-login --disabled-password --gecos "" cratesfyi
+# Install the stable toolchain with rustup
+RUN curl https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init >/tmp/rustup-init && \
+    chmod +x /tmp/rustup-init && \
+    /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
+ENV PATH=/root/.cargo/bin:$PATH
 
-### STEP 3: Setup build environment as new user ###
-ENV CRATESFYI_PREFIX=/home/cratesfyi/prefix
-RUN mkdir $CRATESFYI_PREFIX && chown cratesfyi:cratesfyi "$CRATESFYI_PREFIX"
-
-USER cratesfyi
-RUN mkdir -vp "$CRATESFYI_PREFIX"/documentations "$CRATESFYI_PREFIX"/public_html "$CRATESFYI_PREFIX"/sources
-RUN git clone https://github.com/rust-lang/crates.io-index.git "$CRATESFYI_PREFIX"/crates.io-index
-RUN git --git-dir="$CRATESFYI_PREFIX"/crates.io-index/.git branch crates-index-diff_last-seen
-
-### STEP 4: Build the project ###
 # Build the dependencies in a separate step to avoid rebuilding all of them
 # every time the source code changes. This takes advantage of Docker's layer
 # caching, and it works by copying the Cargo.{toml,lock} with dummy source code
 # and doing a full build with it.
-RUN mkdir -p ~/docs.rs ~/docs.rs/src/web/badge
-WORKDIR $HOME/docs.rs
-COPY --chown=cratesfyi Cargo.lock Cargo.toml ./
-COPY --chown=cratesfyi src/web/badge src/web/badge/
+RUN mkdir -p /build/src/web/badge
+WORKDIR /build
+COPY Cargo.lock Cargo.toml ./
+COPY src/web/badge src/web/badge/
 RUN echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > build.rs
 
 RUN cargo fetch
 RUN cargo build --release
 
-### STEP 5: Build the website ###
 # Dependencies are now cached, copy the actual source code and do another full
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
 # source code didn't change thanks to mtime weirdness.
 RUN rm -rf src build.rs
 
-COPY --chown=cratesfyi build.rs build.rs
+COPY .git .git
+COPY build.rs build.rs
 RUN touch build.rs
-COPY --chown=cratesfyi src src/
+COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
-COPY --chown=cratesfyi templates/style.scss templates/
+COPY templates/style.scss templates/
 
 RUN cargo build --release
 
-ADD templates templates/
-ADD css $CRATESFYI_PREFIX/public_html
+##################
+#  Output stage  #
+##################
 
-ENV DOCS_RS_DOCKER=true
-COPY docker-entrypoint.sh ./
-USER root
-ENTRYPOINT ["./docker-entrypoint.sh"]
+FROM ubuntu:bionic AS output
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    git \
+    libmagic1 \
+    docker.io \
+    ca-certificates
+
+RUN mkdir -p /opt/docsrs/prefix
+
+COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+COPY css /opt/docsrs/prefix/public_html
+COPY templates /opt/docsrs/templates
+COPY docker-entrypoint.sh /opt/docsrs/entrypoint.sh
+
+WORKDIR /opt/docsrs
+ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
 CMD ["daemon", "--foreground"]

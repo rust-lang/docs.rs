@@ -9,8 +9,12 @@ services:
         volumes:
             - "/var/run/docker.sock:/var/run/docker.sock"
             - ".rustwide:/home/cratesfyi/rustwide"
+            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
         environment:
             CRATESFYI_RUSTWIDE_WORKSPACE: /home/cratesfyi/rustwide
+            CRATESFYI_DATABASE_URL: postgresql://cratesfyi:password@db
+        env_file:
+            - .env
     db:
         image: postgres:alpine
         volumes:
@@ -19,4 +23,5 @@ services:
             POSTGRES_USER: cratesfyi
             POSTGRES_PASSWORD: password
 volumes:
-    postgres-data:
+    postgres-data: {}
+    cratesio-index: {}
