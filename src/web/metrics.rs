@@ -35,6 +35,11 @@ lazy_static! {
         "Number of builds that did not complete due to not being a library"
     )
     .unwrap();
+    pub static ref UPLOADED_FILES_TOTAL: IntCounter = register_int_counter!(
+        "docsrs_uploaded_files_total",
+        "Number of files uploaded to S3 or stored in the database"
+    )
+    .unwrap();
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
