@@ -14,11 +14,13 @@ html, button, input, select, textarea,
 div.rustdoc {
   font-family: "Source Serif Pro", Georgia, Times, "Times New Roman", serif;
   padding: 10px 15px 20px 15px;
-  position: absolute;
+  position: fixed;
+  top: 32px;
+  bottom: 0;
   left: 0;
   right: 0;
-  top: 32px;
-  max-height: calc(100vh - 32px);
+  display: block;
+  overflow-y: auto;
 }
 @media (max-width: 700px) {
   div.rustdoc {
