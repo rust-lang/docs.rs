@@ -9,7 +9,7 @@ extern crate rustwide;
 
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Arg, App, SubCommand};
 use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
@@ -53,12 +53,18 @@ pub fn main() {
                 .about("Builds documentation for a crate")
                 .arg(Arg::with_name("CRATE_NAME")
                     .index(1)
-                    .required(true)
+                    .required_unless("LOCAL")
+                    .requires("CRATE_VERSION")
                     .help("Crate name"))
                 .arg(Arg::with_name("CRATE_VERSION")
                     .index(2)
-                    .required(true)
-                    .help("Version of crate")))
+                    .help("Version of crate"))
+                .arg(Arg::with_name("LOCAL")
+                    .short("-l")
+                    .long("--local")
+                    .takes_value(true)
+                    .conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"])
+                    .help("Build a crate at a specific path")))
             .subcommand(SubCommand::with_name("add-essential-files")
                 .about("Adds essential files for rustc"))
             .subcommand(SubCommand::with_name("lock").about("Locks cratesfyi daemon to stop \
@@ -156,9 +162,11 @@ pub fn main() {
         } else if let Some(matches) = matches.subcommand_matches("crate") {
             docbuilder.load_cache().expect("Failed to load cache");
             let mut builder = RustwideBuilder::init().unwrap();
-            builder.build_package(&mut docbuilder, matches.value_of("CRATE_NAME").unwrap(),
-                                  matches.value_of("CRATE_VERSION").unwrap())
-                .expect("Building documentation failed");
+            match matches.value_of("LOCAL") {
+                Some(path) => builder.build_local_package(&mut docbuilder, Path::new(path)),
+                None => builder.build_package(&mut docbuilder,
+                    matches.value_of("CRATE_NAME").unwrap(), matches.value_of("CRATE_VERSION").unwrap(), None),
+            }.expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(_) = matches.subcommand_matches("add-essential-files") {
             let mut builder = RustwideBuilder::init().unwrap();
