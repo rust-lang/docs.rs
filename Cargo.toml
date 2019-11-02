@@ -55,7 +55,7 @@ features = [ "with-time", "with-rustc-serialize" ]
 
 [build-dependencies]
 time = "0.1"
-git2 = "0.9"
+git2 = "0.10"
 sass-rs = "0.2"
 
 [[bin]]
