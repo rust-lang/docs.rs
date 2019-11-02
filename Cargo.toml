@@ -46,7 +46,7 @@ tempdir = "0.3"
 iron = "0.5"
 router = "0.5"
 handlebars-iron = "0.22"
-params = "0.6"
+params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
 
 [dependencies.postgres]
