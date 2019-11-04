@@ -288,7 +288,7 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
 /// Get release_time, yanked and downloads from crates.io
 fn get_release_time_yanked_downloads(
     pkg: &MetadataPackage,
-) -> Result<(Option<time::Timespec>, Option<bool>, Option<i32>)> {
+) -> Result<(time::Timespec, bool, i32)> {
     let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
@@ -332,7 +332,7 @@ fn get_release_time_yanked_downloads(
         }
     }
 
-    Ok((release_time, yanked, downloads))
+    Ok((release_time.unwrap_or(time::get_time()), yanked.unwrap_or(false), downloads.unwrap_or(0)))
 }
 
 
