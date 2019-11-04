@@ -105,6 +105,11 @@ docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
 # Builds every crate and adds them into database
 # (beware: this may take months to finish)
 docker-compose run web build world
+
+# Builds a local package you have at <SOURCE> and adds it to the database.
+# The package does not have to be on crates.io.
+# The package must be on the local filesystem, git urls are not allowed.
+docker-compose run -v "$(realpath <SOURCE>)":/build web build crate --local /build
 ```
 
 

@@ -204,7 +204,7 @@ impl RustwideBuilder {
         crates_from_path(
             &doc_builder.options().crates_io_index_path.clone(),
             &mut |name, version| {
-                match self.build_package(doc_builder, name, version) {
+                match self.build_package(doc_builder, name, version, None) {
                     Ok(status) => {
                         count += 1;
                         if status && count % 10 == 0 {
@@ -218,11 +218,23 @@ impl RustwideBuilder {
         )
     }
 
+    pub fn build_local_package(
+        &mut self,
+        doc_builder: &mut DocBuilder,
+        path: &Path,
+    ) -> Result<bool> {
+        self.update_toolchain()?;
+        let metadata = CargoMetadata::load(&self.workspace, &self.toolchain, path)?;
+        let package = metadata.root();
+        self.build_package(doc_builder, &package.name, &package.version, Some(path))
+    }
+
     pub fn build_package(
         &mut self,
         doc_builder: &mut DocBuilder,
         name: &str,
         version: &str,
+        local: Option<&Path>,
     ) -> Result<bool> {
         if !doc_builder.should_build(name, version) {
             return Ok(false);
@@ -238,7 +250,11 @@ impl RustwideBuilder {
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
         build_dir.purge()?;
 
-        let krate = Crate::crates_io(name, version);
+        let krate = if let Some(path) = local {
+            Crate::local(path)
+        } else {
+            Crate::crates_io(name, version)
+        };
         krate.fetch(&self.workspace)?;
 
         let sandbox = SandboxBuilder::new()

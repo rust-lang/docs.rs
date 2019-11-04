@@ -59,7 +59,7 @@ impl DocBuilder {
         let name: String = query.get(0).get(1);
         let version: String = query.get(0).get(2);
 
-        match builder.build_package(self, &name, &version) {
+        match builder.build_package(self, &name, &version, None) {
             Ok(_) => {
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
                 ::web::metrics::TOTAL_BUILDS.inc();

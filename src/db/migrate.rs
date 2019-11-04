@@ -193,6 +193,16 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             // downgrade query
             "DROP TABLE sandbox_overrides;"
         ),
+        migration!(
+            4,
+            "Make more fields not null",
+            "ALTER TABLE releases ALTER COLUMN release_time SET NOT NULL,
+                                  ALTER COLUMN yanked SET NOT NULL,
+                                  ALTER COLUMN downloads SET NOT NULL",
+            "ALTER TABLE releases ALTER COLUMN release_time DROP NOT NULL,
+                                  ALTER COLUMN yanked DROP NOT NULL,
+                                  ALTER COLUMN downloads DROP NOT NULL"
+        )
     ];
 
     for migration in migrations {
