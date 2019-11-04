@@ -6,3 +6,4 @@ target
 .sass-cache
 .vagrant
 .rustwide
+.rustwide-docker
