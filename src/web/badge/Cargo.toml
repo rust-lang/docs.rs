@@ -12,4 +12,4 @@ path = "badge.rs"
 
 [dependencies]
 base64 = "0.9.0"
-rusttype = "0.8"
+rusttype = "0.7"
