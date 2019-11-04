@@ -161,7 +161,7 @@ pub fn main() {
             docbuilder.save_cache().expect("Failed to save cache");
         } else if let Some(matches) = matches.subcommand_matches("crate") {
             docbuilder.load_cache().expect("Failed to load cache");
-            let mut builder = RustwideBuilder::init().unwrap();
+            let mut builder = RustwideBuilder::init().expect("failed to initialize rustwide");
             match matches.value_of("LOCAL") {
                 Some(path) => builder.build_local_package(&mut docbuilder, Path::new(path)),
                 None => builder.build_package(&mut docbuilder,
