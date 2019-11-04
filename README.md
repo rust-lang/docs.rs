@@ -56,7 +56,6 @@ without adding new users and packages to your host machine.
 
 Make sure you have docker-compose and are able to download ~10GB data on the first run.
 
-
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
@@ -68,6 +67,23 @@ If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
+### Docker-Compose
+
+#### Rebuilding Containers
+
+To rebuild the site, run `docker-compose build`.
+Note that docker-compose caches the build even if you change the source code,
+so this will be necessary anytime you make changes.
+
+#### FAQ
+
+##### I keep getting the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
+
+You probably have [CRLF line endings](https://en.wikipedia.org/wiki/CRLF).
+This causes the hashbang in the docker-entrypoint to be `/bin/sh\r` instead of `/bin/sh`.
+This is probably because you have `git.autocrlf` set to true,
+[set it to `input`](https://stackoverflow.com/questions/10418975) instead.
+
 ### CLI
 
 #### Starting web server
@@ -75,7 +91,7 @@ Docker.
 ```sh
 # This command will start web interface of docs.rs and you can access it from
 # http://localhost:3000/`
-docker-compose run web -p 3000:3000 start-web-server
+docker-compose run -p 3000:3000 web start-web-server
 ```
 
 #### `build` subcommand
@@ -114,7 +130,7 @@ docker-compose run -d db
 docker exec -it <the container name goes here> psql -U cratesfyi
 ```
 
-#### Contact
+### Contact
 
 Docs.rs is run and maintained by [Rustdoc team](https://www.rust-lang.org/governance/teams/dev-tools#rustdoc).
 You can find us in #docs-rs on [Discord](https://discord.gg/rust-lang).
