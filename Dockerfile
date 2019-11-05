@@ -74,4 +74,4 @@ COPY docker-entrypoint.sh /opt/docsrs/entrypoint.sh
 
 WORKDIR /opt/docsrs
 ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
-CMD ["daemon", "--foreground"]
+CMD ["start-web-server"]
