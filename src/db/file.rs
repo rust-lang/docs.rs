@@ -153,6 +153,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     use std::collections::HashMap;
     let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
 
+    use futures::future::Future;
+
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
 
     let mut to_upload = try!(get_file_list(&path));
@@ -205,6 +207,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                     body: Some(content.clone().into()),
                     content_type: Some(mime.clone()),
                     ..Default::default()
+                }).inspect(|_| {
+                    crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
                 }));
             } else {
                 // If AWS credentials are configured, don't insert/update the database
@@ -229,7 +233,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
             if rt.block_on(::futures::future::join_all(futures)).is_ok() {
                 // this batch was successful, start another batch if there are still more files
-                crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(batch_size as i64);
                 batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
                 currently_uploading = to_upload.drain(..batch_size).collect();
                 attempts = 0;
@@ -240,7 +243,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             }
         } else {
-            crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(batch_size as i64);
             batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
             currently_uploading = to_upload.drain(..batch_size).collect();
         }
