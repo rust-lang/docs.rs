@@ -49,9 +49,8 @@ Example badges for `mio` crate:
 
 ## Development
 
-We strongly recommend using [docker-compose](https://docs.docker.com/compose/),
-which will make it easier to get started without adding new users and packages
-to your host machine.
+We strongly recommend using docker-compose, which will make it easier to get started
+without adding new users and packages to your host machine.
 
 ### Getting started
 
@@ -61,20 +60,7 @@ Make sure you have docker-compose and are able to download ~10GB data on the fir
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
 cp .env.sample .env
-
-docker-compose build  # This builds the docs.rs binary
-
-# Build a sample crate to make sure it works
-# This sets up the docs.rs build environment, including installing the nightly
-# Rust toolchain. This will take a while the first time but will be cached afterwards.
-docker-compose run web build crate regex 1.3.1
-
-# This starts the web server but does not build any crates.
-# If you want to build crates, see below under `build` subcommand
-docker-compose up
-
-# As soon as you see `cratesfyi "$@"`
-# you should be able to navigate to http://localhost:3000
+docker-compose up  # This may take a half hour or more on the first run
 ```
 
 If you need to store big files in the repository's directory it's recommended to

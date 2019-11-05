@@ -60,10 +60,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
     libmagic1 \
     docker.io \
-    ca-certificates \
-    build-essential \
-    gcc \
-    pkg-config
+    ca-certificates
 
 RUN mkdir -p /opt/docsrs/prefix
 
@@ -74,4 +71,4 @@ COPY docker-entrypoint.sh /opt/docsrs/entrypoint.sh
 
 WORKDIR /opt/docsrs
 ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
-CMD ["start-web-server"]
+CMD ["daemon", "--foreground"]
