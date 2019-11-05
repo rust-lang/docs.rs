@@ -60,7 +60,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
     libmagic1 \
     docker.io \
-    ca-certificates
+    ca-certificates \
+    build-essential \
+    gcc \
+    pkg-config
 
 RUN mkdir -p /opt/docsrs/prefix
 
