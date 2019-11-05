@@ -49,8 +49,9 @@ Example badges for `mio` crate:
 
 ## Development
 
-We strongly recommend using docker-compose, which will make it easier to get started
-without adding new users and packages to your host machine.
+We strongly recommend using [docker-compose](https://docs.docker.com/compose/),
+which will make it easier to get started without adding new users and packages
+to your host machine.
 
 ### Getting started
 
