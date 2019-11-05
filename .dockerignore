@@ -1,3 +1,4 @@
 /.rustwide
+/.rustwide-docker
 /ignored
 **/target
