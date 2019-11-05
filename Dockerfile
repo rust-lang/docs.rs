@@ -63,7 +63,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     ca-certificates \
     build-essential \
     gcc \
-    pkg-config
+    pkg-config \
+    libssl-dev
 
 RUN mkdir -p /opt/docsrs/prefix
 
