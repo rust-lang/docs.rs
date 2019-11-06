@@ -70,11 +70,10 @@ docker-compose build  # This builds the docs.rs binary
 docker-compose run web build crate regex 1.3.1
 
 # This starts the web server but does not build any crates.
-# If you want to build crates, see below under `build` subcommand
+# If you want to build crates, see below under `build` subcommand.
+# It should print a link to the website once it finishes initializing.
 docker-compose up
 
-# As soon as you see `cratesfyi "$@"`
-# you should be able to navigate to http://localhost:3000
 ```
 
 If you need to store big files in the repository's directory it's recommended to
@@ -105,7 +104,7 @@ This is probably because you have `git.autocrlf` set to true,
 ```sh
 # This command will start web interface of docs.rs and you can access it from
 # http://localhost:3000/`
-docker-compose run -p 3000:3000 web start-web-server
+docker-compose up
 ```
 
 #### `build` subcommand
@@ -140,13 +139,22 @@ docker-compose run web database add-directory <DIRECTORY> [PREFIX]
 docker-compose run web database update-github-fields
 ```
 
-If you want to explore or edit database manually, you can connect database
-with `psql` command.
+If you want to explore or edit database manually, you can connect to the database
+with the `psql` command.
 
 ```sh
 # this will print the name of the container it starts
 docker-compose run -d db
 docker exec -it <the container name goes here> psql -U cratesfyi
+```
+
+#### `daemon` subcommand
+
+```sh
+# Run a persistent daemon which queues builds and starts a web server.
+# Warning: This will try to queue hundreds of packages on crates.io, only start it
+if you have enough resources!
+docker-compose run -p 3000:3000 web daemon --foreground
 ```
 
 ### Contact
