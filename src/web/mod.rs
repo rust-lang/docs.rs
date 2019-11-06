@@ -441,7 +441,11 @@ pub fn start_web_server(sock_addr: Option<&str>) {
     metrics::UPLOADED_FILES_TOTAL.inc_by(0);
 
     let cratesfyi = CratesfyiHandler::new();
-    Iron::new(cratesfyi).http(sock_addr.unwrap_or("0.0.0.0:3000")).unwrap();
+    let addr = sock_addr.unwrap_or("0.0.0.0:3000");
+    // need to assign this so it's not dropped before the function ends
+    let _server = Iron::new(cratesfyi).http(addr)
+        .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
+    info!("Running docs.rs web server on http://{}", addr);
 }
 
 
