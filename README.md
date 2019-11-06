@@ -153,7 +153,7 @@ docker exec -it <the container name goes here> psql -U cratesfyi
 ```sh
 # Run a persistent daemon which queues builds and starts a web server.
 # Warning: This will try to queue hundreds of packages on crates.io, only start it
-if you have enough resources!
+# if you have enough resources!
 docker-compose run -p 3000:3000 web daemon --foreground
 ```
 
