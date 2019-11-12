@@ -280,13 +280,21 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .to_resp("rustdoc")
 }
 
+/// Checks whether the given path (including version and target information) exists.
+/// The crate's `target_name` is used to confirm whether a platform triple is part of the path.
+///
+/// Returns a path that can be appended to `/crate/version/` to create a complete URL.
 fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> String {
     if File::from_path(&conn, &req_path.join("/")).is_some() {
-        req_path[3..].join("/") // NOTE: this adds 'index.html' if it wasn't there before
-    } else { // this page doesn't exist in the latest version
-        let search_item = if *req_path.last().unwrap() == "index.html" { // this is a module
+        // NOTE: this adds 'index.html' if it wasn't there before
+        req_path[3..].join("/")
+    } else {
+        // this page doesn't exist in the latest version
+        let search_item = if *req_path.last().unwrap() == "index.html" {
+            // this is a module
             req_path[req_path.len() - 2]
-        } else { // this is an item
+        } else {
+            // this is an item
             req_path.last().unwrap().split('.').nth(1)
                 .expect("paths should be of the form <class>.<name>.html")
         };
