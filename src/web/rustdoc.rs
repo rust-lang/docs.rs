@@ -285,29 +285,29 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
 fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> String {
+    // Simple case: page exists in the latest version, so just change the version number
     if File::from_path(&conn, &req_path.join("/")).is_some() {
         // NOTE: this adds 'index.html' if it wasn't there before
-        req_path[3..].join("/")
-    } else {
-        // this page doesn't exist in the latest version
-        let search_item = if *req_path.last().unwrap() == "index.html" {
-            // this is a module
-            req_path[req_path.len() - 2]
-        } else {
-            // this is an item
-            req_path.last().unwrap().split('.').nth(1)
-                .expect("paths should be of the form <class>.<name>.html")
-        };
-        // check if req_path[3] is the platform choice or the name of the crate
-        let concat_path;
-        let crate_root = if req_path[3] != target_name {
-            concat_path = format!("{}/{}", req_path[3], req_path[4]);
-            &concat_path
-        } else {
-            req_path[3]
-        };
-        format!("{}/?search={}", crate_root, search_item)
+        return req_path[3..].join("/");
     }
+    // this page doesn't exist in the latest version
+    let search_item = if *req_path.last().unwrap() == "index.html" {
+        // this is a module
+        req_path[req_path.len() - 2]
+    } else {
+        // this is an item
+        req_path.last().unwrap().split('.').nth(1)
+            .expect("paths should be of the form <class>.<name>.html")
+    };
+    // check if req_path[3] is the platform choice or the name of the crate
+    let concat_path;
+    let crate_root = if req_path[3] != target_name {
+        concat_path = format!("{}/{}", req_path[3], req_path[4]);
+        &concat_path
+    } else {
+        req_path[3]
+    };
+    format!("{}/?search={}", crate_root, search_item)
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
