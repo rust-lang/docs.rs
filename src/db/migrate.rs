@@ -20,7 +20,7 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 ///                               "DROP TABLE test;");
 /// ```
 macro_rules! migration {
-    ($version:expr, $description:expr, $up:expr, $down:expr) => {{
+    ($version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
         struct Amigration;
         impl Migration for Amigration {
             fn version(&self) -> Version {
@@ -202,7 +202,17 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "ALTER TABLE releases ALTER COLUMN release_time DROP NOT NULL,
                                   ALTER COLUMN yanked DROP NOT NULL,
                                   ALTER COLUMN downloads DROP NOT NULL"
-        )
+        ),
+        migration!(
+            // version
+            5,
+            // description
+            "Make target_name non-nullable",
+            // upgrade query
+            "ALTER TABLE releases ALTER COLUMN target_name SET NOT NULL",
+            // downgrade query
+            "ALTER TABLE releases ALTER COLUMN target_name DROP NOT NULL",
+        ),
     ];
 
     for migration in migrations {

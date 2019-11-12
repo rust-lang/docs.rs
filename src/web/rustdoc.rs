@@ -15,6 +15,7 @@ use super::page::Page;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
+use postgres::Connection;
 use time;
 use iron::Handler;
 use utils;
@@ -224,7 +225,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let path = {
         let mut path = req_path.join("/");
-        if path.ends_with("/") {
+        if path.ends_with('/') {
+            req_path.pop(); // get rid of empty string
             path.push_str("index.html");
             req_path.push("index.html");
         }
@@ -259,7 +261,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let latest_version = latest_version(&crate_details.versions, &version);
+    let (path, version) = if let Some(version) = latest_version(&crate_details.versions, &version) {
+        req_path[2] = &version;
+        (path_for_version(&req_path, &crate_details.target_name, &conn), version)
+    } else {
+        Default::default()
+    };
 
     content.crate_details = Some(crate_details);
 
@@ -267,12 +274,47 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
-        .set_bool("is_latest_version", latest_version.is_none())
-        .set("latest_version", &latest_version.unwrap_or(String::new()))
+        .set_bool("is_latest_version", path.is_empty())
+        .set("path_in_latest", &path)
+        .set("latest_version", &version)
         .to_resp("rustdoc")
 }
 
-
+/// Checks whether the given path exists.
+/// The crate's `target_name` is used to confirm whether a platform triple is part of the path.
+///
+/// Note that path is overloaded in this context to mean both the path of a URL
+/// and the file path of a static file in the DB.
+///
+/// `req_path` is assumed to have the following format:
+/// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
+///
+/// Returns a path that can be appended to `/crate/version/` to create a complete URL.
+fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> String {
+    // Simple case: page exists in the latest version, so just change the version number
+    if File::from_path(&conn, &req_path.join("/")).is_some() {
+        // NOTE: this adds 'index.html' if it wasn't there before
+        return req_path[3..].join("/");
+    }
+    // this page doesn't exist in the latest version
+    let search_item = if *req_path.last().unwrap() == "index.html" {
+        // this is a module
+        req_path[req_path.len() - 2]
+    } else {
+        // this is an item
+        req_path.last().unwrap().split('.').nth(1)
+            .expect("paths should be of the form <kind>.<name>.html")
+    };
+    // check if req_path[3] is the platform choice or the name of the crate
+    let concat_path;
+    let crate_root = if req_path[3] != target_name {
+        concat_path = format!("{}/{}", req_path[3], req_path[4]);
+        &concat_path
+    } else {
+        req_path[3]
+    };
+    format!("{}/?search={}", crate_root, search_item)
+}
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     use iron::headers::ContentType;

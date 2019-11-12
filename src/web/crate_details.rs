@@ -36,7 +36,7 @@ pub struct CrateDetails {
     homepage_url: Option<String>,
     keywords: Option<Json>,
     have_examples: bool, // need to check this manually
-    target_name: Option<String>,
+    pub target_name: String,
     pub versions: Vec<String>,
     github: bool, // is crate hosted in github
     github_stars: Option<i32>,
