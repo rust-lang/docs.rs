@@ -1,5 +1,6 @@
 /ignored
 /.env
+/src/web/badge/Cargo.lock
 target
 *.css
 *.css.map
