@@ -111,6 +111,12 @@ impl CratesfyiHandler {
         router.get("/std", rustdoc::RustLangRedirector::new("std"), "std");
         router.get("/test", rustdoc::RustLangRedirector::new("test"), "test");
 
+        router.get("/alloc/", rustdoc::RustLangRedirector::new("alloc"), "alloc/");
+        router.get("/core/", rustdoc::RustLangRedirector::new("core"), "core/");
+        router.get("/proc_macro/", rustdoc::RustLangRedirector::new("proc_macro"), "proc_macro/");
+        router.get("/std/", rustdoc::RustLangRedirector::new("std"), "std/");
+        router.get("/test/", rustdoc::RustLangRedirector::new("test"), "test/");
+
         router.get("/releases", releases::recent_releases_handler, "releases");
         router.get("/releases/feed",
                    releases::releases_feed_handler,
