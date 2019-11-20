@@ -48,8 +48,9 @@ static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
 static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "FiraSans-Medium.woff",
     "FiraSans-Regular.woff",
-    "SourceCodePro-Regular.woff",
-    "SourceCodePro-Semibold.woff",
+    "SourceCodePro-Regular.ttf.woff",
+    "SourceCodePro-Semibold.ttf.woff",
+    "SourceCodePro-It.ttf.woff",
     "SourceSerifPro-Bold.ttf.woff",
     "SourceSerifPro-Regular.ttf.woff",
     "SourceSerifPro-It.ttf.woff",
