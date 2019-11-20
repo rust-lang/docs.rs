@@ -1,9 +1,7 @@
-
 // FONTS
 $font-family-sans: "Fira Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 $font-family-serif: "Source Serif Pro",Georgia,Times,"Times New Roman",serif;
 $font-family-mono: "Source Code Pro", Menlo, Monaco, Consolas, "DejaVu Sans Mono", Inconsolata, monospace;
-
 
 // COLORS - Guess what?
 $color-standard: #000;             // pure black
@@ -22,7 +20,6 @@ $color-border: #ddd;               // gray
 $color-red: #d93d3d;               // red
 $top-navbar-height: 32px;          // height of the floating top navbar
 
-
 // pure compatible media queries
 $media-sm: "screen and (min-width: 35.5em)";
 $media-md: "screen and (min-width: 48em)";
@@ -30,7 +27,6 @@ $media-lg: "screen and (min-width: 64em)";
 $media-xl: "screen and (min-width: 80em)";
 // usage:
 // @media #{$media-sm} { ... }
-
 
 html, button, input, select, textarea,
 .pure-g [class *= "pure-u"] {
@@ -104,7 +100,6 @@ body {
     padding-top: $top-navbar-height;
 }
 
-
 // this is a super nasty override for help dialog in rustdocs
 // see #52 for details
 body.blur > :not(#help) {
@@ -120,11 +115,9 @@ body.blur > div.rustdoc > :not(#help) {
     opacity: .7;
 }
 
-
 // rustdocs have 200px sidebar and
 // max-width 960px main pane
 // BUT I really want to make the website centered
-
 body {
     text-align: center;
     font: 16px/1.4 $font-family-sans;
@@ -189,10 +182,12 @@ div.nav-container {
             background-color: #fff;
             height: 31px;
             display: none;
+
             @media #{$media-sm} {
                 display: block;
             }
         }
+
         input.search-input-nav:focus {
             outline: unset;
         }
@@ -202,6 +197,7 @@ div.nav-container {
         border: 1px solid $color-border;
         border-radius: 0 0 2px 2px;
         margin-left: -1px;
+
         li {
             border-left: none;
         }
@@ -228,6 +224,7 @@ div.nav-container {
     div.rustdoc-navigation {
         span.title {
             display: none;
+
             @media #{$media-sm} {
                 display: inline;
             }
@@ -300,10 +297,7 @@ div.landing {
             margin-top: 30px;
         }
     }
-
 }
-
-
 
 div.recent-releases-container {
     text-align: left;
@@ -318,6 +312,7 @@ div.recent-releases-container {
     ol.queue-list li {
         list-style-type: decimal;
         margin-left: 20px;
+
         a {
             color: $color-url;
         }
@@ -354,6 +349,7 @@ div.recent-releases-container {
         color: $color-url;
         font-weight: 500;
         white-space: nowrap;
+
         @media #{$media-sm} {
             text-overflow: ellipsis;
             overflow: hidden;
@@ -367,18 +363,19 @@ div.recent-releases-container {
 
     .build {
         font-weight: 500;
+
         i.fa-check {
             color: $color-macro;
         }
         i.fa-close {
             color: $color-struct;
-
         }
     }
 
     .description {
         font-family: $font-family-serif;
         font-weight: normal;
+
         @media #{$media-sm} {
             font-size: 1em;
             white-space: nowrap;
@@ -396,6 +393,7 @@ div.recent-releases-container {
 
     .date {
         font-weight: normal;
+
         @media #{$media-sm} {
             text-align: right;
         }
@@ -411,7 +409,6 @@ div.recent-releases-container {
     }
 }
 
-
 div.package-container {
     background-color: $color-url;
     color: $color-background-code;;
@@ -426,7 +423,6 @@ div.package-container {
     }
 
     .pure-menu {
-
         .pure-menu-link {
             background-color: #fff;
             border-top: 1px solid $color-border;
@@ -448,7 +444,6 @@ div.package-container {
         }
     }
 }
-
 
 div.package-sheet-container {
     margin-top: 10px;
@@ -529,7 +524,6 @@ div.package-page-container {
 
     div.package-details {
         padding: 0 1em;
-
         font-family: $font-family-serif;
 
         a {
@@ -589,7 +583,6 @@ div.package-page-container {
                 text-align: left;
                 vertical-align: bottom;
             }
-
         }
     }
 
@@ -603,8 +596,6 @@ div.package-page-container {
     }
 }
 
-
-
 div.cratesfyi-package-container {
     text-align: left;
     background-color: $color-background-code;
@@ -615,6 +606,7 @@ div.cratesfyi-package-container {
         margin: 0;
         padding: 15px 0 0 14px;
     }
+
     div.description {
         font-family: $font-family-serif;
         margin: 0;
@@ -626,6 +618,7 @@ div.cratesfyi-package-container {
             text-overflow: ellipsis;
         }
     }
+
     div.description-in-rustdoc {
         padding: 10px 0 10px 14px;
     }
@@ -641,6 +634,7 @@ div.cratesfyi-package-container {
 
             .title {
                 display: none;
+
                 @media #{$media-sm} {
                     display: inline;
                 }
@@ -649,7 +643,6 @@ div.cratesfyi-package-container {
 
         .pure-menu-active {
             color: $color-standard;
-
             background-color: #fff;
             border-top: 1px solid $color-border;
             border-left: 1px solid $color-border;
@@ -672,6 +665,7 @@ div.cratesfyi-package-container {
     ul.platforms-menu {
         float: right;
         display: none;
+
         ul.pure-menu-children {
             left: auto;
             right: 0;
@@ -693,7 +687,6 @@ div.cratesfyi-package-container-rustdoc {
     margin-bottom: 10px;
 }
 
-
 div.warning {
     font-family: $font-family-sans;
     border-radius: 4px;
@@ -701,12 +694,12 @@ div.warning {
     padding: .4em 1em;
     text-align: center;
     margin-bottom: 10px;
+
     a {
         color: $color-url;
         text-decoration: underline;
     }
 }
-
 
 div.search-page-search-form {
     padding: .4em 1em;
@@ -730,26 +723,30 @@ div.search-page-search-form {
     padding-left: 35px;
 }
 
-
 .about {
     font-family: $font-family-serif;
     padding: .4em 1em;
+
     a {
         color: $color-url;
     }
     a:hover {
         text-decoration: underline;
     }
+
     table {
         margin-bottom: 10px;
     }
+
     thead tr th {
         font-family: $font-family-sans;
         font-weight: 500;
     }
+
     strong {
         font-weight: bold;
     }
+
     pre code {
         background-color: inherit;
     }
