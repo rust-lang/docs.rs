@@ -95,6 +95,10 @@ impl CratesfyiHandler {
     }
 
     pub fn new() -> CratesfyiHandler {
+        const DOC_RUST_LANG_ORG_REDIRECTS: [&str; 5] = [
+            "alloc", "core", "proc_macro", "std", "test"
+        ];
+
         let mut router = Router::new();
         router.get("/", releases::home_page, "index");
         router.get("/style.css", style_css_handler, "style_css");
@@ -105,17 +109,15 @@ impl CratesfyiHandler {
         router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
 
         // Redirect standard library crates to rust-lang.org
-        router.get("/alloc", rustdoc::RustLangRedirector::new("alloc"), "alloc");
-        router.get("/core", rustdoc::RustLangRedirector::new("core"), "core");
-        router.get("/proc_macro", rustdoc::RustLangRedirector::new("proc_macro"), "proc_macro");
-        router.get("/std", rustdoc::RustLangRedirector::new("std"), "std");
-        router.get("/test", rustdoc::RustLangRedirector::new("test"), "test");
+        for redirect in DOC_RUST_LANG_ORG_REDIRECTS.iter() {
+            let redirector = rustdoc::RustLangRedirector::new(redirect);
+            router.get(&format!("/{}", redirect), redirector, redirect);
 
-        router.get("/alloc/", rustdoc::RustLangRedirector::new("alloc"), "alloc/");
-        router.get("/core/", rustdoc::RustLangRedirector::new("core"), "core/");
-        router.get("/proc_macro/", rustdoc::RustLangRedirector::new("proc_macro"), "proc_macro/");
-        router.get("/std/", rustdoc::RustLangRedirector::new("std"), "std/");
-        router.get("/test/", rustdoc::RustLangRedirector::new("test"), "test/");
+            // allow trailing slashes
+            let redirector = rustdoc::RustLangRedirector::new(redirect);
+            let target = format!("/{}/", redirect);
+            router.get(&target, redirector, &target[1..]);
+        }
 
         router.get("/releases", releases::recent_releases_handler, "releases");
         router.get("/releases/feed",
