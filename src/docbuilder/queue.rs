@@ -11,9 +11,9 @@ impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
     /// Returns size of queue
     pub fn get_new_crates(&mut self) -> Result<usize> {
-        let conn = try!(connect_db());
-        let index = try!(Index::from_path_or_cloned(&self.options.crates_io_index_path));
-        let mut changes = try!(index.fetch_changes());
+        let conn = connect_db()?;
+        let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
+        let mut changes = index.fetch_changes()?;
         let mut add_count: usize = 0;
 
         // I belive this will fix ordering of queue if we get more than one crate from changes
@@ -29,7 +29,7 @@ impl DocBuilder {
     }
 
     pub fn get_queue_count(&self) -> Result<i64> {
-        let conn = try!(connect_db());
+        let conn = connect_db()?;
         Ok(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
             .unwrap()
             .get(0)
@@ -41,14 +41,14 @@ impl DocBuilder {
         &mut self,
         builder: &mut RustwideBuilder,
     ) -> Result<bool> {
-        let conn = try!(connect_db());
+        let conn = connect_db()?;
 
-        let query = try!(conn.query("SELECT id, name, version
+        let query = conn.query("SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
                                      ORDER BY priority ASC, attempt ASC, id ASC
                                      LIMIT 1",
-                                    &[]));
+                                    &[])?;
 
         if query.is_empty() {
             // nothing in the queue; bail
@@ -66,8 +66,8 @@ impl DocBuilder {
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = try!(conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
-                                           &[&id]));
+                let rows = conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                                           &[&id])?;
                 let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
                     ::web::metrics::FAILED_BUILDS.inc();
