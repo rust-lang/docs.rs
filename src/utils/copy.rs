@@ -47,7 +47,7 @@ fn copy_files_and_handle_html(source: PathBuf,
 
     // Make sure destination directory is exists
     if !destination.exists() {
-        try!(fs::create_dir_all(&destination));
+        fs::create_dir_all(&destination)?;
     }
 
     // Avoid copying common files
@@ -57,22 +57,22 @@ fn copy_files_and_handle_html(source: PathBuf,
 
     for file in try!(source.read_dir()) {
 
-        let file = try!(file);
+        let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);
         destination_full_path.push(file.file_name());
 
-        let metadata = try!(file.metadata());
+        let metadata = file.metadata()?;
 
         if metadata.is_dir() {
-            try!(fs::create_dir_all(&destination_full_path));
-            try!(copy_files_and_handle_html(file.path(),
+            fs::create_dir_all(&destination_full_path)?;
+            copy_files_and_handle_html(file.path(),
                                             destination_full_path,
                                             handle_html,
-                                            &rustc_version))
+                                            &rustc_version)?
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
-            try!(fs::copy(&file.path(), &destination_full_path));
+            fs::copy(&file.path(), &destination_full_path)?;
         }
 
     }

@@ -49,10 +49,10 @@ impl DocBuilder {
         }
 
         for line in reader.unwrap().lines() {
-            self.cache.insert(try!(line));
+            self.cache.insert(line?);
         }
 
-        try!(self.load_database_cache());
+        self.load_database_cache()?;
 
         Ok(())
     }
@@ -61,7 +61,7 @@ impl DocBuilder {
     fn load_database_cache(&mut self) -> Result<()> {
         debug!("Loading database cache");
         use db::connect_db;
-        let conn = try!(connect_db());
+        let conn = connect_db()?;
 
         for row in &conn.query("SELECT name, version FROM crates, releases \
                                WHERE crates.id = releases.crate_id",
@@ -80,12 +80,12 @@ impl DocBuilder {
     pub fn save_cache(&self) -> Result<()> {
         debug!("Saving cache");
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let mut file = try!(fs::OpenOptions::new()
+        let mut file = fs::OpenOptions::new()
             .write(true)
             .create(true)
-            .open(path));
+            .open(path)?;
         for krate in &self.cache {
-            try!(writeln!(file, "{}", krate));
+            writeln!(file, "{}", krate)?;
         }
         Ok(())
     }
@@ -99,7 +99,7 @@ impl DocBuilder {
     pub fn lock(&self) -> Result<()> {
         let path = self.lock_path();
         if !path.exists() {
-            try!(fs::OpenOptions::new().write(true).create(true).open(path));
+            fs::OpenOptions::new().write(true).create(true).open(path)?;
         }
         Ok(())
     }
@@ -108,7 +108,7 @@ impl DocBuilder {
     pub fn unlock(&self) -> Result<()> {
         let path = self.lock_path();
         if path.exists() {
-            try!(fs::remove_file(path));
+            fs::remove_file(path)?;
         }
         Ok(())
     }
