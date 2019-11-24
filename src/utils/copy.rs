@@ -55,7 +55,7 @@ fn copy_files_and_handle_html(source: PathBuf,
         r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
-    for file in try!(source.read_dir()) {
+    for file in source.read_dir()? {
 
         let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);

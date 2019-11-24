@@ -26,7 +26,7 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
                                           -> Result<()> {
     let path = path.as_ref();
 
-    for file in try!(path.read_dir()) {
+    for file in path.read_dir()? {
         let file = file?;
 
         if file.file_type()?.is_file() {

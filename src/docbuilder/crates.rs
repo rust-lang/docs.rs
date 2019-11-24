@@ -66,7 +66,7 @@ pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
         return Err(err_msg("Not a directory"));
     }
 
-    for file in try!(path.read_dir()) {
+    for file in path.read_dir()? {
         let file = file?;
         let path = file.path();
         // skip files under .git and config.json
