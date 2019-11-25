@@ -79,11 +79,31 @@ pub(crate) struct Package {
 }
 
 impl Package {
+    fn library_target(&self) -> Option<&Target> {
+        self.targets
+            .iter()
+            .find(|target| match target.kind.as_slice() {
+                [kind] if kind == "lib" || kind == "proc-macro" => true,
+                _ => false,
+            })
+    }
+
     pub(crate) fn is_library(&self) -> bool {
-        match self.targets[0].kind.as_slice() {
-            &[ref kind] if kind == "lib" || kind == "proc-macro" => true,
-            _ => false,
-        }
+        self.library_target().is_some()
+    }
+
+    fn normalize_package_name(&self, name: &str) -> String {
+        name.replace('-', "_")
+    }
+
+    pub(crate) fn package_name(&self) -> String {
+        self.library_name()
+            .unwrap_or_else(|| self.normalize_package_name(&self.targets[0].name))
+    }
+
+    pub(crate) fn library_name(&self) -> Option<String> {
+        self.library_target()
+            .map(|target| self.normalize_package_name(&target.name))
     }
 }
 
