@@ -555,14 +555,21 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool);
-    let mut crates: Vec<(String, String)> = Vec::new();
-    for krate in &conn.query("SELECT name, version
+    let mut crates: Vec<(String, String, i32)> = Vec::new();
+    for krate in &conn.query("SELECT name, version, priority
                               FROM queue
                               WHERE attempt < 5
                               ORDER BY priority ASC, attempt ASC, id ASC",
                &[])
         .unwrap() {
-        crates.push((krate.get(0), krate.get(1)));
+        crates.push((
+            krate.get("name"),
+            krate.get("version"),
+            // The priority here is inverted: in the database if a crate has a higher priority it
+            // will be built after everything else, which is counter-intuitive for people not
+            // familiar with docs.rs's inner workings.
+            -krate.get::<_, i32>("priority"),
+        ));
     }
     let is_empty = crates.is_empty();
     Page::new(crates)
