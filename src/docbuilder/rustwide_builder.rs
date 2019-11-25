@@ -281,12 +281,19 @@ impl RustwideBuilder {
                         build.host_source_dir(),
                     )?);
 
-                    has_docs = build
-                        .host_target_dir()
-                        .join(&res.target)
-                        .join("doc")
-                        .join(name.replace("-", "_"))
-                        .is_dir();
+                    has_docs = res
+                        .cargo_metadata
+                        .root()
+                        .library_name()
+                        .map(|name| {
+                            build
+                                .host_target_dir()
+                                .join(&res.target)
+                                .join("doc")
+                                .join(name)
+                                .is_dir()
+                        })
+                        .unwrap_or(false);
                 }
 
                 if has_docs {
