@@ -36,4 +36,6 @@ if ! [ -d "${CRATESFYI_PREFIX}/crates.io-index/.git" ]; then
     git --git-dir="$CRATESFYI_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
 fi
 
+cratesfyi build add-essential-files --only-first-time
+
 cratesfyi "$@"

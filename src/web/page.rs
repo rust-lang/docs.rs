@@ -6,6 +6,27 @@ use iron::{IronResult, Set, status};
 use iron::response::Response;
 use handlebars_iron::Template;
 
+lazy_static! {
+    static ref RUSTC_RESOURCE_SUFFIX: String = load_rustc_resource_suffix()
+        .unwrap_or_else(|_| "???".into());
+}
+
+fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
+    let conn = crate::db::connect_db()?;
+
+    let res = conn.query("SELECT value FROM config WHERE name = 'rustc_version';", &[])?;
+    if res.is_empty() {
+        failure::bail!("missing rustc version");
+    }
+
+    if let Some(Ok(vers)) = res.get(0).get_opt::<_, Json>("value") {
+        if let Some(vers_str) = vers.as_string() {
+            return Ok(crate::utils::parse_rustc_version(vers_str)?);
+        }
+    }
+
+    failure::bail!("failed to parse the rustc version");
+}
 
 pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,
@@ -33,6 +54,7 @@ pub struct Page<T: ToJson> {
     varss: BTreeMap<String, String>,
     varsb: BTreeMap<String, bool>,
     varsi: BTreeMap<String, i64>,
+    rustc_resource_suffix: &'static str,
 }
 
 
@@ -45,6 +67,7 @@ impl<T: ToJson> Page<T> {
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),
             varsi: BTreeMap::new(),
+            rustc_resource_suffix: &RUSTC_RESOURCE_SUFFIX,
         }
     }
 
@@ -114,6 +137,7 @@ impl<T: ToJson> ToJson for Page<T> {
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
+        tree.insert("rustc_resource_suffix".to_owned(), self.rustc_resource_suffix.to_json());
         tree.insert("cratesfyi_version".to_owned(), ::BUILD_VERSION.to_json());
         tree.insert("cratesfyi_version_safe".to_owned(),
                     ::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());

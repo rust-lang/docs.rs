@@ -297,6 +297,10 @@ div.landing {
             margin-top: 30px;
         }
     }
+
+    input#search {
+        margin: 0;
+    }
 }
 
 div.recent-releases-container {
@@ -349,6 +353,15 @@ div.recent-releases-container {
         color: $color-url;
         font-weight: 500;
         white-space: nowrap;
+        margin: 0;
+
+        &:hover {
+            background-color: transparent;
+        }
+
+        &::before {
+            display: none;
+        }
 
         @media #{$media-sm} {
             text-overflow: ellipsis;
@@ -406,6 +419,10 @@ div.recent-releases-container {
         .pure-button {
             margin: 0;
         }
+    }
+
+    h4 {
+        border-bottom-color: $color-border !important;
     }
 }
 
@@ -749,6 +766,10 @@ div.search-page-search-form {
 
     pre code {
         background-color: inherit;
+    }
+
+    h4 {
+        border-bottom-color: $color-border !important;
     }
 }
 
