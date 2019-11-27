@@ -1,15 +1,18 @@
 html, button, input, select, textarea,
 .pure-g [class*="pure-u"] {
   font-family: "Fira Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  color: #000; }
+  color: #000;
+}
 
 .pure-button-normal {
   background-color: #fff;
   box-sizing: border-box !important;
-  border: 1px solid #ddd; }
+  border: 1px solid #ddd;
+}
 
 .description {
-  font-family: "Source Serif Pro", Georgia, Times, "Times New Roman", serif; }
+  font-family: "Source Serif Pro", Georgia, Times, "Times New Roman", serif;
+}
 
 div.rustdoc {
   font-family: "Source Serif Pro", Georgia, Times, "Times New Roman", serif;
