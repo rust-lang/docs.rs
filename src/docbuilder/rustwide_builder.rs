@@ -280,15 +280,14 @@ impl RustwideBuilder {
                         build.host_source_dir(),
                     )?);
 
-                    if let Some(name) = res
-                            .cargo_metadata
-                            .root()
-                            .library_name() {
+                    if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
-                        if host_target.join(&res.target)
+                        if host_target
+                            .join(&res.target)
                             .join("doc")
                             .join(&name)
-                            .is_dir() {
+                            .is_dir()
+                        {
                             has_docs = true;
                             in_target = true;
                         // hack for proc-macro documentation:
@@ -313,7 +312,13 @@ impl RustwideBuilder {
                         // Then build the documentation for all the targets
                         for target in TARGETS {
                             debug!("building package {} {} for {}", name, version, target);
-                            self.build_target(target, &build, &limits, &local_storage.path(), &mut successful_targets)?;
+                            self.build_target(
+                                target,
+                                &build,
+                                &limits,
+                                &local_storage.path(),
+                                &mut successful_targets,
+                            )?;
                         }
                     }
                     self.upload_docs(&conn, name, version, local_storage.path())?;
@@ -349,24 +354,22 @@ impl RustwideBuilder {
         Ok(res.successful)
     }
 
-    fn build_target(&self, target: &str, build: &Build, limits: &Limits,
-                    local_storage: &Path, successful_targets: &mut Vec<String>) -> Result<()> {
+    fn build_target(
+        &self,
+        target: &str,
+        build: &Build,
+        limits: &Limits,
+        local_storage: &Path,
+        successful_targets: &mut Vec<String>,
+    ) -> Result<()> {
         let target_res = self.execute_build(Some(target), build, limits)?;
         if target_res.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
             if build.host_target_dir().join(target).join("doc").is_dir() {
-                debug!(
-                    "adding documentation for target {} to the database",
-                    target,
-                );
-                self.copy_docs(
-                    &build.host_target_dir(),
-                    local_storage,
-                    target,
-                    false,
-                )?;
+                debug!("adding documentation for target {} to the database", target,);
+                self.copy_docs(&build.host_target_dir(), local_storage, target, false)?;
                 successful_targets.push(target.to_string());
             }
         }
@@ -406,11 +409,7 @@ impl RustwideBuilder {
         if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
-        let mut cargo_args = vec![
-            "doc".to_owned(),
-            "--lib".to_owned(),
-            "--no-deps".to_owned(),
-        ];
+        let mut cargo_args = vec!["doc".to_owned(), "--lib".to_owned(), "--no-deps".to_owned()];
         if let Some(explicit_target) = target {
             cargo_args.push("--target".to_owned());
             cargo_args.push(explicit_target.to_owned());
@@ -440,7 +439,7 @@ impl RustwideBuilder {
                         .rustc_args
                         .as_ref()
                         .map(|args| args.join(" "))
-                        .unwrap_or_default()
+                        .unwrap_or_default(),
                 )
                 .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
                 .args(&cargo_args)
