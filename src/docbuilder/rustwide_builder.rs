@@ -26,7 +26,6 @@ static TARGETS: &[&str] = &[
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",
 ];
-static DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 
 static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
