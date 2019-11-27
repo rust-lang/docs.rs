@@ -86,11 +86,13 @@ div.rustdoc {
     }
 
     // this is actual fix for docs.rs navigation and rustdoc sidebar
-    position: absolute;
+    position: fixed;
+    top: $top-navbar-height;
+    bottom: 0;
     left: 0;
     right: 0;
-    top: $top-navbar-height;
-    max-height: calc(100vh - #{$top-navbar-height});
+    display: block;
+    overflow-y: auto;
 }
 
 body {
