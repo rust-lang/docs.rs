@@ -309,7 +309,6 @@ impl RustwideBuilder {
                         if in_target { &res.target } else { "" },
                         true,
                     )?;
-                    successful_targets.push(DEFAULT_TARGET.to_string());
 
                     if in_target {
                         // Then build the documentation for all the targets
@@ -385,14 +384,7 @@ impl RustwideBuilder {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
-        let target = if let Some(target) = target {
-            target
-        } else if let Some(target) = metadata.default_target.as_ref().map(|s| s.as_str()) {
-            target
-        } else {
-            DEFAULT_TARGET
-        }
-        .to_string();
+        let target = target.or_else(|| metadata.default_target.as_ref().map(|s| s.as_str()));
 
         let mut rustdoc_flags: Vec<String> = vec![
             "-Z".to_string(),
@@ -419,9 +411,11 @@ impl RustwideBuilder {
             "doc".to_owned(),
             "--lib".to_owned(),
             "--no-deps".to_owned(),
-            "--target".to_owned(),
-            target.to_owned(),
         ];
+        if let Some(explicit_target) = target {
+            cargo_args.push("--target".to_owned());
+            cargo_args.push(explicit_target.to_owned());
+        };
         if let Some(features) = &metadata.features {
             cargo_args.push("--features".to_owned());
             cargo_args.push(features.join(" "));
@@ -445,8 +439,9 @@ impl RustwideBuilder {
                     "RUSTFLAGS",
                     metadata
                         .rustc_args
+                        .as_ref()
                         .map(|args| args.join(" "))
-                        .unwrap_or("".to_owned()),
+                        .unwrap_or_default()
                 )
                 .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
                 .args(&cargo_args)
@@ -460,7 +455,7 @@ impl RustwideBuilder {
             docsrs_version: format!("docsrs {}", ::BUILD_VERSION),
             successful,
             cargo_metadata,
-            target: target.to_string(),
+            target: target.unwrap_or_default().to_string(),
         })
     }
 
