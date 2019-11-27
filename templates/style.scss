@@ -91,6 +91,17 @@ div.rustdoc {
     right: 0;
     top: $top-navbar-height;
     max-height: calc(100vh - #{$top-navbar-height});
+
+    // this prevents the current fragment target (the element that the browser
+    // scrolls to when following a link with a `#fragment`) from hiding under
+    // the navbar bar
+    :target::before {
+        content: " ";
+        margin-top: -$top-navbar-height;
+        display: block;
+        height: $top-navbar-height;
+        pointer-events: none;
+    }
 }
 
 body {
