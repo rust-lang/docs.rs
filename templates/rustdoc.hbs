@@ -13,5 +13,9 @@
 <div class="{{content.rustdoc_body_class}}">
     {{{content.rustdoc_body}}}
 </div>
+<script type="application/javascript">
+var el = document.querySelector("body > div.rustdoc");
+if (el) { el.focus({preventScroll:true}); }
+</script>
 </body>
 </html>
