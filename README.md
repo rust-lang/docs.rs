@@ -1,6 +1,6 @@
 # Docs.rs
 
-[![Build Status](https://dev.azure.com/docsrs/docs.rs/_apis/build/status/docs.rs?branchName=master)](https://dev.azure.com/docsrs/docs.rs/_build/latest?definitionId=1)
+[![Build Status](https://github.com/rust-lang/docs.rs/workflows/CI/badge.svg)](https://github.com/rust-lang/docs.rs/actions?workflow=CI)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/master/LICENSE)
 
 Docs.rs (formerly cratesfyi) is an open source project to host documentation
