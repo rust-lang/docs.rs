@@ -80,12 +80,12 @@ pub(crate) struct Package {
 
 impl Package {
     fn library_target(&self) -> Option<&Target> {
-        self.targets
-            .iter()
-            .find(|target| match target.kind.as_slice() {
-                [kind] if kind == "lib" || kind == "proc-macro" => true,
-                _ => false,
-            })
+        self.targets.iter().find(|target| {
+            target
+                .kind
+                .iter()
+                .any(|kind| kind == "lib" || kind == "proc-macro")
+        })
     }
 
     pub(crate) fn is_library(&self) -> bool {
