@@ -98,11 +98,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        vers: &str,
                        target_name: &str)
                        -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}/{}/{}/{}/",
+        let url = ctry!(Url::parse(&format!("{}/{}/{}/{}/?{}",
                                             redirect_base(req),
                                             name,
                                             vers,
-                                            target_name)[..]));
+                                            target_name,
+                                            req.url.query().unwrap_or_default()
+                                           )[..]));
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
@@ -343,7 +345,7 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
     } else {
         req_path[3]
     };
-    format!("{}/?search={}", crate_root, search_item)
+    format!("{}?search={}", crate_root, search_item)
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
