@@ -84,7 +84,7 @@ impl Package {
             target
                 .kind
                 .iter()
-                .any(|kind| kind == "lib" || kind == "proc-macro")
+                .any(|kind| kind != "bin")
         })
     }
 
