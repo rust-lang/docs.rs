@@ -80,12 +80,9 @@ pub(crate) struct Package {
 
 impl Package {
     fn library_target(&self) -> Option<&Target> {
-        self.targets.iter().find(|target| {
-            target
-                .kind
-                .iter()
-                .any(|kind| kind == "lib" || kind == "proc-macro")
-        })
+        self.targets
+            .iter()
+            .find(|target| target.crate_types.iter().any(|kind| kind != "bin"))
     }
 
     pub(crate) fn is_library(&self) -> bool {
@@ -110,7 +107,7 @@ impl Package {
 #[derive(RustcDecodable)]
 pub(crate) struct Target {
     pub(crate) name: String,
-    pub(crate) kind: Vec<String>,
+    crate_types: Vec<String>,
     pub(crate) src_path: Option<String>,
 }
 
