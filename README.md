@@ -159,8 +159,8 @@ docker-compose run -p 3000:3000 web daemon --foreground
 
 ### Changing the build environment
 
-To make a change to https://github.com/rust-lang/crates-build-env
-and test that it works on docs.rs, see https://github.com/rust-lang/docs.rs/wiki/Making-changes-to-the-build-environment.
+To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
+and test that it works on docs.rs, see [the wiki](https://github.com/rust-lang/docs.rs/wiki/Making-changes-to-the-build-environment).
 
 ### Contact
 
