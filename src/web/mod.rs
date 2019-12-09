@@ -44,6 +44,7 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
+mod routes;
 pub mod metrics;
 
 use std::{env, fmt};
@@ -54,7 +55,7 @@ use iron::prelude::*;
 use iron::{self, Handler, Url, status};
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
 use iron::modifiers::Redirect;
-use router::{Router, NoRoute};
+use router::NoRoute;
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
 use time;
@@ -95,118 +96,11 @@ impl CratesfyiHandler {
     }
 
     pub fn new() -> CratesfyiHandler {
-        const DOC_RUST_LANG_ORG_REDIRECTS: [&str; 5] = [
-            "alloc", "core", "proc_macro", "std", "test"
-        ];
-
-        let mut router = Router::new();
-        router.get("/", releases::home_page, "index");
-        router.get("/style.css", style_css_handler, "style_css");
-        router.get("/about", sitemap::about_handler, "about");
-        router.get("/about/metrics", metrics::metrics_handler, "metrics");
-        router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
-        router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
-        router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
-
-        // Redirect standard library crates to rust-lang.org
-        for redirect in DOC_RUST_LANG_ORG_REDIRECTS.iter() {
-            let redirector = rustdoc::RustLangRedirector::new(redirect);
-            router.get(&format!("/{}", redirect), redirector, redirect);
-
-            // allow trailing slashes
-            let redirector = rustdoc::RustLangRedirector::new(redirect);
-            let target = format!("/{}/", redirect);
-            router.get(&target, redirector, &target[1..]);
-        }
-
-        router.get("/releases", releases::recent_releases_handler, "releases");
-        router.get("/releases/feed",
-                   releases::releases_feed_handler,
-                   "releases_feed");
-        router.get("/releases/recent/:page",
-                   releases::recent_releases_handler,
-                   "releases_recent_page");
-        router.get("/releases/stars", releases::releases_by_stars_handler, "releases_stars");
-        router.get("/releases/stars/:page",
-                   releases::releases_by_stars_handler,
-                   "releases_stars_page");
-        router.get("/releases/recent-failures", releases::releases_recent_failures_handler, "releases_recent_failures");
-        router.get("/releases/recent-failures/:page",
-                   releases::releases_recent_failures_handler,
-                   "releases_recent_failures_page");
-        router.get("/releases/failures", releases::releases_failures_by_stars_handler, "releases_failures_by_stars");
-        router.get("/releases/failures/:page",
-                   releases::releases_failures_by_stars_handler,
-                   "releases_failures_by_starts_page");
-        router.get("/releases/:author",
-                   releases::author_handler,
-                   "releases_author");
-        router.get("/releases/:author/:page",
-                   releases::author_handler,
-                   "releases_author_page");
-        router.get("/releases/activity",
-                   releases::activity_handler,
-                   "releases_activity");
-        router.get("/releases/search",
-                   releases::search_handler,
-                   "releases_search");
-        router.get("/releases/queue",
-                   releases::build_queue_handler,
-                   "releases_queue");
-        router.get("/crate/:name",
-                   crate_details::crate_details_handler,
-                   "crate_name");
-        router.get("/crate/:name/",
-                   crate_details::crate_details_handler,
-                   "crate_name_");
-        router.get("/crate/:name/:version",
-                   crate_details::crate_details_handler,
-                   "crate_name_version");
-        router.get("/crate/:name/:version/",
-                   crate_details::crate_details_handler,
-                   "crate_name_version_");
-        router.get("/crate/:name/:version/builds",
-                   builds::build_list_handler,
-                   "crate_name_version_builds");
-        router.get("/crate/:name/:version/builds.json",
-                   builds::build_list_handler,
-                   "crate_name_version_builds_json");
-        router.get("/crate/:name/:version/builds/:id",
-                   builds::build_list_handler,
-                   "crate_name_version_builds_id");
-        router.get("/crate/:name/:version/source/",
-                   source::source_browser_handler,
-                   "crate_name_version_source");
-        router.get("/crate/:name/:version/source/*",
-                   source::source_browser_handler,
-                   "crate_name_version_source_");
-        router.get("/:crate", rustdoc::rustdoc_redirector_handler, "crate");
-        router.get("/:crate/", rustdoc::rustdoc_redirector_handler, "crate_");
-        router.get("/:crate/badge.svg", rustdoc::badge_handler, "crate_badge");
-        router.get("/:crate/:version",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version");
-        router.get("/:crate/:version/",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version_");
-        router.get("/:crate/:version/settings.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_settings_html");
-        router.get("/:crate/:version/all.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_all_html");
-        router.get("/:crate/:version/:target",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version_target");
-        router.get("/:crate/:version/:target/",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_target_");
-        router.get("/:crate/:version/:target/*.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_target_html");
+        let routes = routes::build_routes();
+        let blacklisted_prefixes = routes.page_prefixes();
 
         let shared_resources = Self::chain(rustdoc::SharedResourceHandler);
-        let router_chain = Self::chain(router);
+        let router_chain = Self::chain(routes.iron_router());
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
@@ -214,7 +108,10 @@ impl CratesfyiHandler {
         CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
             router_handler: Box::new(router_chain),
-            database_file_handler: Box::new(file::DatabaseFileHandler),
+            database_file_handler: Box::new(routes::BlockBlacklistedPrefixes::new(
+                blacklisted_prefixes,
+                Box::new(file::DatabaseFileHandler),
+            )),
             static_handler: Box::new(static_handler),
         }
     }
