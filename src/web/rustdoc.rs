@@ -66,6 +66,7 @@ impl ToJson for RustdocPage {
     }
 }
 
+#[derive(Clone)]
 pub struct RustLangRedirector {
     url: Url,
 }
