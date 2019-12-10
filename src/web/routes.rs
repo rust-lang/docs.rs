@@ -71,7 +71,7 @@ pub(super) fn build_routes() -> Routes {
         super::builds::build_list_handler,
     );
     routes.internal_page(
-        "/crate/:name/:version/source",
+        "/crate/:name/:version/source/",
         super::source::source_browser_handler,
     );
     routes.internal_page(
