@@ -125,9 +125,17 @@ pub(super) fn build_routes() -> Routes {
     routes
 }
 
+/// This wrapper class aids the construction of iron's Router, with docs.rs-specific additions to
+/// it. Routes are supposed to be added by the build_routes function, which calls methods in this
+/// struct depending on the type of route being added.
 pub(super) struct Routes {
+    /// Normal GET routes.
     get: Vec<(String, Box<dyn Handler>)>,
+    /// GET routes serving rustdoc content. The BlockBlacklistedPrefixes middleware is added
+    /// automatically to all of them.
     rustdoc_get: Vec<(String, Box<dyn Handler>)>,
+    /// Prefixes of all the internal routes. This data is used to power the
+    /// BlockBlacklistedPrefixes middleware.
     page_prefixes: HashSet<String>,
 }
 
