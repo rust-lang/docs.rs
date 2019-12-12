@@ -71,6 +71,10 @@ pub(super) fn build_routes() -> Routes {
         super::builds::build_list_handler,
     );
     routes.internal_page(
+        "/crate/:name/:version/source",
+        SimpleRedirect::new(|url| url.set_path(&format!("{}/", url.path()))),
+    );
+    routes.internal_page(
         "/crate/:name/:version/source/",
         super::source::source_browser_handler,
     );
@@ -180,8 +184,12 @@ impl Routes {
         // Automatically add another route ending with / that redirects to the slash-less route.
         if !pattern.ends_with('/') {
             let pattern = format!("{}/", pattern);
-            self.get
-                .push((pattern.to_string(), Box::new(remove_slashes)));
+            self.get.push((
+                pattern.to_string(),
+                Box::new(SimpleRedirect::new(|url| {
+                    url.set_path(&url.path().trim_end_matches('/').to_string())
+                })),
+            ));
         }
 
         // Register the prefix if it's not the home page and the first path component is not a
@@ -204,15 +212,26 @@ impl Routes {
     }
 }
 
-/// Simple Iron route that redirects to the same path without the trailing slash, for example
-/// /foo/bar/baz/ to /foo/bar/baz.
-fn remove_slashes(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-    let mut url: iron::url::Url = req.url.clone().into();
-    url.set_path(&url.path().trim_end_matches('/').to_string());
-    Ok(iron::Response::with((
-        iron::status::Found,
-        iron::modifiers::Redirect(iron::Url::parse(&url.to_string()).unwrap()),
-    )))
+#[derive(Copy, Clone)]
+struct SimpleRedirect {
+    url_mangler: fn(&mut iron::url::Url),
+}
+
+impl SimpleRedirect {
+    fn new(url_mangler: fn(&mut iron::url::Url)) -> Self {
+        Self { url_mangler }
+    }
+}
+
+impl Handler for SimpleRedirect {
+    fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
+        let mut url: iron::url::Url = req.url.clone().into();
+        (self.url_mangler)(&mut url);
+        Ok(iron::Response::with((
+            iron::status::Found,
+            iron::modifiers::Redirect(iron::Url::parse(&url.to_string()).unwrap()),
+        )))
+    }
 }
 
 /// Iron Middleware that prevents requests to blacklisted prefixes.
