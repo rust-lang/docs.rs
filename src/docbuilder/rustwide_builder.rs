@@ -112,6 +112,7 @@ impl RustwideBuilder {
 
     fn detect_rustc_version(&self) -> Result<String> {
         info!("detecting rustc's version...");
+        self.toolchain.install(&self.workspace)?;
         let res = Command::new(&self.workspace, self.toolchain.rustc())
             .args(&["--version"])
             .log_output(false)
