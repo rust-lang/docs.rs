@@ -166,7 +166,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_to_svg() {
         use std::fs::File;
         use std::io::Write;

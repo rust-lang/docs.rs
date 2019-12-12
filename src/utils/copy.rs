@@ -89,7 +89,6 @@ mod test {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_copy_dir() {
         let destination = tempdir::TempDir::new("cratesfyi").unwrap();
 
