@@ -127,7 +127,7 @@ impl RustwideBuilder {
         }
     }
 
-    fn add_essential_files(&mut self) -> Result<()> {
+    pub fn add_essential_files(&mut self) -> Result<()> {
         self.rustc_version = self.detect_rustc_version()?;
         let rustc_version = parse_rustc_version(&self.rustc_version)?;
 
