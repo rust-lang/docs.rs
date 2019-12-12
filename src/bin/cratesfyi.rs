@@ -182,7 +182,7 @@ pub fn main() {
             }
 
             let mut builder = RustwideBuilder::init().unwrap();
-            builder.add_essential_files().expect("failed to add essential files");
+            builder.update_toolchain().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
             docbuilder.lock().expect("Failed to lock");
         } else if let Some(_) = matches.subcommand_matches("unlock") {

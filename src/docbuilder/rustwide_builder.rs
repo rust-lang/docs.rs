@@ -93,7 +93,7 @@ impl RustwideBuilder {
         })
     }
 
-    fn update_toolchain(&mut self) -> Result<()> {
+    pub fn update_toolchain(&mut self) -> Result<()> {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 
@@ -112,7 +112,6 @@ impl RustwideBuilder {
 
     fn detect_rustc_version(&self) -> Result<String> {
         info!("detecting rustc's version...");
-        self.toolchain.install(&self.workspace)?;
         let res = Command::new(&self.workspace, self.toolchain.rustc())
             .args(&["--version"])
             .log_output(false)
@@ -128,7 +127,7 @@ impl RustwideBuilder {
         }
     }
 
-    pub fn add_essential_files(&mut self) -> Result<()> {
+    fn add_essential_files(&mut self) -> Result<()> {
         self.rustc_version = self.detect_rustc_version()?;
         let rustc_version = parse_rustc_version(&self.rustc_version)?;
 
