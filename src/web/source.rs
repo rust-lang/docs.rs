@@ -104,7 +104,7 @@ impl FileList {
             return None;
         }
 
-        let files: Json = rows.get(0).get(5);
+        let files: Json = rows.get(0).get_opt(5).unwrap().ok()?;
 
         let mut file_list: Vec<File> = Vec::new();
 
@@ -181,6 +181,8 @@ impl FileList {
 
 
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
+    use iron::status;
+    use super::error::Nope;
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));
     let version = cexpect!(router.find("version"));
@@ -246,6 +248,6 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
             .set_bool("file_content_rust_source", is_rust_source)
             .to_resp("source")
     } else {
-        page.to_resp("source")
+        Err(IronError::new(Nope::CrateNotFound, status::NotFound))
     }
 }
