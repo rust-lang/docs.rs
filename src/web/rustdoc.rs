@@ -98,13 +98,18 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                        vers: &str,
                        target_name: &str)
                        -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}/{}/{}/{}/?{}",
-                                            redirect_base(req),
-                                            name,
-                                            vers,
-                                            target_name,
-                                            req.url.query().unwrap_or_default()
-                                           )[..]));
+        let mut url_str = format!(
+            "{}/{}/{}/{}/",
+            redirect_base(req),
+            name,
+            vers,
+            target_name,
+        );
+        if let Some(query) = req.url.query() {
+            url_str.push('?');
+            url_str.push_str(query);
+        }
+        let url = ctry!(Url::parse(&url_str[..]));
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
