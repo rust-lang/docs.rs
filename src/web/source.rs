@@ -248,6 +248,6 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
             .set_bool("file_content_rust_source", is_rust_source)
             .to_resp("source")
     } else {
-        Err(IronError::new(Nope::CrateNotFound, status::NotFound))
+        Err(IronError::new(Nope::NoResults, status::NotFound))
     }
 }
