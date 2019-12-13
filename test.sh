@@ -37,7 +37,7 @@ HOST=localhost:3000
 
 # small wrapper around curl to hide extraneous output
 curl() {
-    command curl -s -o /dev/null
+    command curl -s -o /dev/null "$@"
 }
 
 # give the HTTP status of a page hosted locally
