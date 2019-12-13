@@ -12,9 +12,9 @@ docker-compose build
 # TODO: catch errors if `up` failed
 docker-compose up --build -d
 
-# build a crate and store it in the database
+# build a crate and store it in the database if it does not already exist
 build() {
-	docker-compose run web build crate "$@"
+	docker-compose run web build --skip --skip-if-log-exists crate "$@"
 }
 
 # build a few types of crates
