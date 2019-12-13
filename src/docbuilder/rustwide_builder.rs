@@ -93,7 +93,7 @@ impl RustwideBuilder {
         })
     }
 
-    fn update_toolchain(&mut self) -> Result<()> {
+    pub fn update_toolchain(&mut self) -> Result<()> {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 

@@ -65,11 +65,13 @@ pub fn main() {
                     .takes_value(true)
                     .conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"])
                     .help("Build a crate at a specific path")))
-            .subcommand(SubCommand::with_name("add-essential-files")
-                .about("Adds essential files for rustc")
+            .subcommand(SubCommand::with_name("update-toolchain")
+                .about("update the curretntly installed rustup toolchain")
                 .arg(Arg::with_name("ONLY_FIRST_TIME")
                      .long("only-first-time")
-                     .help("add essential files only if no essential files are present")))
+                     .help("update toolchain only if no toolchain is currently installed")))
+            .subcommand(SubCommand::with_name("add-essential-files")
+                .about("Adds essential files for the installed version of rustc"))
             .subcommand(SubCommand::with_name("lock").about("Locks cratesfyi daemon to stop \
                                                               building new crates"))
             .subcommand(SubCommand::with_name("unlock")
@@ -171,16 +173,18 @@ pub fn main() {
                     matches.value_of("CRATE_NAME").unwrap(), matches.value_of("CRATE_VERSION").unwrap(), None),
             }.expect("Building documentation failed");
             docbuilder.save_cache().expect("Failed to save cache");
-        } else if let Some(m) = matches.subcommand_matches("add-essential-files") {
+        } else if let Some(m) = matches.subcommand_matches("update-toolchain") {
             if m.is_present("ONLY_FIRST_TIME") {
                 let conn = db::connect_db().unwrap();
                 let res = conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[]).unwrap();
                 if !res.is_empty() {
-                    println!("add-essential files was already called in the past, exiting");
+                    println!("update-toolchain was already called in the past, exiting");
                     return;
                 }
             }
-
+            let mut builder = RustwideBuilder::init().unwrap();
+            builder.update_toolchain().expect("failed to update toolchain");
+        } else if matches.subcommand_matches("add-essential-files").is_some() {
             let mut builder = RustwideBuilder::init().unwrap();
             builder.add_essential_files().expect("failed to add essential files");
         } else if let Some(_) = matches.subcommand_matches("lock") {
