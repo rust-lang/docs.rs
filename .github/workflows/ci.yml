@@ -22,6 +22,17 @@ jobs:
       - name: Test docs.rs
         run: cargo test -- --test-threads=1
 
+      - name: Install HTML parser
+        # TODO: don't hardcode this for amd64
+        run: >
+            wget https://github.com/ericchiang/pup/releases/download/v0.4.0/pup_v0.4.0_linux_arm64.zip &&
+            [ "$(sha256sum pup_v0.4.0_linux_arm64.zip)" = ec3d29e9fb375b87ac492c8b546ad6be84b0c0b49dab7ff4c6b582eac71ba01c ] &&
+            unzip pup_v0.4.0_linux_arm64.zip &&
+            mv pup /usr/local/bin
+
+      - name: Test docs.rs more thoroughly
+        run: ./test.sh
+
   docker:
     name: Docker
     runs-on: ubuntu-latest
