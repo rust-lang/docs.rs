@@ -30,6 +30,12 @@ jobs:
             ec3d29e9fb375b87ac492c8b546ad6be84b0c0b49dab7ff4c6b582eac71ba01c ] &&
             unzip pup_v0.4.0_linux_amd64.zip
 
+      - name: Cache Rustwide directory
+        uses: actions/cache@v1
+        with:
+          key: always
+          path: .rustwide-docker
+
       - name: Test docs.rs more thoroughly
         run: cp .env.sample .env && PATH="$PATH:." ./test.sh
 
