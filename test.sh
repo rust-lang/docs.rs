@@ -10,7 +10,7 @@ set -euv
 docker-compose build
 # this never exits, run it in the background
 # TODO: catch errors if `up` failed
-docker-compose up --build -d
+docker-compose up -d
 
 # build a crate and store it in the database if it does not already exist
 build() {
@@ -29,15 +29,21 @@ build sysinfo 0.10.0
 # renamed crate
 build constellation-rs 0.1.8
 # used later for latest version
-build rand 0.7.1
+build rand 0.6.5
 build pyo3 0.2.7
 build pyo3 0.8.3
 
-HOST=localhost:3000
+HOST=http://localhost:3000
 
 # small wrapper around curl to hide extraneous output
 curl() {
     command curl -s -o /dev/null "$@"
+}
+
+# exit with a failure message
+die() {
+	echo "$@"
+	exit 1
 }
 
 # give the HTTP status of a page hosted locally
@@ -52,22 +58,27 @@ redirect() {
 }
 
 version_redirect() {
-    curl "$1" | pup "form ul li a.warn attr{href}"
+    command curl -s "$HOST$1" | pup "form ul li a.warn attr{href}"
+}
+
+assert_eq() {
+	[ "$1" = "$2" ] || die "expected '$1' to be '$2'"
 }
 
 assert_status() {
-	[ "$(status "$1")" = "$2" ]
+	assert_eq "$(status "$1")" "$2"
 }
 assert_redirect() {
-	[ "$(redirect "$1")" = "$HOST/$2" ]
+	assert_eq "$(redirect "$1")" "$HOST$2"
 }
 assert_version_redirect() {
-	[ "$(version_redirect "$1")" = "$HOST/$2" ]
+	assert_eq "$(version_redirect "$1")" "$2"
 }
 
 # make sure the crates built successfully
-for crate in /rand/0.7.2/rand /rstest/0.12.1/rstest /sysinfo/0.10.0/sysinfo /constellation-rs/0.1.8/constellation; do
-	assert_status "$crate" 200
+for crate in /rand/0.7.2/rand /rstest/0.4.1/rstest /sysinfo/0.10.0/sysinfo /constellation-rs/0.1.8/constellation; do
+	echo "$crate"
+	assert_status "$crate/" 200
 done
 
 assert_redirect /bat/0.12.1/bat /crate/bat/0.12.1
@@ -77,7 +88,7 @@ assert_status /constellation-rs/0.1.8/src/constellation/lib.rs.html 200
 # make sure it shows source code for docs.rs
 assert_status /crate/constellation-rs/0.1.8/source/ 200
 # with or without trailing slashes
-assert_status /crate/constellation-rs/0.1.8/source 200
+assert_redirect /crate/constellation-rs/0.1.8/source /crate/constellation-rs/0.1.8/source/
 
 # check 'Go to latest version' keeps the current page
 assert_version_redirect /rand/0.6.5/rand/trait.Rng.html \
