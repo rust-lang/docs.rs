@@ -104,7 +104,7 @@ impl FileList {
             return None;
         }
 
-        let files: Json = rows.get(0).get(5);
+        let files: Json = rows.get(0).get_opt(5).unwrap().ok()?;
 
         let mut file_list: Vec<File> = Vec::new();
 
