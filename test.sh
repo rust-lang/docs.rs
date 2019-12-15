@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # test script for docs.rs
 # requires the following tools installed:
 # - docker-compose
@@ -19,7 +19,7 @@ docker-compose up -d
 for i in $(seq 1 5); do
 	curl -I $HOST && break
 	# if we've tried 5 times, exit with error
-	! [ $i = 5 ]
+	! [ "$i" = 5 ]
 	sleep 5
 done
 
@@ -57,13 +57,13 @@ die() {
 
 # give the HTTP status of a page hosted locally
 status() {
-	curl -I -w %{http_code} "$HOST$1"
+	curl -I -w "%{http_code}" "$HOST$1"
 }
 
 # give the URL a page hosted locally redirects to
 # if the page does not redirect, returns the same page it was given
 redirect() {
-	curl -IL -w %{url_effective} "$HOST$1"
+	curl -IL -w "%{url_effective}" "$HOST$1"
 }
 
 version_redirect() {
