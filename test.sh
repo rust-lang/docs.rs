@@ -111,5 +111,12 @@ assert_version_redirect /rand/0.6.5/rand/rngs/struct.JitterRng.html \
 # for renamed items
 assert_version_redirect /pyo3/0.2.7/pyo3/exc/struct.ArithmeticError.html \
                         "/pyo3/0.8.3/pyo3/?search=ArithmeticError"
+# check std library redirects
+for crate in std alloc core proc_macro test; do
+	echo $crate
+	# with or without slash
+	assert_eq "$(redirect /$crate)" https://doc.rust-lang.org/stable/$crate/
+	assert_eq "$(redirect /$crate/)" https://doc.rust-lang.org/stable/$crate/
+done
 
 docker-compose down
