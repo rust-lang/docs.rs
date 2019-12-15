@@ -36,6 +36,18 @@ jobs:
           key: always
           path: .rustwide-docker
 
+      - name: Setup local docker directory
+        run: >
+            mkdir -p ignored/docker &&
+            sudo rm -rf /var/lib/docker &&
+            sudo ln -sf "$(realpath ignored/docker)" /var/lib/docker
+
+      - name: Cache docker directory
+        uses: actions/cache@v1
+        with:
+          key: always
+          path: ignored/docker
+
       - name: Test docs.rs more thoroughly
         run: cp .env.sample .env && PATH="$PATH:." ./test.sh
 
