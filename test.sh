@@ -7,10 +7,21 @@
 
 set -euv
 
+HOST=http://localhost:3000
+
 docker-compose build
+# run a dummy command so that the next background command starts up quickly
+# and doesn't try to compete with `build` commands
+docker-compose run web -- --help || true
 # this never exits, run it in the background
-# TODO: catch errors if `up` failed
 docker-compose up -d
+# ensure that if the web server doesn't start up we catch the error
+for i in $(seq 1 5); do
+	curl -I $HOST && break
+	# if we've tried 5 times, exit with error
+	! [ $i = 5 ]
+	sleep 5
+done
 
 # build a crate and store it in the database if it does not already exist
 build() {
@@ -32,8 +43,6 @@ build constellation-rs 0.1.8
 build rand 0.6.5
 build pyo3 0.2.7
 build pyo3 0.8.3
-
-HOST=http://localhost:3000
 
 # small wrapper around curl to hide extraneous output
 curl() {
