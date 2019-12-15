@@ -39,8 +39,10 @@ jobs:
       - name: Setup local docker directory
         run: >
             mkdir -p ignored/docker &&
+            sudo systemctl stop docker &&
             sudo rm -rf /var/lib/docker &&
-            sudo ln -sf "$(realpath ignored/docker)" /var/lib/docker
+            sudo ln -sf "$(realpath ignored/docker)" /var/lib/docker &&
+            sudo systemctl start docker
 
       - name: Cache docker directory
         uses: actions/cache@v1
