@@ -30,32 +30,10 @@ jobs:
             ec3d29e9fb375b87ac492c8b546ad6be84b0c0b49dab7ff4c6b582eac71ba01c ] &&
             unzip pup_v0.4.0_linux_amd64.zip
 
-      - name: Cache Rustwide directory
-        uses: actions/cache@v1
-        with:
-          key: always
-          path: .rustwide-docker
-
-      - name: Setup local docker directory
-        run: >
-            mkdir -p ignored/docker &&
-            sudo systemctl stop docker &&
-            sudo rm -rf /var/lib/docker &&
-            sudo ln -sf "$(realpath ignored/docker)" /var/lib/docker &&
-            sudo systemctl start docker
-
-      - name: Cache docker directory
-        uses: actions/cache@v1
-        with:
-          key: always
-          path: ignored/docker
-
       - name: Test docs.rs more thoroughly
         run: >
             cp .env.sample .env &&
             PATH="$PATH:." ./test.sh &&
-            find ignored/docker -type d -exec sudo chmod a+rx {} \; &&
-            find ignored/docker -type f -exec sudo chmod a+r {} \; # hack so that caching works
 
   docker:
     name: Docker
