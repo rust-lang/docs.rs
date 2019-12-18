@@ -4,6 +4,7 @@ pub(crate) use self::add_package::add_package_into_database;
 pub(crate) use self::add_package::add_build_into_database;
 pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
+pub use self::delete_crate::delete_crate;
 
 use postgres::{Connection, TlsMode};
 use postgres::error::Error;
@@ -14,6 +15,7 @@ use r2d2_postgres;
 mod add_package;
 pub mod file;
 mod migrate;
+mod delete_crate;
 
 
 /// Connects to database

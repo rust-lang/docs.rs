@@ -111,8 +111,11 @@ pub fn main() {
             .subcommand(SubCommand::with_name("update-release-activity"))
             .about("Updates montly release activity \
                                                               chart")
-            .subcommand(SubCommand::with_name("update-search-index"))
+            .subcommand(SubCommand::with_name("update-search-index")
             .about("Updates search index"))
+            .subcommand(SubCommand::with_name("delete-crate")
+                .about("Removes a whole crate from the database")
+                .arg(Arg::with_name("CRATE_NAME").help("Name of the crate to delete"))))
         .subcommand(SubCommand::with_name("queue")
             .about("Interactions with the build queue")
             .subcommand(SubCommand::with_name("add")
@@ -225,6 +228,10 @@ pub fn main() {
                     count, total
                 );
             }
+        } else if let Some(matches) = matches.subcommand_matches("delete-crate") {
+            let name = matches.value_of("CRATE_NAME").expect("missing crate name");
+            let conn = db::connect_db().expect("failed to connect to the database");
+            db::delete_crate(&conn, &name).expect("failed to delete the crate");
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));

@@ -20,6 +20,8 @@ use rusoto_credential::DefaultCredentialsProvider;
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
+pub(super) static S3_BUCKET_NAME: &str = "rust-docs-rs";
+
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
                                           files: &mut Vec<PathBuf>)
@@ -69,7 +71,7 @@ pub struct Blob {
 pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     if let Some(client) = s3_client() {
         let res = client.get_object(GetObjectRequest {
-            bucket: "rust-docs-rs".into(),
+            bucket: S3_BUCKET_NAME.into(),
             key: path.into(),
             ..Default::default()
         }).sync();
@@ -116,7 +118,7 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     }
 }
 
-fn s3_client() -> Option<S3Client> {
+pub(super) fn s3_client() -> Option<S3Client> {
     // If AWS keys aren't configured, then presume we should use the DB exclusively
     // for file storage.
     if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
@@ -134,7 +136,7 @@ fn s3_client() -> Option<S3Client> {
         creds,
         std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
             name: std::env::var("S3_REGION")
-                .unwrap_or_else(|| "us-west-1".to_owned()),
+                .unwrap_or_else(|_| "us-west-1".to_owned()),
             endpoint: e,
         }).unwrap_or(Region::UsWest1),
     ))
@@ -203,7 +205,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
             if let Some(client) = &client {
                 futures.push(client.put_object(PutObjectRequest {
-                    bucket: "rust-docs-rs".into(),
+                    bucket: S3_BUCKET_NAME.into(),
                     key: bucket_path.clone(),
                     body: Some(content.clone().into()),
                     content_type: Some(mime.clone()),
@@ -295,7 +297,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
         let content: Vec<u8> = row.get(2);
         let path_1 = path.clone();
         futures.push(client.put_object(PutObjectRequest {
-            bucket: "rust-docs-rs".into(),
+            bucket: S3_BUCKET_NAME.into(),
             key: path.clone(),
             body: Some(content.into()),
             content_type: Some(mime),
