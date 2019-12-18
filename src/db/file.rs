@@ -232,15 +232,19 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
         if !futures.is_empty() {
             attempts += 1;
 
-            if rt.block_on(::futures::future::join_all(futures)).is_ok() {
-                // this batch was successful, start another batch if there are still more files
-                batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
-                currently_uploading = to_upload.drain(..batch_size).collect();
-                attempts = 0;
-            } else {
-                // if any futures error, leave `currently_uploading` in tact so that we can retry the batch
-                if attempts > 2 {
-                    panic!("failed to upload 3 times, exiting");
+            match rt.block_on(::futures::future::join_all(futures)) {
+                Ok(_) => {
+                    // this batch was successful, start another batch if there are still more files
+                    batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
+                    currently_uploading = to_upload.drain(..batch_size).collect();
+                    attempts = 0;
+                },
+                Err(err) => {
+                    error!("failed to upload to s3: {:?}", err);
+                    // if any futures error, leave `currently_uploading` in tact so that we can retry the batch
+                    if attempts > 2 {
+                        panic!("failed to upload 3 times, exiting");
+                    }
                 }
             }
         } else {
