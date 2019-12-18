@@ -133,7 +133,8 @@ fn s3_client() -> Option<S3Client> {
         rusoto_core::request::HttpClient::new().unwrap(),
         creds,
         std::env::var("S3_ENDPOINT").ok().map(|e| Region::Custom {
-            name: "us-west-1".to_owned(),
+            name: std::env::var("S3_REGION")
+                .unwrap_or_else(|| "us-west-1".to_owned()),
             endpoint: e,
         }).unwrap_or(Region::UsWest1),
     ))
