@@ -31,9 +31,7 @@ jobs:
             unzip pup_v0.4.0_linux_amd64.zip
 
       - name: Test docs.rs more thoroughly
-        run: >
-            cp .env.sample .env &&
-            PATH="$PATH:." ./test.sh &&
+        run: cp .env.sample .env && PATH="$PATH:." ./test.sh
 
   docker:
     name: Docker
