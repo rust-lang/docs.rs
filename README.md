@@ -80,6 +80,19 @@ If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
+### Running tests
+
+Tests are run outside of the docker-compose environment, and can be run with:
+
+```
+cargo test
+```
+
+Some tests require access to the database. To run them, set the
+`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. You don't have to
+run the migrations on it or ensure it's empty, as all the tests use temporary
+tables to prevent conflicts with each other or existing data.
+
 ### Docker-Compose
 
 #### Rebuilding Containers

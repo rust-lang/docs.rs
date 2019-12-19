@@ -111,6 +111,17 @@ pub(crate) struct Target {
     pub(crate) src_path: Option<String>,
 }
 
+impl Target {
+    #[cfg(test)]
+    pub(crate) fn dummy_lib(name: String, src_path: Option<String>) -> Self {
+        Target {
+            name,
+            crate_types: vec!["lib".into()],
+            src_path,
+        }
+    }
+}
+
 #[derive(RustcDecodable)]
 pub(crate) struct Dependency {
     pub(crate) name: String,

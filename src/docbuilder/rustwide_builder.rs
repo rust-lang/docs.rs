@@ -1,6 +1,6 @@
 use super::DocBuilder;
 use db::file::add_path_into_database;
-use db::{add_build_into_database, add_package_into_database, connect_db};
+use db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
 use docbuilder::{crates::crates_from_path, Limits};
 use error::Result;
 use failure::ResultExt;
@@ -151,7 +151,7 @@ impl RustwideBuilder {
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
                 let res = self.execute_build(None, build, &limits)?;
-                if !res.successful {
+                if !res.result.successful {
                     bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
 
@@ -269,7 +269,7 @@ impl RustwideBuilder {
 
                 // Do an initial build and then copy the sources in the database
                 let res = self.execute_build(None, &build, &limits)?;
-                if res.successful {
+                if res.result.successful {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
                     files_list = Some(add_path_into_database(
@@ -323,7 +323,7 @@ impl RustwideBuilder {
                 }
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
-                if res.successful {
+                if res.result.successful {
                     ::web::metrics::SUCCESSFUL_BUILDS.inc();
                 } else if res.cargo_metadata.root().is_library() {
                     ::web::metrics::FAILED_BUILDS.inc();
@@ -334,13 +334,15 @@ impl RustwideBuilder {
                     &conn,
                     res.cargo_metadata.root(),
                     &build.host_source_dir(),
-                    &res,
+                    &res.result,
                     files_list,
                     successful_targets,
+                    &res.default_target,
+                    &CratesIoData::get_from_network(res.cargo_metadata.root())?,
                     has_docs,
                     has_examples,
                 )?;
-                add_build_into_database(&conn, &release_id, &res)?;
+                add_build_into_database(&conn, &release_id, &res.result)?;
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
@@ -349,7 +351,7 @@ impl RustwideBuilder {
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
         local_storage.close()?;
-        Ok(res.successful)
+        Ok(res.result.successful)
     }
 
     fn build_target(
@@ -361,7 +363,7 @@ impl RustwideBuilder {
         successful_targets: &mut Vec<String>,
     ) -> Result<()> {
         let target_res = self.execute_build(Some(target), build, limits)?;
-        if target_res.successful {
+        if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
@@ -379,7 +381,7 @@ impl RustwideBuilder {
         target: Option<&str>,
         build: &Build,
         limits: &Limits,
-    ) -> Result<BuildResult> {
+    ) -> Result<FullBuildResult> {
         let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
@@ -444,13 +446,16 @@ impl RustwideBuilder {
                 .is_ok()
         });
 
-        Ok(BuildResult {
-            build_log: storage.to_string(),
-            rustc_version: self.rustc_version.clone(),
-            docsrs_version: format!("docsrs {}", ::BUILD_VERSION),
-            successful,
+        Ok(FullBuildResult {
+            result: BuildResult {
+                build_log: storage.to_string(),
+                rustc_version: self.rustc_version.clone(),
+                docsrs_version: format!("docsrs {}", ::BUILD_VERSION),
+                successful,
+            },
             cargo_metadata,
             target: target.unwrap_or_default().to_string(),
+            default_target: metadata.default_target.clone(),
         })
     }
 
@@ -495,11 +500,16 @@ impl RustwideBuilder {
     }
 }
 
+struct FullBuildResult {
+    result: BuildResult,
+    target: String,
+    default_target: Option<String>,
+    cargo_metadata: CargoMetadata,
+}
+
 pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
-    target: String,
-    cargo_metadata: CargoMetadata,
 }

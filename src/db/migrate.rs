@@ -1,11 +1,29 @@
 //! Database migrations
 
-use db::connect_db;
 use error::Result as CratesfyiResult;
-use postgres::error::Error as PostgresError;
-use postgres::transaction::Transaction;
+use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use std::rc::Rc;
+
+
+enum ApplyMode {
+    Permanent,
+    Temporary,
+}
+
+struct MigrationContext {
+    apply_mode: ApplyMode,
+}
+
+impl MigrationContext {
+    fn format_query(&self, query: &str) -> String {
+        query.replace("{create_table}", match self.apply_mode {
+            ApplyMode::Permanent => "CREATE TABLE",
+            ApplyMode::Temporary => "CREATE TEMPORARY TABLE",
+        })
+    }
+}
 
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
@@ -16,12 +34,14 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 /// ```
 /// let my_migration = migration!(100,
 ///                               "Create test table",
-///                               "CREATE TABLE test ( id SERIAL);",
+///                               "{create_table} test ( id SERIAL);",
 ///                               "DROP TABLE test;");
 /// ```
 macro_rules! migration {
-    ($version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
-        struct Amigration;
+    ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
+        struct Amigration {
+            ctx: Rc<MigrationContext>,
+        };
         impl Migration for Amigration {
             fn version(&self) -> Version {
                 $version
@@ -33,33 +53,48 @@ macro_rules! migration {
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &Transaction) -> Result<(), PostgresError> {
                 info!("Applying migration {}: {}", self.version(), self.description());
-                transaction.batch_execute($up).map(|_| ())
+                transaction.batch_execute(&self.ctx.format_query($up)).map(|_| ())
             }
             fn down(&self, transaction: &Transaction) -> Result<(), PostgresError> {
                 info!("Removing migration {}: {}", self.version(), self.description());
-                transaction.batch_execute($down).map(|_| ())
+                transaction.batch_execute(&self.ctx.format_query($down)).map(|_| ())
             }
         }
-        Box::new(Amigration)
+        Box::new(Amigration { ctx: $context })
     }};
 }
 
 
-pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
-    let conn = connect_db()?;
-    let adapter = PostgresAdapter::with_metadata_table(&conn, "database_versions");
-    adapter.setup_schema()?;
+pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
+    migrate_inner(version, conn, ApplyMode::Permanent)
+}
+
+pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
+    migrate_inner(version, conn, ApplyMode::Temporary)
+}
+
+fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyMode) -> CratesfyiResult<()> {
+    let context = Rc::new(MigrationContext { apply_mode });
+
+    conn.execute(
+        &context.format_query(
+            "{create_table} IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);"
+        ),
+        &[],
+    )?;
+    let adapter = PostgresAdapter::with_metadata_table(conn, "database_versions");
 
     let mut migrator = Migrator::new(adapter);
 
     let migrations: Vec<Box<dyn PostgresMigration>> = vec![
         migration!(
+            context.clone(),
             // version
             1,
             // description
             "Initial database schema",
             // upgrade query
-            "CREATE TABLE crates (
+            "{create_table} crates (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255) UNIQUE NOT NULL,
                  latest_version_id INT DEFAULT 0,
@@ -73,7 +108,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                  github_last_update TIMESTAMP,
                  content tsvector
              );
-             CREATE TABLE releases (
+             {create_table} releases (
                  id SERIAL PRIMARY KEY,
                  crate_id INT NOT NULL REFERENCES crates(id),
                  version VARCHAR(100),
@@ -102,40 +137,40 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                  default_target VARCHAR(100),
                  UNIQUE (crate_id, version)
              );
-             CREATE TABLE authors (
+             {create_table} authors (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255),
                  email VARCHAR(255),
                  slug VARCHAR(255) UNIQUE NOT NULL
              );
-             CREATE TABLE author_rels (
+             {create_table} author_rels (
                  rid INT REFERENCES releases(id),
                  aid INT REFERENCES authors(id),
                  UNIQUE(rid, aid)
              );
-             CREATE TABLE keywords (
+             {create_table} keywords (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255),
                  slug VARCHAR(255) NOT NULL UNIQUE
              );
-             CREATE TABLE keyword_rels (
+             {create_table} keyword_rels (
                  rid INT REFERENCES releases(id),
                  kid INT REFERENCES keywords(id),
                  UNIQUE(rid, kid)
              );
-             CREATE TABLE owners (
+             {create_table} owners (
                  id SERIAL PRIMARY KEY,
                  login VARCHAR(255) NOT NULL UNIQUE,
                  avatar VARCHAR(255),
                  name VARCHAR(255),
                  email VARCHAR(255)
              );
-             CREATE TABLE owner_rels (
+             {create_table} owner_rels (
                  cid INT REFERENCES releases(id),
                  oid INT REFERENCES owners(id),
                  UNIQUE(cid, oid)
              );
-             CREATE TABLE builds (
+             {create_table} builds (
                  id SERIAL,
                  rid INT NOT NULL REFERENCES releases(id),
                  rustc_version VARCHAR(100) NOT NULL,
@@ -144,7 +179,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                  build_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  output TEXT
              );
-             CREATE TABLE queue (
+             {create_table} queue (
                  id SERIAL,
                  name VARCHAR(255),
                  version VARCHAR(100),
@@ -152,14 +187,14 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                  date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  UNIQUE(name, version)
              );
-             CREATE TABLE files (
+             {create_table} files (
                  path VARCHAR(4096) NOT NULL PRIMARY KEY,
                  mime VARCHAR(100) NOT NULL,
                  date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  content BYTEA
              );
-             CREATE TABLE config (
+             {create_table} config (
                  name VARCHAR(100) NOT NULL PRIMARY KEY,
                  value JSON NOT NULL
              );
@@ -170,6 +205,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                         owners, releases, crates, builds, queue, files, config;"
         ),
         migration!(
+            context.clone(),
             // version
             2,
             // description
@@ -180,12 +216,13 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "ALTER TABLE queue DROP COLUMN priority;"
         ),
         migration!(
+            context.clone(),
             // version
             3,
             // description
             "Added sandbox_overrides table",
             // upgrade query
-            "CREATE TABLE sandbox_overrides (
+            "{create_table} sandbox_overrides (
                  crate_name VARCHAR NOT NULL PRIMARY KEY,
                  max_memory_bytes INTEGER,
                  timeout_seconds INTEGER
@@ -194,6 +231,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "DROP TABLE sandbox_overrides;"
         ),
         migration!(
+            context.clone(),
             4,
             "Make more fields not null",
             "ALTER TABLE releases ALTER COLUMN release_time SET NOT NULL,
@@ -204,6 +242,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                                   ALTER COLUMN downloads DROP NOT NULL"
         ),
         migration!(
+            context.clone(),
             // version
             5,
             // description
