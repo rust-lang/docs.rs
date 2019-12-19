@@ -202,7 +202,8 @@ pub fn main() {
         if let Some(matches) = matches.subcommand_matches("migrate") {
             let version = matches.value_of("VERSION").map(|v| v.parse::<i64>()
                                                           .expect("Version should be an integer"));
-            db::migrate(version).expect("Failed to run database migrations");
+            db::migrate(version, &connect_db().expect("failed to connect to the database"))
+                .expect("Failed to run database migrations");
         } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
         } else if let Some(matches) = matches.subcommand_matches("add-directory") {

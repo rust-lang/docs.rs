@@ -53,6 +53,8 @@ pub mod db;
 pub mod utils;
 mod docbuilder;
 mod web;
+#[cfg(test)]
+mod test;
 
 use web::page::GlobalAlert;
 

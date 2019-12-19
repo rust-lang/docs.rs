@@ -1,5 +1,4 @@
 
-use Metadata;
 use utils::MetadataPackage;
 use docbuilder::BuildResult;
 use regex::Regex;
@@ -9,6 +8,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::fs;
 
+use time::Timespec;
 use rustc_serialize::json::{Json, ToJson};
 use slug::slugify;
 use reqwest::Client;
@@ -28,6 +28,8 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                  res: &BuildResult,
                                  files: Option<Json>,
                                  doc_targets: Vec<String>,
+                                 default_target: &Option<String>,
+                                 cratesio_data: &CratesIoData,
                                  has_docs: bool,
                                  has_examples: bool)
                                  -> Result<i32> {
@@ -36,9 +38,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
     let dependencies = convert_dependencies(metadata_pkg);
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
-    let (release_time, yanked, downloads) = get_release_time_yanked_downloads(metadata_pkg)?;
     let is_library = metadata_pkg.is_library();
-    let metadata = Metadata::from_source_dir(source_dir)?;
 
     let release_id: i32 = {
         let rows = conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
@@ -61,10 +61,10 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                         RETURNING id",
                                        &[&crate_id,
                                          &metadata_pkg.version,
-                                         &release_time,
+                                         &cratesio_data.release_time,
                                          &dependencies.to_json(),
                                          &metadata_pkg.package_name(),
-                                         &yanked,
+                                         &cratesio_data.yanked,
                                          &res.successful,
                                          &has_docs,
                                          &false, // TODO: Add test status somehow
@@ -77,13 +77,13 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                          &metadata_pkg.authors.to_json(),
                                          &metadata_pkg.keywords.to_json(),
                                          &has_examples,
-                                         &downloads,
+                                         &cratesio_data.downloads,
                                          &files,
                                          &doc_targets.to_json(),
                                          &is_library,
                                          &res.rustc_version,
                                          &metadata_pkg.documentation,
-                                         &metadata.default_target])?;
+                                         &default_target])?;
             // return id
             rows.get(0).get(0)
 
@@ -115,10 +115,10 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
                               &format!("{}", metadata_pkg.version),
-                              &release_time,
+                              &cratesio_data.release_time,
                               &dependencies.to_json(),
                               &metadata_pkg.package_name(),
-                              &yanked,
+                              &cratesio_data.yanked,
                               &res.successful,
                               &has_docs,
                               &false, // TODO: Add test status somehow
@@ -131,13 +131,13 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                               &metadata_pkg.authors.to_json(),
                               &metadata_pkg.keywords.to_json(),
                               &has_examples,
-                              &downloads,
+                              &cratesio_data.downloads,
                               &files,
                               &doc_targets.to_json(),
                               &is_library,
                               &res.rustc_version,
                               &metadata_pkg.documentation,
-                              &metadata.default_target])?;
+                              &default_target])?;
             rows.get(0).get(0)
         }
     };
@@ -145,7 +145,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
 
     add_keywords_into_database(&conn, &metadata_pkg, &release_id)?;
     add_authors_into_database(&conn, &metadata_pkg, &release_id)?;
-    add_owners_into_database(&conn, &metadata_pkg, &crate_id)?;
+    add_owners_into_database(&conn, &cratesio_data.owners, &crate_id)?;
 
 
     // Update versions
@@ -284,6 +284,27 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
 }
 
 
+pub(crate) struct CratesIoData {
+    pub(crate) release_time: Timespec,
+    pub(crate) yanked: bool,
+    pub(crate) downloads: i32,
+    pub(crate) owners: Vec<CrateOwner>,
+}
+
+impl CratesIoData {
+    pub(crate) fn get_from_network(pkg: &MetadataPackage) -> Result<Self> {
+        let (release_time, yanked, downloads) = get_release_time_yanked_downloads(pkg)?;
+        let owners = get_owners(pkg)?;
+
+        Ok(Self {
+            release_time,
+            yanked,
+            downloads,
+            owners,
+        })
+    }
+}
+
 
 /// Get release_time, yanked and downloads from crates.io
 fn get_release_time_yanked_downloads(
@@ -394,9 +415,15 @@ fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_i
 }
 
 
+pub(crate) struct CrateOwner {
+    pub(crate) avatar: String,
+    pub(crate) email: String,
+    pub(crate) login: String,
+    pub(crate) name: String,
+}
 
-/// Adds owners into database
-fn add_owners_into_database(conn: &Connection, pkg: &MetadataPackage, crate_id: &i32) -> Result<()> {
+/// Fetch owners from crates.io
+fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", pkg.name);
     let client = Client::new();
@@ -409,6 +436,7 @@ fn add_owners_into_database(conn: &Connection, pkg: &MetadataPackage, crate_id: 
     res.read_to_string(&mut body).unwrap();
     let json = Json::from_str(&body[..])?;
 
+    let mut result = Vec::new();
     if let Some(owners) = json.as_object()
         .and_then(|j| j.get("users"))
         .and_then(|j| j.as_array()) {
@@ -435,25 +463,38 @@ fn add_owners_into_database(conn: &Connection, pkg: &MetadataPackage, crate_id: 
                 continue;
             }
 
-            let owner_id: i32 = {
-                let rows = conn.query("SELECT id FROM owners WHERE login = $1", &[&login])?;
-                if rows.len() > 0 {
-                    rows.get(0).get(0)
-                } else {
-                    conn.query("INSERT INTO owners (login, avatar, name, email)
-                                     VALUES ($1, $2, $3, $4)
-                                     RETURNING id",
-                                    &[&login, &avatar, &name, &email])?
-                        .get(0)
-                        .get(0)
-                }
-            };
-
-            // add relationship
-            let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
-                               &[crate_id, &owner_id]);
+            result.push(CrateOwner {
+                avatar: avatar.to_string(),
+                email: email.to_string(),
+                login: login.to_string(),
+                name: name.to_string(),
+            });
         }
+    }
 
+    Ok(result)
+}
+
+/// Adds owners into database
+fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: &i32) -> Result<()> {
+    for owner in owners {
+        let owner_id: i32 = {
+            let rows = conn.query("SELECT id FROM owners WHERE login = $1", &[&owner.login])?;
+            if rows.len() > 0 {
+                rows.get(0).get(0)
+            } else {
+                conn.query("INSERT INTO owners (login, avatar, name, email)
+                                 VALUES ($1, $2, $3, $4)
+                                 RETURNING id",
+                                &[&owner.login, &owner.avatar, &owner.name, &owner.email])?
+                    .get(0)
+                    .get(0)
+            }
+        };
+
+        // add relationship
+        let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
+                           &[crate_id, &owner_id]);
     }
     Ok(())
 }
