@@ -4,14 +4,15 @@ use error::Result as CratesfyiResult;
 use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
-use std::rc::Rc;
 
 
+#[derive(Copy, Clone)]
 enum ApplyMode {
     Permanent,
     Temporary,
 }
 
+#[derive(Copy, Clone)]
 struct MigrationContext {
     apply_mode: ApplyMode,
 }
@@ -40,7 +41,7 @@ impl MigrationContext {
 macro_rules! migration {
     ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
         struct Amigration {
-            ctx: Rc<MigrationContext>,
+            ctx: MigrationContext,
         };
         impl Migration for Amigration {
             fn version(&self) -> Version {
@@ -74,7 +75,7 @@ pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> Cratesf
 }
 
 fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyMode) -> CratesfyiResult<()> {
-    let context = Rc::new(MigrationContext { apply_mode });
+    let context = MigrationContext { apply_mode };
 
     conn.execute(
         &context.format_query(
@@ -88,7 +89,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
 
     let migrations: Vec<Box<dyn PostgresMigration>> = vec![
         migration!(
-            context.clone(),
+            context,
             // version
             1,
             // description
@@ -205,7 +206,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                         owners, releases, crates, builds, queue, files, config;"
         ),
         migration!(
-            context.clone(),
+            context,
             // version
             2,
             // description
@@ -216,7 +217,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             "ALTER TABLE queue DROP COLUMN priority;"
         ),
         migration!(
-            context.clone(),
+            context,
             // version
             3,
             // description
@@ -231,7 +232,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             "DROP TABLE sandbox_overrides;"
         ),
         migration!(
-            context.clone(),
+            context,
             4,
             "Make more fields not null",
             "ALTER TABLE releases ALTER COLUMN release_time SET NOT NULL,
@@ -242,7 +243,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                                   ALTER COLUMN downloads DROP NOT NULL"
         ),
         migration!(
-            context.clone(),
+            context,
             // version
             5,
             // description
