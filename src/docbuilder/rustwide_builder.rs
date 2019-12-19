@@ -349,6 +349,9 @@ impl RustwideBuilder {
                         // Then build the documentation for all the targets
                         for target in TARGETS {
                             debug!("building package {} {} for {}", name, version, target);
+                            if *target == res.target {
+                                continue;
+                            }
                             self.build_target(
                                 target,
                                 &build,
