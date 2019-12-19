@@ -97,15 +97,22 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
                 version_id: None,
             })
             .collect::<Vec<_>>();
-        s3.delete_objects(DeleteObjectsRequest {
-            bucket: S3_BUCKET_NAME.into(),
-            delete: rusoto_s3::Delete {
-                objects: to_delete,
-                quiet: None,
-            },
-            ..DeleteObjectsRequest::default()
-        })
-        .sync()?;
+        let resp = s3
+            .delete_objects(DeleteObjectsRequest {
+                bucket: S3_BUCKET_NAME.into(),
+                delete: rusoto_s3::Delete {
+                    objects: to_delete,
+                    quiet: None,
+                },
+                ..DeleteObjectsRequest::default()
+            })
+            .sync()?;
+        if let Some(errs) = resp.errors {
+            for err in &errs {
+                log::error!("error deleting file from s3: {:?}", err);
+            }
+            failure::bail!("uploading to s3 failed");
+        }
 
         continuation_token = list.continuation_token;
         if continuation_token.is_none() {
