@@ -451,6 +451,7 @@ pub struct MetaData {
     pub description: Option<String>,
     pub target_name: Option<String>,
     pub rustdoc_status: bool,
+    pub default_target: String,
 }
 
 
@@ -460,7 +461,8 @@ impl MetaData {
                                        releases.version,
                                        releases.description,
                                        releases.target_name,
-                                       releases.rustdoc_status
+                                       releases.rustdoc_status,
+                                       releases.default_target
                                 FROM releases
                                 INNER JOIN crates ON crates.id = releases.crate_id
                                 WHERE crates.name = $1 AND releases.version = $2",
@@ -473,6 +475,7 @@ impl MetaData {
                 description: row.get(2),
                 target_name: row.get(3),
                 rustdoc_status: row.get(4),
+                default_target: row.get(5),
             });
         }
 
@@ -489,6 +492,7 @@ impl ToJson for MetaData {
         m.insert("description".to_owned(), self.description.to_json());
         m.insert("target_name".to_owned(), self.target_name.to_json());
         m.insert("rustdoc_status".to_owned(), self.rustdoc_status.to_json());
+        m.insert("default_target".to_owned(), self.default_target.to_json());
         m.to_json()
     }
 }

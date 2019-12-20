@@ -43,7 +43,7 @@ pub struct CrateDetails {
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
-    metadata: MetaData,
+    pub metadata: MetaData,
     is_library: bool,
     doc_targets: Option<Json>,
     license: Option<String>,
@@ -120,7 +120,8 @@ impl CrateDetails {
                             releases.is_library,
                             releases.doc_targets,
                             releases.license,
-                            releases.documentation_url
+                            releases.documentation_url,
+                            releases.default_target
                      FROM releases
                      INNER JOIN crates ON releases.crate_id = crates.id
                      WHERE crates.name = $1 AND releases.version = $2;";
@@ -160,6 +161,7 @@ impl CrateDetails {
             description: rows.get(0).get(4),
             rustdoc_status: rows.get(0).get(11),
             target_name: rows.get(0).get(16),
+            default_target: rows.get(0).get(25),
         };
 
         let mut crate_details = CrateDetails {
