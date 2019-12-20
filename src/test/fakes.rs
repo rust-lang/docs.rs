@@ -86,7 +86,6 @@ impl<'db> FakeRelease<'db> {
             &self.build_result,
             self.files,
             self.doc_targets,
-            &self.default_target,
             &self.cratesio_data,
             self.has_docs,
             self.has_examples,
