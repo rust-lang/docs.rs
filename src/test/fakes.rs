@@ -118,7 +118,6 @@ impl<'a> FakeRelease<'a> {
             &self.build_result,
             Some(source_meta),
             self.doc_targets,
-            &self.default_target,
             &self.cratesio_data,
             self.has_docs,
             self.has_examples,

@@ -193,6 +193,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool).get();
+    let base = redirect_base(req);
 
     let mut req_path = req.url.path();
 
@@ -208,7 +209,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
             let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
-                                                redirect_base(req),
+                                                base,
                                                 name,
                                                 v,
                                                 req_path.join("/"))[..]));
@@ -227,8 +228,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // if visiting the full path to the default target, remove the target from the path
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     if req_path[3] == crate_details.metadata.default_target {
-        let canonical = Url::parse(&req_path[..2].join("/"))
-            .expect("got an invalid URL to start");
+        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
+        let canonical = Url::parse(&path).expect("got an invalid URL to start");
         return Ok(super::redirect(canonical));
     }
 
@@ -241,6 +242,16 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
         path
     };
+
+    // if visiting the full path to the default target, remove the target from the path
+    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    debug!("req_path: {}, default_target: {}", req_path.join("/"), crate_details.metadata.default_target);
+    if req_path[3] == crate_details.metadata.default_target {
+        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
+        let canonical = Url::parse(&path).expect("got an invalid URL to start");
+        return Ok(super::redirect(canonical));
+    }
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,

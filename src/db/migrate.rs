@@ -280,6 +280,19 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // downgrade query
             "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE INTEGER;"
         ),
+        migration!(
+            context,
+            // version
+            8,
+            // description
+            "Make default_target non-nullable",
+            // upgrade query
+            "UPDATE releases SET default_target = 'x86_64-unknown-linux-gnu' WHERE default_target IS NULL;
+             ALTER TABLE releases ALTER COLUMN default_target SET NOT NULL",
+            // downgrade query
+            "ALTER TABLE releases ALTER COLUMN default_target DROP NOT NULL;
+             ALTER TABLE releases ALTER COLUMN default_target DROP DEFAULT",
+        ),
     ];
 
     for migration in migrations {

@@ -31,7 +31,6 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                  res: &BuildResult,
                                  source_files: Option<Json>,
                                  doc_targets: Vec<String>,
-                                 default_target: &Option<String>,
                                  cratesio_data: &CratesIoData,
                                  has_docs: bool,
                                  has_examples: bool)
@@ -86,7 +85,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                          &is_library,
                                          &res.rustc_version,
                                          &metadata_pkg.documentation,
-                                         &default_target])?;
+                                         &res.target])?;
             // return id
             rows.get(0).get(0)
 
@@ -140,7 +139,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                               &is_library,
                               &res.rustc_version,
                               &metadata_pkg.documentation,
-                              &default_target])?;
+                              &res.target])?;
             rows.get(0).get(0)
         }
     };

@@ -189,7 +189,7 @@ impl RustwideBuilder {
                 }
 
                 info!("copying essential files for {}", self.rustc_version);
-                let source = build.host_target_dir().join(&res.target).join("doc");
+                let source = build.host_target_dir().join("doc");
                 let dest = ::tempdir::TempDir::new("essential-files")?;
 
                 let files = ESSENTIAL_FILES_VERSIONED
@@ -303,7 +303,7 @@ impl RustwideBuilder {
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
                 let mut files_list = None;
-                let (mut has_docs, mut in_target) = (false, false);
+                let mut has_docs = false;
                 let mut successful_targets = Vec::new();
 
                 // Do an initial build and then copy the sources in the database
@@ -319,20 +319,7 @@ impl RustwideBuilder {
 
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
-                        if host_target
-                            .join(&res.target)
-                            .join("doc")
-                            .join(&name)
-                            .is_dir()
-                        {
-                            has_docs = true;
-                            in_target = true;
-                        // hack for proc-macro documentation:
-                        // it really should be in target/$target/doc,
-                        // but rustdoc has a bug and puts it in target/doc
-                        } else if host_target.join("doc").join(name).is_dir() {
-                            has_docs = true;
-                        }
+                        has_docs = host_target.join("doc").join(name).is_dir();
                     }
                 }
 
@@ -341,26 +328,24 @@ impl RustwideBuilder {
                     self.copy_docs(
                         &build.host_target_dir(),
                         local_storage.path(),
-                        if in_target { &res.target } else { "" },
+                        "",
                         true,
                     )?;
 
                     successful_targets.push(res.target.clone());
-                    if in_target {
-                        // Then build the documentation for all the targets
-                        for target in TARGETS {
-                            debug!("building package {} {} for {}", name, version, target);
-                            if *target == res.target {
-                                continue;
-                            }
-                            self.build_target(
-                                target,
-                                &build,
-                                &limits,
-                                &local_storage.path(),
-                                &mut successful_targets,
-                            )?;
+                    // Then build the documentation for all the targets
+                    for target in TARGETS {
+                        if *target == res.target {
+                            continue;
                         }
+                        debug!("building package {} {} for {}", name, version, &target);
+                        self.build_target(
+                            &target,
+                            &build,
+                            &limits,
+                            &local_storage.path(),
+                            &mut successful_targets,
+                        )?;
                     }
                     self.upload_docs(&conn, name, version, local_storage.path())?;
                 }
@@ -380,7 +365,6 @@ impl RustwideBuilder {
                     &res.result,
                     files_list,
                     successful_targets,
-                    &res.default_target,
                     &CratesIoData::get_from_network(res.cargo_metadata.root())?,
                     has_docs,
                     has_examples,
@@ -555,4 +539,5 @@ pub(crate) struct BuildResult {
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
+    pub(crate) target: String,
 }
