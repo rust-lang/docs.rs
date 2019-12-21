@@ -474,6 +474,14 @@ impl RustwideBuilder {
                 .run()
                 .is_ok()
         });
+        if let Some(explicit_target) = target {
+            // mv target/$explicit_target/doc target/doc
+            let target_dir = build.host_target_dir();
+            let old_dir = target_dir.join(explicit_target).join("doc");
+            let new_dir = target_dir.join("doc");
+            debug!("rename {} to {}", old_dir.display(), new_dir.display());
+            std::fs::rename(old_dir, new_dir)?;
+        }
 
         Ok(FullBuildResult {
             result: BuildResult {
