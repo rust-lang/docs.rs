@@ -9,6 +9,16 @@ set -euv
 
 HOST=http://localhost:3000
 
+cp .env .env.bak
+
+cleanup() {
+	mv .env.bak .env
+	docker-compose down
+}
+
+trap cleanup exit
+echo DOCS_RS_FAST_INIT=true >> .env
+
 docker-compose build
 # run a dummy command so that the next background command starts up quickly
 # and doesn't try to compete with `build` commands
@@ -118,5 +128,3 @@ for crate in std alloc core proc_macro test; do
 	assert_eq "$(redirect /$crate)" https://doc.rust-lang.org/stable/$crate/
 	assert_eq "$(redirect /$crate/)" https://doc.rust-lang.org/stable/$crate/
 done
-
-docker-compose down

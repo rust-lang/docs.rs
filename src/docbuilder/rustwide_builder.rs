@@ -73,8 +73,12 @@ impl RustwideBuilder {
         let is_docker = std::env::var("DOCS_RS_DOCKER")
             .map(|s| s == "true")
             .unwrap_or(false);
+        let fast_init = std::env::var("DOCS_RS_FAST_INIT")
+            .map(|s| s == "true")
+            .unwrap_or(false);
         let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
             .running_inside_docker(is_docker)
+            .fast_init(fast_init)
             .init()?;
         workspace.purge_all_build_dirs()?;
 
