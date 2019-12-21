@@ -18,10 +18,11 @@ use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
 
-static USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-static DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
+const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
+const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
-static TARGETS: &[&str] = &[
+const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
+const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
     "x86_64-apple-darwin",
@@ -29,7 +30,7 @@ static TARGETS: &[&str] = &[
     "x86_64-unknown-linux-gnu",
 ];
 
-static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
+const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
     "wheel.svg",
     "down-arrow.svg",
@@ -46,7 +47,7 @@ static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "noscript.css",
     "rust-logo.png",
 ];
-static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
+const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "FiraSans-Medium.woff",
     "FiraSans-Regular.woff",
     "SourceCodePro-Regular.woff",
@@ -56,8 +57,8 @@ static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "SourceSerifPro-It.ttf.woff",
 ];
 
-static DUMMY_CRATE_NAME: &str = "acme-client";
-static DUMMY_CRATE_VERSION: &str = "0.0.0";
+const DUMMY_CRATE_NAME: &str = "acme-client";
+const DUMMY_CRATE_VERSION: &str = "0.0.0";
 
 pub struct RustwideBuilder {
     workspace: Workspace,
@@ -363,6 +364,7 @@ impl RustwideBuilder {
                     res.cargo_metadata.root(),
                     &build.host_source_dir(),
                     &res.result,
+                    &res.target,
                     files_list,
                     successful_targets,
                     &CratesIoData::get_from_network(res.cargo_metadata.root())?,
@@ -481,8 +483,7 @@ impl RustwideBuilder {
                 successful,
             },
             cargo_metadata,
-            target: target.unwrap_or("x86_64-unknown-linux-gnu").to_string(),
-            default_target: metadata.default_target.clone(),
+            target: target.unwrap_or(DEFAULT_TARGET).to_string(),
         })
     }
 
@@ -530,7 +531,6 @@ impl RustwideBuilder {
 struct FullBuildResult {
     result: BuildResult,
     target: String,
-    default_target: Option<String>,
     cargo_metadata: CargoMetadata,
 }
 
@@ -539,5 +539,4 @@ pub(crate) struct BuildResult {
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
-    pub(crate) target: String,
 }

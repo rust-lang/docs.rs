@@ -84,6 +84,7 @@ impl<'db> FakeRelease<'db> {
             &self.package,
             tempdir.path(),
             &self.build_result,
+            &self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             self.files,
             self.doc_targets,
             &self.cratesio_data,
