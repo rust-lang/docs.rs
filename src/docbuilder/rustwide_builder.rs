@@ -82,9 +82,7 @@ impl RustwideBuilder {
             .map(|t| Cow::Owned(t))
             .unwrap_or_else(|_| Cow::Borrowed("nightly"));
 
-        let toolchain = Toolchain::Dist {
-            name: toolchain_name,
-        };
+        let toolchain = Toolchain::dist(&toolchain_name);
 
         Ok(RustwideBuilder {
             workspace,
