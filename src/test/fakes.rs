@@ -116,7 +116,7 @@ impl<'a> FakeRelease<'a> {
             &self.package,
             tempdir.path(),
             &self.build_result,
-            &self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
+            self.default_target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
             Some(source_meta),
             self.doc_targets,
             &self.cratesio_data,
