@@ -226,6 +226,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     req_path.insert(2, &version);
 
     // if visiting the full path to the default target, remove the target from the path
+    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     if req_path[3] == crate_details.metadata.default_target {
         let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
@@ -242,16 +243,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
         path
     };
-
-    // if visiting the full path to the default target, remove the target from the path
-    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    debug!("req_path: {}, default_target: {}", req_path.join("/"), crate_details.metadata.default_target);
-    if req_path[3] == crate_details.metadata.default_target {
-        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
-        let canonical = Url::parse(&path).expect("got an invalid URL to start");
-        return Ok(super::redirect(canonical));
-    }
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
