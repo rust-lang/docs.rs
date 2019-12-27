@@ -4,6 +4,7 @@ use error::Result as CratesfyiResult;
 use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use std::borrow::Cow;
 
 
 #[derive(Copy, Clone)]
@@ -18,11 +19,13 @@ struct MigrationContext {
 }
 
 impl MigrationContext {
-    fn format_query(&self, query: &str) -> String {
-        query.replace("{create_table}", match self.apply_mode {
-            ApplyMode::Permanent => "CREATE TABLE",
-            ApplyMode::Temporary => "CREATE TEMPORARY TABLE",
-        })
+    fn format_query<'a>(&self, query: &'a str) -> Cow<'a, str> {
+        match self.apply_mode {
+            ApplyMode::Permanent => Cow::Borrowed(query),
+            ApplyMode::Temporary => {
+                Cow::Owned(query.replace("CREATE TABLE", "CREATE TEMPORARY TABLE"))
+            }
+        }
     }
 }
 
@@ -35,7 +38,7 @@ impl MigrationContext {
 /// ```
 /// let my_migration = migration!(100,
 ///                               "Create test table",
-///                               "{create_table} test ( id SERIAL);",
+///                               "CREATE TABLE test ( id SERIAL);",
 ///                               "DROP TABLE test;");
 /// ```
 macro_rules! migration {
@@ -79,7 +82,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
 
     conn.execute(
         &context.format_query(
-            "{create_table} IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);"
+            "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);"
         ),
         &[],
     )?;
@@ -95,7 +98,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // description
             "Initial database schema",
             // upgrade query
-            "{create_table} crates (
+            "CREATE TABLE crates (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255) UNIQUE NOT NULL,
                  latest_version_id INT DEFAULT 0,
@@ -109,7 +112,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                  github_last_update TIMESTAMP,
                  content tsvector
              );
-             {create_table} releases (
+             CREATE TABLE releases (
                  id SERIAL PRIMARY KEY,
                  crate_id INT NOT NULL REFERENCES crates(id),
                  version VARCHAR(100),
@@ -138,40 +141,40 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                  default_target VARCHAR(100),
                  UNIQUE (crate_id, version)
              );
-             {create_table} authors (
+             CREATE TABLE authors (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255),
                  email VARCHAR(255),
                  slug VARCHAR(255) UNIQUE NOT NULL
              );
-             {create_table} author_rels (
+             CREATE TABLE author_rels (
                  rid INT REFERENCES releases(id),
                  aid INT REFERENCES authors(id),
                  UNIQUE(rid, aid)
              );
-             {create_table} keywords (
+             CREATE TABLE keywords (
                  id SERIAL PRIMARY KEY,
                  name VARCHAR(255),
                  slug VARCHAR(255) NOT NULL UNIQUE
              );
-             {create_table} keyword_rels (
+             CREATE TABLE keyword_rels (
                  rid INT REFERENCES releases(id),
                  kid INT REFERENCES keywords(id),
                  UNIQUE(rid, kid)
              );
-             {create_table} owners (
+             CREATE TABLE owners (
                  id SERIAL PRIMARY KEY,
                  login VARCHAR(255) NOT NULL UNIQUE,
                  avatar VARCHAR(255),
                  name VARCHAR(255),
                  email VARCHAR(255)
              );
-             {create_table} owner_rels (
+             CREATE TABLE owner_rels (
                  cid INT REFERENCES releases(id),
                  oid INT REFERENCES owners(id),
                  UNIQUE(cid, oid)
              );
-             {create_table} builds (
+             CREATE TABLE builds (
                  id SERIAL,
                  rid INT NOT NULL REFERENCES releases(id),
                  rustc_version VARCHAR(100) NOT NULL,
@@ -180,7 +183,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                  build_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  output TEXT
              );
-             {create_table} queue (
+             CREATE TABLE queue (
                  id SERIAL,
                  name VARCHAR(255),
                  version VARCHAR(100),
@@ -188,14 +191,14 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
                  date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  UNIQUE(name, version)
              );
-             {create_table} files (
+             CREATE TABLE files (
                  path VARCHAR(4096) NOT NULL PRIMARY KEY,
                  mime VARCHAR(100) NOT NULL,
                  date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                  content BYTEA
              );
-             {create_table} config (
+             CREATE TABLE config (
                  name VARCHAR(100) NOT NULL PRIMARY KEY,
                  value JSON NOT NULL
              );
@@ -223,7 +226,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // description
             "Added sandbox_overrides table",
             // upgrade query
-            "{create_table} sandbox_overrides (
+            "CREATE TABLE sandbox_overrides (
                  crate_name VARCHAR NOT NULL PRIMARY KEY,
                  max_memory_bytes INTEGER,
                  timeout_seconds INTEGER
