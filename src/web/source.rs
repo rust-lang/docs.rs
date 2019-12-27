@@ -104,7 +104,7 @@ impl FileList {
             return None;
         }
 
-        let files: Json = rows.get(0).get(5);
+        let files: Json = rows.get(0).get_opt(5).unwrap().ok()?;
 
         let mut file_list: Vec<File> = Vec::new();
 
@@ -234,6 +234,11 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
+    if list.is_none() {
+        use iron::status;
+        use super::error::Nope;
+        return Err(IronError::new(Nope::NoResults, status::NotFound));
+    }
 
     let page = Page::new(list)
         .set_bool("show_parent_link", !req_path.is_empty())
