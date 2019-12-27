@@ -112,6 +112,7 @@ pub fn main() {
                 .about("Removes a whole crate from the database")
                 .arg(Arg::with_name("CRATE_NAME")
                     .takes_value(true)
+                    .required(true)
                     .help("Name of the crate to delete"))))
         .subcommand(SubCommand::with_name("queue")
             .about("Interactions with the build queue")
@@ -193,8 +194,9 @@ pub fn main() {
             docbuilder.unlock().expect("Failed to unlock");
         } else if let Some(_) = matches.subcommand_matches("print-options") {
             println!("{:?}", docbuilder.options());
+        } else {
+            println!("{}", matches.usage());
         }
-
     } else if let Some(matches) = matches.subcommand_matches("database") {
         if let Some(matches) = matches.subcommand_matches("migrate") {
             let version = matches.value_of("VERSION").map(|v| v.parse::<i64>()
@@ -230,6 +232,8 @@ pub fn main() {
             let name = matches.value_of("CRATE_NAME").expect("missing crate name");
             let conn = db::connect_db().expect("failed to connect to the database");
             db::delete_crate(&conn, &name).expect("failed to delete the crate");
+        } else {
+            println!("{}", matches.usage());
         }
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
@@ -247,6 +251,8 @@ pub fn main() {
                                matches.value_of("CRATE_NAME").unwrap(),
                                matches.value_of("CRATE_VERSION").unwrap(),
                                priority).expect("Could not add crate to queue");
+        } else {
+            println!("{}", matches.usage());
         }
     } else {
         println!("{}", matches.usage());
