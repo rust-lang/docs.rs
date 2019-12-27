@@ -108,11 +108,11 @@ pub fn main() {
                     .index(2)
                     .help("Prefix of files in \
                                                                       database")))
-            .subcommand(SubCommand::with_name("update-release-activity"))
-            .about("Updates montly release activity \
-                                                              chart")
+            .subcommand(SubCommand::with_name("update-release-activity")
+                .about("Updates montly release activity \
+                                                              chart"))
             .subcommand(SubCommand::with_name("update-search-index")
-            .about("Updates search index"))
+                .about("Updates search index"))
             .subcommand(SubCommand::with_name("delete-crate")
                 .about("Removes a whole crate from the database")
                 .arg(Arg::with_name("CRATE_NAME")
