@@ -11,7 +11,7 @@ extern crate rustwide;
 use std::env;
 use std::path::{Path, PathBuf};
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App, AppSettings, SubCommand};
 use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::add_crate_to_queue;
 use cratesfyi::start_web_server;
@@ -24,8 +24,10 @@ pub fn main() {
     let matches = App::new("cratesfyi")
         .version(cratesfyi::BUILD_VERSION)
         .about(env!("CARGO_PKG_DESCRIPTION"))
+        .setting(AppSettings::ArgRequiredElseHelp)
         .subcommand(SubCommand::with_name("build")
             .about("Builds documentation in a chroot environment")
+            .setting(AppSettings::ArgRequiredElseHelp)
             .arg(Arg::with_name("PREFIX")
                 .short("P")
                 .long("prefix")
@@ -89,6 +91,7 @@ pub fn main() {
                 .help("run the server in the foreground instead of detaching a child")))
         .subcommand(SubCommand::with_name("database")
             .about("Database operations")
+            .setting(AppSettings::ArgRequiredElseHelp)
             .subcommand(SubCommand::with_name("move-to-s3"))
             .subcommand(SubCommand::with_name("migrate")
                 .about("Run database migrations")
@@ -115,6 +118,7 @@ pub fn main() {
                     .help("Name of the crate to delete"))))
         .subcommand(SubCommand::with_name("queue")
             .about("Interactions with the build queue")
+            .setting(AppSettings::ArgRequiredElseHelp)
             .subcommand(SubCommand::with_name("add")
                 .about("Add a crate to the build queue")
                 .arg(Arg::with_name("CRATE_NAME")
@@ -231,12 +235,15 @@ pub fn main() {
             let conn = db::connect_db().expect("failed to connect to the database");
             db::delete_crate(&conn, &name).expect("failed to delete the crate");
         }
+
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
+
     } else if let Some(_) = matches.subcommand_matches("daemon") {
         let foreground = matches.subcommand_matches("daemon")
             .map_or(false, |opts| opts.is_present("FOREGROUND"));
         cratesfyi::utils::start_daemon(!foreground);
+
     } else if let Some(matches) = matches.subcommand_matches("queue") {
         if let Some(matches) = matches.subcommand_matches("add") {
             let priority = matches.value_of("BUILD_PRIORITY").unwrap_or("5");
@@ -248,8 +255,6 @@ pub fn main() {
                                matches.value_of("CRATE_VERSION").unwrap(),
                                priority).expect("Could not add crate to queue");
         }
-    } else {
-        println!("{}", matches.usage());
     }
 }
 
