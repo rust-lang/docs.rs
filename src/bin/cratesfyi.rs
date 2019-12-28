@@ -77,6 +77,21 @@ pub fn main() {
             .subcommand(SubCommand::with_name("unlock")
                 .about("Unlocks cratesfyi daemon to continue building new crates"))
             .subcommand(SubCommand::with_name("print-options")))
+        .subcommand(SubCommand::with_name("blacklist")
+            .about("Blacklist operations")
+            .setting(AppSettings::ArgRequiredElseHelp)
+            .subcommand(SubCommand::with_name("add")
+                .about("Add a crate to the blacklist")
+                .arg(Arg::with_name("CRATE_NAME")
+                    .index(1)
+                    .required(true)
+                    .help("Crate name")))
+            .subcommand(SubCommand::with_name("remove")
+                .about("Remove a crate from the blacklist")
+                .arg(Arg::with_name("CRATE_NAME")
+                    .index(1)
+                    .required(true)
+                    .help("Crate name"))))
         .subcommand(SubCommand::with_name("start-web-server")
             .about("Starts web server")
             .arg(Arg::with_name("SOCKET_ADDR")
@@ -198,6 +213,18 @@ pub fn main() {
             docbuilder.unlock().expect("Failed to unlock");
         } else if let Some(_) = matches.subcommand_matches("print-options") {
             println!("{:?}", docbuilder.options());
+        }
+
+    } else if let Some(matches) = matches.subcommand_matches("blacklist") {
+        let conn = db::connect_db().expect("Failed to connect to the database");
+
+        if let Some(matches) = matches.subcommand_matches("add") {
+            let crate_name = matches.value_of("CRATE_NAME").expect("Verified by clap");
+            db::blacklist::add_crate(&conn, crate_name).expect("Failed to add crate to blacklist");
+
+        } else if let Some(matches) = matches.subcommand_matches("remove") {
+            let crate_name = matches.value_of("CRATE_NAME").expect("Verified by clap");
+            db::blacklist::remove_crate(&conn, crate_name).expect("Failed to remove crate from blacklist");
         }
 
     } else if let Some(matches) = matches.subcommand_matches("database") {

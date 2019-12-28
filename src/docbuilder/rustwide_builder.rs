@@ -1,4 +1,5 @@
 use super::DocBuilder;
+use db::blacklist::is_blacklisted;
 use db::file::add_path_into_database;
 use db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
 use docbuilder::{crates::crates_from_path, Limits};
@@ -242,6 +243,11 @@ impl RustwideBuilder {
         info!("building package {} {}", name, version);
 
         let conn = connect_db()?;
+
+        if is_blacklisted(&conn, name)? {
+            return Err(::failure::err_msg("crate is on the blacklist"));
+        }
+
         let limits = Limits::for_crate(&conn, name)?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));

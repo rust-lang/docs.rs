@@ -17,6 +17,7 @@ mod add_package;
 pub mod file;
 mod migrate;
 mod delete_crate;
+pub mod blacklist;
 
 
 /// Connects to database
