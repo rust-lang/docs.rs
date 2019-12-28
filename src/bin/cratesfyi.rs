@@ -115,6 +115,7 @@ pub fn main() {
                 .about("Removes a whole crate from the database")
                 .arg(Arg::with_name("CRATE_NAME")
                     .takes_value(true)
+                    .required(true)
                     .help("Name of the crate to delete"))))
         .subcommand(SubCommand::with_name("queue")
             .about("Interactions with the build queue")
