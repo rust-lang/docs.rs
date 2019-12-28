@@ -256,6 +256,19 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // downgrade query
             "ALTER TABLE releases ALTER COLUMN target_name DROP NOT NULL",
         ),
+        migration!(
+            context,
+            // version
+            6,
+            // description
+            "Added blacklisted_crates table",
+            // upgrade query
+            "CREATE TABLE blacklisted_crates (
+                 crate_name VARCHAR NOT NULL PRIMARY KEY
+             );",
+            // downgrade query
+            "DROP TABLE blacklisted_crates;"
+        ),
     ];
 
     for migration in migrations {
