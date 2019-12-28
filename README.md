@@ -142,6 +142,16 @@ docker-compose run web build world
 docker-compose run -v "$(realpath <SOURCE>)":/build web build crate --local /build
 ```
 
+#### `blacklist` subcommand
+
+```sh
+# Adds <CRATE_NAME> to the blacklist
+# Crates on the blacklist will not be built
+docker-compose run web blacklist add <CRATE_NAME>
+
+# Removes <CRATE_NAME> from the blacklist
+docker-compose run web blacklist remove <CRATE_NAME>
+```
 
 #### `database` subcommand
 
