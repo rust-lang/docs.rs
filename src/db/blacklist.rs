@@ -60,6 +60,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_list_blacklist() {
+        crate::test::with_database(|db| {
+            // crates are added out of order to verify sorting
+            add_crate(db.conn(), "crate A")?;
+            add_crate(db.conn(), "crate C")?;
+            add_crate(db.conn(), "crate B")?;
+
+            assert!(list_crates(db.conn())? == vec!["crate A", "crate B", "crate C"]);
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_add_to_and_remove_from_blacklist() {
         crate::test::with_database(|db| {
             assert!(is_blacklisted(db.conn(), "crate foo")? == false);
