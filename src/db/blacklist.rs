@@ -20,6 +20,15 @@ pub fn is_blacklisted(conn: &Connection, name: &str) -> Result<bool, Error> {
     Ok(count != 0)
 }
 
+pub fn list_crates(conn: &Connection) -> Result<Vec<String>, Error> {
+    let rows = conn.query(
+        "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
+        &[],
+    )?;
+
+    Ok(rows.into_iter().map(|row| row.get(0)).collect())
+}
+
 pub fn add_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     if is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()).into());

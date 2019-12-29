@@ -120,6 +120,8 @@ pub fn main() {
             .subcommand(SubCommand::with_name("blacklist")
                 .about("Blacklist operations")
                 .setting(AppSettings::ArgRequiredElseHelp)
+                .subcommand(SubCommand::with_name("list")
+                    .about("List all crates on the blacklist"))
                 .subcommand(SubCommand::with_name("add")
                     .about("Add a crate to the blacklist")
                     .arg(Arg::with_name("CRATE_NAME")
@@ -251,7 +253,11 @@ pub fn main() {
         } else if let Some(matches) = matches.subcommand_matches("blacklist") {
             let conn = db::connect_db().expect("failed to connect to the database");
 
-            if let Some(matches) = matches.subcommand_matches("add") {
+            if let Some(_) = matches.subcommand_matches("list") {
+                let crates = db::blacklist::list_crates(&conn).expect("failed to list crates on blacklist");
+                println!("{}", crates.join("\n"));
+
+            } else if let Some(matches) = matches.subcommand_matches("add") {
                 let crate_name = matches.value_of("CRATE_NAME").expect("verified by clap");
                 db::blacklist::add_crate(&conn, crate_name).expect("failed to add crate to blacklist");
 
