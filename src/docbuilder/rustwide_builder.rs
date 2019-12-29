@@ -245,7 +245,8 @@ impl RustwideBuilder {
         let conn = connect_db()?;
 
         if is_blacklisted(&conn, name)? {
-            return Err(::failure::err_msg("crate is on the blacklist"));
+            info!("skipping build of {}, crate has been blacklisted", name);
+            return Ok(false);
         }
 
         let limits = Limits::for_crate(&conn, name)?;
