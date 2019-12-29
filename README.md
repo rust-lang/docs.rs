@@ -167,8 +167,10 @@ docker exec -it <the container name goes here> psql -U cratesfyi
 The database contains a blacklist of crates that should not be built.
 
 ```sh
+# List the crates on the blacklist
+docker-compose run web database blacklist list
+
 # Adds <CRATE_NAME> to the blacklist
-# Crates on the blacklist will not be built
 docker-compose run web database blacklist add <CRATE_NAME>
 
 # Removes <CRATE_NAME> from the blacklist
