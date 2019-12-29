@@ -10,6 +10,7 @@ enum BlacklistError {
     CrateNotOnBlacklist(String),
 }
 
+/// Returns whether the given name is blacklisted.
 pub fn is_blacklisted(conn: &Connection, name: &str) -> Result<bool, Error> {
     let rows = conn.query(
         "SELECT COUNT(*) FROM blacklisted_crates WHERE crate_name = $1;",
@@ -20,6 +21,7 @@ pub fn is_blacklisted(conn: &Connection, name: &str) -> Result<bool, Error> {
     Ok(count != 0)
 }
 
+/// Returns the crate names on the blacklist, sorted ascending.
 pub fn list_crates(conn: &Connection) -> Result<Vec<String>, Error> {
     let rows = conn.query(
         "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
@@ -29,6 +31,7 @@ pub fn list_crates(conn: &Connection) -> Result<Vec<String>, Error> {
     Ok(rows.into_iter().map(|row| row.get(0)).collect())
 }
 
+/// Adds a crate to the blacklist.
 pub fn add_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     if is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()).into());
@@ -42,6 +45,7 @@ pub fn add_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// Removes a crate from the blacklist.
 pub fn remove_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     if !is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateNotOnBlacklist(name.into()).into());
