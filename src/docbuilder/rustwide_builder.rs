@@ -20,7 +20,6 @@ static USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs
 static DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
 static TARGETS: &[&str] = &[
-    "i686-apple-darwin",
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
     "x86_64-apple-darwin",
