@@ -10,8 +10,10 @@ use postgres::Connection;
 use rustc_serialize::json::ToJson;
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
+use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
@@ -95,12 +97,43 @@ impl RustwideBuilder {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 
+        let mut targets_to_install = TARGETS
+            .iter()
+            .map(|t| t.to_string())
+            .collect::<HashSet<_>>();
+        let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
+            Ok(targets) => targets,
+            Err(err) => {
+                if let Some(&ToolchainError::NotInstalled) = err.downcast_ref::<ToolchainError>() {
+                    Vec::new()
+                } else {
+                    return Err(err);
+                }
+            }
+        };
+
+        // The extra targets are intentionally removed *before* trying to update.
+        //
+        // If a target is installed locally and it goes missing the next update, rustup will block
+        // the update to avoid leaving the system in a broken state. This is not a behavior we want
+        // though when we also remove the target from the list managed by docs.rs: we want that
+        // target gone, and we don't care if it's missing in the next update.
+        //
+        // Removing it beforehand works fine, and prevents rustup from blocking the update later in
+        // the method.
+        for target in installed_targets {
+            if !targets_to_install.remove(&target) {
+                self.toolchain.remove_target(&self.workspace, &target)?;
+            }
+        }
+
         self.toolchain.install(&self.workspace)?;
-        for target in TARGETS {
+
+        for target in &targets_to_install {
             self.toolchain.add_target(&self.workspace, target)?;
         }
-        self.rustc_version = self.detect_rustc_version()?;
 
+        self.rustc_version = self.detect_rustc_version()?;
         if old_version.as_ref().map(|s| s.as_str()) != Some(&self.rustc_version) {
             self.add_essential_files()?;
         }
