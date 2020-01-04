@@ -63,6 +63,9 @@
       {{else}}
       {{#unless build_status}}
       <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check the <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and, if you believe this is docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.</div>
+      {{#if last_successful_build}}
+      <div class="info">Visit the last successful build: <a href="/crate/{{name}}/{{last_successful_build}}">{{name}}-{{last_successful_build}}</a></div>
+      {{/if}}
       {{else}}
       {{#unless rustdoc_status}}
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>

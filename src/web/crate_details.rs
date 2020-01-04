@@ -31,6 +31,7 @@ pub struct CrateDetails {
     rustdoc: Option<String>, // this is description_long in database
     release_time: time::Timespec,
     build_status: bool,
+    last_successful_build: Option<String>,
     rustdoc_status: bool,
     repository_url: Option<String>,
     homepage_url: Option<String>,
@@ -69,6 +70,7 @@ impl ToJson for CrateDetails {
         m.insert("release_time".to_string(),
                  duration_to_str(self.release_time).to_json());
         m.insert("build_status".to_string(), self.build_status.to_json());
+        m.insert("last_successful_build".to_string(), self.last_successful_build.to_json());
         m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
         m.insert("repository_url".to_string(), self.repository_url.to_json());
         m.insert("homepage_url".to_string(), self.homepage_url.to_json());
@@ -172,6 +174,7 @@ impl CrateDetails {
             rustdoc: rows.get(0).get(8),
             release_time: rows.get(0).get(9),
             build_status: rows.get(0).get(10),
+            last_successful_build: None,
             rustdoc_status: rows.get(0).get(11),
             repository_url: rows.get(0).get(12),
             homepage_url: rows.get(0).get(13),
@@ -215,6 +218,23 @@ impl CrateDetails {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
+        // retrieve last successful build if build failed
+        if crate_details.build_status == false {
+            let rows = conn.query(
+                "SELECT version
+                    FROM releases
+                    INNER JOIN crates ON releases.crate_id = crates.id
+                    WHERE build_status = true AND yanked = false AND crates.name = $1
+                    ORDER BY release_time desc
+                    LIMIT 1;",
+                &[&name],
+            ).unwrap();
+
+            if rows.len() >= 1 {
+                crate_details.last_successful_build = Some(rows.get(0).get(0));
+            }
+        }
+
         Some(crate_details)
     }
 }
@@ -250,5 +270,50 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
         MatchVersion::None => {
             Err(IronError::new(Nope::CrateNotFound, status::NotFound))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use failure::Error;
+
+    #[test]
+    fn test_last_successful_build() {
+        fn last_successful_build_equals(
+            conn: &Connection,
+            package: &str,
+            version: &str,
+            expected_last_successful_build: Option<String>
+        ) -> Result<bool, Error> {
+
+            let details = CrateDetails::new(conn, package, version)
+                .ok_or(failure::err_msg("could not fetch crate details"))?;
+
+            Ok(details.last_successful_build == expected_last_successful_build)
+        };
+
+        crate::test::with_database(|db| {
+            // Create some releases in the database, of which the last release failed to build
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .build_result_successful(false)
+                .create()?;
+
+            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.1", None)?);
+            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.2", None)?);
+            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.3", Some("0.0.2".to_string()))?);
+
+            Ok(())
+        });
     }
 }
