@@ -343,4 +343,21 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn test_versions() {
+        crate::test::with_database(|db| {
+            // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
+            create_release(&db, "foo", "0.0.1", true)?;
+            create_release(&db, "foo", "0.0.3", false)?;
+            create_release(&db, "foo", "1.0.0", true)?;
+            create_release(&db, "foo", "0.0.2", true)?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
+
+            assert_eq!(details.versions, vec!["1.0.0", "0.0.3", "0.0.2", "0.0.1"]);
+
+            Ok(())
+        });
+    }
 }
