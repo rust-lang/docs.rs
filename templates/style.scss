@@ -521,6 +521,11 @@ div.package-page-container {
             background-color: $color-background-code;
         }
 
+        // used for versions that failed to build
+        a.warn {
+            color: $color-type;
+        }
+
         div.sub-menu {
             max-height: 135px;
             overflow-y: auto;
