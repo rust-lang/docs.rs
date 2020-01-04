@@ -415,6 +415,7 @@ impl RustwideBuilder {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
+        let is_default_target = target.is_none();
         let target = target.or_else(|| metadata.default_target.as_ref().map(|s| s.as_str()));
 
         let mut rustdoc_flags: Vec<String> = vec![
@@ -474,13 +475,19 @@ impl RustwideBuilder {
                 .run()
                 .is_ok()
         });
+        // If we're passed a default_target which requires a cross-compile,
+        // cargo will put the output in `target/<target>/doc`.
+        // However, if this is the default build, we don't want it there,
+        // we want it in `target/doc`.
         if let Some(explicit_target) = target {
-            // mv target/$explicit_target/doc target/doc
-            let target_dir = build.host_target_dir();
-            let old_dir = target_dir.join(explicit_target).join("doc");
-            let new_dir = target_dir.join("doc");
-            debug!("rename {} to {}", old_dir.display(), new_dir.display());
-            std::fs::rename(old_dir, new_dir)?;
+            if is_default_target {
+                // mv target/$explicit_target/doc target/doc
+                let target_dir = build.host_target_dir();
+                let old_dir = target_dir.join(explicit_target).join("doc");
+                let new_dir = target_dir.join("doc");
+                debug!("rename {} to {}", old_dir.display(), new_dir.display());
+                std::fs::rename(old_dir, new_dir)?;
+            }
         }
 
         Ok(FullBuildResult {
