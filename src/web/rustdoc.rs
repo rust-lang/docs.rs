@@ -262,7 +262,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let (path, version) = if let Some(version) = latest_version(&crate_details.versions, &version) {
+    let (path, version) = if let Some(version) = latest_version(&crate_details.versions(), &version) {
         req_path[2] = &version;
         (path_for_version(&req_path, &crate_details.target_name, &conn), version)
     } else {

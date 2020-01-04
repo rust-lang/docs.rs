@@ -38,7 +38,7 @@ pub struct CrateDetails {
     keywords: Option<Json>,
     have_examples: bool, // need to check this manually
     pub target_name: String,
-    pub versions: Vec<String>,
+    releases: Vec<Release>,
     github: bool, // is crate hosted in github
     github_stars: Option<i32>,
     github_forks: Option<i32>,
@@ -77,7 +77,7 @@ impl ToJson for CrateDetails {
         m.insert("keywords".to_string(), self.keywords.to_json());
         m.insert("have_examples".to_string(), self.have_examples.to_json());
         m.insert("target_name".to_string(), self.target_name.to_json());
-        m.insert("versions".to_string(), self.versions.to_json());
+        m.insert("releases".to_string(), self.releases.to_json());
         m.insert("github".to_string(), self.github.to_json());
         m.insert("github_stars".to_string(), self.github_stars.to_json());
         m.insert("github_forks".to_string(), self.github_forks.to_json());
@@ -87,6 +87,23 @@ impl ToJson for CrateDetails {
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
         m.insert("documentation_url".to_string(), self.documentation_url.to_json());
+        m.to_json()
+    }
+}
+
+
+#[derive(Debug, Eq, PartialEq)]
+struct Release {
+    pub version: String,
+    pub build_status: bool,
+}
+
+
+impl ToJson for Release {
+    fn to_json(&self) -> Json {
+        let mut m: BTreeMap<String, Json> = BTreeMap::new();
+        m.insert("version".to_string(), self.version.to_json());
+        m.insert("build_status".to_string(), self.build_status.to_json());
         m.to_json()
     }
 }
@@ -135,7 +152,7 @@ impl CrateDetails {
         let release_id: i32 = rows.get(0).get(1);
 
         // sort versions with semver
-        let versions = {
+        let releases = {
             let mut versions: Vec<semver::Version> = Vec::new();
             let versions_from_db: Json = rows.get(0).get(17);
 
@@ -151,7 +168,7 @@ impl CrateDetails {
 
             versions.sort();
             versions.reverse();
-            versions.iter().map(|semver| format!("{}", semver)).collect()
+            versions.iter().map(|version| map_to_release(&conn, crate_id, version.to_string())).collect()
         };
 
         let metadata = MetaData {
@@ -181,7 +198,7 @@ impl CrateDetails {
             keywords: rows.get(0).get(14),
             have_examples: rows.get(0).get(15),
             target_name: rows.get(0).get(16),
-            versions: versions,
+            releases,
             github: false,
             github_stars: rows.get(0).get(18),
             github_forks: rows.get(0).get(19),
@@ -237,6 +254,31 @@ impl CrateDetails {
 
         Some(crate_details)
     }
+
+    /// Returns all versions of this crate.
+    pub fn versions(&self) -> Vec<String> {
+        self.releases.iter()
+            .map(|release| release.version.clone())
+            .collect()
+    }
+}
+
+
+fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
+    let rows = conn.query(
+        "SELECT build_status
+         FROM releases
+         WHERE releases.crate_id = $1 and releases.version = $2;",
+        &[&crate_id, &version],
+    ).unwrap();
+
+    let build_status = if !rows.is_empty() {
+        rows.get(0).get(0)
+    } else {
+        false
+    };
+
+    Release { version, build_status }
 }
 
 
@@ -355,7 +397,13 @@ mod tests {
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
 
-            assert_eq!(details.versions, vec!["1.0.0", "0.0.3", "0.0.2", "0.0.1"]);
+            assert_eq!(details.versions(), vec!["1.0.0", "0.0.3", "0.0.2", "0.0.1"]);
+            assert_eq!(details.releases, vec![
+                Release { version: "1.0.0".to_string(), build_status: true },
+                Release { version: "0.0.3".to_string(), build_status: false },
+                Release { version: "0.0.2".to_string(), build_status: true },
+                Release { version: "0.0.1".to_string(), build_status: true },
+            ]);
 
             Ok(())
         });
