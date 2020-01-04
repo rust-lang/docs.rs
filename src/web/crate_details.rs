@@ -276,65 +276,70 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test::TestDatabase;
     use failure::Error;
 
-    fn last_successful_build_equals(
-        conn: &Connection,
+    fn create_release(db: &TestDatabase, package: &str, version: &str, successful: bool) -> Result<i32, Error> {
+        db.fake_release()
+            .name(package)
+            .version(version)
+            .build_result_successful(successful)
+            .create()
+    }
+
+    fn assert_last_successful_build_equals(
+        db: &TestDatabase,
         package: &str,
         version: &str,
-        expected_last_successful_build: Option<String>
-    ) -> Result<bool, Error> {
+        expected_last_successful_build: Option<&str>,
+    ) -> Result<(), Error> {
 
-        let details = CrateDetails::new(conn, package, version)
+        let details = CrateDetails::new(&db.conn(), package, version)
             .ok_or(failure::err_msg("could not fetch crate details"))?;
 
-        Ok(details.last_successful_build == expected_last_successful_build)
+        assert_eq!(
+            details.last_successful_build,
+            expected_last_successful_build.map(|s| s.to_string()),
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_last_successful_build() {
+    fn test_last_successful_build_when_last_release_failed() {
         crate::test::with_database(|db| {
-            // Create some releases in the database, of which the last release failed to build
-            db.fake_release()
-                .name("foo")
-                .version("0.0.1")
-                .create()?;
-            db.fake_release()
-                .name("foo")
-                .version("0.0.2")
-                .create()?;
-            db.fake_release()
-                .name("foo")
-                .version("0.0.3")
-                .build_result_successful(false)
-                .create()?;
+            create_release(&db, "foo", "0.0.1", true)?;
+            create_release(&db, "foo", "0.0.2", true)?;
+            create_release(&db, "foo", "0.0.3", false)?;
 
-            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.1", None)?);
-            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.2", None)?);
-            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.3", Some("0.0.2".to_string()))?);
-
+            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.3", Some("0.0.2"))?;
             Ok(())
         });
     }
 
     #[test]
-    fn test_last_successful_build_but_none_succeeded() {
+    fn test_last_successful_build_when_all_releases_failed() {
         crate::test::with_database(|db| {
-            // Create some releases in the database, of which all failed to build
-            db.fake_release()
-                .name("foo")
-                .version("0.0.1")
-                .build_result_successful(false)
-                .create()?;
-            db.fake_release()
-                .name("foo")
-                .version("0.0.2")
-                .build_result_successful(false)
-                .create()?;
+            create_release(&db, "foo", "0.0.1", false)?;
+            create_release(&db, "foo", "0.0.2", false)?;
 
-            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.1", None)?);
-            assert!(last_successful_build_equals(&db.conn(), "foo", "0.0.2", None)?);
+            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
+            Ok(())
+        });
+    }
 
+    #[test]
+    fn test_last_successful_build_when_an_intermittent_release_failed() {
+        crate::test::with_database(|db| {
+            create_release(&db, "foo", "0.0.1", true)?;
+            create_release(&db, "foo", "0.0.2", false)?;
+            create_release(&db, "foo", "0.0.3", true)?;
+
+            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.3"))?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
             Ok(())
         });
     }
