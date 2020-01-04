@@ -706,10 +706,10 @@ div.cratesfyi-package-container-rustdoc {
     margin-bottom: 10px;
 }
 
-div.warning {
+div.info {
     font-family: $font-family-sans;
     border-radius: 4px;
-    background-color: lighten($color-type, 45%);
+    background-color: $color-background-code;
     padding: .4em 1em;
     text-align: center;
     margin-bottom: 10px;
@@ -718,6 +718,11 @@ div.warning {
         color: $color-url;
         text-decoration: underline;
     }
+}
+
+div.warning {
+    @extend div.info;
+    background-color: lighten($color-type, 45%);
 }
 
 div.search-page-search-form {
