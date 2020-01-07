@@ -47,7 +47,7 @@
                   {{#if this.build_status}}
                   <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
                   {{else}}
-                  <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn"><i class="fa fa-fw fa-warning"></i> {{this.version}} (build failed)</a>
+                  <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="docs.rs failed to build {{../name}}-{{this.version}}"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
                   {{/if}}
                 </li>
                 {{/each}}
