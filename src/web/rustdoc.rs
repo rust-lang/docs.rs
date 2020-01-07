@@ -193,6 +193,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool);
+    let base = redirect_base(req);
 
     let mut req_path = req.url.path();
 
@@ -208,7 +209,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
             let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
-                                                redirect_base(req),
+                                                base,
                                                 name,
                                                 v,
                                                 req_path.join("/"))[..]));
@@ -223,6 +224,15 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // add crate name and version
     req_path.insert(1, &name);
     req_path.insert(2, &version);
+
+    // if visiting the full path to the default target, remove the target from the path
+    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    if req_path[3] == crate_details.metadata.default_target {
+        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
+        let canonical = Url::parse(&path).expect("got an invalid URL to start");
+        return Ok(super::redirect(canonical));
+    }
 
     let path = {
         let mut path = req_path.join("/");
@@ -261,7 +271,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     content.body_class = body_class;
 
     content.full = file_content;
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     let (path, version) = if let Some(version) = latest_version(&crate_details.versions, &version) {
         req_path[2] = &version;
         (path_for_version(&req_path, &crate_details.target_name, &conn), version)

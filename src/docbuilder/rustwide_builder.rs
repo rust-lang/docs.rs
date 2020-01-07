@@ -18,10 +18,11 @@ use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use Metadata;
 
-static USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-static DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
+const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
+const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
-static TARGETS: &[&str] = &[
+const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
+const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
     "x86_64-apple-darwin",
@@ -29,7 +30,7 @@ static TARGETS: &[&str] = &[
     "x86_64-unknown-linux-gnu",
 ];
 
-static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
+const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
     "wheel.svg",
     "down-arrow.svg",
@@ -46,7 +47,7 @@ static ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "noscript.css",
     "rust-logo.png",
 ];
-static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
+const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "FiraSans-Medium.woff",
     "FiraSans-Regular.woff",
     "SourceCodePro-Regular.woff",
@@ -56,8 +57,8 @@ static ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "SourceSerifPro-It.ttf.woff",
 ];
 
-static DUMMY_CRATE_NAME: &str = "acme-client";
-static DUMMY_CRATE_VERSION: &str = "0.0.0";
+const DUMMY_CRATE_NAME: &str = "acme-client";
+const DUMMY_CRATE_VERSION: &str = "0.0.0";
 
 pub struct RustwideBuilder {
     workspace: Workspace,
@@ -189,7 +190,7 @@ impl RustwideBuilder {
                 }
 
                 info!("copying essential files for {}", self.rustc_version);
-                let source = build.host_target_dir().join(&res.target).join("doc");
+                let source = build.host_target_dir().join("doc");
                 let dest = ::tempdir::TempDir::new("essential-files")?;
 
                 let files = ESSENTIAL_FILES_VERSIONED
@@ -303,7 +304,7 @@ impl RustwideBuilder {
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
                 let mut files_list = None;
-                let (mut has_docs, mut in_target) = (false, false);
+                let mut has_docs = false;
                 let mut successful_targets = Vec::new();
 
                 // Do an initial build and then copy the sources in the database
@@ -319,20 +320,7 @@ impl RustwideBuilder {
 
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
-                        if host_target
-                            .join(&res.target)
-                            .join("doc")
-                            .join(&name)
-                            .is_dir()
-                        {
-                            has_docs = true;
-                            in_target = true;
-                        // hack for proc-macro documentation:
-                        // it really should be in target/$target/doc,
-                        // but rustdoc has a bug and puts it in target/doc
-                        } else if host_target.join("doc").join(name).is_dir() {
-                            has_docs = true;
-                        }
+                        has_docs = host_target.join("doc").join(name).is_dir();
                     }
                 }
 
@@ -341,22 +329,24 @@ impl RustwideBuilder {
                     self.copy_docs(
                         &build.host_target_dir(),
                         local_storage.path(),
-                        if in_target { &res.target } else { "" },
+                        "",
                         true,
                     )?;
 
-                    if in_target {
-                        // Then build the documentation for all the targets
-                        for target in TARGETS {
-                            debug!("building package {} {} for {}", name, version, target);
-                            self.build_target(
-                                target,
-                                &build,
-                                &limits,
-                                &local_storage.path(),
-                                &mut successful_targets,
-                            )?;
+                    successful_targets.push(res.target.clone());
+                    // Then build the documentation for all the targets
+                    for target in TARGETS {
+                        if *target == res.target {
+                            continue;
                         }
+                        debug!("building package {} {} for {}", name, version, &target);
+                        self.build_target(
+                            &target,
+                            &build,
+                            &limits,
+                            &local_storage.path(),
+                            &mut successful_targets,
+                        )?;
                     }
                     self.upload_docs(&conn, name, version, local_storage.path())?;
                 }
@@ -374,9 +364,9 @@ impl RustwideBuilder {
                     res.cargo_metadata.root(),
                     &build.host_source_dir(),
                     &res.result,
+                    &res.target,
                     files_list,
                     successful_targets,
-                    &res.default_target,
                     &CratesIoData::get_from_network(res.cargo_metadata.root())?,
                     has_docs,
                     has_examples,
@@ -425,6 +415,7 @@ impl RustwideBuilder {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
+        let is_default_target = target.is_none();
         let target = target.or_else(|| metadata.default_target.as_ref().map(|s| s.as_str()));
 
         let mut rustdoc_flags: Vec<String> = vec![
@@ -484,6 +475,20 @@ impl RustwideBuilder {
                 .run()
                 .is_ok()
         });
+        // If we're passed a default_target which requires a cross-compile,
+        // cargo will put the output in `target/<target>/doc`.
+        // However, if this is the default build, we don't want it there,
+        // we want it in `target/doc`.
+        if let Some(explicit_target) = target {
+            if is_default_target {
+                // mv target/$explicit_target/doc target/doc
+                let target_dir = build.host_target_dir();
+                let old_dir = target_dir.join(explicit_target).join("doc");
+                let new_dir = target_dir.join("doc");
+                debug!("rename {} to {}", old_dir.display(), new_dir.display());
+                std::fs::rename(old_dir, new_dir)?;
+            }
+        }
 
         Ok(FullBuildResult {
             result: BuildResult {
@@ -493,8 +498,7 @@ impl RustwideBuilder {
                 successful,
             },
             cargo_metadata,
-            target: target.unwrap_or_default().to_string(),
-            default_target: metadata.default_target.clone(),
+            target: target.unwrap_or(DEFAULT_TARGET).to_string(),
         })
     }
 
@@ -542,7 +546,6 @@ impl RustwideBuilder {
 struct FullBuildResult {
     result: BuildResult,
     target: String,
-    default_target: Option<String>,
     cargo_metadata: CargoMetadata,
 }
 
