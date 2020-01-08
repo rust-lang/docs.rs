@@ -311,8 +311,13 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
             .expect("paths should be of the form <kind>.<name>.html")
     };
     // check if req_path[3] is the platform choice or the name of the crate
+    // rustdoc generates a ../settings.html page;
+    // if we get this far and we're on settings.html, there is no module.
+    // additionally, if settings.html doesn't exist on the most recent page,
+    // the build must have failed, so we just redirect to the root page.
     let concat_path;
-    let crate_root = if req_path[3] != target_name {
+    let crate_root = if req_path[3] != target_name && req_path[3] != "settings.html" {
+        assert!(req_path.len() >= 5, "{:?}", req_path);
         concat_path = format!("{}/{}", req_path[3], req_path[4]);
         &concat_path
     } else {
