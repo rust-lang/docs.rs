@@ -41,6 +41,7 @@ extern crate tokio;
 extern crate systemstat;
 extern crate rustwide;
 extern crate tempdir;
+extern crate once_cell;
 
 pub use self::docbuilder::RustwideBuilder;
 pub use self::docbuilder::DocBuilder;

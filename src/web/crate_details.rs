@@ -348,7 +348,9 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_last_release_failed() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             create_release(&db, "foo", "0.0.1", true)?;
             create_release(&db, "foo", "0.0.2", true)?;
             create_release(&db, "foo", "0.0.3", false)?;
@@ -362,7 +364,9 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_all_releases_failed() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             create_release(&db, "foo", "0.0.1", false)?;
             create_release(&db, "foo", "0.0.2", false)?;
 
@@ -374,7 +378,9 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_an_intermittent_release_failed() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             create_release(&db, "foo", "0.0.1", true)?;
             create_release(&db, "foo", "0.0.2", false)?;
             create_release(&db, "foo", "0.0.3", true)?;
@@ -388,7 +394,9 @@ mod tests {
 
     #[test]
     fn test_versions() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
             create_release(&db, "foo", "0.0.1", true)?;
             create_release(&db, "foo", "0.0.3", false)?;
