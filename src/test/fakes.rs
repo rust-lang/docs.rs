@@ -1,7 +1,7 @@
 use super::TestDatabase;
+use crate::db::CratesIoData;
 use crate::docbuilder::BuildResult;
 use crate::utils::{Dependency, MetadataPackage, Target};
-use crate::db::CratesIoData;
 use failure::Error;
 use rustc_serialize::json::Json;
 
@@ -53,7 +53,7 @@ impl<'db> FakeRelease<'db> {
                 release_time: time::get_time(),
                 yanked: false,
                 downloads: 0,
-                owners: Vec::new()
+                owners: Vec::new(),
             },
             has_docs: true,
             has_examples: false,
@@ -80,7 +80,7 @@ impl<'db> FakeRelease<'db> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 
         let release_id = crate::db::add_package_into_database(
-            self.db.conn(),
+            &self.db.conn(),
             &self.package,
             tempdir.path(),
             &self.build_result,
@@ -91,7 +91,7 @@ impl<'db> FakeRelease<'db> {
             self.has_docs,
             self.has_examples,
         )?;
-        crate::db::add_build_into_database(self.db.conn(), &release_id, &self.build_result)?;
+        crate::db::add_build_into_database(&self.db.conn(), &release_id, &self.build_result)?;
 
         Ok(release_id)
     }

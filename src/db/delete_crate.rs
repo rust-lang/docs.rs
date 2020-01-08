@@ -154,24 +154,24 @@ mod tests {
                 .create()?;
             let pkg2_id = db.fake_release().name("package-2").create()?;
 
-            assert!(crate_exists(db.conn(), "package-1")?);
-            assert!(crate_exists(db.conn(), "package-2")?);
-            assert!(release_exists(db.conn(), pkg1_v1_id)?);
-            assert!(release_exists(db.conn(), pkg1_v2_id)?);
-            assert!(release_exists(db.conn(), pkg2_id)?);
+            assert!(crate_exists(&db.conn(), "package-1")?);
+            assert!(crate_exists(&db.conn(), "package-2")?);
+            assert!(release_exists(&db.conn(), pkg1_v1_id)?);
+            assert!(release_exists(&db.conn(), pkg1_v2_id)?);
+            assert!(release_exists(&db.conn(), pkg2_id)?);
 
-            let pkg1_id = db.conn()
+            let pkg1_id = &db.conn()
                 .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?
                 .get(0)
                 .get("id");
 
-            delete_from_database(db.conn(), "package-1", pkg1_id)?;
+            delete_from_database(&db.conn(), "package-1", *pkg1_id)?;
 
-            assert!(!crate_exists(db.conn(), "package-1")?);
-            assert!(crate_exists(db.conn(), "package-2")?);
-            assert!(!release_exists(db.conn(), pkg1_v1_id)?);
-            assert!(!release_exists(db.conn(), pkg1_v2_id)?);
-            assert!(release_exists(db.conn(), pkg2_id)?);
+            assert!(!crate_exists(&db.conn(), "package-1")?);
+            assert!(crate_exists(&db.conn(), "package-2")?);
+            assert!(!release_exists(&db.conn(), pkg1_v1_id)?);
+            assert!(!release_exists(&db.conn(), pkg1_v2_id)?);
+            assert!(release_exists(&db.conn(), pkg2_id)?);
 
             Ok(())
         });
