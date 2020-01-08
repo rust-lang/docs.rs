@@ -73,8 +73,8 @@
                       <li class="pure-menu-item">
                         <div class="pure-menu pure-menu-scrollable sub-menu">
                           <ul class="pure-menu-list">
-                            {{#each versions}}
-                            <li class="pure-menu-item"><a href="/crate/{{../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
+                            {{#each releases}}
+                            <li class="pure-menu-item"><a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a></li>
                             {{/each}}
                           </ul>
                         </div>
