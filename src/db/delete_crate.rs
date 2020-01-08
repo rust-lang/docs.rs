@@ -140,7 +140,9 @@ mod tests {
                 .is_empty())
         }
 
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             // Create fake packages in the database
             let pkg1_v1_id = db
                 .fake_release()

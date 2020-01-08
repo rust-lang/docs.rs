@@ -2,13 +2,55 @@ mod fakes;
 
 use crate::web::Server;
 use failure::Error;
+use once_cell::unsync::OnceCell;
 use postgres::Connection;
-use std::sync::{Arc, Mutex, MutexGuard};
 use reqwest::{Client, Method, RequestBuilder};
+use std::sync::{Arc, Mutex, MutexGuard};
 
-pub(crate) fn with_database(f: impl FnOnce(&TestDatabase) -> Result<(), Error>) {
-    let env = TestDatabase::new().expect("failed to initialize the environment");
-    report_error(|| f(&env));
+pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
+    let env = TestEnvironment::new();
+    let result = f(&env);
+    env.cleanup();
+
+    if let Err(err) = result {
+        eprintln!("the test failed: {}", err);
+        for cause in err.iter_causes() {
+            eprintln!("  caused by: {}", cause);
+        }
+
+        eprintln!("{}", err.backtrace());
+
+        panic!("the test failed");
+    }
+}
+
+pub(crate) struct TestEnvironment {
+    db: OnceCell<TestDatabase>,
+    frontend: OnceCell<TestFrontend>,
+}
+
+impl TestEnvironment {
+    fn new() -> Self {
+        Self {
+            db: OnceCell::new(),
+            frontend: OnceCell::new(),
+        }
+    }
+
+    fn cleanup(self) {
+        if let Some(frontend) = self.frontend.into_inner() {
+            frontend.server.leak();
+        }
+    }
+
+    pub(crate) fn db(&self) -> &TestDatabase {
+        self.db
+            .get_or_init(|| TestDatabase::new().expect("failed to initialize the db"))
+    }
+
+    pub(crate) fn frontend(&self) -> &TestFrontend {
+        self.frontend.get_or_init(|| TestFrontend::new(self.db()))
+    }
 }
 
 pub(crate) struct TestDatabase {
@@ -37,13 +79,6 @@ impl TestDatabase {
     }
 }
 
-pub(crate) fn with_frontend(db: &TestDatabase, f: impl FnOnce(&TestFrontend) -> Result<(), Error>) {
-    let frontend = TestFrontend::new(db);
-    let result = f(&frontend);
-    frontend.server.leak();
-    report_error(|| result)
-}
-
 pub(crate) struct TestFrontend {
     server: Server,
     client: Client,
@@ -58,23 +93,11 @@ impl TestFrontend {
     }
 
     fn build_request(&self, method: Method, url: &str) -> RequestBuilder {
-        self.client.request(method, &format!("http://{}{}", self.server.addr(), url))
+        self.client
+            .request(method, &format!("http://{}{}", self.server.addr(), url))
     }
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         self.build_request(Method::GET, url)
-    }
-}
-
-fn report_error(f: impl FnOnce() -> Result<(), Error>) {
-    if let Err(err) = f() {
-        eprintln!("the test failed: {}", err);
-        for cause in err.iter_causes() {
-            eprintln!("  caused by: {}", cause);
-        }
-
-        eprintln!("{}", err.backtrace());
-
-        panic!("the test failed");
     }
 }

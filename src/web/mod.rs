@@ -538,11 +538,9 @@ mod test {
 
     #[test]
     fn test_index_returns_success() {
-        crate::test::with_database(|db| {
-            crate::test::with_frontend(db, |web| {
-                assert!(web.get("/").send()?.status().is_success());
-                Ok(())
-            });
+        crate::test::wrapper(|env| {
+            let web = env.frontend();
+            assert!(web.get("/").send()?.status().is_success());
             Ok(())
         });
     }

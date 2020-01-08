@@ -65,7 +65,9 @@ mod tests {
 
     #[test]
     fn test_list_blacklist() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             // crates are added out of order to verify sorting
             add_crate(&db.conn(), "crate A")?;
             add_crate(&db.conn(), "crate C")?;
@@ -78,7 +80,9 @@ mod tests {
 
     #[test]
     fn test_add_to_and_remove_from_blacklist() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             assert!(is_blacklisted(&db.conn(), "crate foo")? == false);
             add_crate(&db.conn(), "crate foo")?;
             assert!(is_blacklisted(&db.conn(), "crate foo")? == true);
@@ -90,7 +94,9 @@ mod tests {
 
     #[test]
     fn test_add_twice_to_blacklist() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             add_crate(&db.conn(), "crate foo")?;
             assert!(add_crate(&db.conn(), "crate foo").is_err());
             add_crate(&db.conn(), "crate bar")?;
@@ -101,7 +107,9 @@ mod tests {
 
     #[test]
     fn test_remove_non_existing_crate() {
-        crate::test::with_database(|db| {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
             assert!(remove_crate(&db.conn(), "crate foo").is_err());
 
             Ok(())
