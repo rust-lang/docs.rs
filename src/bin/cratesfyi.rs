@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use clap::{Arg, App, AppSettings, SubCommand};
 use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
 use cratesfyi::utils::add_crate_to_queue;
-use cratesfyi::start_web_server;
+use cratesfyi::Server;
 use cratesfyi::db::{add_path_into_database, connect_db};
 
 
@@ -268,7 +268,7 @@ pub fn main() {
         }
 
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
-        start_web_server(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
+        Server::start(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
 
     } else if let Some(_) = matches.subcommand_matches("daemon") {
         let foreground = matches.subcommand_matches("daemon")

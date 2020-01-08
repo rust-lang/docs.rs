@@ -51,8 +51,9 @@ use std::{env, fmt};
 use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
+use std::net::SocketAddr;
 use iron::prelude::*;
-use iron::{self, Handler, Url, status};
+use iron::{self, Listening, Handler, Url, status};
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
 use iron::modifiers::Redirect;
 use router::NoRoute;
@@ -70,6 +71,7 @@ const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
+const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
@@ -338,24 +340,36 @@ fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<Stri
 }
 
 
-
-/// Starts cratesfyi web server
-pub fn start_web_server(sock_addr: Option<&str>) {
-    // poke all the metrics counters to instantiate and register them
-    metrics::TOTAL_BUILDS.inc_by(0);
-    metrics::SUCCESSFUL_BUILDS.inc_by(0);
-    metrics::FAILED_BUILDS.inc_by(0);
-    metrics::NON_LIBRARY_BUILDS.inc_by(0);
-    metrics::UPLOADED_FILES_TOTAL.inc_by(0);
-
-    let cratesfyi = CratesfyiHandler::new(Box::new(|| Pool::new()));
-    let addr = sock_addr.unwrap_or("0.0.0.0:3000");
-    // need to assign this so it's not dropped before the function ends
-    let _server = Iron::new(cratesfyi).http(addr)
-        .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
-    info!("Running docs.rs web server on http://{}", addr);
+pub struct Server {
+    inner: Listening,
 }
 
+impl Server {
+    pub fn start(addr: Option<&str>) -> Self {
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(|| Pool::new()));
+        info!("Running docs.rs web server on http://{}", server.addr());
+        server
+    }
+
+    fn start_inner(addr: &str, pool_factory: Box<dyn Fn() -> Pool + Send + Sync>) -> Self {
+        // poke all the metrics counters to instantiate and register them
+        metrics::TOTAL_BUILDS.inc_by(0);
+        metrics::SUCCESSFUL_BUILDS.inc_by(0);
+        metrics::FAILED_BUILDS.inc_by(0);
+        metrics::NON_LIBRARY_BUILDS.inc_by(0);
+        metrics::UPLOADED_FILES_TOTAL.inc_by(0);
+
+        let cratesfyi = CratesfyiHandler::new(pool_factory);
+        let inner = Iron::new(cratesfyi).http(addr)
+            .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
+
+        Server { inner }
+    }
+
+    pub(crate) fn addr(&self) -> SocketAddr {
+        self.inner.socket
+    }
+}
 
 
 /// Converts Timespec to nice readable relative time string
@@ -501,14 +515,6 @@ impl ToJson for MetaData {
 mod test {
     extern crate env_logger;
     use super::*;
-
-    #[test]
-    #[ignore]
-    fn test_start_web_server() {
-        // FIXME: This test is doing nothing
-        let _ = env_logger::try_init();
-        start_web_server(None);
-    }
 
     #[test]
     fn test_latest_version() {
