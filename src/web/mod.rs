@@ -66,6 +66,9 @@ use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use self::pool::Pool;
 
+#[cfg(test)]
+use std::sync::{Arc, Mutex};
+
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
@@ -351,6 +354,11 @@ impl Server {
         server
     }
 
+    #[cfg(test)]
+    pub(crate) fn start_test(conn: Arc<Mutex<Connection>>) -> Self {
+        Self::start_inner("127.0.0.1:0", Box::new(move || Pool::new_simple(conn.clone())))
+    }
+
     fn start_inner(addr: &str, pool_factory: Box<dyn Fn() -> Pool + Send + Sync>) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
@@ -368,6 +376,18 @@ impl Server {
 
     pub(crate) fn addr(&self) -> SocketAddr {
         self.inner.socket
+    }
+
+    /// Iron is bugged, and it never closes the server even when the listener is dropped. To
+    /// avoid never-ending tests this method forgets about the server, leaking it and allowing the
+    /// program to end.
+    ///
+    /// The OS will then close all the dangling servers once the process exits.
+    ///
+    /// https://docs.rs/iron/0.6.1/iron/struct.Listening.html#method.close
+    #[cfg(test)]
+    pub(crate) fn leak(self) {
+        std::mem::forget(self.inner);
     }
 }
 
@@ -515,6 +535,17 @@ impl ToJson for MetaData {
 mod test {
     extern crate env_logger;
     use super::*;
+
+    #[test]
+    fn test_index_returns_success() {
+        crate::test::with_database(|db| {
+            crate::test::with_frontend(db, |web| {
+                assert!(web.get("/").send()?.status().is_success());
+                Ok(())
+            });
+            Ok(())
+        });
+    }
 
     #[test]
     fn test_latest_version() {
