@@ -174,7 +174,7 @@ impl FileList {
                 description: rows.get(0).get(2),
                 target_name: rows.get(0).get(3),
                 rustdoc_status: rows.get(0).get(4),
-                default_target: rows.get(0).get(5),
+                default_target: rows.get(0).get(6),
             },
             files: file_list,
         })
