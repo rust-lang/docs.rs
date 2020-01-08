@@ -209,7 +209,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
 
     // try to get actual file first
     // skip if request is a directory

@@ -46,7 +46,7 @@ pub struct DatabaseFileHandler;
 impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path().join("/");
-        let conn = extension!(req, Pool);
+        let conn = extension!(req, Pool).get();
         if let Some(file) = File::from_path(&conn, &path) {
             Ok(file.serve())
         } else {

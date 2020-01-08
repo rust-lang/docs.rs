@@ -69,7 +69,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let version = cexpect!(router.find("version"));
     let req_build_id: i32 = router.find("id").unwrap_or("0").parse().unwrap_or(0);
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let limits = ctry!(Limits::for_crate(&conn, name));
 
     let mut build_list: Vec<Build> = Vec::new();
