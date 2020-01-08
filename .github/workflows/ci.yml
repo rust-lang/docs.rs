@@ -3,6 +3,9 @@
 on: [push, pull_request]
 name: CI
 
+env:
+  RUST_BACKTRACE: 1
+
 jobs:
   test:
     name: Test
