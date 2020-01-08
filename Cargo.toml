@@ -40,7 +40,6 @@ prometheus = { version = "0.7.0", default-features = false }
 lazy_static = "1.0.0"
 rustwide = "0.5.0"
 tempdir = "0.3"
-once_cell = "1.2.0"
 
 # iron dependencies
 iron = "0.5"
@@ -52,6 +51,9 @@ staticfile = { version = "0.4", features = [ "cache" ] }
 [dependencies.postgres]
 version = "0.15"
 features = [ "with-time", "with-rustc-serialize" ]
+
+[dev-dependencies]
+once_cell = "1.2.0"
 
 [build-dependencies]
 time = "0.1"

@@ -76,17 +76,20 @@ const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
+type PoolFactoryFn = dyn Fn() -> Pool + Send + Sync;
+type PoolFactory = Box<PoolFactoryFn>;
+
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
     static_handler: Box<dyn Handler>,
-    pool_factory: Box<dyn Fn() -> Pool + Send + Sync>,
+    pool_factory: PoolFactory,
 }
 
 
 impl CratesfyiHandler {
-    fn chain<H: Handler>(pool_factory: &dyn Fn() -> Pool, base: H) -> Chain {
+    fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
         // TODO: Use DocBuilderOptions for paths
         let mut hbse = HandlebarsEngine::new();
         hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
@@ -102,7 +105,7 @@ impl CratesfyiHandler {
         chain
     }
 
-    pub fn new(pool_factory: Box<dyn Fn() -> Pool + Send + Sync>) -> CratesfyiHandler {
+    pub fn new(pool_factory: PoolFactory) -> CratesfyiHandler {
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
 
@@ -359,7 +362,7 @@ impl Server {
         Self::start_inner("127.0.0.1:0", Box::new(move || Pool::new_simple(conn.clone())))
     }
 
-    fn start_inner(addr: &str, pool_factory: Box<dyn Fn() -> Pool + Send + Sync>) -> Self {
+    fn start_inner(addr: &str, pool_factory: PoolFactory) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
         metrics::SUCCESSFUL_BUILDS.inc_by(0);
@@ -384,7 +387,7 @@ impl Server {
     ///
     /// The OS will then close all the dangling servers once the process exits.
     ///
-    /// https://docs.rs/iron/0.6.1/iron/struct.Listening.html#method.close
+    /// https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
     #[cfg(test)]
     pub(crate) fn leak(self) {
         std::mem::forget(self.inner);
