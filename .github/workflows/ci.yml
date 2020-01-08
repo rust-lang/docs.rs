@@ -30,6 +30,12 @@ jobs:
       - name: Build docs.rs
         run: cargo build
 
+      - name: Prepare the test environment
+        run: |
+          prefix=$(pwd)/ignored/prefix
+          mkdir -p ${prefix}/public-html
+          echo "::set-env name=CRATESFYI_PREFIX::${prefix}"
+
       - name: Test docs.rs
         run: cargo test -- --test-threads=1
 
