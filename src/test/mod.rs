@@ -1,7 +1,8 @@
 mod fakes;
 
-use postgres::Connection;
 use failure::Error;
+use postgres::Connection;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(crate) fn with_database(f: impl FnOnce(&TestDatabase) -> Result<(), Error>) {
     let env = TestDatabase::new().expect("failed to initialize the environment");
@@ -19,7 +20,7 @@ pub(crate) fn with_database(f: impl FnOnce(&TestDatabase) -> Result<(), Error>) 
 }
 
 pub(crate) struct TestDatabase {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl TestDatabase {
@@ -30,11 +31,13 @@ impl TestDatabase {
         let conn = crate::db::connect_db()?;
         crate::db::migrate_temporary(None, &conn)?;
 
-        Ok(TestDatabase { conn })
+        Ok(TestDatabase {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
-    pub(crate) fn conn(&self) -> &Connection {
-        &self.conn
+    pub(crate) fn conn(&self) -> MutexGuard<Connection> {
+        self.conn.lock().expect("failed to lock the connection")
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {

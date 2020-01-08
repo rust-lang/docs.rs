@@ -67,11 +67,11 @@ mod tests {
     fn test_list_blacklist() {
         crate::test::with_database(|db| {
             // crates are added out of order to verify sorting
-            add_crate(db.conn(), "crate A")?;
-            add_crate(db.conn(), "crate C")?;
-            add_crate(db.conn(), "crate B")?;
+            add_crate(&db.conn(), "crate A")?;
+            add_crate(&db.conn(), "crate C")?;
+            add_crate(&db.conn(), "crate B")?;
 
-            assert!(list_crates(db.conn())? == vec!["crate A", "crate B", "crate C"]);
+            assert!(list_crates(&db.conn())? == vec!["crate A", "crate B", "crate C"]);
             Ok(())
         });
     }
@@ -79,11 +79,11 @@ mod tests {
     #[test]
     fn test_add_to_and_remove_from_blacklist() {
         crate::test::with_database(|db| {
-            assert!(is_blacklisted(db.conn(), "crate foo")? == false);
-            add_crate(db.conn(), "crate foo")?;
-            assert!(is_blacklisted(db.conn(), "crate foo")? == true);
-            remove_crate(db.conn(), "crate foo")?;
-            assert!(is_blacklisted(db.conn(), "crate foo")? == false);
+            assert!(is_blacklisted(&db.conn(), "crate foo")? == false);
+            add_crate(&db.conn(), "crate foo")?;
+            assert!(is_blacklisted(&db.conn(), "crate foo")? == true);
+            remove_crate(&db.conn(), "crate foo")?;
+            assert!(is_blacklisted(&db.conn(), "crate foo")? == false);
             Ok(())
         });
     }
@@ -91,9 +91,9 @@ mod tests {
     #[test]
     fn test_add_twice_to_blacklist() {
         crate::test::with_database(|db| {
-            add_crate(db.conn(), "crate foo")?;
-            assert!(add_crate(db.conn(), "crate foo").is_err());
-            add_crate(db.conn(), "crate bar")?;
+            add_crate(&db.conn(), "crate foo")?;
+            assert!(add_crate(&db.conn(), "crate foo").is_err());
+            add_crate(&db.conn(), "crate bar")?;
 
             Ok(())
         });
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_remove_non_existing_crate() {
         crate::test::with_database(|db| {
-            assert!(remove_crate(db.conn(), "crate foo").is_err());
+            assert!(remove_crate(&db.conn(), "crate foo").is_err());
 
             Ok(())
         });
