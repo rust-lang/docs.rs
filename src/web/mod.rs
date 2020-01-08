@@ -63,6 +63,7 @@ use postgres::Connection;
 use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
+use self::pool::Pool;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
@@ -75,11 +76,12 @@ struct CratesfyiHandler {
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
     static_handler: Box<dyn Handler>,
+    pool_factory: Box<dyn Fn() -> Pool + Send + Sync>,
 }
 
 
 impl CratesfyiHandler {
-    fn chain<H: Handler>(base: H) -> Chain {
+    fn chain<H: Handler>(pool_factory: &dyn Fn() -> Pool, base: H) -> Chain {
         // TODO: Use DocBuilderOptions for paths
         let mut hbse = HandlebarsEngine::new();
         hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
@@ -90,17 +92,17 @@ impl CratesfyiHandler {
         }
 
         let mut chain = Chain::new(base);
-        chain.link_before(pool::Pool::new());
+        chain.link_before(pool_factory());
         chain.link_after(hbse);
         chain
     }
 
-    pub fn new() -> CratesfyiHandler {
+    pub fn new(pool_factory: Box<dyn Fn() -> Pool + Send + Sync>) -> CratesfyiHandler {
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
 
-        let shared_resources = Self::chain(rustdoc::SharedResourceHandler);
-        let router_chain = Self::chain(routes.iron_router());
+        let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
+        let router_chain = Self::chain(&pool_factory, routes.iron_router());
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
@@ -113,6 +115,7 @@ impl CratesfyiHandler {
                 Box::new(file::DatabaseFileHandler),
             )),
             static_handler: Box::new(static_handler),
+            pool_factory,
         }
     }
 }
@@ -169,7 +172,7 @@ impl Handler for CratesfyiHandler {
                 }
 
 
-                Self::chain(err).handle(req)
+                Self::chain(&self.pool_factory, err).handle(req)
             })
     }
 }
@@ -345,7 +348,7 @@ pub fn start_web_server(sock_addr: Option<&str>) {
     metrics::NON_LIBRARY_BUILDS.inc_by(0);
     metrics::UPLOADED_FILES_TOTAL.inc_by(0);
 
-    let cratesfyi = CratesfyiHandler::new();
+    let cratesfyi = CratesfyiHandler::new(Box::new(|| Pool::new()));
     let addr = sock_addr.unwrap_or("0.0.0.0:3000");
     // need to assign this so it's not dropped before the function ends
     let _server = Iron::new(cratesfyi).http(addr)
