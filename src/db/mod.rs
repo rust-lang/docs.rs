@@ -31,7 +31,7 @@ pub fn connect_db() -> Result<Connection, Error> {
 }
 
 
-pub fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
+pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
     let manager = r2d2_postgres::PostgresConnectionManager::new(&db_url[..],
