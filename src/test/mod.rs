@@ -30,6 +30,13 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     }
 }
 
+/// Make sure that a URL returns a status code between 200-299
+pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error> {
+    let status = web.get(path).send()?.status();
+    assert!(status.is_success(), "failed to GET {}: {}", path, status);
+    Ok(())
+}
+
 pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     frontend: OnceCell<TestFrontend>,

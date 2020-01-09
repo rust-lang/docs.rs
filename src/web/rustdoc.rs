@@ -413,3 +413,32 @@ impl Handler for SharedResourceHandler {
         Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::test::*;
+    #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/issues/552
+    fn settings_html() {
+        wrapper(|env| {
+            let db = env.db();
+            // first release works, second fails
+            db.fake_release()
+              .name("buggy").version("0.1.0")
+              .build_result_successful(true)
+              .file("text/html", "settings.html", "some data")
+              .file("text/html", "all.html", "some data 2")
+              .create()?;
+            db.fake_release()
+              .name("buggy").version("0.2.0")
+              .build_result_successful(false)
+              .create()?;
+            let web = env.frontend();
+            assert_success("/", web)?;
+            assert_success("/crate/buggy/0.1.0/", web)?;
+            assert_success("/buggy/0.1.0/settings.html", web)?;
+            assert_success("/buggy/0.1.0/all.html", web)?;
+            Ok(())
+        });
+    }
+}
