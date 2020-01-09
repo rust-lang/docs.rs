@@ -8,16 +8,6 @@ use error::Result;
 
 use regex::Regex;
 
-
-/// Copies files from source directory to destination directory.
-pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
-    copy_files_and_handle_html(source.as_ref().to_path_buf(),
-                               destination.as_ref().to_path_buf(),
-                               false,
-                               "")
-}
-
-
 /// Copies documentation from a crate's target directory to destination.
 ///
 /// Target directory must have doc directory.
