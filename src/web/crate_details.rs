@@ -313,19 +313,13 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::TestDatabase;
     use failure::Error;
-
-    fn create_release(db: &TestDatabase, package: &str, version: &str, successful: bool) -> Result<i32, Error> {
-        db.fake_release()
-            .name(package)
-            .version(version)
-            .build_result_successful(successful)
-            .create()
-    }
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -349,9 +343,9 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            create_release(&db, "foo", "0.0.1", true)?;
-            create_release(&db, "foo", "0.0.2", true)?;
-            create_release(&db, "foo", "0.0.3", false)?;
+            db.fake_release().name("foo").version("0.0.1").create()?;
+            db.fake_release().name("foo").version("0.0.2").create()?;
+            db.fake_release().name("foo").version("0.0.3").build_result_successful(false).create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
@@ -365,8 +359,8 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            create_release(&db, "foo", "0.0.1", false)?;
-            create_release(&db, "foo", "0.0.2", false)?;
+            db.fake_release().name("foo").version("0.0.1").build_result_successful(false).create()?;
+            db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
@@ -379,9 +373,9 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            create_release(&db, "foo", "0.0.1", true)?;
-            create_release(&db, "foo", "0.0.2", false)?;
-            create_release(&db, "foo", "0.0.3", true)?;
+            db.fake_release().name("foo").version("0.0.1").create()?;
+            db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
+            db.fake_release().name("foo").version("0.0.3").create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.3"))?;
@@ -396,13 +390,13 @@ mod tests {
             let db = env.db();
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
-            create_release(&db, "foo", "0.1.0", true)?;
-            create_release(&db, "foo", "0.1.1", true)?;
-            create_release(&db, "foo", "0.3.0", false)?;
-            create_release(&db, "foo", "1.0.0", true)?;
-            create_release(&db, "foo", "0.12.0", true)?;
-            create_release(&db, "foo", "0.2.0", true)?;
-            create_release(&db, "foo", "0.2.0-alpha", true)?;
+            db.fake_release().name("foo").version("0.1.0").create()?;
+            db.fake_release().name("foo").version("0.1.1").create()?;
+            db.fake_release().name("foo").version("0.3.0").build_result_successful(false).create()?;
+            db.fake_release().name("foo").version("1.0.0").create()?;
+            db.fake_release().name("foo").version("0.12.0").create()?;
+            db.fake_release().name("foo").version("0.2.0").create()?;
+            db.fake_release().name("foo").version("0.2.0-alpha").create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(details.releases, vec![
