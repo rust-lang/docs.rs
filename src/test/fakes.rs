@@ -108,14 +108,17 @@ impl<'db> FakeRelease<'db> {
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 
-        let upload_files = |prefix, files: Vec<(String, Vec<u8>)>, package: &MetadataPackage, db: &TestDatabase| {
+        let upload_files = |prefix: &str, files: Vec<(String, Vec<u8>)>, package: &MetadataPackage, db: &TestDatabase| {
+            let path_prefix = tempdir.path().join(prefix);
+            std::fs::create_dir(&path_prefix)?;
+
             for (path, data) in files {
-                let file = tempdir.path().join(&path);
+                let file = path_prefix.join(&path);
                 std::fs::write(file, data)?;
             }
 
             let prefix = format!("{}/{}/{}", prefix, package.name, package.version);
-            crate::db::add_path_into_database(&db.conn(), &prefix, tempdir.path())
+            crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
         };
 
         let rustdoc_meta = upload_files("rustdoc", self.rustdoc_files, &self.package, self.db)?;
