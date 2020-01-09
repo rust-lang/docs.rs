@@ -14,22 +14,17 @@ use regex::Regex;
 ///
 /// This function is designed to avoid file duplications. It is using rustc version string
 /// to rename common files (css files, jquery.js, playpen.js, main.js etc.) in a standard rustdoc.
-pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
-                                    destination: P,
-                                    rustc_version: &str)
-                                    -> Result<()> {
+pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P) -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
     copy_files_and_handle_html(source,
                                destination.as_ref().to_path_buf(),
-                               true,
-                               rustc_version)
+                               true)
 }
 
 
 fn copy_files_and_handle_html(source: PathBuf,
                               destination: PathBuf,
-                              handle_html: bool,
-                              rustc_version: &str)
+                              handle_html: bool)
                               -> Result<()> {
 
     // FIXME: handle_html is useless since we started using --resource-suffix
@@ -57,8 +52,7 @@ fn copy_files_and_handle_html(source: PathBuf,
             fs::create_dir_all(&destination_full_path)?;
             copy_files_and_handle_html(file.path(),
                                             destination_full_path,
-                                            handle_html,
-                                            &rustc_version)?
+                                            handle_html)?
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
@@ -84,7 +78,7 @@ mod test {
         let destination = tempdir::TempDir::new("cratesfyi").unwrap();
 
         // lets try to copy a src directory to tempdir
-        let res = copy_dir(Path::new("src"), destination.path());
+        let res = copy_doc_dir(Path::new("src"), destination.path());
         // remove temp dir
         fs::remove_dir_all(destination.path()).unwrap();
 

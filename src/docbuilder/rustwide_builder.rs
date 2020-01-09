@@ -522,8 +522,7 @@ impl RustwideBuilder {
         }
 
         info!("{} {}", source.display(), dest.display());
-        copy_doc_dir(source, dest, self.rustc_version.trim())?;
-        Ok(())
+        copy_doc_dir(source, dest)
     }
 
     fn upload_docs(
