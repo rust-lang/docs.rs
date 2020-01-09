@@ -6,9 +6,9 @@ use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::panic;
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
-    use std::panic;
     let env = TestEnvironment::new();
     // if we didn't catch the panic, the server would hang forever
     let maybe_panic = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&env)));

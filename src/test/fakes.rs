@@ -88,9 +88,6 @@ impl<'db> FakeRelease<'db> {
               D: Into<Vec<u8>>,
         {
         let (mimetype, path, data) = (mimetype.into(), path.into(), data.into());
-        if mimetype.contains('"') || path.contains('"') {
-            panic!("invalid mimetype or path: {}, {}", mimetype, path);
-        }
         self.files.push((mimetype, path, data));
         self
     }
@@ -102,8 +99,7 @@ impl<'db> FakeRelease<'db> {
             let file = tempdir.path().join(&path);
             std::fs::write(file, data)?;
 
-            let metadata = format!("[\"{}\", \"{}\"]", mimetype, path);
-            Ok(Json::from_str(&metadata).expect("should be valid json"))
+            Ok(Json::Array(vec![Json::String(mimetype), Json::String(path)]))
         }).collect::<Result<_, Error>>()?;
 
         let release_id = crate::db::add_package_into_database(
