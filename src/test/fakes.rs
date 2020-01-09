@@ -5,11 +5,12 @@ use crate::utils::{Dependency, MetadataPackage, Target};
 use failure::Error;
 use rustc_serialize::json::Json;
 
+#[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'db> {
     db: &'db TestDatabase,
     package: MetadataPackage,
     build_result: BuildResult,
-    files: Option<Json>,
+    files: Vec<(String, String, Vec<u8>)>,
     doc_targets: Vec<String>,
     default_target: Option<String>,
     cratesio_data: CratesIoData,
@@ -46,7 +47,7 @@ impl<'db> FakeRelease<'db> {
                 build_log: "It works!".into(),
                 successful: true,
             },
-            files: None,
+            files: Vec::new(),
             doc_targets: Vec::new(),
             default_target: None,
             cratesio_data: CratesIoData {
@@ -81,15 +82,36 @@ impl<'db> FakeRelease<'db> {
         self
     }
 
+    pub(crate) fn file<M, P, D>(mut self, mimetype: M, path: P, data: D) -> Self
+        where M: Into<String>,
+              P: Into<String>,
+              D: Into<Vec<u8>>,
+        {
+        let (mimetype, path, data) = (mimetype.into(), path.into(), data.into());
+        if mimetype.contains('"') || path.contains('"') {
+            panic!("invalid mimetype or path: {}, {}", mimetype, path);
+        }
+        self.files.push((mimetype, path, data));
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
+
+        let files: Vec<_> = self.files.into_iter().map(|(mimetype, path, data)| {
+            let file = tempdir.path().join(&path);
+            std::fs::write(file, data)?;
+
+            let metadata = format!("[\"{}\", \"{}\"]", mimetype, path);
+            Ok(Json::from_str(&metadata).expect("should be valid json"))
+        }).collect::<Result<_, Error>>()?;
 
         let release_id = crate::db::add_package_into_database(
             &self.db.conn(),
             &self.package,
             tempdir.path(),
             &self.build_result,
-            self.files,
+            if files.is_empty() { None } else { Some(Json::Array(files)) },
             self.doc_targets,
             &self.default_target,
             &self.cratesio_data,
@@ -97,6 +119,10 @@ impl<'db> FakeRelease<'db> {
             self.has_examples,
         )?;
         crate::db::add_build_into_database(&self.db.conn(), &release_id, &self.build_result)?;
+
+        let prefix = format!("rustdoc/{}/{}", self.package.name, self.package.version);
+        let added_files = crate::db::add_path_into_database(&self.db.conn(), &prefix, tempdir.path())?;
+        log::debug!("added files {}", added_files);
 
         Ok(release_id)
     }
