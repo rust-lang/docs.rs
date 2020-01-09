@@ -53,7 +53,7 @@ pub struct Metadata {
     /// System dependencies.
     ///
     /// Docs.rs is running on a Debian jessie.
-    pub dependencies: Option<Vec<String>>,
+    dependencies: Option<Vec<String>>,
 }
 
 
@@ -69,7 +69,7 @@ impl Metadata {
         Err(err_msg("Manifest not found"))
     }
 
-    pub fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
+    fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
         use std::fs::File;
         use std::io::Read;
         let mut f = match File::open(path) {

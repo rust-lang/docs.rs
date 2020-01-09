@@ -9,11 +9,11 @@ use failure::err_msg;
 /// Fields we need use in cratesfyi
 #[derive(Debug)]
 struct GitHubFields {
-    pub description: String,
-    pub stars: i64,
-    pub forks: i64,
-    pub issues: i64,
-    pub last_commit: time::Timespec,
+    description: String,
+    stars: i64,
+    forks: i64,
+    issues: i64,
+    last_commit: time::Timespec,
 }
 
 
