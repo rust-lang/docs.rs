@@ -99,9 +99,7 @@ impl<'db> FakeRelease<'db> {
         where P: Into<String>,
               D: Into<Vec<u8>>,
         {
-        let (path, data) = (path.into(), data.into());
-        self.rustdoc_files.push((path, data));
-
+        self.rustdoc_files.push((path.into(), data.into()));
         self
     }
 
