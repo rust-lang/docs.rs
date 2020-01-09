@@ -16,7 +16,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use Metadata;
+use super::Metadata;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
