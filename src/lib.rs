@@ -50,7 +50,7 @@ pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::metadata::Metadata;
 pub use self::web::Server;
 
-pub mod error;
+pub(crate) mod error;
 pub mod db;
 pub mod utils;
 mod docbuilder;
