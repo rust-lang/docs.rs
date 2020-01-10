@@ -94,9 +94,9 @@ impl ToJson for CrateDetails {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Release {
-    pub version: String,
-    pub build_status: bool,
-    pub yanked: bool,
+    version: String,
+    build_status: bool,
+    yanked: bool,
 }
 
 
