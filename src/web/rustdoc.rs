@@ -262,9 +262,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let (path, version) = if let Some(version) = latest_version(&crate_details.versions(), &version) {
-        req_path[2] = &version;
-        (path_for_version(&req_path, &crate_details.target_name, &conn), version)
+    let (path, latest_version) = if let Some(latest_version) = latest_version(&crate_details.versions(), &version) {
+        req_path[2] = &latest_version;
+        (path_for_version(&req_path, &crate_details.target_name, &conn), latest_version)
     } else {
         Default::default()
     };
@@ -277,7 +277,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_show_platforms_tab")
         .set_bool("is_latest_version", path.is_empty())
         .set("path_in_latest", &path)
-        .set("latest_version", &version)
+        .set("latest_version", &latest_version)
         .to_resp("rustdoc")
 }
 
