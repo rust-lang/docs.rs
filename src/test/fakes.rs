@@ -106,7 +106,7 @@ impl<'db> FakeRelease<'db> {
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 
-        let upload_files = |prefix: &str, files: Vec<(String, Vec<u8>)>, package: &MetadataPackage, db: &TestDatabase| {
+        let upload_files = |prefix: &str, files: &[(String, Vec<u8>)]| {
             let path_prefix = tempdir.path().join(prefix);
             std::fs::create_dir(&path_prefix)?;
 
@@ -115,13 +115,13 @@ impl<'db> FakeRelease<'db> {
                 std::fs::write(file, data)?;
             }
 
-            let prefix = format!("{}/{}/{}", prefix, package.name, package.version);
-            crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
+            let prefix = format!("{}/{}/{}", prefix, self.package.name, self.package.version);
+            crate::db::add_path_into_database(&self.db.conn(), &prefix, path_prefix)
         };
 
-        let rustdoc_meta = upload_files("rustdoc", self.rustdoc_files, &self.package, self.db)?;
+        let rustdoc_meta = upload_files("rustdoc", &self.rustdoc_files)?;
         log::debug!("added rustdoc files {}", rustdoc_meta);
-        let source_meta = upload_files("source", self.source_files, &self.package, self.db)?;
+        let source_meta = upload_files("source", &self.source_files)?;
         log::debug!("added source files {}", source_meta);
 
         let release_id = crate::db::add_package_into_database(
