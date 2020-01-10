@@ -3,7 +3,7 @@
 
 use super::pool::Pool;
 use super::file::File;
-use super::{latest_version, redirect_base};
+use super::redirect_base;
 use super::crate_details::CrateDetails;
 use iron::prelude::*;
 use iron::{status, Url};
@@ -262,7 +262,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let (path, latest_version) = if let Some(latest_version) = latest_version(&crate_details.versions(), &version) {
+
+    let (path, latest_version) = if !crate_details.is_latest_version() {
+        let latest_version = crate_details.latest_version().to_string();
         req_path[2] = &latest_version;
         (path_for_version(&req_path, &crate_details.target_name, &conn), latest_version)
     } else {

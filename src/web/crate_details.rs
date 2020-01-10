@@ -261,8 +261,18 @@ impl CrateDetails {
             .map(|release| release.version.clone())
             .collect()
     }
-}
 
+    /// Returns whether this release is the latest release of this crate.
+    pub fn is_latest_version(&self) -> bool {
+        self.version == self.latest_version()
+    }
+
+    /// Returns the version of the latest release of this crate.
+    pub fn latest_version(&self) -> &str {
+        // this is safe to unwrap: releases will always contain at least the version of this release
+        &self.releases.get(0).unwrap().version
+    }
+}
 
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
     let rows = conn.query(
@@ -415,5 +425,30 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_latest_version() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release().name("foo").version("0.0.1").create()?;
+            db.fake_release().name("foo").version("0.0.3").create()?;
+            db.fake_release().name("foo").version("0.0.2").create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(details.is_latest_version(), false);
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
+            assert_eq!(details.is_latest_version(), false);
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
+            assert_eq!(details.is_latest_version(), true);
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            Ok(())
+        })
     }
 }

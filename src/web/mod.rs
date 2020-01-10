@@ -313,39 +313,6 @@ fn render_markdown(text: &str) -> String {
 
 
 
-/// Returns latest version if required version is not the latest
-/// req_version must be an exact version
-fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<String> {
-    let req_version = match Version::parse(req_version) {
-        Ok(v) => v,
-        Err(_) => return None,
-    };
-    let versions = {
-        let mut versions: Vec<Version> = Vec::new();
-        for version in versions_json {
-            let version = match Version::parse(&version) {
-                Ok(v) => v,
-                Err(_) => return None,
-            };
-            versions.push(version);
-        }
-
-        versions.sort();
-        versions.reverse();
-        versions
-    };
-
-    if req_version != versions[0] {
-        for i in 1..versions.len() {
-            if req_version == versions[i]  {
-                return Some(format!("{}", versions[0]))
-            }
-        }
-    }
-    None
-}
-
-
 pub struct Server {
     inner: Listening,
 }
@@ -537,7 +504,6 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    use super::*;
 
     #[test]
     fn test_index_returns_success() {
@@ -546,17 +512,5 @@ mod test {
             assert!(web.get("/").send()?.status().is_success());
             Ok(())
         });
-    }
-
-    #[test]
-    fn test_latest_version() {
-        let versions = vec!["1.0.0".to_string(),
-                            "1.1.0".to_string(),
-                            "0.9.0".to_string(),
-                            "0.9.1".to_string()];
-        assert_eq!(latest_version(&versions, "1.1.0"), None);
-        assert_eq!(latest_version(&versions, "1.0.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&versions, "invalidversion"), None);
     }
 }
