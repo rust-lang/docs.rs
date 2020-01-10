@@ -425,8 +425,8 @@ mod test {
             db.fake_release()
               .name("buggy").version("0.1.0")
               .build_result_successful(true)
-              .rustdoc_file("settings.html", "some data")
-              .rustdoc_file("all.html", "some data 2")
+              .rustdoc_file("settings.html", b"some data")
+              .rustdoc_file("all.html", b"some data 2")
               .create()?;
             db.fake_release()
               .name("buggy").version("0.2.0")

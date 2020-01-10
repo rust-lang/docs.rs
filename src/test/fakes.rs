@@ -5,14 +5,14 @@ use crate::utils::{Dependency, MetadataPackage, Target};
 use failure::Error;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
-pub(crate) struct FakeRelease<'db> {
-    db: &'db TestDatabase,
+pub(crate) struct FakeRelease<'a> {
+    db: &'a TestDatabase,
     package: MetadataPackage,
     build_result: BuildResult,
     /// name, content
-    source_files: Vec<(String, Vec<u8>)>,
+    source_files: Vec<(&'a str, &'a [u8])>,
     /// name, content
-    rustdoc_files: Vec<(String, Vec<u8>)>,
+    rustdoc_files: Vec<(&'a str, &'a [u8])>,
     doc_targets: Vec<String>,
     default_target: Option<String>,
     cratesio_data: CratesIoData,
@@ -20,8 +20,8 @@ pub(crate) struct FakeRelease<'db> {
     has_examples: bool,
 }
 
-impl<'db> FakeRelease<'db> {
-    pub(super) fn new(db: &'db TestDatabase) -> Self {
+impl<'a> FakeRelease<'a> {
+    pub(super) fn new(db: &'a TestDatabase) -> Self {
         FakeRelease {
             db,
             package: MetadataPackage {
@@ -85,28 +85,15 @@ impl<'db> FakeRelease<'db> {
         self
     }
 
-    pub(crate) fn file<M, P, D>(mut self, mimetype: M, path: P, data: D) -> Self
-        where M: Into<String>,
-              P: Into<String>,
-              D: Into<Vec<u8>>,
-        {
-        let (mimetype, path, data) = (mimetype.into(), path.into(), data.into());
-        self.files.push((mimetype, path, data));
-        self
-    }
-
-    pub(crate) fn rustdoc_file<P, D>(mut self, path: P, data: D) -> Self
-        where P: Into<String>,
-              D: Into<Vec<u8>>,
-        {
-        self.rustdoc_files.push((path.into(), data.into()));
+    pub(crate) fn rustdoc_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
+        self.rustdoc_files.push((path, data));
         self
     }
 
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 
-        let upload_files = |prefix: &str, files: &[(String, Vec<u8>)]| {
+        let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
             let path_prefix = tempdir.path().join(prefix);
             std::fs::create_dir(&path_prefix)?;
 
