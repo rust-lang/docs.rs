@@ -396,17 +396,23 @@ mod tests {
             let db = env.db();
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
-            create_release(&db, "foo", "0.0.1", true)?;
-            create_release(&db, "foo", "0.0.3", false)?;
+            create_release(&db, "foo", "0.1.0", true)?;
+            create_release(&db, "foo", "0.1.1", true)?;
+            create_release(&db, "foo", "0.3.0", false)?;
             create_release(&db, "foo", "1.0.0", true)?;
-            create_release(&db, "foo", "0.0.2", true)?;
+            create_release(&db, "foo", "0.12.0", true)?;
+            create_release(&db, "foo", "0.2.0", true)?;
+            create_release(&db, "foo", "0.2.0-alpha", true)?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
+            let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(details.releases, vec![
                 Release { version: "1.0.0".to_string(), build_status: true },
-                Release { version: "0.0.3".to_string(), build_status: false },
-                Release { version: "0.0.2".to_string(), build_status: true },
-                Release { version: "0.0.1".to_string(), build_status: true },
+                Release { version: "0.12.0".to_string(), build_status: true },
+                Release { version: "0.3.0".to_string(), build_status: false },
+                Release { version: "0.2.0".to_string(), build_status: true },
+                Release { version: "0.2.0-alpha".to_string(), build_status: true },
+                Release { version: "0.1.1".to_string(), build_status: true },
+                Release { version: "0.1.0".to_string(), build_status: true },
             ]);
 
             Ok(())
