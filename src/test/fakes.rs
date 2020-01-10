@@ -76,6 +76,11 @@ impl<'db> FakeRelease<'db> {
         self
     }
 
+    pub(crate) fn cratesio_data_yanked(mut self, new: bool) -> Self {
+        self.cratesio_data.yanked = new;
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 

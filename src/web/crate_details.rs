@@ -339,47 +339,53 @@ mod tests {
     }
 
     #[test]
-    fn test_last_successful_build_when_last_release_failed() {
+    fn test_last_successful_build_when_last_releases_failed_or_yanked() {
         crate::test::wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
             db.fake_release().name("foo").version("0.0.3").build_result_successful(false).create()?;
+            db.fake_release().name("foo").version("0.0.4").cratesio_data_yanked(true).create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.3", Some("0.0.2"))?;
+            // don't test for foo-0.0.4, yanked crates are not displayed
             Ok(())
         });
     }
 
     #[test]
-    fn test_last_successful_build_when_all_releases_failed() {
+    fn test_last_successful_build_when_all_releases_failed_or_yanked() {
         crate::test::wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").build_result_successful(false).create()?;
             db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
+            db.fake_release().name("foo").version("0.0.3").cratesio_data_yanked(true).create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
+            // don't test for foo-0.0.3, yanked crates are not displayed
             Ok(())
         });
     }
 
     #[test]
-    fn test_last_successful_build_when_an_intermittent_release_failed() {
+    fn test_last_successful_build_with_intermittent_releases_failed_or_yanked() {
         crate::test::wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
             db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
-            db.fake_release().name("foo").version("0.0.3").create()?;
+            db.fake_release().name("foo").version("0.0.3").cratesio_data_yanked(true).create()?;
+            db.fake_release().name("foo").version("0.0.4").create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.3"))?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.4"))?;
+            // don't test for foo-0.0.3, yanked crates are not displayed
+            assert_last_successful_build_equals(&db, "foo", "0.0.4", None)?;
             Ok(())
         });
     }
