@@ -255,13 +255,6 @@ impl CrateDetails {
         Some(crate_details)
     }
 
-    /// Returns all versions of this crate.
-    pub fn versions(&self) -> Vec<String> {
-        self.releases.iter()
-            .map(|release| release.version.clone())
-            .collect()
-    }
-
     /// Returns whether this release is the latest release of this crate.
     pub fn is_latest_version(&self) -> bool {
         self.version == self.latest_version()
@@ -403,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn test_versions() {
+    fn test_releases_should_be_sorted() {
         crate::test::wrapper(|env| {
             let db = env.db();
 
@@ -414,8 +407,6 @@ mod tests {
             create_release(&db, "foo", "0.0.2", true)?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-
-            assert_eq!(details.versions(), vec!["1.0.0", "0.0.3", "0.0.2", "0.0.1"]);
             assert_eq!(details.releases, vec![
                 Release { version: "1.0.0".to_string(), build_status: true },
                 Release { version: "0.0.3".to_string(), build_status: false },
