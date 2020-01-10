@@ -255,11 +255,6 @@ impl CrateDetails {
         Some(crate_details)
     }
 
-    /// Returns whether this release is the latest release of this crate.
-    pub fn is_latest_version(&self) -> bool {
-        self.version == self.latest_version()
-    }
-
     /// Returns the version of the latest release of this crate.
     pub fn latest_version(&self) -> &str {
         // releases will always contain at least one element
@@ -428,15 +423,12 @@ mod tests {
             db.fake_release().name("foo").version("0.0.2").create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.is_latest_version(), false);
             assert_eq!(details.latest_version(), "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.is_latest_version(), false);
             assert_eq!(details.latest_version(), "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.is_latest_version(), true);
             assert_eq!(details.latest_version(), "0.0.3");
 
             Ok(())

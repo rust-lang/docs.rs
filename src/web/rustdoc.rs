@@ -263,10 +263,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     content.full = file_content;
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
-    let (path, latest_version) = if !crate_details.is_latest_version() {
-        let latest_version = crate_details.latest_version().to_string();
+    let latest_version = crate_details.latest_version().to_owned();
+    let is_latest_version = latest_version == version;
+
+    let path = if !is_latest_version {
         req_path[2] = &latest_version;
-        (path_for_version(&req_path, &crate_details.target_name, &conn), latest_version)
+        path_for_version(&req_path, &crate_details.target_name, &conn)
     } else {
         Default::default()
     };
@@ -277,7 +279,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
-        .set_bool("is_latest_version", path.is_empty())
+        .set_bool("is_latest_version", is_latest_version)
         .set("path_in_latest", &path)
         .set("latest_version", &latest_version)
         .to_resp("rustdoc")
