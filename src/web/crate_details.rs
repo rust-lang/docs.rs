@@ -262,8 +262,8 @@ impl CrateDetails {
 
     /// Returns the version of the latest release of this crate.
     pub fn latest_version(&self) -> &str {
-        // this is safe to unwrap: releases will always contain at least the version of this release
-        &self.releases.get(0).unwrap().version
+        // releases will always contain at least one element
+        &self.releases[0].version
     }
 }
 
