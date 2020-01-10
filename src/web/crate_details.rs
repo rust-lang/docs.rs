@@ -96,6 +96,7 @@ impl ToJson for CrateDetails {
 struct Release {
     pub version: String,
     pub build_status: bool,
+    pub yanked: bool,
 }
 
 
@@ -235,21 +236,11 @@ impl CrateDetails {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
-        // retrieve last successful build if build failed
         if !crate_details.build_status {
-            let rows = conn.query(
-                "SELECT version
-                    FROM releases
-                    INNER JOIN crates ON releases.crate_id = crates.id
-                    WHERE build_status = true AND yanked = false AND crates.name = $1
-                    ORDER BY release_time desc
-                    LIMIT 1;",
-                &[&name],
-            ).unwrap();
-
-            if rows.len() >= 1 {
-                crate_details.last_successful_build = Some(rows.get(0).get(0));
-            }
+            crate_details.last_successful_build = crate_details.releases.iter()
+                .filter(|release| release.build_status && !release.yanked)
+                .map(|release| release.version.to_owned())
+                .nth(0);
         }
 
         Some(crate_details)
@@ -264,19 +255,19 @@ impl CrateDetails {
 
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
     let rows = conn.query(
-        "SELECT build_status
+        "SELECT build_status, yanked
          FROM releases
          WHERE releases.crate_id = $1 and releases.version = $2;",
         &[&crate_id, &version],
     ).unwrap();
 
-    let build_status = if !rows.is_empty() {
-        rows.get(0).get(0)
+    let (build_status, yanked) = if !rows.is_empty() {
+        (rows.get(0).get(0), rows.get(0).get(1))
     } else {
-        false
+        Default::default()
     };
 
-    Release { version, build_status }
+    Release { version, build_status, yanked }
 }
 
 
@@ -401,18 +392,18 @@ mod tests {
             db.fake_release().name("foo").version("0.3.0").build_result_successful(false).create()?;
             db.fake_release().name("foo").version("1.0.0").create()?;
             db.fake_release().name("foo").version("0.12.0").create()?;
-            db.fake_release().name("foo").version("0.2.0").create()?;
+            db.fake_release().name("foo").version("0.2.0").cratesio_data_yanked(true).create()?;
             db.fake_release().name("foo").version("0.2.0-alpha").create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(details.releases, vec![
-                Release { version: "1.0.0".to_string(), build_status: true },
-                Release { version: "0.12.0".to_string(), build_status: true },
-                Release { version: "0.3.0".to_string(), build_status: false },
-                Release { version: "0.2.0".to_string(), build_status: true },
-                Release { version: "0.2.0-alpha".to_string(), build_status: true },
-                Release { version: "0.1.1".to_string(), build_status: true },
-                Release { version: "0.1.0".to_string(), build_status: true },
+                Release { version: "1.0.0".to_string(), build_status: true, yanked: false },
+                Release { version: "0.12.0".to_string(), build_status: true, yanked: false },
+                Release { version: "0.3.0".to_string(), build_status: false, yanked: false },
+                Release { version: "0.2.0".to_string(), build_status: true, yanked: true },
+                Release { version: "0.2.0-alpha".to_string(), build_status: true, yanked: false },
+                Release { version: "0.1.1".to_string(), build_status: true, yanked: false },
+                Release { version: "0.1.0".to_string(), build_status: true, yanked: false },
             ]);
 
             Ok(())
