@@ -74,7 +74,13 @@
                         <div class="pure-menu pure-menu-scrollable sub-menu">
                           <ul class="pure-menu-list">
                             {{#each releases}}
-                            <li class="pure-menu-item"><a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a></li>
+                            <li class="pure-menu-item">
+                              {{#if this.build_status}}
+                              <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
+                              {{else}}
+                              <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="docs.rs failed to build {{../name}}-{{this.version}}"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                              {{/if}}
+                            </li>
                             {{/each}}
                           </ul>
                         </div>
