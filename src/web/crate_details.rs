@@ -240,7 +240,7 @@ impl CrateDetails {
             crate_details.last_successful_build = crate_details.releases.iter()
                 .filter(|release| release.build_status && !release.yanked)
                 .map(|release| release.version.to_owned())
-                .nth(0);
+                .next();
         }
 
         Some(crate_details)
