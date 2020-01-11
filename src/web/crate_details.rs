@@ -338,11 +338,13 @@ mod tests {
             db.fake_release().name("foo").version("0.0.2").create()?;
             db.fake_release().name("foo").version("0.0.3").build_result_successful(false).create()?;
             db.fake_release().name("foo").version("0.0.4").cratesio_data_yanked(true).create()?;
+            db.fake_release().name("foo").version("0.0.5").build_result_successful(false).cratesio_data_yanked(true).create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.3", Some("0.0.2"))?;
-            // don't test for foo-0.0.4, yanked crates are not displayed
+            assert_last_successful_build_equals(&db, "foo", "0.0.4", None)?;
+            assert_last_successful_build_equals(&db, "foo", "0.0.5", Some("0.0.2"))?;
             Ok(())
         });
     }
@@ -358,7 +360,7 @@ mod tests {
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
-            // don't test for foo-0.0.3, yanked crates are not displayed
+            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
             Ok(())
         });
     }
@@ -375,7 +377,7 @@ mod tests {
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.4"))?;
-            // don't test for foo-0.0.3, yanked crates are not displayed
+            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.4", None)?;
             Ok(())
         });
