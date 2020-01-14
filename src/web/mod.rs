@@ -186,6 +186,7 @@ impl Handler for CratesfyiHandler {
 }
 
 /// Represents the possible results of attempting to load a version requirement.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum MatchVersion {
     /// `match_version` was given an exact version, which matched a saved crate version.
     Exact(String),
@@ -226,19 +227,15 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
         .unwrap_or("*".to_string());
 
-    let versions = {
-        let mut versions = Vec::new();
-        let rows = conn.query("SELECT versions FROM crates WHERE name = $1", &[&name]).unwrap();
+    let versions: Vec<String> = {
+        let query = "SELECT version
+            FROM releases INNER JOIN crates ON releases.crate_id = crates.id
+            WHERE name = $1 AND yanked = false";
+        let rows = conn.query(query, &[&name]).unwrap();
         if rows.len() == 0 {
             return MatchVersion::None;
         }
-        let versions_json: Json = rows.get(0).get(0);
-        for version in versions_json.as_array().unwrap() {
-            let version: String = version.as_string().unwrap().to_owned();
-            versions.push(version);
-        }
-
-        versions
+        rows.iter().map(|row| row.get(0)).collect()
     };
 
     // first check for exact match
@@ -274,16 +271,16 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         versions_sem
     };
 
-    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
-    // return first version if requested version is '*'
-    if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver(format!("{}", versions_sem[0]));
-    }
-
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
             return MatchVersion::Semver(format!("{}", version));
         }
+    }
+
+    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
+    // return first version if requested version is '*'
+    if req_version == "*" && !versions_sem.is_empty() {
+        return MatchVersion::Semver(format!("{}", versions_sem[0]));
     }
 
     MatchVersion::None
@@ -516,5 +513,44 @@ mod test {
             assert!(web.get("/").send()?.status().is_success());
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_match_version() {
+        use web::{match_version, MatchVersion};
+
+        crate::test::wrapper(|env| {
+            let db = env.db();
+            let version = |v| match_version(&db.conn(), "foo", v);
+            let release = |v| db.fake_release().name("foo").version(v).create().unwrap();
+
+            release("0.3.1-pre");
+            assert_eq!(version(Some("*")), MatchVersion::Semver("0.3.1-pre".into()));
+
+            release("0.3.1-alpha");
+            assert_eq!(version(Some("0.3.1-alpha")), MatchVersion::Exact("0.3.1-alpha".into()));
+
+            let release_id = release("0.3.0");
+            let three = MatchVersion::Semver("0.3.0".into());
+            assert_eq!(version(Some("*")), three);
+            // same thing but make sure None behaves like we think it does
+            assert_eq!(version(None), three);
+            // make sure exact matches still work
+            assert_eq!(version(Some("0.3.0")), MatchVersion::Exact("0.3.0".into()));
+
+            // https://github.com/rust-lang/docs.rs/issues/395
+            let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+            db.conn().query(query, &[&release_id]).unwrap();
+            release("0.1.0+4.1");
+            assert_eq!(version(Some("0.1.0+4.1")), MatchVersion::Exact("0.1.0+4.1".into()));
+            assert_eq!(version(None), MatchVersion::Semver("0.1.0+4.1".into()));
+            release("0.1.1");
+            assert_eq!(version(None), MatchVersion::Semver("0.1.1".into()));
+            release("0.5.1+zstd.1.4.4");
+            assert_eq!(version(None), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(Some("0.5.1+zstd.1.4.4")), MatchVersion::Exact("0.5.1+zstd.1.4.4".into()));
+
+            Ok(())
+        })
     }
 }
