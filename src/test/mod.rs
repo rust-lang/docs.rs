@@ -6,11 +6,17 @@ use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::panic;
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let env = TestEnvironment::new();
-    let result = f(&env);
+    // if we didn't catch the panic, the server would hang forever
+    let maybe_panic = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&env)));
     env.cleanup();
+    let result = match maybe_panic {
+        Ok(r) => r,
+        Err(payload) => panic::resume_unwind(payload),
+    };
 
     if let Err(err) = result {
         eprintln!("the test failed: {}", err);
@@ -22,6 +28,13 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
 
         panic!("the test failed");
     }
+}
+
+/// Make sure that a URL returns a status code between 200-299
+pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error> {
+    let status = web.get(path).send()?.status();
+    assert!(status.is_success(), "failed to GET {}: {}", path, status);
+    Ok(())
 }
 
 pub(crate) struct TestEnvironment {

@@ -3,13 +3,16 @@ use crate::db::CratesIoData;
 use crate::docbuilder::BuildResult;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use failure::Error;
-use rustc_serialize::json::Json;
 
-pub(crate) struct FakeRelease<'db> {
-    db: &'db TestDatabase,
+#[must_use = "FakeRelease does nothing until you call .create()"]
+pub(crate) struct FakeRelease<'a> {
+    db: &'a TestDatabase,
     package: MetadataPackage,
     build_result: BuildResult,
-    files: Option<Json>,
+    /// name, content
+    source_files: Vec<(&'a str, &'a [u8])>,
+    /// name, content
+    rustdoc_files: Vec<(&'a str, &'a [u8])>,
     doc_targets: Vec<String>,
     default_target: Option<String>,
     cratesio_data: CratesIoData,
@@ -17,8 +20,8 @@ pub(crate) struct FakeRelease<'db> {
     has_examples: bool,
 }
 
-impl<'db> FakeRelease<'db> {
-    pub(super) fn new(db: &'db TestDatabase) -> Self {
+impl<'a> FakeRelease<'a> {
+    pub(super) fn new(db: &'a TestDatabase) -> Self {
         FakeRelease {
             db,
             package: MetadataPackage {
@@ -46,7 +49,8 @@ impl<'db> FakeRelease<'db> {
                 build_log: "It works!".into(),
                 successful: true,
             },
-            files: None,
+            source_files: Vec::new(),
+            rustdoc_files: Vec::new(),
             doc_targets: Vec::new(),
             default_target: None,
             cratesio_data: CratesIoData {
@@ -81,15 +85,38 @@ impl<'db> FakeRelease<'db> {
         self
     }
 
+    pub(crate) fn rustdoc_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
+        self.rustdoc_files.push((path, data));
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
+
+        let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
+            let path_prefix = tempdir.path().join(prefix);
+            std::fs::create_dir(&path_prefix)?;
+
+            for (path, data) in files {
+                let file = path_prefix.join(&path);
+                std::fs::write(file, data)?;
+            }
+
+            let prefix = format!("{}/{}/{}", prefix, self.package.name, self.package.version);
+            crate::db::add_path_into_database(&self.db.conn(), &prefix, path_prefix)
+        };
+
+        let rustdoc_meta = upload_files("rustdoc", &self.rustdoc_files)?;
+        log::debug!("added rustdoc files {}", rustdoc_meta);
+        let source_meta = upload_files("source", &self.source_files)?;
+        log::debug!("added source files {}", source_meta);
 
         let release_id = crate::db::add_package_into_database(
             &self.db.conn(),
             &self.package,
             tempdir.path(),
             &self.build_result,
-            self.files,
+            Some(source_meta),
             self.doc_targets,
             &self.default_target,
             &self.cratesio_data,
