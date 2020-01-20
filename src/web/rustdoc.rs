@@ -229,7 +229,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     if req_path[3] == crate_details.metadata.default_target {
-        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
+        let path = [
+            base,
+            req_path[1..3].join("/"),
+            req_path[4..].join("/")
+        ].join("/");
         let canonical = Url::parse(&path).expect("got an invalid URL to start");
         return Ok(super::redirect(canonical));
     }
