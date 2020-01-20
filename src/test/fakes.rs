@@ -14,7 +14,7 @@ pub(crate) struct FakeRelease<'a> {
     /// name, content
     rustdoc_files: Vec<(&'a str, &'a [u8])>,
     doc_targets: Vec<String>,
-    default_target: Option<String>,
+    default_target: Option<&'a str>,
     cratesio_data: CratesIoData,
     has_docs: bool,
     has_examples: bool,
@@ -90,16 +90,28 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn default_target(mut self, target: &'a str) -> Self {
+        self.default_target = Some(target);
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
+        use std::fs;
+        use std::path::Path;
+
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
 
         let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
             let path_prefix = tempdir.path().join(prefix);
-            std::fs::create_dir(&path_prefix)?;
+            fs::create_dir(&path_prefix)?;
 
             for (path, data) in files {
+                // allow `src/main.rs`
+                if let Some(parent) = Path::new(path).parent() {
+                    fs::create_dir_all(path_prefix.join(parent))?;
+                }
                 let file = path_prefix.join(&path);
-                std::fs::write(file, data)?;
+                fs::write(file, data)?;
             }
 
             let prefix = format!("{}/{}/{}", prefix, self.package.name, self.package.version);
@@ -116,7 +128,7 @@ impl<'a> FakeRelease<'a> {
             &self.package,
             tempdir.path(),
             &self.build_result,
-            self.default_target.as_deref().unwrap_or("x86_64-unknown-linux-gnu"),
+            self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             Some(source_meta),
             self.doc_targets,
             &self.cratesio_data,

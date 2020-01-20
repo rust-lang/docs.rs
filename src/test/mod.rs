@@ -37,6 +37,20 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
     Ok(())
 }
 
+/// Make sure that a URL redirects to a specific page
+pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<(), Error> {
+    let response = web.get(path).send()?;
+    let status = response.status();
+    // Reqwest follows redirects
+    assert!(status.is_success(), "failed to GET {}: {}", path, status);
+
+    let redirect_target = response.url().path();
+    assert!(redirect_target == expected_target,
+            "{}: expected redirect to {}, got redirect to {}",
+            path, expected_target, redirect_target);
+    Ok(())
+}
+
 pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     frontend: OnceCell<TestFrontend>,

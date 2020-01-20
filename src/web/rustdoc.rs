@@ -453,4 +453,38 @@ mod test {
             Ok(())
         });
     }
+    #[test]
+    fn default_target_redirects_to_base() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+              .name("dummy").version("0.1.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .create()?;
+
+            let web = env.frontend();
+            // no explicit default-target
+            let base = "/dummy/0.1.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+
+            // set an explicit target that requires cross-compile
+            let target = "x86_64-pc-windows-msvc";
+            db.fake_release().name("dummy").version("0.2.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .default_target(target).create()?;
+            let base = "/dummy/0.2.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base, web)?;
+
+            // set an explicit target without cross-compile
+            let target = "x86_64-unknown-linux-gnu";
+            db.fake_release().name("dummy").version("0.3.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .default_target(target).create()?;
+            let base = "/dummy/0.3.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)
+        });
+    }
 }
