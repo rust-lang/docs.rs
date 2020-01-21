@@ -189,7 +189,8 @@ impl RustwideBuilder {
         build_dir
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
-                let res = self.execute_build(None, build, &limits)?;
+                let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
+                let res = self.execute_build(None, build, &limits, &metadata)?;
                 if !res.result.successful {
                     bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -312,9 +313,10 @@ impl RustwideBuilder {
                 let mut files_list = None;
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
+                let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
                 // Do an initial build and then copy the sources in the database
-                let res = self.execute_build(None, &build, &limits)?;
+                let res = self.execute_build(None, &build, &limits, &metadata)?;
                 if res.result.successful {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
@@ -352,6 +354,7 @@ impl RustwideBuilder {
                             &limits,
                             &local_storage.path(),
                             &mut successful_targets,
+                            &metadata,
                         )?;
                     }
                     self.upload_docs(&conn, name, version, local_storage.path())?;
@@ -396,8 +399,9 @@ impl RustwideBuilder {
         limits: &Limits,
         local_storage: &Path,
         successful_targets: &mut Vec<String>,
+        metadata: &Metadata,
     ) -> Result<()> {
-        let target_res = self.execute_build(Some(target), build, limits)?;
+        let target_res = self.execute_build(Some(target), build, limits, metadata)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -416,8 +420,8 @@ impl RustwideBuilder {
         target: Option<&str>,
         build: &Build,
         limits: &Limits,
+        metadata: &Metadata,
     ) -> Result<FullBuildResult> {
-        let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
