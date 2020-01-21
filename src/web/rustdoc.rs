@@ -487,7 +487,8 @@ mod test {
             let base = "/dummy/0.3.0/dummy/";
             assert_success(base, web)?;
             assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
-            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)?;
+            assert_redirect("/dummy/0.3.0/", base, web)
         });
     }
 }
