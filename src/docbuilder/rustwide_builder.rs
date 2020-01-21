@@ -342,8 +342,18 @@ impl RustwideBuilder {
                     )?;
 
                     successful_targets.push(res.target.clone());
+
+                    // this is a breaking change, don't enable it by default
+                    let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
+                        .map(|s| s == "true").unwrap_or(false);
+                    let strs: Vec<_>;
+                    let targets: &[&str] = if build_specific {
+                        strs = metadata.extra_targets.iter().map(|s| s.as_str()).collect();
+                        &strs
+                    } else { TARGETS };
+
                     // Then build the documentation for all the targets
-                    for target in TARGETS {
+                    for target in targets {
                         if *target == res.target {
                             continue;
                         }
