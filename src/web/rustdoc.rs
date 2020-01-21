@@ -478,13 +478,16 @@ mod test {
             assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base, web)?;
 
             // set an explicit target without cross-compile
+            // also check that /:crate/:version/:platform/all.html doesn't panic
             let target = "x86_64-unknown-linux-gnu";
             db.fake_release().name("dummy").version("0.3.0")
               .rustdoc_file("dummy/index.html", b"some content")
+              .rustdoc_file("all.html", b"html")
               .default_target(target).create()?;
             let base = "/dummy/0.3.0/dummy/";
             assert_success(base, web)?;
-            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)
         });
     }
 }
