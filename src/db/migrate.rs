@@ -274,7 +274,7 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // version
             7,
             // description
-            "Change sandbox_overrides's max_memory_bytes to BIGINT",
+            "Allow memory limits of more than 4 GB",
             // upgrade query
             "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE BIGINT;",
             // downgrade query
