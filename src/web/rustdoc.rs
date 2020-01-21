@@ -193,6 +193,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool).get();
+    let base = redirect_base(req);
 
     let mut req_path = req.url.path();
 
@@ -208,7 +209,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
             let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
-                                                redirect_base(req),
+                                                base,
                                                 name,
                                                 v,
                                                 req_path.join("/"))[..]));
@@ -223,6 +224,19 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // add crate name and version
     req_path.insert(1, &name);
     req_path.insert(2, &version);
+
+    // if visiting the full path to the default target, remove the target from the path
+    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    if req_path[3] == crate_details.metadata.default_target {
+        let path = [
+            base,
+            req_path[1..3].join("/"),
+            req_path[4..].join("/")
+        ].join("/");
+        let canonical = Url::parse(&path).expect("got an invalid URL to start");
+        return Ok(super::redirect(canonical));
+    }
 
     let path = {
         let mut path = req_path.join("/");
@@ -261,7 +275,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     content.body_class = body_class;
 
     content.full = file_content;
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
     let latest_version = crate_details.latest_version().to_owned();
     let is_latest_version = latest_version == version;
@@ -438,6 +451,44 @@ mod test {
             assert_success("/buggy/0.1.0/settings.html", web)?;
             assert_success("/buggy/0.1.0/all.html", web)?;
             Ok(())
+        });
+    }
+    #[test]
+    fn default_target_redirects_to_base() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+              .name("dummy").version("0.1.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .create()?;
+
+            let web = env.frontend();
+            // no explicit default-target
+            let base = "/dummy/0.1.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+
+            // set an explicit target that requires cross-compile
+            let target = "x86_64-pc-windows-msvc";
+            db.fake_release().name("dummy").version("0.2.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .default_target(target).create()?;
+            let base = "/dummy/0.2.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base, web)?;
+
+            // set an explicit target without cross-compile
+            // also check that /:crate/:version/:platform/all.html doesn't panic
+            let target = "x86_64-unknown-linux-gnu";
+            db.fake_release().name("dummy").version("0.3.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .rustdoc_file("all.html", b"html")
+              .default_target(target).create()?;
+            let base = "/dummy/0.3.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)?;
+            assert_redirect("/dummy/0.3.0/", base, web)
         });
     }
 }

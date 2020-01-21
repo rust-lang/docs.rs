@@ -93,7 +93,8 @@ impl FileList {
                                       releases.description,
                                       releases.target_name,
                                       releases.rustdoc_status,
-                                      releases.files
+                                      releases.files,
+                                      releases.default_target
                                FROM releases
                                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
@@ -173,6 +174,7 @@ impl FileList {
                 description: rows.get(0).get(2),
                 target_name: rows.get(0).get(3),
                 rustdoc_status: rows.get(0).get(4),
+                default_target: rows.get(0).get(6),
             },
             files: file_list,
         })
