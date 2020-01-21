@@ -31,7 +31,7 @@ impl Limits {
         )?;
         if !res.is_empty() {
             let row = res.get(0);
-            if let Some(memory) = row.get::<_, Option<i32>>("max_memory_bytes") {
+            if let Some(memory) = row.get::<_, Option<i64>>("max_memory_bytes") {
                 limits.memory = memory as usize;
             }
             if let Some(timeout) = row.get::<_, Option<i32>>("timeout_seconds") {

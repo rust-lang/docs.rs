@@ -269,6 +269,17 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // downgrade query
             "DROP TABLE blacklisted_crates;"
         ),
+        migration!(
+            context,
+            // version
+            7,
+            // description
+            "Allow memory limits of more than 4 GB",
+            // upgrade query
+            "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE BIGINT;",
+            // downgrade query
+            "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE INTEGER;"
+        ),
     ];
 
     for migration in migrations {
