@@ -39,6 +39,9 @@
         backdrop.style.display = "block";
     }
     function menuOnClick(e) {
+        if (this.getAttribute("href") != "#") {
+            return;
+        }
         if (this.parentNode === currentMenu) {
             closeMenu();
         } else {
@@ -123,6 +126,7 @@
                 case "enter":
                 case "return":
                 case "space":
+                case " ":
                     // enter, return, and space have the default browser behavior,
                     // but they also close the menu
                     // this behavior is identical between both the WAI example, and GitHub's
@@ -154,6 +158,17 @@
                 }
                 e.preventDefault();
                 e.stopPropagation();
+            }
+        } else if (e.target.parentNode.className && e.target.parentNode.className.indexOf("pure-menu-has-children") !== -1) {
+            switch (e.key.toLowerCase()) {
+                case "arrowdown":
+                case "down":
+                case "space":
+                case " ":
+                    openMenu(e.target.parentNode);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    break;
             }
         }
     };
