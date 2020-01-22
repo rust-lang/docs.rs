@@ -18,6 +18,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+pub(crate) use crate::storage::Blob;
+
 const MAX_CONCURRENT_UPLOADS: usize = 50;
 
 pub(super) static S3_BUCKET_NAME: &str = "rust-docs-rs";
@@ -57,14 +59,7 @@ fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-pub struct Blob {
-    pub path: String,
-    pub mime: String,
-    pub date_updated: time::Timespec,
-    pub content: Vec<u8>,
-}
-
-pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
+pub(crate) fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
     if let Some(client) = s3_client() {
         let res = client
             .get_object(GetObjectRequest {

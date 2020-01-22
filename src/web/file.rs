@@ -6,7 +6,7 @@ use iron::status;
 use iron::{Handler, IronError, IronResult, Request, Response};
 use postgres::Connection;
 
-pub struct File(pub db::file::Blob);
+pub(crate) struct File(pub(crate) db::file::Blob);
 
 impl File {
     /// Gets file from database

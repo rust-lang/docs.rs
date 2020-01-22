@@ -10,6 +10,7 @@ pub use self::web::Server;
 pub mod db;
 mod docbuilder;
 mod error;
+mod storage;
 #[cfg(test)]
 mod test;
 pub mod utils;
