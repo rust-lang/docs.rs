@@ -2,7 +2,7 @@
 (function() {
     var currentMenu;
     var backdrop = document.createElement("div");
-    backdrop.style = "display:none;position:fixed;width:100%;height:100%;z-index:1;background:rgba(50, 50, 50, 0.5)";
+    backdrop.style = "display:none;position:fixed;width:100%;height:100%;z-index:1";
     document.documentElement.insertBefore(backdrop, document.querySelector("body"));
     function previous(allItems, item) {
         var i = 1;
@@ -104,7 +104,7 @@
                         // it is not the same as GitHub, but GitHub allows you to tab yourself out
                         // of the menu without closing it (which is horrible behavior)
                         switchTo = e.shiftKey ? last(allItems) : allItems[0];
-                    } else if (e.shiftKey && currentItem === allItems[0]) {
+                    } else if (e.shiftKey && currentLink === allItems[0]) {
                         // if you tab your way out of the menu, close it
                         // this is neither what GitHub nor the WAI example do,
                         // but is a rationalization of GitHub's behavior: we don't want users who know how to
