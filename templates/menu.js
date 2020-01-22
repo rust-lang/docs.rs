@@ -28,6 +28,16 @@
         return allItems[allItems.length - 1];
     }
     function closeMenu() {
+        if (this === backdrop) {
+            var rustdoc = document.querySelector(".rustdoc");
+            if (rustdoc) {
+                rustdoc.focus();
+            } else {
+                document.documentElement.focus();
+            }
+        } else if (currentMenu.querySelector(".pure-menu-link:focus")) {
+            currentMenu.firstElementChild.focus();
+        }
         currentMenu.className = currentMenu.className.replace("pure-menu-active", "");
         currentMenu = null;
         backdrop.style.display = "none";
@@ -113,7 +123,6 @@
                         // but is a rationalization of GitHub's behavior: we don't want users who know how to
                         // use tab and enter, but don't know that they can close menus with Escape,
                         // to find themselves completely trapped in the menu
-                        currentMenu.firstElementChild.focus();
                         closeMenu();
                         e.preventDefault();
                         e.stopPropagation();
