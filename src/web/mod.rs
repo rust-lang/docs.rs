@@ -500,11 +500,19 @@ impl ToJson for MetaData {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
+    use crate::test::*;
+    use web::{match_version, MatchVersion};
+
+    fn release(version: &str, db: &TestDatabase) -> i32 {
+        db.fake_release().name("foo").version(version).create().unwrap()
+    }
+    fn version(v: Option<&str>, db: &TestDatabase) -> MatchVersion {
+        match_version(&db.conn(), "foo", v)
+    }
 
     #[test]
     fn test_index_returns_success() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let web = env.frontend();
             assert!(web.get("/").send()?.status().is_success());
             Ok(())
@@ -512,13 +520,12 @@ mod test {
     }
 
     #[test]
-    fn test_match_version() {
-        use web::{match_version, MatchVersion};
-
-        crate::test::wrapper(|env| {
+    // https://github.com/rust-lang/docs.rs/issues/223
+    fn prereleases_are_not_considered_for_semver() {
+        wrapper(|env| {
             let db = env.db();
-            let version = |v| match_version(&db.conn(), "foo", v);
-            let release = |v| db.fake_release().name("foo").version(v).create().unwrap();
+            let version = |v| version(v, db);
+            let release = |v| release(v, db);
 
             release("0.3.1-pre");
             assert_eq!(version(Some("*")), MatchVersion::Semver("0.3.1-pre".into()));
@@ -526,27 +533,54 @@ mod test {
             release("0.3.1-alpha");
             assert_eq!(version(Some("0.3.1-alpha")), MatchVersion::Exact("0.3.1-alpha".into()));
 
-            let release_id = release("0.3.0");
+            release("0.3.0");
             let three = MatchVersion::Semver("0.3.0".into());
-            assert_eq!(version(Some("*")), three);
-            // same thing but make sure None behaves like we think it does
             assert_eq!(version(None), three);
+            // same thing but with "*"
+            assert_eq!(version(Some("*")), three);
             // make sure exact matches still work
             assert_eq!(version(Some("0.3.0")), MatchVersion::Exact("0.3.0".into()));
 
-            // https://github.com/rust-lang/docs.rs/issues/395
+            Ok(())
+        });
+    }
+
+    #[test]
+    // https://github.com/rust-lang/docs.rs/issues/221
+    fn yanked_crates_are_not_considered() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
             db.conn().query(query, &[&release_id]).unwrap();
-            release("0.1.0+4.1");
-            assert_eq!(version(Some("0.1.0+4.1")), MatchVersion::Exact("0.1.0+4.1".into()));
-            assert_eq!(version(None), MatchVersion::Semver("0.1.0+4.1".into()));
-            release("0.1.1");
-            assert_eq!(version(None), MatchVersion::Semver("0.1.1".into()));
-            release("0.5.1+zstd.1.4.4");
-            assert_eq!(version(None), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
-            assert_eq!(version(Some("0.5.1+zstd.1.4.4")), MatchVersion::Exact("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(None, db), MatchVersion::None);
+            assert_eq!(version(Some("0.3"), db), MatchVersion::None);
+
+            release("0.1.0+4.1", db);
+            assert_eq!(version(Some("0.1.0+4.1"), db), MatchVersion::Exact("0.1.0+4.1".into()));
+            assert_eq!(version(None, db), MatchVersion::Semver("0.1.0+4.1".into()));
 
             Ok(())
-        })
+        });
+    }
+
+    #[test]
+    // vaguely related to https://github.com/rust-lang/docs.rs/issues/395
+    fn metadata_has_no_effect() {
+        wrapper(|env| {
+            let db = env.db();
+
+            release("0.1.0+4.1", db);
+            release("0.1.1", db);
+            assert_eq!(version(None, db), MatchVersion::Semver("0.1.1".into()));
+
+            release("0.5.1+zstd.1.4.4", db);
+            assert_eq!(version(None, db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(Some("0.5"), db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(Some("0.5.1+zstd.1.4.4"), db), MatchVersion::Exact("0.5.1+zstd.1.4.4".into()));
+
+            Ok(())
+        });
     }
 }
