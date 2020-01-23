@@ -449,13 +449,13 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 /// MetaData used in header
 #[derive(Debug)]
-struct MetaData {
+pub(crate) struct MetaData {
     name: String,
     version: String,
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
-    default_target: String,
+    pub default_target: String,
 }
 
 
