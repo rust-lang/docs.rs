@@ -533,6 +533,23 @@ mod test {
     }
 
     #[test]
+    fn binary_docs_redirect_to_crate() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("bat").version("0.2.0").binary(true)
+              .create().unwrap();
+            let web = env.frontend();
+            assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0", web)?;
+            assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu", "/crate/bat/0.2.0", web)?;
+            /* TODO: this should work
+            assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
+            assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
+            */
+            Ok(())
+        })
+    }
+
+    #[test]
     // https://github.com/rust-lang/docs.rs/issues/223
     fn prereleases_are_not_considered_for_semver() {
         wrapper(|env| {
