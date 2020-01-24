@@ -91,6 +91,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn source_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
+        self.source_files.push((path, data));
+        self
+    }
+
     pub(crate) fn default_target(mut self, target: &'a str) -> Self {
         self.default_target = Some(target);
         self
@@ -111,6 +116,8 @@ impl<'a> FakeRelease<'a> {
         use std::path::Path;
 
         let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
+        let package = self.package;
+        let db = self.db;
 
         let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
             let path_prefix = tempdir.path().join(prefix);
@@ -125,18 +132,29 @@ impl<'a> FakeRelease<'a> {
                 fs::write(file, data)?;
             }
 
-            let prefix = format!("{}/{}/{}", prefix, self.package.name, self.package.version);
-            crate::db::add_path_into_database(&self.db.conn(), &prefix, path_prefix)
+            let prefix = format!("{}/{}/{}", prefix, package.name, package.version);
+            crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
         };
 
-        let rustdoc_meta = upload_files("rustdoc", &self.rustdoc_files)?;
+        let index = [&package.name, "index.html"].join("/");
+        let mut rustdoc_files = self.rustdoc_files;
+        if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
+            rustdoc_files.push((&index, b"default index content"));
+        }
+        for (source_path, data) in &self.source_files {
+            if source_path.starts_with("src/") {
+                let updated = ["src", &package.name, &source_path[4..]].join("/");
+                rustdoc_files.push((Box::leak(Box::new(updated)), data));
+            }
+        }
+        let rustdoc_meta = upload_files("rustdoc", &rustdoc_files)?;
         log::debug!("added rustdoc files {}", rustdoc_meta);
         let source_meta = upload_files("source", &self.source_files)?;
         log::debug!("added source files {}", source_meta);
 
         let release_id = crate::db::add_package_into_database(
-            &self.db.conn(),
-            &self.package,
+            &db.conn(),
+            &package,
             tempdir.path(),
             &self.build_result,
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
@@ -146,7 +164,7 @@ impl<'a> FakeRelease<'a> {
             self.has_docs,
             self.has_examples,
         )?;
-        crate::db::add_build_into_database(&self.db.conn(), &release_id, &self.build_result)?;
+        crate::db::add_build_into_database(&db.conn(), &release_id, &self.build_result)?;
 
         Ok(release_id)
     }

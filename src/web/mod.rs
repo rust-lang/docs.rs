@@ -550,6 +550,20 @@ mod test {
     }
 
     #[test]
+    fn can_view_source() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("regex").version("0.3.0")
+              .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
+              .create().unwrap();
+            let web = env.frontend();
+            assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
+            assert_success("/regex/0.3.0/src/regex/main.rs", web)?;
+            Ok(())
+        })
+    }
+
+    #[test]
     // https://github.com/rust-lang/docs.rs/issues/223
     fn prereleases_are_not_considered_for_semver() {
         wrapper(|env| {
