@@ -43,7 +43,11 @@ pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFront
     let status = response.status();
 
     // Reqwest follows redirects automatically
-    let redirect_target = response.url().path();
+    let redirect_target = if expected_target.starts_with("https://") {
+        response.url().as_str()
+    } else {
+        response.url().path()
+    };
     if redirect_target != expected_target {
         if redirect_target != path {
             panic!("{}: expected redirect to {}, got redirect to {}",

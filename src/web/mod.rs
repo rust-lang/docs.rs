@@ -533,6 +533,20 @@ mod test {
     }
 
     #[test]
+    fn standard_library_redirects() {
+        wrapper(|env| {
+            let web = env.frontend();
+            for krate in &["std", "alloc", "core", "proc_macro", "test"] {
+                let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
+                // with or without slash
+                assert_redirect(&format!("/{}", krate), &target, web)?;
+                assert_redirect(&format!("/{}/", krate), &target, web)?;
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
             let db = env.db();
