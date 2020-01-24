@@ -41,13 +41,18 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
 pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<(), Error> {
     let response = web.get(path).send()?;
     let status = response.status();
-    // Reqwest follows redirects
-    assert!(status.is_success(), "failed to GET {}: {}", path, status);
 
+    // Reqwest follows redirects automatically
     let redirect_target = response.url().path();
-    assert!(redirect_target == expected_target,
-            "{}: expected redirect to {}, got redirect to {}",
-            path, expected_target, redirect_target);
+    if redirect_target != expected_target {
+        if redirect_target != path {
+            panic!("{}: expected redirect to {}, got redirect to {}",
+                   path, expected_target, redirect_target);
+        } else {
+            panic!("{}: expected redirect to {}, got {}", path, expected_target, status);
+        }
+    }
+    assert!(status.is_success(), "failed to GET {}: {}", expected_target, status);
     Ok(())
 }
 
