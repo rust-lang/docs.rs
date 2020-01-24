@@ -96,6 +96,16 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn binary(mut self, bin: bool) -> Self {
+        self.has_docs = !bin;
+        if bin {
+            for target in self.package.targets.iter_mut() {
+                target.crate_types = vec!["bin".into()];
+            }
+        }
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::fs;
         use std::path::Path;

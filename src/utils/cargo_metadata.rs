@@ -107,7 +107,10 @@ impl Package {
 #[derive(RustcDecodable)]
 pub(crate) struct Target {
     pub(crate) name: String,
+    #[cfg(not(test))]
     crate_types: Vec<String>,
+    #[cfg(test)]
+    pub(crate) crate_types: Vec<String>,
     pub(crate) src_path: Option<String>,
 }
 
