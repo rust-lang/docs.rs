@@ -65,6 +65,10 @@
         if (currentMenu) {
             if (e.target.className.indexOf("pure-menu-link") !== -1) {
                 e.target.focus();
+                if (e.target.parentNode.className.indexOf("pure-menu-has-children") !== -1 && e.target.parentNode !== currentMenu) {
+                  closeMenu();
+                  openMenu(e.target.parentNode);
+                }
             }
         }
     }
@@ -144,6 +148,7 @@
                     }, 100);
                     break;
                 case "home":
+                case "pageup":
                     // home: focus first menu item.
                     // This is the behavior of WAI, while GitHub scrolls,
                     // but it's unlikely that a user will try to scroll the page while the menu is open,
@@ -151,6 +156,7 @@
                     switchTo = allItems[0];
                     break;
                 case "end":
+                case "pagedown":
                     // end: focus last menu item.
                     // This is the behavior of WAI, while GitHub scrolls,
                     // but it's unlikely that a user will try to scroll the page while the menu is open,
