@@ -437,6 +437,18 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
+        use html5ever::tendril::TendrilSink;
+        let data = web.get(path).send()?.text()?;
+        let dom = kuchiki::parse_html().one(data);
+        for elems in dom.select("form ul li a.warn") {
+            for elem in elems {
+                let warning = elem.as_node().as_element().unwrap();
+                return Ok(warning.attributes.borrow().get("href").unwrap().to_string());
+            }
+        }
+        Ok(String::new())
+    }
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
     fn settings_html() {
@@ -508,5 +520,16 @@ mod test {
             assert_redirect("/dummy/0.3.0/index.html",base, web)?;
             Ok(())
         });
+    }
+    #[test]
+    fn go_to_latest_version() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("dummy").version("0.1.0").create()?;
+            db.fake_release().name("dummy").version("0.2.0").create()?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &env.frontend())?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+            Ok(())
+        })
     }
 }

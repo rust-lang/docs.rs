@@ -54,6 +54,7 @@ features = [ "with-time", "with-rustc-serialize" ]
 
 [dev-dependencies]
 once_cell = "1.2.0"
+kuchiki = "0.7"
 
 [build-dependencies]
 time = "0.1"
