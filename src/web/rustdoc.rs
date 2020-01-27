@@ -439,15 +439,18 @@ mod test {
     use crate::test::*;
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
         use html5ever::tendril::TendrilSink;
+        assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         let dom = kuchiki::parse_html().one(data);
         for elems in dom.select("form ul li a.warn") {
             for elem in elems {
                 let warning = elem.as_node().as_element().unwrap();
-                return Ok(warning.attributes.borrow().get("href").unwrap().to_string());
+                let link = warning.attributes.borrow().get("href").unwrap().to_string();
+                assert_success(&link, web)?;
+                return Ok(link);
             }
         }
-        Ok(String::new())
+        panic!("no redirect found for {}", path);
     }
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
@@ -525,10 +528,31 @@ mod test {
     fn go_to_latest_version() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("dummy").version("0.1.0").create()?;
-            db.fake_release().name("dummy").version("0.2.0").create()?;
+            db.fake_release().name("dummy").version("0.1.0")
+              .rustdoc_file("dummy/blah/index.html", b"lah")
+              .rustdoc_file("dummy/blah/blah.html", b"lah")
+              .rustdoc_file("dummy/struct.will-be-deleted.html", b"lah")
+              .create()?;
+            db.fake_release().name("dummy").version("0.2.0")
+              .rustdoc_file("dummy/blah/index.html", b"lah")
+              .rustdoc_file("dummy/blah/blah.html", b"lah")
+              .create()?;
+
+            // check it works at all
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &env.frontend())?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+
+            // check it keeps the subpage
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", &env.frontend())?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/index.html");
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &env.frontend())?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/blah.html");
+
+            // check it searches for removed pages
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &env.frontend())?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/?search=will-be-deleted");
+
+            // TODO: check it keeps the platform
             Ok(())
         })
     }
