@@ -111,6 +111,13 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn platform<S: Into<String>>(mut self, platform: S) -> Self {
+        let name = self.package.targets[0].name.clone();
+        let target = Target::dummy_lib(name, Some(platform.into()));
+        self.package.targets.push(target);
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::fs;
         use std::path::Path;
@@ -119,8 +126,11 @@ impl<'a> FakeRelease<'a> {
         let package = self.package;
         let db = self.db;
 
-        let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
-            let path_prefix = tempdir.path().join(prefix);
+        let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
+            let mut path_prefix = tempdir.path().join(prefix);
+            if let Some(target) = target {
+                path_prefix.push(target);
+            }
             fs::create_dir(&path_prefix)?;
 
             for (path, data) in files {
@@ -129,10 +139,12 @@ impl<'a> FakeRelease<'a> {
                     fs::create_dir_all(path_prefix.join(parent))?;
                 }
                 let file = path_prefix.join(&path);
+                log::debug!("writing file {}", file.display());
                 fs::write(file, data)?;
             }
 
-            let prefix = format!("{}/{}/{}", prefix, package.name, package.version);
+            let prefix = format!("{}/{}/{}/{}", prefix, package.name, package.version, target.unwrap_or(""));
+            log::debug!("adding directory {} from {}", prefix, path_prefix.display());
             crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
         };
 
@@ -147,10 +159,16 @@ impl<'a> FakeRelease<'a> {
                 rustdoc_files.push((Box::leak(Box::new(updated)), data));
             }
         }
-        let rustdoc_meta = upload_files("rustdoc", &rustdoc_files)?;
+        let rustdoc_meta = upload_files("rustdoc", &rustdoc_files, None)?;
         log::debug!("added rustdoc files {}", rustdoc_meta);
-        let source_meta = upload_files("source", &self.source_files)?;
+        let source_meta = upload_files("source", &self.source_files, None)?;
         log::debug!("added source files {}", source_meta);
+
+        for target in &package.targets[1..] {
+            let platform = target.src_path.as_ref().unwrap();
+            upload_files("rustdoc", &rustdoc_files, Some(platform))?;
+            log::debug!("added platform files for {}", platform);
+        }
 
         let release_id = crate::db::add_package_into_database(
             &db.conn(),

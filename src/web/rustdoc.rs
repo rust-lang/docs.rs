@@ -552,7 +552,29 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &env.frontend())?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/?search=will-be-deleted");
 
-            // TODO: check it keeps the platform
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn go_to_latest_version_keeps_platform() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("dummy").version("0.1.0")
+              .platform("x86_64-pc-windows-msvc")
+              .create().unwrap();
+            db.fake_release().name("dummy").version("0.2.0")
+              .platform("x86_64-pc-windows-msvc")
+              .create().unwrap();
+
+            let web = env.frontend();
+            /* TODO: this should work even without a trailing slash
+            let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
+            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy");
+            */
+            let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
+            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
+
             Ok(())
         })
     }
