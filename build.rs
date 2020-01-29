@@ -52,13 +52,7 @@ fn compile_sass() {
 }
 
 fn copy_js() {
-    use std::io::Read;
-    let mut javascript = String::new();
     let source_path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/menu.js"));
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("menu.js");
-    File::open(&source_path)
-        .expect("open templates/menu.js")
-        .read_to_string(&mut javascript)
-        .expect("read templates/menu.js");
     fs::copy(&source_path, &dest_path).expect("copy template/menu.js to target");
 }
