@@ -5,7 +5,7 @@ extern crate git2;
 
 use std::env;
 use std::path::Path;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
 use git2::Repository;
 
@@ -60,8 +60,5 @@ fn copy_js() {
         .expect("open templates/menu.js")
         .read_to_string(&mut javascript)
         .expect("read templates/menu.js");
-    File::create(&dest_path)
-        .expect("create target/.../menu.js")
-        .write_all(javascript.as_bytes())
-        .expect("write target/.../menu.js");
+    fs::copy(&source_path, &dest_path).expect("copy template/menu.js to target");
 }
