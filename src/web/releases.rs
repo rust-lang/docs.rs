@@ -274,7 +274,7 @@ fn get_search_results(conn: &Connection,
                                  INNER JOIN releases ON crates.latest_version_id = releases.id
                                  WHERE crates.name LIKE concat('%', $1, '%')
                                     OR crates.content @@ to_tsquery($1)
-                                 ORDER BY crates.name = $1 DESC,
+                                 ORDER BY crates.name DESC,
                                     crates.name LIKE concat('%', $1, '%') DESC,
                                     rank DESC
                                  LIMIT $2 OFFSET $3",
