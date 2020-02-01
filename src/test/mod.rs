@@ -43,10 +43,16 @@ pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFront
     let response = web.get(path).send()?;
     let status = response.status();
 
+    let mut tmp;
     let redirect_target = if expected_target.starts_with("https://") {
         response.url().as_str()
     } else {
-        response.url().path()
+        tmp = String::from(response.url().path());
+        if let Some(query) = response.url().query() {
+            tmp.push('?');
+            tmp.push_str(query);
+        }
+        &tmp
     };
     // Either we followed a redirect to the wrong place, or there was no redirect
     if redirect_target != expected_target {

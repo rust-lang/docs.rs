@@ -543,19 +543,22 @@ mod test {
               .rustdoc_file("dummy/blah/blah.html", b"lah")
               .create()?;
 
+            let web = env.frontend();
+
             // check it works at all
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &env.frontend())?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &web)?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
 
             // check it keeps the subpage
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", &env.frontend())?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", &web)?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/index.html");
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &env.frontend())?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &web)?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/blah.html");
 
             // check it searches for removed pages
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &env.frontend())?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/?search=will-be-deleted");
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy?search=will-be-deleted");
+            assert_redirect("/dummy/0.2.0/dummy?search=will-be-deleted", "/dummy/0.2.0/dummy/?search=will-be-deleted", &web).unwrap();
 
             Ok(())
         })
@@ -579,6 +582,23 @@ mod test {
 
             let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
             assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
+
+            Ok(())
+        })
+    }
+    #[test]
+    fn redirect_latest_goes_to_crate_if_build_failed() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("dummy").version("0.1.0")
+              .rustdoc_file("dummy/index.html", b"lah")
+              .create().unwrap();
+            db.fake_release().name("dummy").version("0.2.0")
+              .build_result_successful(false).create().unwrap();
+
+            let web = env.frontend();
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            assert_eq!(redirect, "/crate/dummy/0.2.0");
 
             Ok(())
         })
