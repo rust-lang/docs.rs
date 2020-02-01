@@ -44,12 +44,10 @@ impl DocBuilder {
         let path = PathBuf::from(&self.options.prefix).join("cache");
         let reader = fs::File::open(path).map(|f| BufReader::new(f));
 
-        if reader.is_err() {
-            return Ok(());
-        }
-
-        for line in reader.unwrap().lines() {
-            self.cache.insert(line?);
+        if let Ok(reader) = reader {
+            for line in reader.lines() {
+                self.cache.insert(line?);
+            }
         }
 
         self.load_database_cache()?;

@@ -241,7 +241,7 @@ pub fn start_daemon(background: bool) {
 
     // at least start web server
     info!("Starting web server");
-    ::start_web_server(None);
+    ::Server::start(None);
 }
 
 

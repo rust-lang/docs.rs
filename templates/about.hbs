@@ -89,6 +89,10 @@
         <td><a href="https://docs.rs/clap/2.9.3">docs.rs/clap/2.9.3</a></td>
         <td>2.9.3 version (you don't need <code>=</code> unlike semver)</td>
       </tr>
+      <tr>
+        <td><a href="https://docs.rs/clap/*/clap/struct.App.html">docs.rs/clap/*/clap/struct.App.html</a></td>
+        <td>Latest version of this page (if it still exists). "latest" or "newest" work as well as <code>*</code>.</td>
+      </tr>
     </tbody>
   </table>
 
@@ -127,21 +131,41 @@
     </tbody>
   </table>
 
-  <h4>Metadata for custom builds</h4>
+  <h4 id="metadata"><a href="#metadata">Metadata for custom builds</a></h4>
 
   <p>You can customize docs.rs builds by defining <code>[package.metadata.docs.rs]</code> table in your crates' `Cargo.toml`.</p>
 
-  <p>An example metadata:</p>
+  <p>The available configuration flags you can customize are:</p>
 
   <pre><code>[package]
 name = "test"
 
 [package.metadata.docs.rs]
+
+# Features to pass to Cargo (default: none)
 features = [ "feature1", "feature2" ]
+
+# Whether to pass `--all-features` to Cargo (default: false)
 all-features = true
+
+# Whether to pass `--no-default-features` to Cargo (default: false)
 no-default-features = true
+
+# Target to test build on, used as the default landing page (default: "x86_64-unknown-linux-gnu")
+#
+# Available targets:
+# - x86_64-unknown-linux-gnu
+# - x86_64-apple-darwin
+# - x86_64-pc-windows-msvc
+# - i686-unknown-linux-gnu
+# - i686-apple-darwin
+# - i686-pc-windows-msvc
 default-target = "x86_64-unknown-linux-gnu"
+
+# Additional `RUSTFLAGS` to set (default: none)
 rustc-args = [ "--example-rustc-arg" ]
+
+# Additional `RUSTDOCFLAGS` to set (default: none)
 rustdoc-args = [ "--example-rustdoc-arg" ]</pre></code>
 
   <h4>Version</h4>
@@ -149,8 +173,8 @@ rustdoc-args = [ "--example-rustdoc-arg" ]</pre></code>
 
   <h4>Contact</h4>
   <p>
-    Docs.rs is run and maintained by <a href="https://www.rust-lang.org/governance/teams/dev-tools#rustdoc" target="_blank">Rustdoc team</a>.
-    You can find us in #docs-rs on <a href="https://discord.gg/rust-lang" target="_blank">Discord</a>.
+    Docs.rs is run and maintained by the <a href="https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" target="_blank">Docs.rs team</a>.
+    You can find us in #docs-rs on <a href="https://discordapp.com/invite/f7mTXPW/" target="_blank">Discord</a>.
   </p>
 
 </div>

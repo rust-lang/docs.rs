@@ -43,7 +43,7 @@ lazy_static! {
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
 
     QUEUED_CRATES_COUNT.set(
         ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))

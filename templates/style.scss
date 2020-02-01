@@ -184,6 +184,7 @@ div.nav-container {
             background-color: #fff;
             height: 31px;
             display: none;
+            box-shadow: 0px 0px 2px #000;
 
             @media #{$media-sm} {
                 display: block;
@@ -521,6 +522,11 @@ div.package-page-container {
             background-color: $color-background-code;
         }
 
+        // used for versions that failed to build
+        a.warn {
+            color: $color-type;
+        }
+
         div.sub-menu {
             max-height: 135px;
             overflow-y: auto;
@@ -706,10 +712,10 @@ div.cratesfyi-package-container-rustdoc {
     margin-bottom: 10px;
 }
 
-div.warning {
+div.info {
     font-family: $font-family-sans;
     border-radius: 4px;
-    background-color: lighten($color-type, 45%);
+    background-color: $color-background-code;
     padding: .4em 1em;
     text-align: center;
     margin-bottom: 10px;
@@ -718,6 +724,11 @@ div.warning {
         color: $color-url;
         text-decoration: underline;
     }
+}
+
+div.warning {
+    @extend div.info;
+    background-color: lighten($color-type, 45%);
 }
 
 div.search-page-search-form {

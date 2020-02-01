@@ -42,8 +42,14 @@
           <li class="pure-menu-item">
             <div class="pure-menu pure-menu-scrollable sub-menu">
               <ul class="pure-menu-list">
-                {{#each versions}}
-                <li class="pure-menu-item"><a href="/crate/{{../name}}/{{this}}" class="pure-menu-link">{{this}}</a></li>
+                {{#each releases}}
+                <li class="pure-menu-item">
+                  {{#if this.build_status}}
+                  <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
+                  {{else}}
+                  <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="docs.rs failed to build {{../name}}-{{this.version}}"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                  {{/if}}
+                </li>
                 {{/each}}
               </ul>
             </div>
@@ -63,6 +69,9 @@
       {{else}}
       {{#unless build_status}}
       <div class="warning">docs.rs failed to build {{name}}-{{version}}<br>Please check the <a href="/crate/{{name}}/{{version}}/builds">build logs</a> and, if you believe this is docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.</div>
+      {{#if last_successful_build}}
+      <div class="info">Visit the last successful build: <a href="/crate/{{name}}/{{last_successful_build}}">{{name}}-{{last_successful_build}}</a></div>
+      {{/if}}
       {{else}}
       {{#unless rustdoc_status}}
       <div class="warning">{{name}}-{{version}} doesn't have any documentation.</div>

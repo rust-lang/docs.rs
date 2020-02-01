@@ -3,6 +3,9 @@
 on: [push, pull_request]
 name: CI
 
+env:
+  RUST_BACKTRACE: 1
+
 jobs:
   test:
     name: Test
@@ -16,8 +19,22 @@ jobs:
       - name: Install stable Rust
         run: rustup update stable && rustup default stable
 
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postgresql
+          sudo systemctl start postgresql
+          sudo -u postgres createuser $(whoami) -w
+          sudo -u postgres createdb $(whoami) -O $(whoami)
+          echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
+
       - name: Build docs.rs
         run: cargo build
+
+      - name: Prepare the test environment
+        run: |
+          prefix=$(pwd)/ignored/prefix
+          mkdir -p ${prefix}/public-html
+          echo "::set-env name=CRATESFYI_PREFIX::${prefix}"
 
       - name: Test docs.rs
         run: cargo test -- --test-threads=1

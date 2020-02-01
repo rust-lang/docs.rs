@@ -312,8 +312,8 @@ fn get_search_results(conn: &Connection,
 
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
     Page::new(packages)
         .set_true("show_search_form")
         .set_true("hide_package_navigation")
@@ -322,8 +322,8 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
     let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
     resp.headers.set(::iron::headers::ContentType("application/atom+xml".parse().unwrap()));
     Ok(resp)
@@ -361,32 +361,32 @@ pub fn releases_handler(packages: Vec<Release>,
 // Following functions caused a code repeat due to design of our /releases/ URL routes
 pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
     releases_handler(packages, page_number, "recent", "releases_navigation_recent_tab", "Recently uploaded crates")
 }
 
 
 pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
     releases_handler(packages, page_number, "stars", "releases_navigation_stars_tab", "Crates with most stars")
 }
 
 
 pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::RecentFailures);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::RecentFailures);
     releases_handler(packages, page_number, "recent-failures", "releases_navigation_recent_failures_tab", "Recent crates failed to build")
 }
 
 
 pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router).find("page").unwrap_or("1").parse().unwrap_or(1);
-    let conn = extension!(req, Pool);
-    let packages = get_releases(conn, page_number, RELEASES_IN_RELEASES, Order::FailuresByGithubStars);
+    let conn = extension!(req, Pool).get();
+    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::FailuresByGithubStars);
     releases_handler(packages, page_number, "failures", "releases_navigation_failures_by_stars_tab", "Crates with most stars failed to build")
 }
 
@@ -396,18 +396,18 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
     let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let author = ctry!(router.find("author")
         .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
     let (author_name, packages) = if author.starts_with("@") {
         let mut author = author.clone().split("@");
-        get_releases_by_owner(conn,
+        get_releases_by_owner(&conn,
                               page_number,
                               RELEASES_IN_RELEASES,
                               cexpect!(author.nth(1)))
     } else {
-        get_releases_by_author(conn, page_number, RELEASES_IN_RELEASES, author)
+        get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
     };
 
     if packages.is_empty() {
@@ -439,7 +439,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let params = ctry!(req.get::<Params>());
     let query = params.find(&["query"]);
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     if let Some(&Value::String(ref query)) = query {
 
         // check if I am feeling lucky button pressed and redirect user to crate page
@@ -537,7 +537,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let release_activity_data: Json =
         ctry!(conn.query("SELECT value FROM config WHERE name = 'release_activity'",
                          &[]))
@@ -554,7 +554,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let mut crates: Vec<(String, String, i32)> = Vec::new();
     for krate in &conn.query("SELECT name, version, priority
                               FROM queue

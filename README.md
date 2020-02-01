@@ -17,16 +17,13 @@ If a crate doesn't have this field, no README will be displayed.
 Docs.rs is using semver to parse URLs. You can use this feature to access
 crates' documentation easily. Example of URL redirections for `clap` crate:
 
-| URL                          | Redirects to documentation of                  |
-|------------------------------|------------------------------------------------|
-| <https://docs.rs/clap>       | Latest version of clap                         |
-| <https://docs.rs/clap/~2>    | 2.* version                                    |
-| <https://docs.rs/clap/~2.9>  | 2.9.* version                                  |
-| <https://docs.rs/clap/2.9.3> | 2.9.3 version (you don't need = unlike semver) |
-
-The crates.fyi domain will redirect to docs.rs, supporting all of the
-redirects discussed above
-
+| URL                                           | Redirects to documentation of                    |
+|-----------------------------------------------|--------------------------------------------------|
+| <https://docs.rs/clap>                        | Latest version of clap                           |
+| <https://docs.rs/clap/~2>                     | 2.* version                                      |
+| <https://docs.rs/clap/~2.9>                   | 2.9.* version                                    |
+| <https://docs.rs/clap/2.9.3>                  | 2.9.3 version (you don't need = unlike semver)   |
+| <https://docs.rs/clap/*/clap/struct.App.html> | Latest version of this page (if it still exists).|
 
 ### Badges
 
@@ -80,6 +77,23 @@ If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
+### Running tests
+
+Tests are run outside of the docker-compose environment, and can be run with:
+
+```
+cargo test
+```
+
+Some tests require access to the database. To run them, set the
+`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. You don't have to
+run the migrations on it or ensure it's empty, as all the tests use temporary
+tables to prevent conflicts with each other or existing data. See the [wiki
+page on developing outside docker-compose][wiki-no-compose] for more
+information on how to setup this environment.
+
+[wiki-no-compose]: https://github.com/rust-lang/docs.rs/wiki/Developing-without-docker-compose
+
 ### Docker-Compose
 
 #### Rebuilding Containers
@@ -125,7 +139,6 @@ docker-compose run web build world
 docker-compose run -v "$(realpath <SOURCE>)":/build web build crate --local /build
 ```
 
-
 #### `database` subcommand
 
 ```sh
@@ -148,6 +161,19 @@ docker-compose run -d db
 docker exec -it <the container name goes here> psql -U cratesfyi
 ```
 
+The database contains a blacklist of crates that should not be built.
+
+```sh
+# List the crates on the blacklist
+docker-compose run web database blacklist list
+
+# Adds <CRATE_NAME> to the blacklist
+docker-compose run web database blacklist add <CRATE_NAME>
+
+# Removes <CRATE_NAME> from the blacklist
+docker-compose run web database blacklist remove <CRATE_NAME>
+```
+
 #### `daemon` subcommand
 
 ```sh
@@ -156,6 +182,11 @@ docker exec -it <the container name goes here> psql -U cratesfyi
 # if you have enough resources!
 docker-compose run -p 3000:3000 web daemon --foreground
 ```
+
+### Changing the build environment
+
+To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
+and test that it works on docs.rs, see [the wiki](https://github.com/rust-lang/docs.rs/wiki/Making-changes-to-the-build-environment).
 
 ### Contact
 

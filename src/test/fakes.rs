@@ -1,0 +1,143 @@
+use super::TestDatabase;
+use crate::db::CratesIoData;
+use crate::docbuilder::BuildResult;
+use crate::utils::{Dependency, MetadataPackage, Target};
+use failure::Error;
+
+#[must_use = "FakeRelease does nothing until you call .create()"]
+pub(crate) struct FakeRelease<'a> {
+    db: &'a TestDatabase,
+    package: MetadataPackage,
+    build_result: BuildResult,
+    /// name, content
+    source_files: Vec<(&'a str, &'a [u8])>,
+    /// name, content
+    rustdoc_files: Vec<(&'a str, &'a [u8])>,
+    doc_targets: Vec<String>,
+    default_target: Option<&'a str>,
+    cratesio_data: CratesIoData,
+    has_docs: bool,
+    has_examples: bool,
+}
+
+impl<'a> FakeRelease<'a> {
+    pub(super) fn new(db: &'a TestDatabase) -> Self {
+        FakeRelease {
+            db,
+            package: MetadataPackage {
+                id: "fake-package-id".into(),
+                name: "fake-package".into(),
+                version: "1.0.0".into(),
+                license: Some("MIT".into()),
+                repository: Some("https://git.example.com".into()),
+                homepage: Some("https://www.example.com".into()),
+                description: Some("Fake package".into()),
+                documentation: Some("https://docs.example.com".into()),
+                dependencies: vec![Dependency {
+                    name: "fake-dependency".into(),
+                    req: "^1.0.0".into(),
+                    kind: None,
+                }],
+                targets: vec![Target::dummy_lib("fake_package".into(), None)],
+                readme: None,
+                keywords: vec!["fake".into(), "package".into()],
+                authors: vec!["Fake Person <fake@example.com>".into()],
+            },
+            build_result: BuildResult {
+                rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
+                docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
+                build_log: "It works!".into(),
+                successful: true,
+            },
+            source_files: Vec::new(),
+            rustdoc_files: Vec::new(),
+            doc_targets: Vec::new(),
+            default_target: None,
+            cratesio_data: CratesIoData {
+                release_time: time::get_time(),
+                yanked: false,
+                downloads: 0,
+                owners: Vec::new(),
+            },
+            has_docs: true,
+            has_examples: false,
+        }
+    }
+
+    pub(crate) fn name(mut self, new: &str) -> Self {
+        self.package.name = new.into();
+        self.package.id = format!("{}-id", new);
+        self.package.targets[0].name = new.into();
+        self
+    }
+
+    pub(crate) fn version(mut self, new: &str) -> Self {
+        self.package.version = new.into();
+        self
+    }
+
+    pub(crate) fn build_result_successful(mut self, new: bool) -> Self {
+        self.build_result.successful = new;
+        self
+    }
+
+    pub(crate) fn cratesio_data_yanked(mut self, new: bool) -> Self {
+        self.cratesio_data.yanked = new;
+        self
+    }
+
+    pub(crate) fn rustdoc_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
+        self.rustdoc_files.push((path, data));
+        self
+    }
+
+    pub(crate) fn default_target(mut self, target: &'a str) -> Self {
+        self.default_target = Some(target);
+        self
+    }
+
+    pub(crate) fn create(self) -> Result<i32, Error> {
+        use std::fs;
+        use std::path::Path;
+
+        let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
+
+        let upload_files = |prefix: &str, files: &[(&str, &[u8])]| {
+            let path_prefix = tempdir.path().join(prefix);
+            fs::create_dir(&path_prefix)?;
+
+            for (path, data) in files {
+                // allow `src/main.rs`
+                if let Some(parent) = Path::new(path).parent() {
+                    fs::create_dir_all(path_prefix.join(parent))?;
+                }
+                let file = path_prefix.join(&path);
+                fs::write(file, data)?;
+            }
+
+            let prefix = format!("{}/{}/{}", prefix, self.package.name, self.package.version);
+            crate::db::add_path_into_database(&self.db.conn(), &prefix, path_prefix)
+        };
+
+        let rustdoc_meta = upload_files("rustdoc", &self.rustdoc_files)?;
+        log::debug!("added rustdoc files {}", rustdoc_meta);
+        let source_meta = upload_files("source", &self.source_files)?;
+        log::debug!("added source files {}", source_meta);
+
+        let release_id = crate::db::add_package_into_database(
+            &self.db.conn(),
+            &self.package,
+            tempdir.path(),
+            &self.build_result,
+            self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
+            Some(source_meta),
+            self.doc_targets,
+            &self.cratesio_data,
+            self.has_docs,
+            self.has_examples,
+        )?;
+        crate::db::add_build_into_database(&self.db.conn(), &release_id, &self.build_result)?;
+
+        Ok(release_id)
+    }
+}

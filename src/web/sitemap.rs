@@ -7,7 +7,7 @@ use super::pool::Pool;
 use time;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let mut releases: Vec<(String, String)> = Vec::new();
     for row in &conn.query("SELECT DISTINCT ON (crates.name)
                                    crates.name,
@@ -34,7 +34,7 @@ pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let mut content = BTreeMap::new();
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
     let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
 
     if let Some(row) = res.iter().next() {

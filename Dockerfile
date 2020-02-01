@@ -47,6 +47,7 @@ RUN touch build.rs
 COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style.scss templates/
+COPY templates/menu.js templates/
 
 RUN cargo build --release
 

@@ -41,18 +41,22 @@ extern crate tokio;
 extern crate systemstat;
 extern crate rustwide;
 extern crate tempdir;
+#[cfg(test)]
+extern crate once_cell;
 
 pub use self::docbuilder::RustwideBuilder;
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::metadata::Metadata;
-pub use self::web::start_web_server;
+pub use self::web::Server;
 
 pub mod error;
 pub mod db;
 pub mod utils;
 mod docbuilder;
 mod web;
+#[cfg(test)]
+mod test;
 
 use web::page::GlobalAlert;
 

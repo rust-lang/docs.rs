@@ -82,10 +82,7 @@ impl Package {
     fn library_target(&self) -> Option<&Target> {
         self.targets
             .iter()
-            .find(|target| match target.kind.as_slice() {
-                [kind] if kind == "lib" || kind == "proc-macro" => true,
-                _ => false,
-            })
+            .find(|target| target.crate_types.iter().any(|kind| kind != "bin"))
     }
 
     pub(crate) fn is_library(&self) -> bool {
@@ -110,8 +107,19 @@ impl Package {
 #[derive(RustcDecodable)]
 pub(crate) struct Target {
     pub(crate) name: String,
-    pub(crate) kind: Vec<String>,
+    crate_types: Vec<String>,
     pub(crate) src_path: Option<String>,
+}
+
+impl Target {
+    #[cfg(test)]
+    pub(crate) fn dummy_lib(name: String, src_path: Option<String>) -> Self {
+        Target {
+            name,
+            crate_types: vec!["lib".into()],
+            src_path,
+        }
+    }
 }
 
 #[derive(RustcDecodable)]

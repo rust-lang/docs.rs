@@ -5,7 +5,7 @@ extern crate git2;
 
 use std::env;
 use std::path::Path;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
 use git2::Repository;
 
@@ -13,6 +13,7 @@ use git2::Repository;
 fn main() {
     write_git_version();
     compile_sass();
+    copy_js();
 }
 
 
@@ -48,4 +49,10 @@ fn compile_sass() {
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("style.css");
     let mut file = File::create(&dest_path).unwrap();
     file.write_all(css.as_bytes()).unwrap();
+}
+
+fn copy_js() {
+    let source_path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/menu.js"));
+    let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("menu.js");
+    fs::copy(&source_path, &dest_path).expect("copy template/menu.js to target");
 }

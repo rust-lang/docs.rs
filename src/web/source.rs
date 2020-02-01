@@ -93,7 +93,8 @@ impl FileList {
                                       releases.description,
                                       releases.target_name,
                                       releases.rustdoc_status,
-                                      releases.files
+                                      releases.files,
+                                      releases.default_target
                                FROM releases
                                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
@@ -104,7 +105,7 @@ impl FileList {
             return None;
         }
 
-        let files: Json = rows.get(0).get(5);
+        let files: Json = rows.get(0).get_opt(5).unwrap().ok()?;
 
         let mut file_list: Vec<File> = Vec::new();
 
@@ -173,6 +174,7 @@ impl FileList {
                 description: rows.get(0).get(2),
                 target_name: rows.get(0).get(3),
                 rustdoc_status: rows.get(0).get(4),
+                default_target: rows.get(0).get(6),
             },
             files: file_list,
         })
@@ -209,7 +211,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
 
     // try to get actual file first
     // skip if request is a directory
@@ -234,6 +236,11 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
+    if list.is_none() {
+        use iron::status;
+        use super::error::Nope;
+        return Err(IronError::new(Nope::NoResults, status::NotFound));
+    }
 
     let page = Page::new(list)
         .set_bool("show_parent_link", !req_path.is_empty())

@@ -3,7 +3,7 @@
 
 use super::pool::Pool;
 use super::file::File;
-use super::{latest_version, redirect_base};
+use super::redirect_base;
 use super::crate_details::CrateDetails;
 use iron::prelude::*;
 use iron::{status, Url};
@@ -66,6 +66,7 @@ impl ToJson for RustdocPage {
     }
 }
 
+#[derive(Clone)]
 pub struct RustLangRedirector {
     url: Url,
 }
@@ -135,7 +136,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         } else {
             let path = req.url.path();
             let path = path.join("/");
-            let conn = extension!(req, Pool);
+            let conn = extension!(req, Pool).get();
             match File::from_path(&conn, &path) {
                 Some(f) => return Ok(f.serve()),
                 None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
@@ -152,7 +153,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let crate_name = cexpect!(router.find("crate"));
     let req_version = router.find("version");
 
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
@@ -191,7 +192,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let name = router.find("crate").unwrap_or("").to_string();
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
+    let base = redirect_base(req);
 
     let mut req_path = req.url.path();
 
@@ -207,7 +209,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
             let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
-                                                redirect_base(req),
+                                                base,
                                                 name,
                                                 v,
                                                 req_path.join("/"))[..]));
@@ -222,6 +224,19 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // add crate name and version
     req_path.insert(1, &name);
     req_path.insert(2, &version);
+
+    // if visiting the full path to the default target, remove the target from the path
+    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    if req_path[3] == crate_details.metadata.default_target {
+        let path = [
+            base,
+            req_path[1..3].join("/"),
+            req_path[4..].join("/")
+        ].join("/");
+        let canonical = Url::parse(&path).expect("got an invalid URL to start");
+        return Ok(super::redirect(canonical));
+    }
 
     let path = {
         let mut path = req_path.join("/");
@@ -260,10 +275,13 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     content.body_class = body_class;
 
     content.full = file_content;
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
-    let (path, version) = if let Some(version) = latest_version(&crate_details.versions, &version) {
-        req_path[2] = &version;
-        (path_for_version(&req_path, &crate_details.target_name, &conn), version)
+
+    let latest_version = crate_details.latest_version().to_owned();
+    let is_latest_version = latest_version == version;
+
+    let path = if !is_latest_version {
+        req_path[2] = &latest_version;
+        path_for_version(&req_path, &crate_details.target_name, &conn)
     } else {
         Default::default()
     };
@@ -274,9 +292,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
-        .set_bool("is_latest_version", path.is_empty())
+        .set_bool("is_latest_version", is_latest_version)
         .set("path_in_latest", &path)
-        .set("latest_version", &version)
+        .set("latest_version", &latest_version)
         .to_resp("rustdoc")
 }
 
@@ -306,8 +324,12 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
             .expect("paths should be of the form <kind>.<name>.html")
     };
     // check if req_path[3] is the platform choice or the name of the crate
+    // rustdoc generates a ../settings.html page, so if req_path[3] is not
+    // the target, that doesn't necessarily mean it's a platform.
+    // we also can't check if it's in TARGETS, since some targets have been
+    // removed (looking at you, i686-apple-darwin)
     let concat_path;
-    let crate_root = if req_path[3] != target_name {
+    let crate_root = if req_path[3] != target_name && req_path.len() >= 5 {
         concat_path = format!("{}/{}", req_path[3], req_path[4]);
         &concat_path
     } else {
@@ -330,7 +352,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let name = cexpect!(extension!(req, Router).find("crate"));
-    let conn = extension!(req, Pool);
+    let conn = extension!(req, Pool).get();
 
     let options = match match_version(&conn, &name, Some(&version)) {
         MatchVersion::Exact(version) => {
@@ -392,14 +414,81 @@ impl Handler for SharedResourceHandler {
         let filename = path.last().unwrap();  // unwrap is fine: vector is non-empty
         let suffix = filename.split('.').last().unwrap();  // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
-            let conn = extension!(req, Pool);
+            let conn = extension!(req, Pool).get();
 
-            if let Some(file) = File::from_path(conn, filename) {
+            if let Some(file) = File::from_path(&conn, filename) {
                 return Ok(file.serve());
             }
         }
 
         // Just always return a 404 here - the main handler will then try the other handlers
         Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::test::*;
+    #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/issues/552
+    fn settings_html() {
+        wrapper(|env| {
+            let db = env.db();
+            // first release works, second fails
+            db.fake_release()
+              .name("buggy").version("0.1.0")
+              .build_result_successful(true)
+              .rustdoc_file("settings.html", b"some data")
+              .rustdoc_file("all.html", b"some data 2")
+              .create()?;
+            db.fake_release()
+              .name("buggy").version("0.2.0")
+              .build_result_successful(false)
+              .create()?;
+            let web = env.frontend();
+            assert_success("/", web)?;
+            assert_success("/crate/buggy/0.1.0/", web)?;
+            assert_success("/buggy/0.1.0/settings.html", web)?;
+            assert_success("/buggy/0.1.0/all.html", web)?;
+            Ok(())
+        });
+    }
+    #[test]
+    fn default_target_redirects_to_base() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+              .name("dummy").version("0.1.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .create()?;
+
+            let web = env.frontend();
+            // no explicit default-target
+            let base = "/dummy/0.1.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+
+            // set an explicit target that requires cross-compile
+            let target = "x86_64-pc-windows-msvc";
+            db.fake_release().name("dummy").version("0.2.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .default_target(target).create()?;
+            let base = "/dummy/0.2.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base, web)?;
+
+            // set an explicit target without cross-compile
+            // also check that /:crate/:version/:platform/all.html doesn't panic
+            let target = "x86_64-unknown-linux-gnu";
+            db.fake_release().name("dummy").version("0.3.0")
+              .rustdoc_file("dummy/index.html", b"some content")
+              .rustdoc_file("all.html", b"html")
+              .default_target(target).create()?;
+            let base = "/dummy/0.3.0/dummy/";
+            assert_success(base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)?;
+            assert_redirect("/dummy/0.3.0/", base, web)
+        });
     }
 }

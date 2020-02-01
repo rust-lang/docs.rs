@@ -1,11 +1,33 @@
 //! Database migrations
 
-use db::connect_db;
 use error::Result as CratesfyiResult;
-use postgres::error::Error as PostgresError;
-use postgres::transaction::Transaction;
+use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use std::borrow::Cow;
+
+
+#[derive(Copy, Clone)]
+enum ApplyMode {
+    Permanent,
+    Temporary,
+}
+
+#[derive(Copy, Clone)]
+struct MigrationContext {
+    apply_mode: ApplyMode,
+}
+
+impl MigrationContext {
+    fn format_query<'a>(&self, query: &'a str) -> Cow<'a, str> {
+        match self.apply_mode {
+            ApplyMode::Permanent => Cow::Borrowed(query),
+            ApplyMode::Temporary => {
+                Cow::Owned(query.replace("CREATE TABLE", "CREATE TEMPORARY TABLE"))
+            }
+        }
+    }
+}
 
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
@@ -20,8 +42,10 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 ///                               "DROP TABLE test;");
 /// ```
 macro_rules! migration {
-    ($version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
-        struct Amigration;
+    ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
+        struct Amigration {
+            ctx: MigrationContext,
+        };
         impl Migration for Amigration {
             fn version(&self) -> Version {
                 $version
@@ -33,27 +57,42 @@ macro_rules! migration {
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &Transaction) -> Result<(), PostgresError> {
                 info!("Applying migration {}: {}", self.version(), self.description());
-                transaction.batch_execute($up).map(|_| ())
+                transaction.batch_execute(&self.ctx.format_query($up)).map(|_| ())
             }
             fn down(&self, transaction: &Transaction) -> Result<(), PostgresError> {
                 info!("Removing migration {}: {}", self.version(), self.description());
-                transaction.batch_execute($down).map(|_| ())
+                transaction.batch_execute(&self.ctx.format_query($down)).map(|_| ())
             }
         }
-        Box::new(Amigration)
+        Box::new(Amigration { ctx: $context })
     }};
 }
 
 
-pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
-    let conn = connect_db()?;
-    let adapter = PostgresAdapter::with_metadata_table(&conn, "database_versions");
-    adapter.setup_schema()?;
+pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
+    migrate_inner(version, conn, ApplyMode::Permanent)
+}
+
+pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
+    migrate_inner(version, conn, ApplyMode::Temporary)
+}
+
+fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyMode) -> CratesfyiResult<()> {
+    let context = MigrationContext { apply_mode };
+
+    conn.execute(
+        &context.format_query(
+            "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);"
+        ),
+        &[],
+    )?;
+    let adapter = PostgresAdapter::with_metadata_table(conn, "database_versions");
 
     let mut migrator = Migrator::new(adapter);
 
     let migrations: Vec<Box<dyn PostgresMigration>> = vec![
         migration!(
+            context,
             // version
             1,
             // description
@@ -170,6 +209,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                         owners, releases, crates, builds, queue, files, config;"
         ),
         migration!(
+            context,
             // version
             2,
             // description
@@ -180,6 +220,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "ALTER TABLE queue DROP COLUMN priority;"
         ),
         migration!(
+            context,
             // version
             3,
             // description
@@ -194,6 +235,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "DROP TABLE sandbox_overrides;"
         ),
         migration!(
+            context,
             4,
             "Make more fields not null",
             "ALTER TABLE releases ALTER COLUMN release_time SET NOT NULL,
@@ -204,6 +246,7 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
                                   ALTER COLUMN downloads DROP NOT NULL"
         ),
         migration!(
+            context,
             // version
             5,
             // description
@@ -212,6 +255,43 @@ pub fn migrate(version: Option<Version>) -> CratesfyiResult<()> {
             "ALTER TABLE releases ALTER COLUMN target_name SET NOT NULL",
             // downgrade query
             "ALTER TABLE releases ALTER COLUMN target_name DROP NOT NULL",
+        ),
+        migration!(
+            context,
+            // version
+            6,
+            // description
+            "Added blacklisted_crates table",
+            // upgrade query
+            "CREATE TABLE blacklisted_crates (
+                 crate_name VARCHAR NOT NULL PRIMARY KEY
+             );",
+            // downgrade query
+            "DROP TABLE blacklisted_crates;"
+        ),
+        migration!(
+            context,
+            // version
+            7,
+            // description
+            "Allow memory limits of more than 4 GB",
+            // upgrade query
+            "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE BIGINT;",
+            // downgrade query
+            "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE INTEGER;"
+        ),
+        migration!(
+            context,
+            // version
+            8,
+            // description
+            "Make default_target non-nullable",
+            // upgrade query
+            "UPDATE releases SET default_target = 'x86_64-unknown-linux-gnu' WHERE default_target IS NULL;
+             ALTER TABLE releases ALTER COLUMN default_target SET NOT NULL",
+            // downgrade query
+            "ALTER TABLE releases ALTER COLUMN default_target DROP NOT NULL;
+             ALTER TABLE releases ALTER COLUMN default_target DROP DEFAULT",
         ),
     ];
 

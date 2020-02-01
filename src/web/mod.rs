@@ -44,17 +44,19 @@ mod file;
 mod builds;
 mod error;
 mod sitemap;
+mod routes;
 pub mod metrics;
 
 use std::{env, fmt};
 use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
+use std::net::SocketAddr;
 use iron::prelude::*;
-use iron::{self, Handler, Url, status};
+use iron::{self, Listening, Handler, Url, status};
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
 use iron::modifiers::Redirect;
-use router::{Router, NoRoute};
+use router::NoRoute;
 use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
 use time;
@@ -62,23 +64,33 @@ use postgres::Connection;
 use semver::{Version, VersionReq};
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
+use self::pool::Pool;
+
+#[cfg(test)]
+use std::sync::{Arc, Mutex};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const MENU_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
 const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
+const DEFAULT_BIND: &str = "0.0.0.0:3000";
+
+type PoolFactoryFn = dyn Fn() -> Pool + Send + Sync;
+type PoolFactory = Box<PoolFactoryFn>;
 
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
     static_handler: Box<dyn Handler>,
+    pool_factory: PoolFactory,
 }
 
 
 impl CratesfyiHandler {
-    fn chain<H: Handler>(base: H) -> Chain {
+    fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
         // TODO: Use DocBuilderOptions for paths
         let mut hbse = HandlebarsEngine::new();
         hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
@@ -89,124 +101,17 @@ impl CratesfyiHandler {
         }
 
         let mut chain = Chain::new(base);
-        chain.link_before(pool::Pool::new());
+        chain.link_before(pool_factory());
         chain.link_after(hbse);
         chain
     }
 
-    pub fn new() -> CratesfyiHandler {
-        const DOC_RUST_LANG_ORG_REDIRECTS: [&str; 5] = [
-            "alloc", "core", "proc_macro", "std", "test"
-        ];
+    pub fn new(pool_factory: PoolFactory) -> CratesfyiHandler {
+        let routes = routes::build_routes();
+        let blacklisted_prefixes = routes.page_prefixes();
 
-        let mut router = Router::new();
-        router.get("/", releases::home_page, "index");
-        router.get("/style.css", style_css_handler, "style_css");
-        router.get("/about", sitemap::about_handler, "about");
-        router.get("/about/metrics", metrics::metrics_handler, "metrics");
-        router.get("/robots.txt", sitemap::robots_txt_handler, "robots_txt");
-        router.get("/sitemap.xml", sitemap::sitemap_handler, "sitemap_xml");
-        router.get("/opensearch.xml", opensearch_xml_handler, "opensearch_xml");
-
-        // Redirect standard library crates to rust-lang.org
-        for redirect in DOC_RUST_LANG_ORG_REDIRECTS.iter() {
-            let redirector = rustdoc::RustLangRedirector::new(redirect);
-            router.get(&format!("/{}", redirect), redirector, redirect);
-
-            // allow trailing slashes
-            let redirector = rustdoc::RustLangRedirector::new(redirect);
-            let target = format!("/{}/", redirect);
-            router.get(&target, redirector, &target[1..]);
-        }
-
-        router.get("/releases", releases::recent_releases_handler, "releases");
-        router.get("/releases/feed",
-                   releases::releases_feed_handler,
-                   "releases_feed");
-        router.get("/releases/recent/:page",
-                   releases::recent_releases_handler,
-                   "releases_recent_page");
-        router.get("/releases/stars", releases::releases_by_stars_handler, "releases_stars");
-        router.get("/releases/stars/:page",
-                   releases::releases_by_stars_handler,
-                   "releases_stars_page");
-        router.get("/releases/recent-failures", releases::releases_recent_failures_handler, "releases_recent_failures");
-        router.get("/releases/recent-failures/:page",
-                   releases::releases_recent_failures_handler,
-                   "releases_recent_failures_page");
-        router.get("/releases/failures", releases::releases_failures_by_stars_handler, "releases_failures_by_stars");
-        router.get("/releases/failures/:page",
-                   releases::releases_failures_by_stars_handler,
-                   "releases_failures_by_starts_page");
-        router.get("/releases/:author",
-                   releases::author_handler,
-                   "releases_author");
-        router.get("/releases/:author/:page",
-                   releases::author_handler,
-                   "releases_author_page");
-        router.get("/releases/activity",
-                   releases::activity_handler,
-                   "releases_activity");
-        router.get("/releases/search",
-                   releases::search_handler,
-                   "releases_search");
-        router.get("/releases/queue",
-                   releases::build_queue_handler,
-                   "releases_queue");
-        router.get("/crate/:name",
-                   crate_details::crate_details_handler,
-                   "crate_name");
-        router.get("/crate/:name/",
-                   crate_details::crate_details_handler,
-                   "crate_name_");
-        router.get("/crate/:name/:version",
-                   crate_details::crate_details_handler,
-                   "crate_name_version");
-        router.get("/crate/:name/:version/",
-                   crate_details::crate_details_handler,
-                   "crate_name_version_");
-        router.get("/crate/:name/:version/builds",
-                   builds::build_list_handler,
-                   "crate_name_version_builds");
-        router.get("/crate/:name/:version/builds.json",
-                   builds::build_list_handler,
-                   "crate_name_version_builds_json");
-        router.get("/crate/:name/:version/builds/:id",
-                   builds::build_list_handler,
-                   "crate_name_version_builds_id");
-        router.get("/crate/:name/:version/source/",
-                   source::source_browser_handler,
-                   "crate_name_version_source");
-        router.get("/crate/:name/:version/source/*",
-                   source::source_browser_handler,
-                   "crate_name_version_source_");
-        router.get("/:crate", rustdoc::rustdoc_redirector_handler, "crate");
-        router.get("/:crate/", rustdoc::rustdoc_redirector_handler, "crate_");
-        router.get("/:crate/badge.svg", rustdoc::badge_handler, "crate_badge");
-        router.get("/:crate/:version",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version");
-        router.get("/:crate/:version/",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version_");
-        router.get("/:crate/:version/settings.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_settings_html");
-        router.get("/:crate/:version/all.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_all_html");
-        router.get("/:crate/:version/:target",
-                   rustdoc::rustdoc_redirector_handler,
-                   "crate_version_target");
-        router.get("/:crate/:version/:target/",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_target_");
-        router.get("/:crate/:version/:target/*.html",
-                   rustdoc::rustdoc_html_server_handler,
-                   "crate_version_target_html");
-
-        let shared_resources = Self::chain(rustdoc::SharedResourceHandler);
-        let router_chain = Self::chain(router);
+        let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
+        let router_chain = Self::chain(&pool_factory, routes.iron_router());
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
@@ -214,8 +119,12 @@ impl CratesfyiHandler {
         CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
             router_handler: Box::new(router_chain),
-            database_file_handler: Box::new(file::DatabaseFileHandler),
+            database_file_handler: Box::new(routes::BlockBlacklistedPrefixes::new(
+                blacklisted_prefixes,
+                Box::new(file::DatabaseFileHandler),
+            )),
             static_handler: Box::new(static_handler),
+            pool_factory,
         }
     }
 }
@@ -272,12 +181,13 @@ impl Handler for CratesfyiHandler {
                 }
 
 
-                Self::chain(err).handle(req)
+                Self::chain(&self.pool_factory, err).handle(req)
             })
     }
 }
 
 /// Represents the possible results of attempting to load a version requirement.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum MatchVersion {
     /// `match_version` was given an exact version, which matched a saved crate version.
     Exact(String),
@@ -318,19 +228,15 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
         .unwrap_or("*".to_string());
 
-    let versions = {
-        let mut versions = Vec::new();
-        let rows = conn.query("SELECT versions FROM crates WHERE name = $1", &[&name]).unwrap();
+    let versions: Vec<String> = {
+        let query = "SELECT version
+            FROM releases INNER JOIN crates ON releases.crate_id = crates.id
+            WHERE name = $1 AND yanked = false";
+        let rows = conn.query(query, &[&name]).unwrap();
         if rows.len() == 0 {
             return MatchVersion::None;
         }
-        let versions_json: Json = rows.get(0).get(0);
-        for version in versions_json.as_array().unwrap() {
-            let version: String = version.as_string().unwrap().to_owned();
-            versions.push(version);
-        }
-
-        versions
+        rows.iter().map(|row| row.get(0)).collect()
     };
 
     // first check for exact match
@@ -366,16 +272,16 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         versions_sem
     };
 
-    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
-    // return first version if requested version is '*'
-    if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver(format!("{}", versions_sem[0]));
-    }
-
     for version in &versions_sem {
         if req_sem_ver.matches(&version) {
             return MatchVersion::Semver(format!("{}", version));
         }
+    }
+
+    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
+    // return first version if requested version is '*'
+    if req_version == "*" && !versions_sem.is_empty() {
+        return MatchVersion::Semver(format!("{}", versions_sem[0]));
     }
 
     MatchVersion::None
@@ -405,57 +311,53 @@ fn render_markdown(text: &str) -> String {
 
 
 
-/// Returns latest version if required version is not the latest
-/// req_version must be an exact version
-fn latest_version(versions_json: &Vec<String>, req_version: &str) -> Option<String> {
-    let req_version = match Version::parse(req_version) {
-        Ok(v) => v,
-        Err(_) => return None,
-    };
-    let versions = {
-        let mut versions: Vec<Version> = Vec::new();
-        for version in versions_json {
-            let version = match Version::parse(&version) {
-                Ok(v) => v,
-                Err(_) => return None,
-            };
-            versions.push(version);
-        }
+pub struct Server {
+    inner: Listening,
+}
 
-        versions.sort();
-        versions.reverse();
-        versions
-    };
-
-    if req_version != versions[0] {
-        for i in 1..versions.len() {
-            if req_version == versions[i]  {
-                return Some(format!("{}", versions[0]))
-            }
-        }
+impl Server {
+    pub fn start(addr: Option<&str>) -> Self {
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(|| Pool::new()));
+        info!("Running docs.rs web server on http://{}", server.addr());
+        server
     }
-    None
+
+    #[cfg(test)]
+    pub(crate) fn start_test(conn: Arc<Mutex<Connection>>) -> Self {
+        Self::start_inner("127.0.0.1:0", Box::new(move || Pool::new_simple(conn.clone())))
+    }
+
+    fn start_inner(addr: &str, pool_factory: PoolFactory) -> Self {
+        // poke all the metrics counters to instantiate and register them
+        metrics::TOTAL_BUILDS.inc_by(0);
+        metrics::SUCCESSFUL_BUILDS.inc_by(0);
+        metrics::FAILED_BUILDS.inc_by(0);
+        metrics::NON_LIBRARY_BUILDS.inc_by(0);
+        metrics::UPLOADED_FILES_TOTAL.inc_by(0);
+
+        let cratesfyi = CratesfyiHandler::new(pool_factory);
+        let inner = Iron::new(cratesfyi).http(addr)
+            .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
+
+        Server { inner }
+    }
+
+    pub(crate) fn addr(&self) -> SocketAddr {
+        self.inner.socket
+    }
+
+    /// Iron is bugged, and it never closes the server even when the listener is dropped. To
+    /// avoid never-ending tests this method forgets about the server, leaking it and allowing the
+    /// program to end.
+    ///
+    /// The OS will then close all the dangling servers once the process exits.
+    ///
+    /// https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
+    #[cfg(test)]
+    pub(crate) fn leak(self) {
+        std::mem::forget(self.inner);
+    }
 }
-
-
-
-/// Starts cratesfyi web server
-pub fn start_web_server(sock_addr: Option<&str>) {
-    // poke all the metrics counters to instantiate and register them
-    metrics::TOTAL_BUILDS.inc_by(0);
-    metrics::SUCCESSFUL_BUILDS.inc_by(0);
-    metrics::FAILED_BUILDS.inc_by(0);
-    metrics::NON_LIBRARY_BUILDS.inc_by(0);
-    metrics::UPLOADED_FILES_TOTAL.inc_by(0);
-
-    let cratesfyi = CratesfyiHandler::new();
-    let addr = sock_addr.unwrap_or("0.0.0.0:3000");
-    // need to assign this so it's not dropped before the function ends
-    let _server = Iron::new(cratesfyi).http(addr)
-        .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
-    info!("Running docs.rs web server on http://{}", addr);
-}
-
 
 
 /// Converts Timespec to nice readable relative time string
@@ -522,6 +424,14 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     Ok(response)
 }
 
+fn menu_js_handler(_: &mut Request) -> IronResult<Response> {
+    let mut response = Response::with((status::Ok, MENU_JS));
+    let cache = vec![CacheDirective::Public,
+                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    response.headers.set(ContentType("application/javascript".parse().unwrap()));
+    response.headers.set(CacheControl(cache));
+    Ok(response)
+}
 
 fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
@@ -554,6 +464,7 @@ pub struct MetaData {
     pub description: Option<String>,
     pub target_name: Option<String>,
     pub rustdoc_status: bool,
+    pub default_target: String,
 }
 
 
@@ -563,7 +474,8 @@ impl MetaData {
                                        releases.version,
                                        releases.description,
                                        releases.target_name,
-                                       releases.rustdoc_status
+                                       releases.rustdoc_status,
+                                       releases.default_target
                                 FROM releases
                                 INNER JOIN crates ON crates.id = releases.crate_id
                                 WHERE crates.name = $1 AND releases.version = $2",
@@ -576,6 +488,7 @@ impl MetaData {
                 description: row.get(2),
                 target_name: row.get(3),
                 rustdoc_status: row.get(4),
+                default_target: row.get(5),
             });
         }
 
@@ -592,6 +505,7 @@ impl ToJson for MetaData {
         m.insert("description".to_owned(), self.description.to_json());
         m.insert("target_name".to_owned(), self.target_name.to_json());
         m.insert("rustdoc_status".to_owned(), self.rustdoc_status.to_json());
+        m.insert("default_target".to_owned(), self.default_target.to_json());
         m.to_json()
     }
 }
@@ -599,26 +513,87 @@ impl ToJson for MetaData {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
-    use super::*;
+    use crate::test::*;
+    use web::{match_version, MatchVersion};
 
-    #[test]
-    #[ignore]
-    fn test_start_web_server() {
-        // FIXME: This test is doing nothing
-        let _ = env_logger::try_init();
-        start_web_server(None);
+    fn release(version: &str, db: &TestDatabase) -> i32 {
+        db.fake_release().name("foo").version(version).create().unwrap()
+    }
+    fn version(v: Option<&str>, db: &TestDatabase) -> MatchVersion {
+        match_version(&db.conn(), "foo", v)
     }
 
     #[test]
-    fn test_latest_version() {
-        let versions = vec!["1.0.0".to_string(),
-                            "1.1.0".to_string(),
-                            "0.9.0".to_string(),
-                            "0.9.1".to_string()];
-        assert_eq!(latest_version(&versions, "1.1.0"), None);
-        assert_eq!(latest_version(&versions, "1.0.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&versions, "0.9.0"), Some("1.1.0".to_owned()));
-        assert_eq!(latest_version(&versions, "invalidversion"), None);
+    fn test_index_returns_success() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert!(web.get("/").send()?.status().is_success());
+            Ok(())
+        });
+    }
+
+    #[test]
+    // https://github.com/rust-lang/docs.rs/issues/223
+    fn prereleases_are_not_considered_for_semver() {
+        wrapper(|env| {
+            let db = env.db();
+            let version = |v| version(v, db);
+            let release = |v| release(v, db);
+
+            release("0.3.1-pre");
+            assert_eq!(version(Some("*")), MatchVersion::Semver("0.3.1-pre".into()));
+
+            release("0.3.1-alpha");
+            assert_eq!(version(Some("0.3.1-alpha")), MatchVersion::Exact("0.3.1-alpha".into()));
+
+            release("0.3.0");
+            let three = MatchVersion::Semver("0.3.0".into());
+            assert_eq!(version(None), three);
+            // same thing but with "*"
+            assert_eq!(version(Some("*")), three);
+            // make sure exact matches still work
+            assert_eq!(version(Some("0.3.0")), MatchVersion::Exact("0.3.0".into()));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    // https://github.com/rust-lang/docs.rs/issues/221
+    fn yanked_crates_are_not_considered() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let release_id = release("0.3.0", db);
+            let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+            db.conn().query(query, &[&release_id]).unwrap();
+            assert_eq!(version(None, db), MatchVersion::None);
+            assert_eq!(version(Some("0.3"), db), MatchVersion::None);
+
+            release("0.1.0+4.1", db);
+            assert_eq!(version(Some("0.1.0+4.1"), db), MatchVersion::Exact("0.1.0+4.1".into()));
+            assert_eq!(version(None, db), MatchVersion::Semver("0.1.0+4.1".into()));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    // vaguely related to https://github.com/rust-lang/docs.rs/issues/395
+    fn metadata_has_no_effect() {
+        wrapper(|env| {
+            let db = env.db();
+
+            release("0.1.0+4.1", db);
+            release("0.1.1", db);
+            assert_eq!(version(None, db), MatchVersion::Semver("0.1.1".into()));
+
+            release("0.5.1+zstd.1.4.4", db);
+            assert_eq!(version(None, db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(Some("0.5"), db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(Some("0.5.1+zstd.1.4.4"), db), MatchVersion::Exact("0.5.1+zstd.1.4.4".into()));
+
+            Ok(())
+        });
     }
 }

@@ -10,6 +10,9 @@ pub use self::html::extract_head_and_body;
 pub use self::queue::add_crate_to_queue;
 pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
 
+#[cfg(test)]
+pub(crate) use self::cargo_metadata::{Dependency, Target};
+
 mod cargo_metadata;
 mod github_updater;
 mod copy;
