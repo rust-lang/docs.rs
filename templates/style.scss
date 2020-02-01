@@ -184,6 +184,7 @@ div.nav-container {
             background-color: #fff;
             height: 31px;
             display: none;
+            box-shadow: 0px 0px 2px #000;
 
             @media #{$media-sm} {
                 display: block;
