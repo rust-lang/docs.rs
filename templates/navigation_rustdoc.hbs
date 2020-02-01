@@ -3,7 +3,7 @@
         <div class="pure-menu pure-menu-horizontal">
           <form action="/releases/search" method="GET" class="landing-search-form-nav">
             {{#unless varsb.show_search_form}}
-            <input class="search-input-nav" name="query" aria-label="Find crate by search query" tabindex="-1" type="text" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
+            <input class="search-input-nav" name="query" aria-label="Find crate by search query" tabindex="-1" type="text" placeholder="Find crate &#x1F50D;"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
             {{/unless}}
             <a href="/" class="pure-menu-heading pure-menu-link"><i class="fa fa-cubes fa-fw"></i><span class="title"> Docs.rs</span></a>
           {{#with content.crate_details}}
