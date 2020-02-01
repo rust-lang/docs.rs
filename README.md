@@ -24,9 +24,6 @@ crates' documentation easily. Example of URL redirections for `clap` crate:
 | <https://docs.rs/clap/~2.9>                   | 2.9.* version                                    |
 | <https://docs.rs/clap/2.9.3>                  | 2.9.3 version (you don't need = unlike semver)   |
 | <https://docs.rs/clap/*/clap/struct.App.html> | Latest version of this page (if it still exists).|
-The crates.fyi domain will redirect to docs.rs, supporting all of the
-redirects discussed above
-
 
 ### Badges
 
