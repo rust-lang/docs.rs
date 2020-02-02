@@ -238,7 +238,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return Ok(super::redirect(canonical));
     }
 
-    let path = {
+    let mut path = {
         let mut path = req_path.join("/");
         if path.ends_with('/') {
             req_path.pop(); // get rid of empty string
@@ -250,7 +250,15 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
-        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        None => {
+            //If it fails, we try again with /index.html at the end
+            path.push_str("/index.html");
+            req_path.push("index.html");
+            match File::from_path(&conn, &path) {
+                Some(f) => f,
+                None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+            }
+        },
     };
 
     // serve file directly if it's not html
@@ -439,7 +447,11 @@ mod test {
               .name("buggy").version("0.1.0")
               .build_result_successful(true)
               .rustdoc_file("settings.html", b"some data")
+              .rustdoc_file("directoty_1/index.html", b"some data 1")
+              .rustdoc_file("directoty_2.html/index.html", b"some data 1")
               .rustdoc_file("all.html", b"some data 2")
+              .rustdoc_file("directory_3/.gitignore", b"*.ext")
+              .rustdoc_file("directory_4/empty_file_no_ext", b"")
               .create()?;
             db.fake_release()
               .name("buggy").version("0.2.0")
@@ -448,8 +460,12 @@ mod test {
             let web = env.frontend();
             assert_success("/", web)?;
             assert_success("/crate/buggy/0.1.0/", web)?;
+            assert_success("/buggy/0.1.0/directoty_1/index.html", web)?;
+            assert_success("/buggy/0.1.0/directoty_2.html/index.html", web)?;
+            assert_success("/buggy/0.1.0/directory_3/.gitignore", web)?;
             assert_success("/buggy/0.1.0/settings.html", web)?;
             assert_success("/buggy/0.1.0/all.html", web)?;
+            assert_success("/buggy/0.1.0/directory_4/empty_file_no_ext", web)?;
             Ok(())
         });
     }
@@ -488,7 +504,9 @@ mod test {
             assert_success(base, web)?;
             assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
             assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)?;
-            assert_redirect("/dummy/0.3.0/", base, web)
+            assert_redirect("/dummy/0.3.0/", base, web)?;
+            assert_redirect("/dummy/0.3.0/index.html",base, web)?;
+            Ok(())
         });
     }
 }
