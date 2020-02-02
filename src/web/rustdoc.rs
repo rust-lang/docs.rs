@@ -20,6 +20,7 @@ use time;
 use iron::Handler;
 use utils;
 
+const DIR_DEFAULT_FILE: &str = "index.html";
 
 #[derive(Debug)]
 struct RustdocPage {
@@ -238,28 +239,27 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return Ok(super::redirect(canonical));
     }
 
-    if let Some(&end) = req_path.last(){
-        if end == "" {
-            req_path.pop(); // get rid of empty string
-            req_path.push("index.html");
-        } else if !end.contains('.') {
-            req_path.push("index.html");
-        } else {
-            // page might already have extension, so do nothing
-        }
+    let mut path = req_path.join("/");
+
+    //If it is a directory, we default to looking 
+    if path.ends_with("/") {
+        path.push_str(DIR_DEFAULT_FILE);
+        req_path.push(DIR_DEFAULT_FILE);
     }
 
-    let path = req_path.join("/");
-
-    let file = match File::from_path(&conn, &path) {
-        Some(f) => f,
-        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+    if !path.ends_with(".html") {
+        if let Some(file) = File::from_path(&conn, &path) {
+            return Ok(file.serve());
+        };
+        path.push_str("/");
+        path.push_str(DIR_DEFAULT_FILE);
+        req_path.push(DIR_DEFAULT_FILE);
     };
 
-    // serve file directly if it's not html
-    if !path.ends_with(".html") {
-        return Ok(file.serve());
-    }
+    let file = match File::from_path(&conn, &path) {
+        Some(file) => file,
+        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+    };
 
     let mut content = RustdocPage::default();
 
@@ -318,7 +318,7 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
         return req_path[3..].join("/");
     }
     // this page doesn't exist in the latest version
-    let search_item = if *req_path.last().unwrap() == "index.html" {
+    let search_item = if *req_path.last().unwrap() == DIR_DEFAULT_FILE {
         // this is a module
         req_path[req_path.len() - 2]
     } else {
@@ -441,9 +441,11 @@ mod test {
             db.fake_release()
               .name("buggy").version("0.1.0")
               .build_result_successful(true)
-              .rustdoc_file("settings.html", b"some data")
+              .rustdoc_file("settings.html", b"some setting data")
               .rustdoc_file("all.html", b"some data 2")
-              .rustdoc_file("some_module/other_module/index.html", b"some data 2")
+              .rustdoc_file("file_without_ext", b"some data 3")
+              .rustdoc_file("some_module/directory/index.html", b"some data 3")
+              .rustdoc_file("some_module/file_without_ext", b"some data 3")
               .create()?;
             db.fake_release()
               .name("buggy").version("0.2.0")
@@ -451,11 +453,12 @@ mod test {
               .create()?;
             let web = env.frontend();
             assert_success("/", web)?;
-            assert_success("/crate/buggy/0.1.0/", web)?;
+            assert_success("/crate/buggy/0.1.0", web)?;
             assert_success("/crate/buggy/0.1.0/", web)?;
             assert_success("/buggy/0.1.0/settings.html", web)?;
             assert_success("/buggy/0.1.0/all.html", web)?;
-            assert_success("/buggy/0.1.0/some_module/other_module", web)?;
+            assert_success("/buggy/0.1.0/some_module/file_without_ext", web)?;
+            assert_success("/buggy/0.1.0/some_module/directory", web)?;
             Ok(())
         });
     }
