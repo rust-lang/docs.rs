@@ -10,8 +10,24 @@
 </head>
 <body>
 {{> navigation_rustdoc}}
-<div class="{{content.rustdoc_body_class}}" tabindex="1">
+<div id="rustdoc_body_wrapper" class="{{content.rustdoc_body_class}}" tabindex="-1">
     {{{content.rustdoc_body}}}
 </div>
 </body>
+<script>
+    var doc_body = document.getElementById("rustdoc_body_wrapper");
+    if(window.location.hash) {
+        var notFirefox = typeof InstallTrigger === 'undefined';
+        if(notFirefox) {
+            var hash = window.location.hash;
+            window.location.hash = "";
+            setTimeout(function () {
+                window.location.hash = hash;
+                doc_body.focus();
+            }, 1);
+        }
+    } else {
+        doc_body.focus();
+    }
+</script>
 </html>
