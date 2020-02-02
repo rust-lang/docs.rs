@@ -238,15 +238,18 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return Ok(super::redirect(canonical));
     }
 
-    let path = {
-        let mut path = req_path.join("/");
-        if path.ends_with('/') {
+    if let Some(&end) = req_path.last(){
+        if end == "" {
             req_path.pop(); // get rid of empty string
-            path.push_str("index.html");
             req_path.push("index.html");
+        } else if !end.contains('.') {
+            req_path.push("index.html");
+        } else {
+            // page might already have extension, so do nothing
         }
-        path
-    };
+    }
+
+    let path = req_path.join("/");
 
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
@@ -440,6 +443,7 @@ mod test {
               .build_result_successful(true)
               .rustdoc_file("settings.html", b"some data")
               .rustdoc_file("all.html", b"some data 2")
+              .rustdoc_file("some_module/other_module/index.html", b"some data 2")
               .create()?;
             db.fake_release()
               .name("buggy").version("0.2.0")
@@ -448,8 +452,10 @@ mod test {
             let web = env.frontend();
             assert_success("/", web)?;
             assert_success("/crate/buggy/0.1.0/", web)?;
+            assert_success("/crate/buggy/0.1.0/", web)?;
             assert_success("/buggy/0.1.0/settings.html", web)?;
             assert_success("/buggy/0.1.0/all.html", web)?;
+            assert_success("/buggy/0.1.0/some_module/other_module", web)?;
             Ok(())
         });
     }
@@ -484,6 +490,7 @@ mod test {
               .rustdoc_file("dummy/index.html", b"some content")
               .rustdoc_file("all.html", b"html")
               .default_target(target).create()?;
+
             let base = "/dummy/0.3.0/dummy/";
             assert_success(base, web)?;
             assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
