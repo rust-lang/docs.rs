@@ -251,7 +251,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let file = match File::from_path(&conn, &path) {
         Some(f) => f,
         None => {
-            //If it fails, we try again with /index.html at the end
+            // If it fails, we try again with /index.html at the end
             path.push_str("/index.html");
             req_path.push("index.html");
             match File::from_path(&conn, &path) {
@@ -447,8 +447,8 @@ mod test {
               .name("buggy").version("0.1.0")
               .build_result_successful(true)
               .rustdoc_file("settings.html", b"some data")
-              .rustdoc_file("directoty_1/index.html", b"some data 1")
-              .rustdoc_file("directoty_2.html/index.html", b"some data 1")
+              .rustdoc_file("directory_1/index.html", b"some data 1")
+              .rustdoc_file("directory_2.html/index.html", b"some data 1")
               .rustdoc_file("all.html", b"some data 2")
               .rustdoc_file("directory_3/.gitignore", b"*.ext")
               .rustdoc_file("directory_4/empty_file_no_ext", b"")
@@ -460,8 +460,8 @@ mod test {
             let web = env.frontend();
             assert_success("/", web)?;
             assert_success("/crate/buggy/0.1.0/", web)?;
-            assert_success("/buggy/0.1.0/directoty_1/index.html", web)?;
-            assert_success("/buggy/0.1.0/directoty_2.html/index.html", web)?;
+            assert_success("/buggy/0.1.0/directory_1/index.html", web)?;
+            assert_success("/buggy/0.1.0/directory_2.html/index.html", web)?;
             assert_success("/buggy/0.1.0/directory_3/.gitignore", web)?;
             assert_success("/buggy/0.1.0/settings.html", web)?;
             assert_success("/buggy/0.1.0/all.html", web)?;
