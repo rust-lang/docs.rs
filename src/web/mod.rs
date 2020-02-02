@@ -111,7 +111,7 @@ impl CratesfyiHandler {
 
         let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(&pool_factory, routes.iron_router());
-        let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").unwrap()).join("public_html");
+        let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").expect("the CRATESFYI_PREFIX environment variable is not set")).join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
