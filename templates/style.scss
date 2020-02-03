@@ -177,7 +177,6 @@ div.nav-container {
             float: right;
             max-width: 200px;
             border: none;
-            border-left: 1px solid $color-border;
             margin: 0 1em 0 0;
             font-size: 0.8em;
             text-align: right;
@@ -189,6 +188,10 @@ div.nav-container {
 
             @media #{$media-sm} {
                 display: block;
+            }
+            
+            @media #{$media-md} {
+                border-left: 1px solid $color-border;
             }
         }
 
