@@ -155,10 +155,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               prefix: &str,
                                               path: P)
                                               -> Result<Json> {
-    use magic::{Cookie, flags};
-    let cookie = Cookie::open(flags::MIME_TYPE)?;
-    cookie.load::<&str>(&[])?;
-
     let trans = conn.transaction()?;
 
     use std::collections::HashMap;
@@ -192,7 +188,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 .into_os_string().into_string().unwrap();
 
             let mime = {
-                let mime = cookie.buffer(&content)?;
+                let mime = tree_magic::from_u8(&content);
                 // css's are causing some problem in browsers
                 // magic will return text/plain for css file types
                 // convert them to text/css

@@ -16,7 +16,7 @@ extern crate reqwest;
 extern crate time;
 extern crate semver;
 extern crate slug;
-extern crate magic;
+extern crate tree_magic;
 extern crate iron;
 extern crate router;
 extern crate staticfile;
