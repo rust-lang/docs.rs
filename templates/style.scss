@@ -185,6 +185,7 @@ div.nav-container {
             background-color: #fff;
             height: 31px;
             display: none;
+            font-family: append(FontAwesome, $font-family-sans, "comma");
 
             @media #{$media-sm} {
                 display: block;
