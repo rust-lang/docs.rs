@@ -175,12 +175,16 @@ div.nav-container {
 
         div.search-input-nav {
             float: right;
-            max-width: 200px;
-            border-left: 1px solid $color-border;
+            max-width: 150px;
             display: none;
+            border-left: 1px solid $color-border;
 
             @media #{$media-sm} {
                 display: block;
+            }
+
+            @media #{$media-md} {
+                max-width: 200px;
             }
 
             label {
