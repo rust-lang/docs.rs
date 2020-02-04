@@ -194,7 +194,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                     bucket: S3_BUCKET_NAME.into(),
                     key: bucket_path.clone(),
                     body: Some(content.clone().into()),
-                    content_type: Some(mime.clone()),
+                    content_type: mime.clone(),
                     ..Default::default()
                 }).inspect(|_| {
                     crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
@@ -214,7 +214,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             }
 
-            file_paths_and_mimes.insert(file_path.clone(), mime.clone());
+            file_paths_and_mimes.insert(file_path.clone(), mime.unwrap_or_default());
         }
 
         if !futures.is_empty() {
@@ -250,8 +250,13 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-fn detect_mime(path: &Path) -> String {
-    mime_guess::from_path(path).first_or_text_plain().to_string()
+fn detect_mime(path: &Path) -> Option<String> {
+    let file_ext = path.extension().map(|ext| ext.to_str()).unwrap_or_default();
+    match file_ext {
+        Some("md") => Some("text/markdown".to_owned()),
+        None => None,
+        _ => mime_guess::from_path(path).first_raw().map(|m| m.to_owned())
+    }
 }
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
@@ -335,14 +340,14 @@ mod test {
 
     #[test]
     fn test_mime_types() {
-        assert_eq!(detect_mime(Path::new(".gitignore")), "text/plain");
-        assert_eq!(detect_mime(Path::new("hello.toml")), "text/x-toml");
-        assert_eq!(detect_mime(Path::new("hello.css")), "text/css");
-        assert_eq!(detect_mime(Path::new("hello.js")), "application/javascript");
-        assert_eq!(detect_mime(Path::new("hello.html")), "text/html");
-        assert_eq!(detect_mime(Path::new("hello.hello.md")), "text/x-markdown");
-        assert_eq!(detect_mime(Path::new("hello.markdown")), "text/markdown");
-        assert_eq!(detect_mime(Path::new("hello.json")), "application/json");
-        assert_eq!(detect_mime(Path::new("hello.txt")), "text/plain");
+        assert_eq!(detect_mime(Path::new("hello.toml")).unwrap(), "text/x-toml");
+        assert_eq!(detect_mime(Path::new("hello.css")).unwrap(), "text/css");
+        assert_eq!(detect_mime(Path::new("hello.js")).unwrap(), "application/javascript");
+        assert_eq!(detect_mime(Path::new("hello.html")).unwrap(), "text/html");
+        assert_eq!(detect_mime(Path::new("hello.hello.md")).unwrap(), "text/markdown");
+        assert_eq!(detect_mime(Path::new("hello.markdown")).unwrap(), "text/markdown");
+        assert_eq!(detect_mime(Path::new("hello.json")).unwrap(), "application/json");
+        assert_eq!(detect_mime(Path::new("hello.txt")).unwrap(), "text/plain");
+        assert!(detect_mime(Path::new("blah")).is_none());
     }
 }
