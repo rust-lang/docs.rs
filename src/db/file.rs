@@ -187,25 +187,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             let bucket_path = Path::new(prefix).join(&file_path)
                 .into_os_string().into_string().unwrap();
 
-            let mime = {
-                let mime = tree_magic::from_u8(&content);
-                // css's are causing some problem in browsers
-                // magic will return text/plain for css file types
-                // convert them to text/css
-                // do the same for javascript files
-                if mime == "text/plain" {
-                    let e = file_path.extension().unwrap_or_default();
-                    if e == "css" {
-                        "text/css".to_owned()
-                    } else if e == "js" {
-                        "application/javascript".to_owned()
-                    } else {
-                        mime.to_owned()
-                    }
-                } else {
-                    mime.to_owned()
-                }
-            };
+            let mime = detect_mime(file_path);
 
             if let Some(client) = &client {
                 futures.push(client.put_object(PutObjectRequest {
@@ -268,7 +250,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-
+fn detect_mime(path: &Path) -> String {
+    mime_guess::from_path(path).first_or_text_plain().to_string()
+}
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
 
@@ -335,7 +319,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
 mod test {
     extern crate env_logger;
     use std::env;
-    use super::get_file_list;
+    use super::*;
 
     #[test]
     fn test_get_file_list() {
@@ -347,5 +331,18 @@ mod test {
 
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
+    }
+
+    #[test]
+    fn test_mime_types() {
+        assert_eq!(detect_mime(Path::new(".gitignore")), "text/plain");
+        assert_eq!(detect_mime(Path::new("hello.toml")), "text/x-toml");
+        assert_eq!(detect_mime(Path::new("hello.css")), "text/css");
+        assert_eq!(detect_mime(Path::new("hello.js")), "application/javascript");
+        assert_eq!(detect_mime(Path::new("hello.html")), "text/html");
+        assert_eq!(detect_mime(Path::new("hello.hello.md")), "text/x-markdown");
+        assert_eq!(detect_mime(Path::new("hello.markdown")), "text/markdown");
+        assert_eq!(detect_mime(Path::new("hello.json")), "application/json");
+        assert_eq!(detect_mime(Path::new("hello.txt")), "text/plain");
     }
 }
