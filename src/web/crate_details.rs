@@ -43,7 +43,7 @@ pub struct CrateDetails {
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
-    pub metadata: MetaData,
+    pub(crate) metadata: MetaData,
     is_library: bool,
     doc_targets: Option<Json>,
     license: Option<String>,

@@ -22,7 +22,6 @@ use failure::err_msg;
 /// default-target = "x86_64-unknown-linux-gnu"
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
-/// dependencies = [ "example-system-dependency" ]
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
@@ -49,11 +48,6 @@ pub struct Metadata {
 
     /// List of command line arguments for `rustdoc`.
     pub rustdoc_args: Option<Vec<String>>,
-
-    /// System dependencies.
-    ///
-    /// Docs.rs is running on a Debian jessie.
-    pub dependencies: Option<Vec<String>>,
 }
 
 
@@ -69,7 +63,7 @@ impl Metadata {
         Err(err_msg("Manifest not found"))
     }
 
-    pub fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
+    fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
         use std::fs::File;
         use std::io::Read;
         let mut f = match File::open(path) {
@@ -93,7 +87,6 @@ impl Metadata {
             default_target: None,
             rustc_args: None,
             rustdoc_args: None,
-            dependencies: None,
         }
     }
 
@@ -122,8 +115,6 @@ impl Metadata {
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.dependencies = table.get("dependencies").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                 }
 
         metadata
@@ -151,7 +142,6 @@ mod test {
             default-target = "x86_64-unknown-linux-gnu"
             rustc-args = [ "--example-rustc-arg" ]
             rustdoc-args = [ "--example-rustdoc-arg" ]
-            dependencies = [ "example-system-dependency" ]
         "#;
 
         let metadata = Metadata::from_str(manifest);
@@ -176,9 +166,5 @@ mod test {
         let rustdoc_args = metadata.rustdoc_args.unwrap();
         assert_eq!(rustdoc_args.len(), 1);
         assert_eq!(rustdoc_args[0], "--example-rustdoc-arg".to_owned());
-
-        let dependencies = metadata.dependencies.unwrap();
-        assert_eq!(dependencies.len(), 1);
-        assert_eq!(dependencies[0], "example-system-dependency".to_owned());
     }
 }
