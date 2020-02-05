@@ -49,7 +49,7 @@ pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::web::Server;
 
-pub(crate) mod error;
+mod error;
 pub mod db;
 pub mod utils;
 mod docbuilder;
