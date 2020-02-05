@@ -12,16 +12,12 @@ use regex::Regex;
 ///
 /// Target directory must have doc directory.
 ///
-/// This function is designed to avoid file duplications. It is using rustc version string
-/// to rename common files (css files, jquery.js, playpen.js, main.js etc.) in a standard rustdoc.
+/// This function is designed to avoid file duplications.
 pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P) -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
     let destination = destination.as_ref().to_path_buf();
 
-    // FIXME: handle_html is useless since we started using --resource-suffix
-    //        argument with rustdoc
-
-    // Make sure destination directory is exists
+    // Make sure destination directory exists
     if !destination.exists() {
         fs::create_dir_all(&destination)?;
     }
@@ -62,8 +58,7 @@ mod test {
     use super::*;
 
     #[test]
-    #[ignore]
-    fn test_copy_dir() {
+    fn test_copy_doc_dir() {
         let destination = tempdir::TempDir::new("cratesfyi").unwrap();
 
         // lets try to copy a src directory to tempdir
