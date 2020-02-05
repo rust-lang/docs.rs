@@ -1,7 +1,7 @@
 //! Web interface of cratesfyi
 
 
-pub mod page;
+pub(crate) mod page;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -45,7 +45,7 @@ mod builds;
 mod error;
 mod sitemap;
 mod routes;
-pub mod metrics;
+pub(crate) mod metrics;
 
 use std::{env, fmt};
 use std::error::Error;
@@ -106,7 +106,7 @@ impl CratesfyiHandler {
         chain
     }
 
-    pub fn new(pool_factory: PoolFactory) -> CratesfyiHandler {
+    fn new(pool_factory: PoolFactory) -> CratesfyiHandler {
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
 
@@ -202,7 +202,7 @@ enum MatchVersion {
 impl MatchVersion {
     /// Convert this `MatchVersion` into an `Option`, discarding whether the matched version came
     /// from an exact version number or a semver requirement.
-    pub fn into_option(self) -> Option<String> {
+    fn into_option(self) -> Option<String> {
         match self {
             MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
             MatchVersion::None => None,
@@ -397,7 +397,7 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
-pub fn redirect_base(req: &Request) -> String {
+fn redirect_base(req: &Request) -> String {
     // Try to get the scheme from CloudFront first, and then from iron
     let scheme = req.headers
         .get_raw("cloudfront-forwarded-proto")
@@ -458,18 +458,18 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 /// MetaData used in header
 #[derive(Debug)]
-pub struct MetaData {
-    pub name: String,
-    pub version: String,
-    pub description: Option<String>,
-    pub target_name: Option<String>,
-    pub rustdoc_status: bool,
+pub(crate) struct MetaData {
+    name: String,
+    version: String,
+    description: Option<String>,
+    target_name: Option<String>,
+    rustdoc_status: bool,
     pub default_target: String,
 }
 
 
 impl MetaData {
-    pub fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
+    fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
         for row in &conn.query("SELECT crates.name,
                                        releases.version,
                                        releases.description,
