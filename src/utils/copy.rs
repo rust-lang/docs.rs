@@ -54,19 +54,21 @@ pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P) -> Result<()> {
 mod test {
     extern crate env_logger;
     use std::fs;
-    use std::path::Path;
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_copy_doc_dir() {
-        let destination = tempdir::TempDir::new("cratesfyi").unwrap();
+        let source = tempdir::TempDir::new("cratesfyi-src").unwrap();
+        let destination = tempdir::TempDir::new("cratesfyi-dst").unwrap();
+        let doc = source.path().join("doc");
+        fs::create_dir(&doc).unwrap();
+
+        fs::write(doc.join("index.html"), "<html>spooky</html>").unwrap();
+        fs::write(doc.join("index.txt"), "spooky").unwrap();
 
         // lets try to copy a src directory to tempdir
-        let res = copy_doc_dir(Path::new("src"), destination.path());
-        // remove temp dir
-        fs::remove_dir_all(destination.path()).unwrap();
-
-        assert!(res.is_ok());
+        copy_doc_dir(source.path(), destination.path()).unwrap();
+        assert!(destination.path().join("index.html").exists());
+        assert!(!destination.path().join("index.txt").exists());
     }
 }
