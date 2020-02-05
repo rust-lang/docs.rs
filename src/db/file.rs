@@ -42,7 +42,7 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 }
 
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
+fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     let mut files = Vec::new();
 
