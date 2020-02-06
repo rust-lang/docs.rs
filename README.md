@@ -156,9 +156,7 @@ If you want to explore or edit database manually, you can connect to the databas
 with the `psql` command.
 
 ```sh
-# this will print the name of the container it starts
-docker-compose run -d db
-docker exec -it <the container name goes here> psql -U cratesfyi
+docker exec -it "$(docker-compose run -d db && sleep 1)" psql -U cratesfyi
 ```
 
 The database contains a blacklist of crates that should not be built.
