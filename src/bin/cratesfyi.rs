@@ -239,7 +239,7 @@ pub fn main() {
             let mut count = 1;
             let mut total = 0;
             while count != 0 {
-                count = db::move_to_s3(&conn, 5_000).expect("Failed to upload batch to S3");
+                count = db::file::move_to_s3(&conn, 5_000).expect("Failed to upload batch to S3");
                 total += count;
                 eprintln!(
                     "moved {} rows to s3 in this batch, total moved so far: {}",

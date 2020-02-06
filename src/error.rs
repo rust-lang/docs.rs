@@ -2,6 +2,6 @@
 
 use std::result::Result as StdResult;
 
-pub(crate) use failure::Error;
+pub use failure::{Error, ResultExt};
 
 pub type Result<T> = StdResult<T, Error>;

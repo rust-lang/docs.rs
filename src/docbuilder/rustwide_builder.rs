@@ -16,7 +16,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
 use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use super::Metadata;
+use Metadata;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
@@ -522,7 +522,8 @@ impl RustwideBuilder {
         }
 
         info!("{} {}", source.display(), dest.display());
-        copy_doc_dir(source, dest)
+        copy_doc_dir(source, dest, self.rustc_version.trim())?;
+        Ok(())
     }
 
     fn upload_docs(

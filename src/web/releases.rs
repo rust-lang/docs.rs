@@ -330,7 +330,7 @@ pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 
-fn releases_handler(packages: Vec<Release>,
+pub fn releases_handler(packages: Vec<Release>,
                         page_number: i64,
                         release_type: &str,
                         tab: &str,
