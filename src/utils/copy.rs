@@ -13,8 +13,7 @@ use regex::Regex;
 /// Target directory must have doc directory.
 ///
 /// This function is designed to avoid file duplications.
-pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P) -> Result<()> {
-    let source = PathBuf::from(target.as_ref()).join("doc");
+pub fn copy_doc_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
     let destination = destination.as_ref().to_path_buf();
 
     // Make sure destination directory exists
@@ -27,7 +26,7 @@ pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P) -> Result<()> {
         r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
-    for file in source.read_dir()? {
+    for file in source.as_ref().read_dir()? {
 
         let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);

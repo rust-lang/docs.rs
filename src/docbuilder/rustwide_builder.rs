@@ -509,7 +509,7 @@ impl RustwideBuilder {
         target: &str,
         is_default_target: bool,
     ) -> Result<()> {
-        let source = target_dir.join(target);
+        let source = target_dir.join(target).join("doc");
 
         let mut dest = local_storage.to_path_buf();
         // only add target name to destination directory when we are copying a non-default target.
