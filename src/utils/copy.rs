@@ -1,8 +1,5 @@
 
-// FIXME: There is so many PathBuf's in this module
-//        Conver them to Path
-
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
 use error::Result;
 
@@ -13,12 +10,12 @@ use regex::Regex;
 /// Target directory must have doc directory.
 ///
 /// This function is designed to avoid file duplications.
-pub fn copy_doc_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
-    let destination = destination.as_ref().to_path_buf();
+pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -> Result<()> {
+    let destination = destination.as_ref();
 
     // Make sure destination directory exists
     if !destination.exists() {
-        fs::create_dir_all(&destination)?;
+        fs::create_dir_all(destination)?;
     }
 
     // Avoid copying common files
@@ -29,8 +26,7 @@ pub fn copy_doc_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
     for file in source.as_ref().read_dir()? {
 
         let file = file?;
-        let mut destination_full_path = PathBuf::from(&destination);
-        destination_full_path.push(file.file_name());
+        let destination_full_path = destination.join(file.file_name());
 
         let metadata = file.metadata()?;
 
@@ -61,13 +57,18 @@ mod test {
         let destination = tempdir::TempDir::new("cratesfyi-dst").unwrap();
         let doc = source.path().join("doc");
         fs::create_dir(&doc).unwrap();
+        fs::create_dir(doc.join("inner")).unwrap();
 
         fs::write(doc.join("index.html"), "<html>spooky</html>").unwrap();
         fs::write(doc.join("index.txt"), "spooky").unwrap();
+        fs::write(doc.join("inner").join("index.html"), "<html>spooky</html>").unwrap();
+        fs::write(doc.join("inner").join("index.txt"), "spooky").unwrap();
 
         // lets try to copy a src directory to tempdir
-        copy_doc_dir(source.path(), destination.path()).unwrap();
+        copy_doc_dir(source.path().join("doc"), destination.path()).unwrap();
         assert!(destination.path().join("index.html").exists());
         assert!(!destination.path().join("index.txt").exists());
+        assert!(destination.path().join("inner").join("index.html").exists());
+        assert!(!destination.path().join("inner").join("index.txt").exists());
     }
 }
