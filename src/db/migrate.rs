@@ -10,7 +10,6 @@ use std::borrow::Cow;
 #[derive(Copy, Clone)]
 enum ApplyMode {
     Permanent,
-    #[cfg(test)]
     Temporary,
 }
 
@@ -23,7 +22,6 @@ impl MigrationContext {
     fn format_query<'a>(&self, query: &'a str) -> Cow<'a, str> {
         match self.apply_mode {
             ApplyMode::Permanent => Cow::Borrowed(query),
-            #[cfg(test)]
             ApplyMode::Temporary => {
                 Cow::Owned(query.replace("CREATE TABLE", "CREATE TEMPORARY TABLE"))
             }
@@ -75,7 +73,6 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
     migrate_inner(version, conn, ApplyMode::Permanent)
 }
 
-#[cfg(test)]
 pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
     migrate_inner(version, conn, ApplyMode::Temporary)
 }

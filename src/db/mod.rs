@@ -3,10 +3,8 @@
 pub(crate) use self::add_package::add_package_into_database;
 pub(crate) use self::add_package::add_build_into_database;
 pub(crate) use self::add_package::CratesIoData;
-pub use self::file::{add_path_into_database, move_to_s3};
-pub use self::migrate::migrate;
-#[cfg(test)]
-pub(crate) use self::migrate::migrate_temporary;
+pub use self::file::add_path_into_database;
+pub use self::migrate::{migrate, migrate_temporary};
 pub use self::delete_crate::delete_crate;
 
 use postgres::{Connection, TlsMode};
@@ -16,7 +14,7 @@ use r2d2;
 use r2d2_postgres;
 
 mod add_package;
-pub(crate) mod file;
+pub mod file;
 mod migrate;
 mod delete_crate;
 pub mod blacklist;
@@ -31,7 +29,7 @@ pub fn connect_db() -> Result<Connection, Error> {
 }
 
 
-pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
+pub fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
     let manager = r2d2_postgres::PostgresConnectionManager::new(&db_url[..],

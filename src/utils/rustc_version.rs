@@ -1,4 +1,5 @@
 
+use std::process::{Command, Output};
 use regex::Regex;
 use error::Result;
 use failure::err_msg;
@@ -16,6 +17,26 @@ pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
             captures.get(1).unwrap().as_str(),
             captures.get(2).unwrap().as_str()))
 }
+
+
+/// Returns current version of rustc and cratesfyi
+pub fn get_current_versions() -> Result<(String, String)> {
+    let rustc_version = command_result(Command::new("rustc").arg("--version").output()?)?;
+    let cratesfyi_version = command_result(Command::new("rustc").arg("--version").output()?)?;
+
+    Ok((rustc_version, cratesfyi_version))
+}
+
+
+pub fn command_result(output: Output) -> Result<String> {
+    let mut command_out = String::from_utf8_lossy(&output.stdout).into_owned();
+    command_out.push_str(&String::from_utf8_lossy(&output.stderr).into_owned()[..]);
+    match output.status.success() {
+        true => Ok(command_out),
+        false => Err(err_msg(command_out)),
+    }
+}
+
 
 #[test]
 fn test_parse_rustc_version() {

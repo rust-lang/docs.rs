@@ -23,14 +23,14 @@ use utils;
 
 #[derive(Debug)]
 struct RustdocPage {
-    head: String,
-    body: String,
-    body_class: String,
-    name: String,
-    full: String,
-    version: String,
-    description: Option<String>,
-    crate_details: Option<CrateDetails>,
+    pub head: String,
+    pub body: String,
+    pub body_class: String,
+    pub name: String,
+    pub full: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub crate_details: Option<CrateDetails>,
 }
 
 

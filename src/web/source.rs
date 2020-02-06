@@ -82,7 +82,7 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
-    fn from_path(conn: &Connection,
+    pub fn from_path(conn: &Connection,
                      name: &str,
                      version: &str,
                      req_path: &str)
