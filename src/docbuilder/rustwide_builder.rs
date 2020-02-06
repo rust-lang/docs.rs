@@ -68,6 +68,7 @@ pub struct RustwideBuilder {
 
 impl RustwideBuilder {
     pub fn init() -> Result<Self> {
+        use rustwide::cmd::SandboxImage;
         let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
         let workspace_path = env_workspace_path
             .as_ref()
@@ -76,9 +77,13 @@ impl RustwideBuilder {
         let is_docker = std::env::var("DOCS_RS_DOCKER")
             .map(|s| s == "true")
             .unwrap_or(false);
-        let workspace = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
-            .running_inside_docker(is_docker)
-            .init()?;
+        let mut builder = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
+            .running_inside_docker(is_docker);
+        if let Ok(custom_image) = std::env::var("DOCS_RS_LOCAL_IMAGE") {
+            builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
+        }
+
+        let workspace = builder.init()?;
         workspace.purge_all_build_dirs()?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
@@ -255,7 +260,8 @@ impl RustwideBuilder {
         path: &Path,
     ) -> Result<bool> {
         self.update_toolchain()?;
-        let metadata = CargoMetadata::load(&self.workspace, &self.toolchain, path)?;
+        let metadata = CargoMetadata::load(&self.workspace, &self.toolchain, path)
+            .map_err(|err| err.context(format!("failed to load local package {}", path.display())))?;
         let package = metadata.root();
         self.build_package(doc_builder, &package.name, &package.version, Some(path))
     }
