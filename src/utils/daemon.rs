@@ -2,31 +2,31 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-
-use std::{env, thread};
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::process::exit;
+use db::{connect_db, update_search_index};
+use docbuilder::RustwideBuilder;
+use libc::fork;
 use std::fs::File;
 use std::io::Write;
-use std::time::Duration;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use libc::fork;
+use std::process::exit;
+use std::time::Duration;
+use std::{env, thread};
 use time;
-use docbuilder::RustwideBuilder;
-use DocBuilderOptions;
+use utils::{github_updater, pubsubhubbub, update_release_activity};
 use DocBuilder;
-use utils::{update_release_activity, github_updater, pubsubhubbub};
-use db::{connect_db, update_search_index};
-
-
+use DocBuilderOptions;
 
 pub fn start_daemon(background: bool) {
     // first check required environment variables
-    for v in ["CRATESFYI_PREFIX",
-              "CRATESFYI_PREFIX",
-              "CRATESFYI_GITHUB_USERNAME",
-              "CRATESFYI_GITHUB_ACCESSTOKEN"]
-        .iter() {
+    for v in [
+        "CRATESFYI_PREFIX",
+        "CRATESFYI_PREFIX",
+        "CRATESFYI_GITHUB_USERNAME",
+        "CRATESFYI_GITHUB_ACCESSTOKEN",
+    ]
+    .iter()
+    {
         env::var(v).expect(&format!("Environment variable {} not found", v));
     }
 
@@ -49,26 +49,29 @@ pub fn start_daemon(background: bool) {
     }
 
     // check new crates every minute
-    thread::Builder::new().name("crates.io reader".to_string()).spawn(move || {
-        // space this out to prevent it from clashing against the queue-builder thread on launch
-        thread::sleep(Duration::from_secs(30));
-        loop {
-            let opts = opts();
-            let mut doc_builder = DocBuilder::new(opts);
+    thread::Builder::new()
+        .name("crates.io reader".to_string())
+        .spawn(move || {
+            // space this out to prevent it from clashing against the queue-builder thread on launch
+            thread::sleep(Duration::from_secs(30));
+            loop {
+                let opts = opts();
+                let mut doc_builder = DocBuilder::new(opts);
 
-            if doc_builder.is_locked() {
-                debug!("Lock file exists, skipping checking new crates");
-            } else {
-                debug!("Checking new crates");
-                match doc_builder.get_new_crates() {
-                    Ok(n) => debug!("{} crates added to queue", n),
-                    Err(e) => error!("Failed to get new crates: {}", e),
+                if doc_builder.is_locked() {
+                    debug!("Lock file exists, skipping checking new crates");
+                } else {
+                    debug!("Checking new crates");
+                    match doc_builder.get_new_crates() {
+                        Ok(n) => debug!("{} crates added to queue", n),
+                        Err(e) => error!("Failed to get new crates: {}", e),
+                    }
                 }
-            }
 
-            thread::sleep(Duration::from_secs(60));
-        }
-    }).unwrap();
+                thread::sleep(Duration::from_secs(60));
+            }
+        })
+        .unwrap();
 
     // build new crates every minute
     thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
@@ -199,10 +202,10 @@ pub fn start_daemon(background: bool) {
         }
     }).unwrap();
 
-
     // update release activity everyday at 23:55
-    thread::Builder::new().name("release activity updater".to_string()).spawn(move || {
-        loop {
+    thread::Builder::new()
+        .name("release activity updater".to_string())
+        .spawn(move || loop {
             thread::sleep(Duration::from_secs(60));
             let now = time::now();
             if now.tm_hour == 23 && now.tm_min == 55 {
@@ -211,31 +214,31 @@ pub fn start_daemon(background: bool) {
                     error!("Failed to update release activity: {}", e);
                 }
             }
-        }
-    }).unwrap();
-
+        })
+        .unwrap();
 
     // update search index every 3 hours
-    thread::Builder::new().name("search index updater".to_string()).spawn(move || {
-        loop {
+    thread::Builder::new()
+        .name("search index updater".to_string())
+        .spawn(move || loop {
             thread::sleep(Duration::from_secs(60 * 60 * 3));
             let conn = connect_db().expect("Failed to connect database");
             if let Err(e) = update_search_index(&conn) {
                 error!("Failed to update search index: {}", e);
             }
-        }
-    }).unwrap();
-
+        })
+        .unwrap();
 
     // update github stats every 6 hours
-    thread::Builder::new().name("github stat updater".to_string()).spawn(move || {
-        loop {
+    thread::Builder::new()
+        .name("github stat updater".to_string())
+        .spawn(move || loop {
             thread::sleep(Duration::from_secs(60 * 60 * 6));
             if let Err(e) = github_updater() {
                 error!("Failed to update github fields: {}", e);
             }
-        }
-    }).unwrap();
+        })
+        .unwrap();
 
     // TODO: update ssl certificate every 3 months
 
@@ -244,10 +247,9 @@ pub fn start_daemon(background: bool) {
     ::Server::start(None);
 }
 
-
-
 fn opts() -> DocBuilderOptions {
-    let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX")
-        .expect("CRATESFYI_PREFIX environment variable not found"));
+    let prefix = PathBuf::from(
+        env::var("CRATESFYI_PREFIX").expect("CRATESFYI_PREFIX environment variable not found"),
+    );
     DocBuilderOptions::from_prefix(prefix)
 }

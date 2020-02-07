@@ -1,11 +1,10 @@
 //! Updates crates.io index and builds new packages
 
 use super::{DocBuilder, RustwideBuilder};
+use crates_index_diff::{ChangeKind, Index};
 use db::connect_db;
 use error::Result;
-use crates_index_diff::{ChangeKind, Index};
 use utils::add_crate_to_queue;
-
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
@@ -30,7 +29,8 @@ impl DocBuilder {
 
     pub fn get_queue_count(&self) -> Result<i64> {
         let conn = connect_db()?;
-        Ok(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
+        Ok(conn
+            .query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
             .unwrap()
             .get(0)
             .get(0))
@@ -43,12 +43,14 @@ impl DocBuilder {
     ) -> Result<bool> {
         let conn = connect_db()?;
 
-        let query = conn.query("SELECT id, name, version
+        let query = conn.query(
+            "SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
                                      ORDER BY priority ASC, attempt ASC, id ASC
                                      LIMIT 1",
-                                    &[])?;
+            &[],
+        )?;
 
         if query.is_empty() {
             // nothing in the queue; bail
@@ -66,17 +68,19 @@ impl DocBuilder {
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
-                                           &[&id])?;
+                let rows = conn.query(
+                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                    &[&id],
+                )?;
                 let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
                     ::web::metrics::FAILED_BUILDS.inc();
                     ::web::metrics::TOTAL_BUILDS.inc();
                 }
-                error!("Failed to build package {}-{} from queue: {}",
-                       name,
-                       version,
-                       e)
+                error!(
+                    "Failed to build package {}-{} from queue: {}",
+                    name, version, e
+                )
             }
         }
 

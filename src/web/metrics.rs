@@ -2,7 +2,7 @@ use super::pool::Pool;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
-use prometheus::{Encoder, IntGauge, IntCounter, TextEncoder};
+use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
 
 lazy_static! {
     static ref QUEUED_CRATES_COUNT: IntGauge = register_int_gauge!(
@@ -15,11 +15,8 @@ lazy_static! {
         "Number of crates that failed to build"
     )
     .unwrap();
-    pub static ref TOTAL_BUILDS: IntCounter = register_int_counter!(
-        "docsrs_total_builds",
-        "Number of crates built"
-    )
-    .unwrap();
+    pub static ref TOTAL_BUILDS: IntCounter =
+        register_int_counter!("docsrs_total_builds", "Number of crates built").unwrap();
     pub static ref SUCCESSFUL_BUILDS: IntCounter = register_int_counter!(
         "docsrs_successful_builds",
         "Number of builds that successfully generated docs"

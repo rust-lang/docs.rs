@@ -5,8 +5,8 @@ use failure::Error;
 use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::panic;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let env = TestEnvironment::new();
@@ -38,16 +38,24 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
 }
 
 /// Make sure that a URL redirects to a specific page
-pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<(), Error> {
+pub(crate) fn assert_redirect(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<(), Error> {
     let response = web.get(path).send()?;
     let status = response.status();
     // Reqwest follows redirects
     assert!(status.is_success(), "failed to GET {}: {}", path, status);
 
     let redirect_target = response.url().path();
-    assert!(redirect_target == expected_target,
-            "{}: expected redirect to {}, got redirect to {}",
-            path, expected_target, redirect_target);
+    assert!(
+        redirect_target == expected_target,
+        "{}: expected redirect to {}, got redirect to {}",
+        path,
+        expected_target,
+        redirect_target
+    );
     Ok(())
 }
 

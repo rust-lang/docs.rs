@@ -1,9 +1,9 @@
-use std::error::Error;
 use iron::prelude::*;
-use iron::Handler;
 use iron::status;
-use web::page::Page;
+use iron::Handler;
+use std::error::Error;
 use std::fmt;
+use web::page::Page;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Nope {

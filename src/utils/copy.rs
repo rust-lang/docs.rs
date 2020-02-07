@@ -1,22 +1,21 @@
-
 // FIXME: There is so many PathBuf's in this module
 //        Conver them to Path
 
-use std::path::{Path, PathBuf};
-use std::fs;
 use error::Result;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
-
 /// Copies files from source directory to destination directory.
 pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
-    copy_files_and_handle_html(source.as_ref().to_path_buf(),
-                               destination.as_ref().to_path_buf(),
-                               false,
-                               "")
+    copy_files_and_handle_html(
+        source.as_ref().to_path_buf(),
+        destination.as_ref().to_path_buf(),
+        false,
+        "",
+    )
 }
-
 
 /// Copies documentation from a crate's target directory to destination.
 ///
@@ -24,24 +23,22 @@ pub fn copy_dir<P: AsRef<Path>>(source: P, destination: P) -> Result<()> {
 ///
 /// This function is designed to avoid file duplications. It is using rustc version string
 /// to rename common files (css files, jquery.js, playpen.js, main.js etc.) in a standard rustdoc.
-pub fn copy_doc_dir<P: AsRef<Path>>(target: P,
-                                    destination: P,
-                                    rustc_version: &str)
-                                    -> Result<()> {
+pub fn copy_doc_dir<P: AsRef<Path>>(target: P, destination: P, rustc_version: &str) -> Result<()> {
     let source = PathBuf::from(target.as_ref()).join("doc");
-    copy_files_and_handle_html(source,
-                               destination.as_ref().to_path_buf(),
-                               true,
-                               rustc_version)
+    copy_files_and_handle_html(
+        source,
+        destination.as_ref().to_path_buf(),
+        true,
+        rustc_version,
+    )
 }
 
-
-fn copy_files_and_handle_html(source: PathBuf,
-                              destination: PathBuf,
-                              handle_html: bool,
-                              rustc_version: &str)
-                              -> Result<()> {
-
+fn copy_files_and_handle_html(
+    source: PathBuf,
+    destination: PathBuf,
+    handle_html: bool,
+    rustc_version: &str,
+) -> Result<()> {
     // FIXME: handle_html is useless since we started using --resource-suffix
     //        argument with rustdoc
 
@@ -56,7 +53,6 @@ fn copy_files_and_handle_html(source: PathBuf,
         .unwrap();
 
     for file in source.read_dir()? {
-
         let file = file?;
         let mut destination_full_path = PathBuf::from(&destination);
         destination_full_path.push(file.file_name());
@@ -65,28 +61,27 @@ fn copy_files_and_handle_html(source: PathBuf,
 
         if metadata.is_dir() {
             fs::create_dir_all(&destination_full_path)?;
-            copy_files_and_handle_html(file.path(),
-                                            destination_full_path,
-                                            handle_html,
-                                            &rustc_version)?
+            copy_files_and_handle_html(
+                file.path(),
+                destination_full_path,
+                handle_html,
+                &rustc_version,
+            )?
         } else if handle_html && dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
             fs::copy(&file.path(), &destination_full_path)?;
         }
-
     }
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod test {
     extern crate env_logger;
+    use super::*;
     use std::fs;
     use std::path::Path;
-    use super::*;
 
     #[test]
     #[ignore]

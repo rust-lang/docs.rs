@@ -326,12 +326,7 @@ impl RustwideBuilder {
 
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
-                        local_storage.path(),
-                        "",
-                        true,
-                    )?;
+                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
                     successful_targets.push(res.target.clone());
                     // Then build the documentation for all the targets

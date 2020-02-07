@@ -13,8 +13,8 @@ pub(crate) struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            memory: 3 * 1024 * 1024 * 1024,  // 3 GB
-            timeout: Duration::from_secs(15 * 60),  // 15 minutes
+            memory: 3 * 1024 * 1024 * 1024,        // 3 GB
+            timeout: Duration::from_secs(15 * 60), // 15 minutes
             networking: false,
             max_log_size: 100 * 1024, // 100 KB
         }
@@ -68,7 +68,10 @@ impl Limits {
             "Maximum rustdoc execution time".into(),
             time_scale(self.timeout.as_secs() as usize),
         );
-        res.insert("Maximum size of a build log".into(), size_scale(self.max_log_size));
+        res.insert(
+            "Maximum size of a build log".into(),
+            size_scale(self.max_log_size),
+        );
         if self.networking {
             res.insert("Network access".into(), "allowed".into());
         } else {

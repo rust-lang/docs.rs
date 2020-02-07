@@ -1,17 +1,15 @@
 //! Source code browser
 
-
-use std::collections::BTreeMap;
-use std::cmp::Ordering;
-use super::MetaData;
+use super::file::File as DbFile;
 use super::page::Page;
 use super::pool::Pool;
-use super::file::File as DbFile;
+use super::MetaData;
 use iron::prelude::*;
+use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
-use postgres::Connection;
-
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 #[derive(PartialEq, PartialOrd)]
 enum FileType {
@@ -21,19 +19,16 @@ enum FileType {
     RustSource,
 }
 
-
 #[derive(PartialEq, PartialOrd)]
 struct File {
     name: String,
     file_type: FileType,
 }
 
-
 struct FileList {
     metadata: MetaData,
     files: Vec<File>,
 }
-
 
 impl ToJson for FileList {
     fn to_json(&self) -> Json {
@@ -47,13 +42,15 @@ impl ToJson for FileList {
             let mut file_m: BTreeMap<String, Json> = BTreeMap::new();
             file_m.insert("name".to_string(), file.name.to_json());
 
-            file_m.insert(match file.file_type {
-                              FileType::Dir => "file_type_dir".to_string(),
-                              FileType::Text => "file_type_text".to_string(),
-                              FileType::Binary => "file_type_binary".to_string(),
-                              FileType::RustSource => "file_type_rust_source".to_string(),
-                          },
-                          true.to_json());
+            file_m.insert(
+                match file.file_type {
+                    FileType::Dir => "file_type_dir".to_string(),
+                    FileType::Text => "file_type_text".to_string(),
+                    FileType::Binary => "file_type_binary".to_string(),
+                    FileType::RustSource => "file_type_rust_source".to_string(),
+                },
+                true.to_json(),
+            );
 
             file_vec.push(file_m.to_json());
         }
@@ -62,7 +59,6 @@ impl ToJson for FileList {
         m.to_json()
     }
 }
-
 
 impl FileList {
     /// Gets FileList from a request path
@@ -82,13 +78,15 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
-    pub fn from_path(conn: &Connection,
-                     name: &str,
-                     version: &str,
-                     req_path: &str)
-                     -> Option<FileList> {
-
-        let rows = conn.query("SELECT crates.name,
+    pub fn from_path(
+        conn: &Connection,
+        name: &str,
+        version: &str,
+        req_path: &str,
+    ) -> Option<FileList> {
+        let rows = conn
+            .query(
+                "SELECT crates.name,
                                       releases.version,
                                       releases.description,
                                       releases.target_name,
@@ -98,7 +96,8 @@ impl FileList {
                                FROM releases
                                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
-                   &[&name, &version])
+                &[&name, &version],
+            )
             .unwrap();
 
         if rows.len() == 0 {
@@ -129,8 +128,7 @@ impl FileList {
                         // if path have '/' it is a directory
                         let ftype = if path_splited.len() > 1 {
                             FileType::Dir
-                        } else if mime.starts_with("text") &&
-                                              path_splited[0].ends_with(".rs") {
+                        } else if mime.starts_with("text") && path_splited[0].ends_with(".rs") {
                             FileType::RustSource
                         } else if mime.starts_with("text") {
                             FileType::Text
@@ -181,7 +179,6 @@ impl FileList {
     }
 }
 
-
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));
@@ -205,11 +202,12 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         });
 
         // remove crate name and version from req_path
-        let path = req_path.join("/").replace(&format!("{}/{}/", name, version), "");
+        let path = req_path
+            .join("/")
+            .replace(&format!("{}/{}/", name, version), "");
 
         (path, file_path)
     };
-
 
     let conn = extension!(req, Pool).get();
 
@@ -221,13 +219,15 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         None
     };
 
-
     let (content, is_rust_source) = if let Some(file) = file {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !file.0.mime.starts_with("text") && !file.is_empty() {
             return Ok(file.serve());
         } else if file.0.mime.starts_with("text") && !file.is_empty() {
-            (String::from_utf8(file.0.content).ok(), file.0.path.ends_with(".rs"))
+            (
+                String::from_utf8(file.0.content).ok(),
+                file.0.path.ends_with(".rs"),
+            )
         } else {
             (None, false)
         }
@@ -237,8 +237,8 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
     if list.is_none() {
-        use iron::status;
         use super::error::Nope;
+        use iron::status;
         return Err(IronError::new(Nope::NoResults, status::NotFound));
     }
 
