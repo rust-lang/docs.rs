@@ -283,7 +283,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get();
 
     match match_version(&conn, &name, req_version) {
-        MatchVersion::Exact(version) => {
+        MatchVersion::Exact((version, _)) => {
             let details = CrateDetails::new(&conn, &name, &version);
 
             Page::new(details)
@@ -292,7 +292,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .set_true("package_navigation_crate_tab")
                 .to_resp("crate_details")
         }
-        MatchVersion::Semver(version) => {
+        MatchVersion::Semver((version, _)) => {
             let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
                                                 redirect_base(req),
                                                 name,
