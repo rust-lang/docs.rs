@@ -5,12 +5,8 @@
 
 use std::{env, thread};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::process::exit;
-use std::fs::File;
-use std::io::Write;
 use std::time::Duration;
 use std::path::PathBuf;
-use libc::fork;
 use time;
 use docbuilder::RustwideBuilder;
 use DocBuilderOptions;
@@ -18,7 +14,13 @@ use DocBuilder;
 use utils::{update_release_activity, github_updater, pubsubhubbub};
 use db::{connect_db, update_search_index};
 
-
+#[cfg(not(target_os = "windows"))]
+use ::{
+    libc::fork,
+    std::process::exit,
+    std::fs::File,
+    std::io::Write
+};
 
 pub fn start_daemon(background: bool) {
     // first check required environment variables
@@ -36,15 +38,22 @@ pub fn start_daemon(background: bool) {
     dbopts.check_paths().unwrap();
 
     if background {
-        // fork the process
-        let pid = unsafe { fork() };
-        if pid > 0 {
-            let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
-                .expect("Failed to create pid file");
-            writeln!(&mut file, "{}", pid).expect("Failed to write pid");
+        #[cfg(target_os = "windows")]
+        {
+            panic!("running in background not supported on windows");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            // fork the process
+            let pid = unsafe { fork() };
+            if pid > 0 {
+                let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
+                    .expect("Failed to create pid file");
+                writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
-            info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
-            exit(0);
+                info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
+                exit(0);
+            }
         }
     }
 
