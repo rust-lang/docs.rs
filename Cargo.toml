@@ -48,6 +48,9 @@ handlebars-iron = "0.22"
 params = "0.6"
 staticfile = { version = "0.4", features = [ "cache" ] }
 
+[target.'cfg(windows)'.dependencies]
+path-slash = "0.1.1"
+
 [dependencies.postgres]
 version = "0.15"
 features = [ "with-time", "with-rustc-serialize" ]
