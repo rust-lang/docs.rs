@@ -28,7 +28,11 @@ services:
             POSTGRES_PASSWORD: password
     s3:
         image: minio/minio
-        command: server /data
+        entrypoint: >
+            /bin/sh -c "
+                mkdir /data/rust-docs-rs;
+                minio server /data;
+            "
         ports:
             - "9000:9000"
         volumes:
