@@ -41,6 +41,10 @@ extern crate tokio;
 extern crate systemstat;
 extern crate rustwide;
 extern crate tempdir;
+
+#[cfg(windows)]
+extern crate path_slash;
+
 #[cfg(test)]
 extern crate once_cell;
 

@@ -163,7 +163,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
 
     use std::collections::HashMap;
     let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
-
     use futures::future::Future;
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
@@ -188,8 +187,13 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             };
             let mut content: Vec<u8> = Vec::new();
             file.read_to_end(&mut content)?;
-            let bucket_path = Path::new(prefix).join(&file_path)
-                .into_os_string().into_string().unwrap();
+            
+            let bucket_path = Path::new(prefix).join(&file_path);
+
+            #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
+            let bucket_path = path_slash::PathBufExt::to_slash(&bucket_path).unwrap();
+            #[cfg(not(windows))]
+            let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
             let mime = {
                 let mime = cookie.buffer(&content)?;
