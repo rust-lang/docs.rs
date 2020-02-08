@@ -173,23 +173,37 @@ div.nav-container {
     form.landing-search-form-nav {
         max-width: 1200px;
 
-        input.search-input-nav {
+        div.search-input-nav {
             float: right;
-            max-width: 200px;
-            border: none;
-            margin: 0 1em 0 0;
-            font-size: 0.8em;
-            text-align: right;
-            box-shadow: none;
-            background-color: #fff;
-            height: 31px;
+            max-width: 150px;
             display: none;
-            box-shadow: 0px 0px 2px #000;
+            border-left: 1px solid $color-border;
 
             @media #{$media-sm} {
                 display: block;
             }
+
+            @media #{$media-md} {
+                max-width: 200px;
+            }
+
+            label {
+                color: #777;
+                cursor: pointer;
+                padding-left: 0.5rem;
+                font-size: 0.8em;
+            }
+
+            input {
+                border: none;
+                margin: 0 1em 0 0;
+                font-size: 0.8em;
+                box-shadow: none;
+                background-color: #fff;
+                height: 31px;
+            }
         }
+        
 
         input.search-input-nav:focus {
             outline: unset;
