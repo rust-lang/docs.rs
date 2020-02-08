@@ -190,10 +190,10 @@ impl Handler for CratesfyiHandler {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MatchVersion {
     /// `match_version` was given an exact version, which matched a saved crate version.
-    Exact(String),
+    Exact((String, i32)),
     /// `match_version` was given a semver version requirement, which matched the given saved crate
     /// version.
-    Semver(String),
+    Semver((String, i32)),
     /// `match_version` was given a version requirement which did not match any saved crate
     /// versions.
     None,
@@ -202,7 +202,7 @@ enum MatchVersion {
 impl MatchVersion {
     /// Convert this `MatchVersion` into an `Option`, discarding whether the matched version came
     /// from an exact version number or a semver requirement.
-    fn into_option(self) -> Option<String> {
+    fn into_option(self) -> Option<(String, i32)> {
         match self {
             MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
             MatchVersion::None => None,
@@ -228,21 +228,21 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
         .unwrap_or("*".to_string());
 
-    let versions: Vec<String> = {
-        let query = "SELECT version
+    let versions: Vec<(String, i32)> = {
+        let query = "SELECT version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE name = $1 AND yanked = false";
         let rows = conn.query(query, &[&name]).unwrap();
         if rows.len() == 0 {
             return MatchVersion::None;
         }
-        rows.iter().map(|row| row.get(0)).collect()
+        rows.iter().map(|row| (row.get(0), row.get(1))).collect()
     };
 
     // first check for exact match
     // we can't expect users to use semver in query
     for version in &versions {
-        if version == &req_version {
+        if version.0 == req_version {
             return MatchVersion::Exact(version.clone());
         }
     }
@@ -255,13 +255,13 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
 
     // we need to sort versions first
     let versions_sem = {
-        let mut versions_sem: Vec<Version> = Vec::new();
+        let mut versions_sem: Vec<(Version, i32)> = Vec::new();
 
         for version in &versions {
             // in theory a crate must always have a semver compatible version
             // but check result just in case
-            let version = match Version::parse(&version) {
-                Ok(v) => v,
+            let version = match Version::parse(&version.0) {
+                Ok(v) => (v, version.1),
                 Err(_) => return MatchVersion::None,
             };
             versions_sem.push(version);
@@ -273,15 +273,15 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
     };
 
     for version in &versions_sem {
-        if req_sem_ver.matches(&version) {
-            return MatchVersion::Semver(format!("{}", version));
+        if req_sem_ver.matches(&version.0) {
+            return MatchVersion::Semver((format!("{}", version.0), version.1));
         }
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first version if requested version is '*'
     if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver(format!("{}", versions_sem[0]));
+        return MatchVersion::Semver((format!("{}", versions_sem[0].0), versions_sem[0].1));
     }
 
     MatchVersion::None
@@ -516,11 +516,25 @@ mod test {
     use crate::test::*;
     use web::{match_version, MatchVersion};
 
+    const DEFAULT_ID: i32 = 0;
+
     fn release(version: &str, db: &TestDatabase) -> i32 {
         db.fake_release().name("foo").version(version).create().unwrap()
     }
-    fn version(v: Option<&str>, db: &TestDatabase) -> MatchVersion {
-        match_version(&db.conn(), "foo", v)
+    fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
+        strip_id(match_version(&db.conn(), "foo", v))
+    }
+
+    fn strip_id(v: MatchVersion) -> Option<String> {
+        v.into_option().map(|(version, _id)| version)
+    }
+
+    fn semver(version: &'static str) -> Option<String> {
+        strip_id(MatchVersion::Semver((version.into(), DEFAULT_ID)))
+    }
+
+    fn exact(version: &'static str) -> Option<String> {
+        strip_id(MatchVersion::Exact((version.into(), DEFAULT_ID)))
     }
 
     #[test]
@@ -541,18 +555,18 @@ mod test {
             let release = |v| release(v, db);
 
             release("0.3.1-pre");
-            assert_eq!(version(Some("*")), MatchVersion::Semver("0.3.1-pre".into()));
+            assert_eq!(version(Some("*")), semver("0.3.1-pre"));
 
             release("0.3.1-alpha");
-            assert_eq!(version(Some("0.3.1-alpha")), MatchVersion::Exact("0.3.1-alpha".into()));
+            assert_eq!(version(Some("0.3.1-alpha")), exact("0.3.1-alpha"));
 
             release("0.3.0");
-            let three = MatchVersion::Semver("0.3.0".into());
+            let three = semver("0.3.0");
             assert_eq!(version(None), three);
             // same thing but with "*"
             assert_eq!(version(Some("*")), three);
             // make sure exact matches still work
-            assert_eq!(version(Some("0.3.0")), MatchVersion::Exact("0.3.0".into()));
+            assert_eq!(version(Some("0.3.0")), exact("0.3.0"));
 
             Ok(())
         });
@@ -567,12 +581,12 @@ mod test {
             let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
             db.conn().query(query, &[&release_id]).unwrap();
-            assert_eq!(version(None, db), MatchVersion::None);
-            assert_eq!(version(Some("0.3"), db), MatchVersion::None);
+            assert_eq!(version(None, db), strip_id(MatchVersion::None));
+            assert_eq!(version(Some("0.3"), db), strip_id(MatchVersion::None));
 
             release("0.1.0+4.1", db);
-            assert_eq!(version(Some("0.1.0+4.1"), db), MatchVersion::Exact("0.1.0+4.1".into()));
-            assert_eq!(version(None, db), MatchVersion::Semver("0.1.0+4.1".into()));
+            assert_eq!(version(Some("0.1.0+4.1"), db), exact("0.1.0+4.1"));
+            assert_eq!(version(None, db), semver("0.1.0+4.1"));
 
             Ok(())
         });
@@ -586,12 +600,12 @@ mod test {
 
             release("0.1.0+4.1", db);
             release("0.1.1", db);
-            assert_eq!(version(None, db), MatchVersion::Semver("0.1.1".into()));
+            assert_eq!(version(None, db), semver("0.1.1"));
 
             release("0.5.1+zstd.1.4.4", db);
-            assert_eq!(version(None, db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
-            assert_eq!(version(Some("0.5"), db), MatchVersion::Semver("0.5.1+zstd.1.4.4".into()));
-            assert_eq!(version(Some("0.5.1+zstd.1.4.4"), db), MatchVersion::Exact("0.5.1+zstd.1.4.4".into()));
+            assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
+            assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
+            assert_eq!(version(Some("0.5.1+zstd.1.4.4"), db), exact("0.5.1+zstd.1.4.4"));
 
             Ok(())
         });

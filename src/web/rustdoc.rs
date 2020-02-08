@@ -157,7 +157,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let version = match match_version(&conn, &crate_name, req_version).into_option() {
+    let (version, id) = match match_version(&conn, &crate_name, req_version).into_option() {
         Some(v) => v,
         None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     };
@@ -167,9 +167,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let (target_name, has_docs): (String, bool) = {
         let rows = ctry!(conn.query("SELECT target_name, rustdoc_status
                                      FROM releases
-                                     INNER JOIN crates ON crates.id = releases.crate_id
-                                     WHERE crates.name = $1 AND releases.version = $2",
-                                    &[&crate_name, &version]));
+                                     WHERE releases.id = $1",
+                                    &[&id]));
 
         (rows.get(0).get(0), rows.get(0).get(1))
     };
@@ -203,8 +202,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     version = match match_version(&conn, &name, url_version) {
-        MatchVersion::Exact(v) => v,
-        MatchVersion::Semver(v) => {
+        MatchVersion::Exact((v, _)) => v,
+        MatchVersion::Semver((v, _)) => {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
@@ -363,12 +362,11 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get();
 
     let options = match match_version(&conn, &name, Some(&version)) {
-        MatchVersion::Exact(version) => {
+        MatchVersion::Exact((version, id)) => {
             let rows = ctry!(conn.query("SELECT rustdoc_status
                                          FROM releases
-                                         INNER JOIN crates ON crates.id = releases.crate_id
-                                         WHERE crates.name = $1 AND releases.version = $2",
-                                        &[&name, &version]));
+                                         WHERE releases.id = $1",
+                                        &[&id]));
             if rows.len() > 0 && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
@@ -383,7 +381,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
-        MatchVersion::Semver(version) => {
+        MatchVersion::Semver((version, _)) => {
             let url = ctry!(Url::parse(&format!("{}/{}/badge.svg?version={}",
                                                 redirect_base(req),
                                                 name,
