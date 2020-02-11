@@ -39,20 +39,23 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
 
 /// Make sure that a URL redirects to a specific page
 pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<(), Error> {
+    // Reqwest follows redirects automatically
     let response = web.get(path).send()?;
     let status = response.status();
 
-    // Reqwest follows redirects automatically
     let redirect_target = if expected_target.starts_with("https://") {
         response.url().as_str()
     } else {
         response.url().path()
     };
+    // Either we followed a redirect to the wrong place, or there was no redirect
     if redirect_target != expected_target {
+        // wrong place
         if redirect_target != path {
             panic!("{}: expected redirect to {}, got redirect to {}",
                    path, expected_target, redirect_target);
         } else {
+            // no redirect
             panic!("{}: expected redirect to {}, got {}", path, expected_target, status);
         }
     }
