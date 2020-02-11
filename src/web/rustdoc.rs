@@ -568,10 +568,10 @@ mod test {
               .create().unwrap();
 
             let web = env.frontend();
-            /* TODO: this should work even without a trailing slash
+
             let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy");
-            */
+            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
+
             let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
             assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
 
