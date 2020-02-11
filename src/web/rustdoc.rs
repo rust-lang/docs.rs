@@ -561,10 +561,10 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             db.fake_release().name("dummy").version("0.1.0")
-              .platform("x86_64-pc-windows-msvc")
+              .add_platform("x86_64-pc-windows-msvc")
               .create().unwrap();
             db.fake_release().name("dummy").version("0.2.0")
-              .platform("x86_64-pc-windows-msvc")
+              .add_platform("x86_64-pc-windows-msvc")
               .create().unwrap();
 
             let web = env.frontend();
