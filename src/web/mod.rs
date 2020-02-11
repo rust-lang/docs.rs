@@ -555,7 +555,7 @@ mod test {
             let web = env.frontend();
             assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu", "/crate/bat/0.2.0", web)?;
-            /* TODO: this should work
+            /* TODO: this should work (https://github.com/rust-lang/docs.rs/issues/603)
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
             */
