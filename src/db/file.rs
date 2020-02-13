@@ -16,6 +16,10 @@ use failure::err_msg;
 use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
+#[cfg(not(windows))]
+use magic::{Cookie, flags};
+#[cfg(not(windows))]
+use std::ffi::OsStr;
 
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
@@ -155,12 +159,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               prefix: &str,
                                               path: P)
                                               -> Result<Json> {
-    use magic::{Cookie, flags};
-    let cookie = Cookie::open(flags::MIME_TYPE)?;
-    cookie.load::<&str>(&[])?;
-
     let trans = conn.transaction()?;
-
+    #[cfg(not(windows))]
+    let mime_data = load_mime_data()?;
     use std::collections::HashMap;
     let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
     use futures::future::Future;
@@ -195,25 +196,10 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             #[cfg(not(windows))]
             let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
-            let mime = {
-                let mime = cookie.buffer(&content)?;
-                // css's are causing some problem in browsers
-                // magic will return text/plain for css file types
-                // convert them to text/css
-                // do the same for javascript files
-                if mime == "text/plain" {
-                    let e = file_path.extension().unwrap_or_default();
-                    if e == "css" {
-                        "text/css".to_owned()
-                    } else if e == "js" {
-                        "application/javascript".to_owned()
-                    } else {
-                        mime.to_owned()
-                    }
-                } else {
-                    mime.to_owned()
-                }
-            };
+            #[cfg(windows)]
+            let mime = detect_mime(&content, &file_path)?;
+            #[cfg(not(windows))]
+            let mime = detect_mime(&content, &file_path, &mime_data)?;
 
             if let Some(client) = &client {
                 futures.push(client.put_object(PutObjectRequest {
@@ -276,6 +262,51 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
+#[cfg(not(windows))]
+fn load_mime_data() -> Result<Cookie> {
+    let cookie = Cookie::open(flags::MIME_TYPE)?;
+    cookie.load::<&str>(&[])?;
+    Ok(cookie)
+}
+
+#[cfg(not(windows))]
+fn detect_mime(content: &Vec<u8>, file_path: &Path, cookie: &Cookie) -> Result<String> {
+    let mime = cookie.buffer(&content)?;
+
+    // magic is not specific enough sometimes
+    match mime.as_str() {
+        "text/plain" => {
+            match file_path.extension().and_then(OsStr::to_str) {
+                Some("md") => Ok("text/markdown".to_owned()),
+                Some("rs") => Ok("text/rust".to_owned()),
+                Some("markdown") => Ok("text/markdown".to_owned()),
+                Some("css") => Ok("text/css".to_owned()),
+                Some("toml") => Ok("text/x-toml".to_owned()),
+                Some("js") => Ok("application/javascript".to_owned()),
+                Some("json") => Ok("application/json".to_owned()),
+                _ => Ok(mime.to_owned())
+            }
+        }
+        "text/troff" => {
+            match file_path.extension().and_then(OsStr::to_str) {
+                Some("css") => Ok("text/css".to_owned()),
+                _ => Ok(mime.to_owned())
+            }
+        }
+        _ => Ok(mime.to_owned())
+    }
+}
+
+#[cfg(windows)]
+fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String> {
+    let file_ext = file_path.extension().map(|ext| ext.to_str()).unwrap_or_default();
+    Ok(match file_ext {
+        Some("md") => "text/markdown".to_owned(),
+        Some("rs") => "text/rust".to_owned(),
+        None => "text/plain".to_owned(),
+        _ => mime_guess::from_path(file_path).first_raw().map(|m| m.to_owned()).unwrap_or("text/plain".to_owned())
+    })
+}
 
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
@@ -343,7 +374,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
 mod test {
     extern crate env_logger;
     use std::env;
-    use super::get_file_list;
+    use super::*;
 
     #[test]
     fn test_get_file_list() {
@@ -356,4 +387,29 @@ mod test {
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
+    #[test]
+    fn test_mime_types() {
+        check_mime("/ignored", ".gitignore", "text/plain");
+        check_mime("[package]", "hello.toml","text/x-toml");
+        check_mime(".ok { color:red; }", "hello.css","text/css");
+        check_mime("var x = 1", "hello.js","application/javascript");
+        check_mime("<html>", "hello.html","text/html");
+        check_mime("## HELLO", "hello.hello.md","text/markdown");
+        check_mime("## WORLD", "hello.markdown","text/markdown");
+        check_mime("{}", "hello.json","application/json");
+        check_mime("hello world", "hello.txt","text/plain");
+        check_mime("//! Simple module to ...", "file.rs", "text/rust");
+    }
+
+    fn check_mime(content: &str, path: &str, expected_mime: &str) {
+        #[cfg(not(windows))]
+        let mime_data = load_mime_data().unwrap();
+        #[cfg(windows)]
+        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path));
+        #[cfg(not(windows))]
+        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path), &mime_data);
+        let detected_mime = detected_mime.expect("no mime was given");
+        assert_eq!(detected_mime, expected_mime);
+    }
 }
+

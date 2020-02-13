@@ -16,7 +16,6 @@ extern crate reqwest;
 extern crate time;
 extern crate semver;
 extern crate slug;
-extern crate magic;
 extern crate iron;
 extern crate router;
 extern crate staticfile;
@@ -26,7 +25,6 @@ extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate url;
 extern crate params;
-extern crate libc;
 extern crate badge;
 extern crate crates_index_diff;
 extern crate toml;
@@ -42,8 +40,15 @@ extern crate systemstat;
 extern crate rustwide;
 extern crate tempdir;
 
+#[cfg(not(windows))]
+extern crate magic;
+#[cfg(not(windows))]
+extern crate libc;
+
 #[cfg(windows)]
 extern crate path_slash;
+#[cfg(windows)]
+extern crate mime_guess;
 
 #[cfg(test)]
 extern crate once_cell;
