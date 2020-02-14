@@ -16,11 +16,9 @@ use failure::err_msg;
 use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
+use std::ffi::OsStr;
 #[cfg(not(windows))]
 use magic::{Cookie, flags};
-#[cfg(not(windows))]
-use std::ffi::OsStr;
-
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -272,40 +270,31 @@ fn load_mime_data() -> Result<Cookie> {
 #[cfg(not(windows))]
 fn detect_mime(content: &Vec<u8>, file_path: &Path, cookie: &Cookie) -> Result<String> {
     let mime = cookie.buffer(&content)?;
-
-    // magic is not specific enough sometimes
-    match mime.as_str() {
-        "text/plain" => {
-            match file_path.extension().and_then(OsStr::to_str) {
-                Some("md") => Ok("text/markdown".to_owned()),
-                Some("rs") => Ok("text/rust".to_owned()),
-                Some("markdown") => Ok("text/markdown".to_owned()),
-                Some("css") => Ok("text/css".to_owned()),
-                Some("toml") => Ok("text/x-toml".to_owned()),
-                Some("js") => Ok("application/javascript".to_owned()),
-                Some("json") => Ok("application/json".to_owned()),
-                _ => Ok(mime.to_owned())
-            }
-        }
-        "text/troff" => {
-            match file_path.extension().and_then(OsStr::to_str) {
-                Some("css") => Ok("text/css".to_owned()),
-                _ => Ok(mime.to_owned())
-            }
-        }
-        _ => Ok(mime.to_owned())
-    }
+    correct_mime(&mime, &file_path)
 }
 
 #[cfg(windows)]
 fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String> {
-    let file_ext = file_path.extension().map(|ext| ext.to_str()).unwrap_or_default();
-    Ok(match file_ext {
-        Some("md") => "text/markdown".to_owned(),
-        Some("rs") => "text/rust".to_owned(),
-        None => "text/plain".to_owned(),
-        _ => mime_guess::from_path(file_path).first_raw().map(|m| m.to_owned()).unwrap_or("text/plain".to_owned())
-    })
+    let mime = mime_guess::from_path(file_path).first_raw().map(|m| m).unwrap_or("text/plain");
+    correct_mime(&mime, &file_path)
+}
+
+fn correct_mime(mime: &str, file_path: &Path) -> Result<String> {
+    Ok(match mime {
+        "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" => {
+            match file_path.extension().and_then(OsStr::to_str) {
+                Some("md") => "text/markdown",
+                Some("rs") => "text/rust",
+                Some("markdown") => "text/markdown",
+                Some("css") => "text/css",
+                Some("toml") => "text/x-toml",
+                Some("js") => "application/javascript",
+                Some("json") => "application/json",
+                _ => mime
+            }
+        }
+        _ => mime
+    }.to_owned())
 }
 
 
