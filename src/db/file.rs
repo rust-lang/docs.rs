@@ -281,13 +281,13 @@ fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String> {
 
 fn correct_mime(mime: &str, file_path: &Path) -> Result<String> {
     Ok(match mime {
-        "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" => {
+        "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.extension().and_then(OsStr::to_str) {
                 Some("md") => "text/markdown",
                 Some("rs") => "text/rust",
                 Some("markdown") => "text/markdown",
                 Some("css") => "text/css",
-                Some("toml") => "text/x-toml",
+                Some("toml") => "text/toml",
                 Some("js") => "application/javascript",
                 Some("json") => "application/json",
                 _ => mime
@@ -379,7 +379,7 @@ mod test {
     #[test]
     fn test_mime_types() {
         check_mime("/ignored", ".gitignore", "text/plain");
-        check_mime("[package]", "hello.toml","text/x-toml");
+        check_mime("[package]", "hello.toml","text/toml");
         check_mime(".ok { color:red; }", "hello.css","text/css");
         check_mime("var x = 1", "hello.js","application/javascript");
         check_mime("<html>", "hello.html","text/html");
