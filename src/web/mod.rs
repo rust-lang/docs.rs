@@ -187,6 +187,7 @@ impl Handler for CratesfyiHandler {
 }
 
 /// Represents the possible results of attempting to load a version requirement.
+/// The id (i32) of the release is stored to simplify successive queries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MatchVersion {
     /// `match_version` was given an exact version, which matched a saved crate version.
@@ -207,6 +208,10 @@ impl MatchVersion {
             MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
             MatchVersion::None => None,
         }
+    }
+
+    fn strip_id(self) -> Option<String> {
+        self.into_option().map(|(version, _id)| version)
     }
 }
 
@@ -274,7 +279,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
 
     for version in &versions_sem {
         if req_sem_ver.matches(&version.0) {
-            return MatchVersion::Semver((format!("{}", version.0), version.1));
+            return MatchVersion::Semver((version.0.to_string(), version.1));
         }
     }
 
@@ -522,19 +527,15 @@ mod test {
         db.fake_release().name("foo").version(version).create().unwrap()
     }
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        strip_id(match_version(&db.conn(), "foo", v))
-    }
-
-    fn strip_id(v: MatchVersion) -> Option<String> {
-        v.into_option().map(|(version, _id)| version)
+        match_version(&db.conn(), "foo", v).strip_id()
     }
 
     fn semver(version: &'static str) -> Option<String> {
-        strip_id(MatchVersion::Semver((version.into(), DEFAULT_ID)))
+        MatchVersion::Semver((version.into(), DEFAULT_ID)).strip_id()
     }
 
     fn exact(version: &'static str) -> Option<String> {
-        strip_id(MatchVersion::Exact((version.into(), DEFAULT_ID)))
+        MatchVersion::Exact((version.into(), DEFAULT_ID)).strip_id()
     }
 
     #[test]
@@ -628,8 +629,8 @@ mod test {
             let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
             db.conn().query(query, &[&release_id]).unwrap();
-            assert_eq!(version(None, db), strip_id(MatchVersion::None));
-            assert_eq!(version(Some("0.3"), db), strip_id(MatchVersion::None));
+            assert_eq!(version(None, db), MatchVersion::None.strip_id());
+            assert_eq!(version(Some("0.3"), db), MatchVersion::None.strip_id());
 
             release("0.1.0+4.1", db);
             assert_eq!(version(Some("0.1.0+4.1"), db), exact("0.1.0+4.1"));
