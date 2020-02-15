@@ -173,20 +173,34 @@ div.nav-container {
     form.landing-search-form-nav {
         max-width: 1200px;
 
-        input.search-input-nav {
+        #search-input-nav {
             float: right;
-            max-width: 200px;
-            border: none;
-            margin: 0 1em 0 0;
-            font-size: 0.8em;
-            text-align: right;
-            box-shadow: none;
-            background-color: #fff;
-            height: 31px;
+            max-width: 150px;
             display: none;
+            border-left: 1px solid $color-border;
 
             @media #{$media-sm} {
                 display: block;
+            }
+
+            @media #{$media-md} {
+                 max-width: 200px;
+            }
+
+            label {
+                 color: #777;
+                 cursor: pointer;
+                 padding-left: 0.5rem;
+                 font-size: 0.8em;
+            }
+
+            input {
+                 border: none;
+                 margin: 0 1em 0 0;
+                 font-size: 0.8em;
+                 box-shadow: none;
+                 background-color: #fff;
+                 height: 31px;
             }
         }
 
