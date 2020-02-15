@@ -292,7 +292,8 @@ fn correct_mime(mime: &str, file_path: &Path) -> Result<String> {
                 Some("json") => "application/json",
                 _ => mime
             }
-        }
+        },
+        "image/svg" => "image/svg+xml",
         _ => mime
     }.to_owned())
 }
