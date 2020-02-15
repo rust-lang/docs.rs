@@ -629,8 +629,8 @@ mod test {
             let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
             db.conn().query(query, &[&release_id]).unwrap();
-            assert_eq!(version(None, db), MatchVersion::None.strip_id());
-            assert_eq!(version(Some("0.3"), db), MatchVersion::None.strip_id());
+            assert_eq!(version(None, db), None);
+            assert_eq!(version(Some("0.3"), db), None);
 
             release("0.1.0+4.1", db);
             assert_eq!(version(Some("0.1.0+4.1"), db), exact("0.1.0+4.1"));
