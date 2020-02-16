@@ -286,7 +286,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first version if requested version is '*'
     if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver((format!("{}", versions_sem[0].0), versions_sem[0].1));
+        return MatchVersion::Semver((versions_sem[0].0.to_string(), versions_sem[0].1));
     }
 
     MatchVersion::None
