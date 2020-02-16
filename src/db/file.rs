@@ -389,6 +389,7 @@ mod test {
         check_mime("{}", "hello.json","application/json");
         check_mime("hello world", "hello.txt","text/plain");
         check_mime("//! Simple module to ...", "file.rs", "text/rust");
+        check_mime("<svg></svg>", "important.svg", "image/svg+xml");
     }
 
     fn check_mime(content: &str, path: &str, expected_mime: &str) {

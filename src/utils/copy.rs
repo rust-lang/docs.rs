@@ -63,6 +63,7 @@ mod test {
         fs::write(doc.join("index.txt"), "spooky").unwrap();
         fs::write(doc.join("inner").join("index.html"), "<html>spooky</html>").unwrap();
         fs::write(doc.join("inner").join("index.txt"), "spooky").unwrap();
+        fs::write(doc.join("inner").join("important.svg"), "<svg></svg>").unwrap();
 
         // lets try to copy a src directory to tempdir
         copy_doc_dir(source.path().join("doc"), destination.path()).unwrap();
@@ -70,5 +71,6 @@ mod test {
         assert!(!destination.path().join("index.txt").exists());
         assert!(destination.path().join("inner").join("index.html").exists());
         assert!(!destination.path().join("inner").join("index.txt").exists());
+        assert!(!destination.path().join("inner").join("important.svg").exists());
     }
 }
