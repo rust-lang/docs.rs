@@ -52,7 +52,11 @@ fn compile_sass() {
 }
 
 fn copy_js() {
-    let source_path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/menu.js"));
-    let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("menu.js");
-    fs::copy(&source_path, &dest_path).expect("copy template/menu.js to target");
+    ["menu.js", "index.js"].iter()
+        .for_each(|path| {
+            let source_path = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join(format!("templates/{}", path));
+            let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);
+            fs::copy(&source_path, &dest_path).expect("Copy JavaScript file to target");
+        });
 }

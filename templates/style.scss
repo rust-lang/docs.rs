@@ -785,6 +785,14 @@ div.search-page-search-form {
     }
 }
 
+#crate-title {
+    display: inline-block;
+}
+
+#clipboard {
+    cursor: pointer;
+}
+
 i.dependencies.normal {
   visibility: hidden;
   display: none;
