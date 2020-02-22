@@ -73,6 +73,7 @@ use std::sync::{Arc, Mutex};
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
 const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const MENU_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
+const INDEX_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
 const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
@@ -429,13 +430,21 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     Ok(response)
 }
 
-fn menu_js_handler(_: &mut Request) -> IronResult<Response> {
-    let mut response = Response::with((status::Ok, MENU_JS));
+fn load_js(file_path_str: &'static str) -> IronResult<Response> {
+    let mut response = Response::with((status::Ok, file_path_str));
     let cache = vec![CacheDirective::Public,
                      CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
     response.headers.set(ContentType("application/javascript".parse().unwrap()));
     response.headers.set(CacheControl(cache));
     Ok(response)
+}
+
+fn menu_js_handler(_: &mut Request) -> IronResult<Response> {
+    load_js(MENU_JS)
+}
+
+fn index_js_handler(_: &mut Request) -> IronResult<Response> {
+    load_js(INDEX_JS)
 }
 
 fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
