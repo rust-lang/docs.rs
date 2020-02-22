@@ -1,6 +1,6 @@
 function formatCrateName(crateTitleAndVersion) {
     const stringParts = crateTitleAndVersion.split(" ", 2);
-    return stringParts[0] + " = " + stringParts[1];
+    return stringParts[0] + ' = "' + stringParts[1] + '"';
 }
 
 function copyTextHandler() {
