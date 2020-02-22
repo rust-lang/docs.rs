@@ -17,5 +17,4 @@ function copyTextHandler() {
     temporaryInput.remove();
 }
 
-document.getElementById("clipboard")
-    .addEventListener("click", copyTextHandler);
+document.getElementById("clipboard").addEventListener("click", copyTextHandler);
