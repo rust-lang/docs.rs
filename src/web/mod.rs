@@ -439,14 +439,6 @@ fn load_js(file_path_str: &'static str) -> IronResult<Response> {
     Ok(response)
 }
 
-fn menu_js_handler(_: &mut Request) -> IronResult<Response> {
-    load_js(MENU_JS)
-}
-
-fn index_js_handler(_: &mut Request) -> IronResult<Response> {
-    load_js(INDEX_JS)
-}
-
 fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
     let cache = vec![CacheDirective::Public,
