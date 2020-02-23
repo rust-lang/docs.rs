@@ -156,7 +156,11 @@ If you want to explore or edit database manually, you can connect to the databas
 with the `psql` command.
 
 ```sh
+# NOTE: this creates a new container that will keep running after you exit
+# To remove the new container, run `docker-compose down`.
 docker exec -it "$(docker-compose run -d db && sleep 1)" psql -U cratesfyi
+# You only need to start the container once, in the future you can attach to it like so:
+docker exec -it "$(docker container ps | grep postgres | cut -d ' ' -f 1)" psql -U cratesfyi
 ```
 
 The database contains a blacklist of crates that should not be built.
