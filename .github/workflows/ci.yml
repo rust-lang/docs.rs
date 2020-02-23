@@ -22,10 +22,22 @@ jobs:
       - name: Install stable Rust
         run: rustup update stable && rustup default stable
 
-      - name: Install PostgreSQL
+      - name: Install PostgreSQL (Linux)
+        if: matrix.os.contains(ubuntu)
         run: |
           sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postgresql
           sudo systemctl start postgresql
+          
+      - name: Install PostgreSQL (macOS)
+        if: matrix.os.contains(macos)
+        run: brew install postgresql
+        
+      - name: Install PostgreSQL (Windows)
+        if: matrix.os.contains(windows)
+        run: choco install postgresql
+        
+      - name: Setup Postgres
+        run: |
           sudo -u postgres createuser $(whoami) -w
           sudo -u postgres createdb $(whoami) -O $(whoami)
           echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
