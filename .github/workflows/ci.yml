@@ -36,9 +36,9 @@ jobs:
         
       - name: Setup Postgres
         run: |
-          sudo -u postgres createuser $(whoami) -w
-          sudo -u postgres createdb $(whoami) -O $(whoami)
-          echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
+          createuser postgres -w
+          createdb postgres -O postgres
+          echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/postgres"
 
       - name: Build docs.rs
         run: cargo build
