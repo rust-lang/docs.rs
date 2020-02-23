@@ -10,7 +10,7 @@ assignees: ''
 <!-- If you need a system dependency added for your crate to build,
 consider making a PR to https://github.com/rust-lang/crates-build-env
 instead of opening an issue here. There are detailed instructions for this at
-https://forge.rust-lang.org/infra/docs/docs-rs/add-dependencies.html
+https://forge.rust-lang.org/docs-rs/add-dependencies.html
 -->
 
 **Crate name:**
