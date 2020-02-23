@@ -20,7 +20,9 @@ jobs:
           fetch-depth: 2
 
       - name: Install stable Rust
-        run: rustup update stable && rustup default stable
+        run: |
+          rustup update stable
+          rustup default stable
 
       - name: Install PostgreSQL (Linux)
         if: contains(matrix.os, 'ubuntu')
