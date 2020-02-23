@@ -32,7 +32,7 @@ jobs:
         
       - name: Install PostgreSQL (macOS)
         if: contains(matrix.os, 'macos')
-        run: brew install postgresql
+        run: psql --help
         
       - name: Install PostgreSQL (Windows)
         if: contains(matrix.os, 'windows')
