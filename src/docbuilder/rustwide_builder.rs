@@ -79,7 +79,7 @@ impl RustwideBuilder {
             .unwrap_or(false);
         let mut builder = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
             .running_inside_docker(is_docker);
-        if let Ok(custom_image) = std::env::var("DOCS_RS_LOCAL_IMAGE") {
+        if let Ok(custom_image) = std::env::var("DOCS_RS_LOCAL_DOCKER_IMAGE") {
             builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
         }
 
