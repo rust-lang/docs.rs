@@ -137,6 +137,7 @@ impl<T: ToJson> ToJson for Page<T> {
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
+        tree.insert("is_successful_request".to_owned(), self.status.is_success().to_json());
         tree.insert("rustc_resource_suffix".to_owned(), self.rustc_resource_suffix.to_json());
         tree.insert("cratesfyi_version".to_owned(), ::BUILD_VERSION.to_json());
         tree.insert("cratesfyi_version_safe".to_owned(),
