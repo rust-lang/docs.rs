@@ -290,7 +290,6 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .set_true("show_package_navigation")
                 .set_true("javascript_highlightjs")
                 .set_true("package_navigation_crate_tab")
-                .set_true("show_clipboard")
                 .to_resp("crate_details")
         }
         MatchVersion::Semver((version, _)) => {

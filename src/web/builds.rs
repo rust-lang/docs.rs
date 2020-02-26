@@ -140,7 +140,6 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         Page::new(builds_page)
             .set_true("show_package_navigation")
             .set_true("package_navigation_builds_tab")
-            .set_true("show_clipboard")
             .to_resp("builds")
     }
 }
