@@ -34,8 +34,14 @@
     {{#unless varsb.hide_package_navigation}}
     <div class="cratesfyi-package-container">
       <div class="container">
-        <h1 id="crate-title">{{#if title}}{{title}}{{else}}{{content.metadata.name}} {{content.metadata.version}}{{/if}}</h1>
-        {{#if varsb.show_clipboard}}<i class="fa fa-clipboard fa-1" id="clipboard" aria-label="Copy crate name and version information"></i>{{/if}}
+        <h1 id="crate-title">
+          {{#if title}}
+            {{title}}
+          {{else}}
+            {{content.metadata.name}} {{content.metadata.version}}
+            <i class="fa fa-clipboard fa-1" id="clipboard" aria-label="Copy crate name and version information"></i>
+          {{/if}}
+        </h1>
         <div class="description">{{#if content.metadata.description }}{{content.metadata.description}}{{else}}{{varss.description}}{{/if}}</div>
 
         {{#if ../varsb.show_package_navigation}}

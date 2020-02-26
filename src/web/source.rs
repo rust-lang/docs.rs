@@ -245,7 +245,6 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     let page = Page::new(list)
         .set_bool("show_parent_link", !req_path.is_empty())
         .set_true("javascript_highlightjs")
-        .set_true("show_clipboard")
         .set_true("show_package_navigation")
         .set_true("package_source_tab");
 
