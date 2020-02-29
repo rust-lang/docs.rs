@@ -595,6 +595,7 @@ mod test {
                 "/fake_crate/0.0.1/fake_crate",
                 web
             ));
+            assert!(!clipboard_is_present_for_path("/not/a/real/path", web));
             Ok(())
         });
     }
