@@ -520,6 +520,7 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use html5ever::tendril::TendrilSink;
     use web::{match_version, MatchVersion};
 
     const DEFAULT_ID: i32 = 0;
@@ -539,11 +540,61 @@ mod test {
         MatchVersion::Exact((version.into(), DEFAULT_ID)).strip_id()
     }
 
+    fn clipboard_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
+        let data = web.get(path).send().unwrap().text().unwrap();
+        let node = kuchiki::parse_html().one(data);
+        node.select("#clipboard").unwrap().count() == 1
+    }
+
     #[test]
     fn test_index_returns_success() {
         wrapper(|env| {
             let web = env.frontend();
             assert!(web.get("/").send()?.status().is_success());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_show_clipboard_for_crate_pages() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("fake_crate")
+                .version("0.0.1")
+                .source_file("test.rs", &[])
+                .create()
+                .unwrap();
+            let web = env.frontend();
+            assert!(clipboard_is_present_for_path(
+                "/crate/fake_crate/0.0.1",
+                web
+            ));
+            assert!(clipboard_is_present_for_path(
+                "/crate/fake_crate/0.0.1/source/",
+                web
+            ));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_hide_clipboard_for_non_crate_pages() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("fake_crate")
+                .version("0.0.1")
+                .create()
+                .unwrap();
+            let web = env.frontend();
+            assert!(!clipboard_is_present_for_path("/about", web));
+            assert!(!clipboard_is_present_for_path("/releases", web));
+            assert!(!clipboard_is_present_for_path("/", web));
+            assert!(!clipboard_is_present_for_path(
+                "/fake_crate/0.0.1/fake_crate",
+                web
+            ));
             Ok(())
         });
     }
