@@ -203,5 +203,5 @@ and test that it works on docs.rs, see [the wiki](https://github.com/rust-lang/d
 
 ### Contact
 
-Docs.rs is run and maintained by [Rustdoc team](https://www.rust-lang.org/governance/teams/dev-tools#rustdoc).
-You can find us in #docs-rs on [Discord](https://discord.gg/rust-lang).
+Docs.rs is run and maintained by the [docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#docs-rs).
+You can find us in #docs-rs on [Discord](https://discord.gg/f7mTXPW).
