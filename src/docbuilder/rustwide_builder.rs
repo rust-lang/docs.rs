@@ -365,13 +365,13 @@ impl RustwideBuilder {
                     };
 
                     // Then build the documentation for all the targets
-                    for target in targets {
-                        if *target == res.target {
+                    for &target in targets {
+                        if target == res.target {
                             continue;
                         }
-                        debug!("building package {} {} for {}", name, version, &target);
+                        debug!("building package {} {} for {}", name, version, target);
                         self.build_target(
-                            &target,
+                            target,
                             &build,
                             &limits,
                             &local_storage.path(),
