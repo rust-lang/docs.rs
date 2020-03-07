@@ -1,4 +1,4 @@
-
+use std::collections::HashSet;
 use std::path::Path;
 use toml::Value;
 use error::Result;
@@ -129,6 +129,28 @@ impl Metadata {
                 }
 
         metadata
+    }
+    pub(super) fn select_extra_targets<'a>(&'a self, default_target: &str) -> HashSet<&'a str> {
+        use super::rustwide_builder::TARGETS;
+        // this is a breaking change, don't enable it by default
+        let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
+            .map(|s| s == "true").unwrap_or(false);
+        // If the env variable is set, _only_ build the specified targets
+        // If no targets are specified, only build the default target.
+        let mut extra_targets: HashSet<_> = if build_specific {
+            self.extra_targets
+                    .as_ref()
+                    .map(|v| v.iter().map(|s| s.as_str()).collect())
+                    .unwrap_or_default()
+        // Otherwise, let people opt-in to only having specific targets
+        } else if let Some(explicit_targets) = &self.extra_targets {
+            explicit_targets.iter().map(|s| s.as_str()).collect()
+        // Otherwise, keep the existing behavior
+        } else {
+            TARGETS.iter().copied().collect()
+        };
+        extra_targets.remove(default_target);
+        extra_targets
     }
 }
 
