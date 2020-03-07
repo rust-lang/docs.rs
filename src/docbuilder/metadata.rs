@@ -171,7 +171,7 @@ mod test {
 
         assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
 
-        let extra_targets = metadata.extra_targets;
+        let extra_targets = metadata.extra_targets.expect("should have explicit extra target");
         assert_eq!(extra_targets.len(), 2);
         assert_eq!(extra_targets[0], "x86_64-apple-darwin");
         assert_eq!(extra_targets[1], "x86_64-pc-windows-msvc");
@@ -183,5 +183,33 @@ mod test {
         let rustdoc_args = metadata.rustdoc_args.unwrap();
         assert_eq!(rustdoc_args.len(), 1);
         assert_eq!(rustdoc_args[0], "--example-rustdoc-arg".to_owned());
+    }
+
+    #[test]
+    fn test_no_extra_targets() {
+        // metadata section but no extra_targets
+        let manifest = r#"
+            [package]
+            name = "test"
+
+            [package.metadata.docs.rs]
+            features = [ "feature1", "feature2" ]
+        "#;
+        let metadata = Metadata::from_str(manifest);
+        assert!(metadata.extra_targets.is_none());
+
+        // no package.metadata.docs.rs section
+        let metadata = Metadata::from_str(r#"
+            [package]
+            name = "test"
+        "#);
+        assert!(metadata.extra_targets.is_none());
+
+        // extra targets explicitly set to empty array
+        let metadata = Metadata::from_str(r#"
+            [package.metadata.docs.rs]
+            extra-targets = []
+        "#);
+        assert!(metadata.extra_targets.unwrap().is_empty());
     }
 }
