@@ -234,4 +234,51 @@ mod test {
         "#);
         assert!(metadata.extra_targets.unwrap().is_empty());
     }
+    #[test]
+    fn test_select_extra_targets() {
+        use crate::docbuilder::rustwide_builder::TARGETS;
+
+        let mut metadata = Metadata {
+            extra_targets: None,
+            ..Metadata::default()
+        };
+        const DEFAULT_TARGET: &str = "x86-unknown-linux-gnu";
+
+        // unchanged default_target, extra targets not specified
+        let tier_one = metadata.select_extra_targets(DEFAULT_TARGET);
+        // should be equal to TARGETS except for DEFAULT_TARGET
+        for actual in &tier_one {
+            assert!(TARGETS.contains(actual));
+        }
+        for expected in TARGETS {
+            if *expected == DEFAULT_TARGET {
+                assert!(!tier_one.contains(DEFAULT_TARGET));
+            } else {
+                assert!(tier_one.contains(expected));
+            }
+        }
+
+        // unchanged default_target, extra targets specified to be empty
+        metadata.extra_targets = Some(Vec::new());
+        assert!(metadata.select_extra_targets(DEFAULT_TARGET).is_empty());
+
+        // unchanged default_target, extra targets includes targets besides default_target
+        metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
+        let extras = metadata.select_extra_targets(DEFAULT_TARGET);
+        assert_eq!(extras.len(), 2);
+        assert!(extras.contains("i686-pc-windows-msvc"));
+        assert!(extras.contains("i686-apple-darwin"));
+
+        // make sure that default_target is not built twice
+        metadata.extra_targets = Some(vec![DEFAULT_TARGET.into()]);
+        assert!(metadata.select_extra_targets(DEFAULT_TARGET).is_empty());
+
+        // make sure that duplicates are removed
+        metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
+        assert_eq!(metadata.select_extra_targets(DEFAULT_TARGET).len(), 1);
+
+        // try it with a different default target just for sanity
+        assert!(metadata.select_extra_targets("i686-pc-windows-msvc").is_empty());
+
+    }
 }
