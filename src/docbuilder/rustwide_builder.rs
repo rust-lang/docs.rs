@@ -342,33 +342,10 @@ impl RustwideBuilder {
                     )?;
 
                     successful_targets.push(res.target.clone());
-
-                    // this is a breaking change, don't enable it by default
-                    let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
-                        .map(|s| s == "true").unwrap_or(false);
-                    let strs: Vec<_>;
-                    // If the env variable is set, _only_ build the specified targets
-                    // If no targets are specified, only build the default target.
-                    let targets: &[&str] = if build_specific {
-                        strs = metadata.extra_targets
-                                       .as_ref()
-                                       .map(|v| v.iter().map(|s| s.as_str()).collect())
-                                       .unwrap_or_default();
-                        &strs
-                    // Otherwise, let people opt-in to only having specific targets
-                    } else if let Some(explicit_targets) = &metadata.extra_targets {
-                        strs = explicit_targets.iter().map(|s| s.as_str()).collect();
-                        &strs
-                    // Otherwise, keep the existing behavior
-                    } else {
-                        TARGETS
-                    };
+                    let targets = select_extra_targets(&res.target, &metadata);
 
                     // Then build the documentation for all the targets
-                    for &target in targets {
-                        if target == res.target {
-                            continue;
-                        }
+                    for target in targets {
                         debug!("building package {} {} for {}", name, version, target);
                         self.build_target(
                             target,
@@ -572,6 +549,28 @@ impl RustwideBuilder {
         )?;
         Ok(())
     }
+}
+
+fn select_extra_targets<'a>(default_target: &str, metadata: &'a Metadata) -> HashSet<&'a str> {
+    // this is a breaking change, don't enable it by default
+    let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
+        .map(|s| s == "true").unwrap_or(false);
+    // If the env variable is set, _only_ build the specified targets
+    // If no targets are specified, only build the default target.
+    let mut extra_targets: HashSet<_> = if build_specific {
+        metadata.extra_targets
+                .as_ref()
+                .map(|v| v.iter().map(|s| s.as_str()).collect())
+                .unwrap_or_default()
+    // Otherwise, let people opt-in to only having specific targets
+    } else if let Some(explicit_targets) = &metadata.extra_targets {
+        explicit_targets.iter().map(|s| s.as_str()).collect()
+    // Otherwise, keep the existing behavior
+    } else {
+        TARGETS.iter().copied().collect()
+    };
+    extra_targets.remove(default_target);
+    extra_targets
 }
 
 struct FullBuildResult {
