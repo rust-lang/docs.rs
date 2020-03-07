@@ -44,10 +44,12 @@ pub struct Metadata {
     /// is always built on this target. You can change default target by setting this.
     pub default_target: Option<String>,
 
-    /// Docs.rs doesn't automatically build extra targets for crates. If you want a crate to build
-    /// for multiple targets, set `extra-targets` to the list of targets to build, in addition to
-    /// `default-target`.
-    pub extra_targets: Vec<String>,
+    /// If you want a crate to build only for specific targets,
+    /// set `extra-targets` to the list of targets to build, in addition to `default-target`.
+    ///
+    /// If you do not set `extra_targets`, all of the tier 1 supported targets will be built.
+    /// If you set `extra_targets` to an empty array, only the default target will be built.
+    pub extra_targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
     pub rustc_args: Option<Vec<String>>,
@@ -93,7 +95,7 @@ impl Metadata {
             default_target: None,
             rustc_args: None,
             rustdoc_args: None,
-            extra_targets: Vec::new(),
+            extra_targets: None,
         }
     }
 
@@ -119,8 +121,7 @@ impl Metadata {
                     metadata.default_target = table.get("default-target")
                         .and_then(|v| v.as_str()).map(|v| v.to_owned());
                     metadata.extra_targets = table.get("extra-targets").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect())
-                        .unwrap_or_default();
+                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())
