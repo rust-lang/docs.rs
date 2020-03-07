@@ -347,10 +347,22 @@ impl RustwideBuilder {
                     let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
                         .map(|s| s == "true").unwrap_or(false);
                     let strs: Vec<_>;
+                    // If the env variable is set, _only_ build the specified targets
+                    // If no targets are specified, only build the default target.
                     let targets: &[&str] = if build_specific {
-                        strs = metadata.extra_targets.iter().map(|s| s.as_str()).collect();
+                        strs = metadata.extra_targets
+                                       .as_ref()
+                                       .map(|v| v.iter().map(|s| s.as_str()).collect())
+                                       .unwrap_or_default();
                         &strs
-                    } else { TARGETS };
+                    // Otherwise, let people opt-in to only having specific targets
+                    } else if let Some(explicit_targets) = &metadata.extra_targets {
+                        strs = explicit_targets.iter().map(|s| s.as_str()).collect();
+                        &strs
+                    // Otherwise, keep the existing behavior
+                    } else {
+                        TARGETS
+                    };
 
                     // Then build the documentation for all the targets
                     for target in targets {
