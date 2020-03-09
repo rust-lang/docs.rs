@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::Path;
 use toml::Value;
 use error::Result;
@@ -130,27 +129,34 @@ impl Metadata {
 
         metadata
     }
-    pub(super) fn select_extra_targets<'a>(&'a self, default_target: &str) -> HashSet<&'a str> {
-        use super::rustwide_builder::TARGETS;
-        // this is a breaking change, don't enable it by default
-        let build_specific = std::env::var("DOCS_RS_BUILD_ONLY_SPECIFIED_TARGETS")
-            .map(|s| s == "true").unwrap_or(false);
-        // If the env variable is set, _only_ build the specified targets
-        // If no targets are specified, only build the default target.
-        let mut extra_targets: HashSet<_> = if build_specific {
-            self.extra_targets
-                    .as_ref()
-                    .map(|v| v.iter().map(|s| s.as_str()).collect())
-                    .unwrap_or_default()
-        // Otherwise, let people opt-in to only having specific targets
-        } else if let Some(explicit_targets) = &self.extra_targets {
-            explicit_targets.iter().map(|s| s.as_str()).collect()
-        // Otherwise, keep the existing behavior
-        } else {
-            TARGETS.iter().copied().collect()
+    pub(super) fn select_extra_targets<'a: 'ret, 'b: 'ret, 'ret>(&'a self) -> (&'ret str, Vec<&'ret str>) {
+        use super::rustwide_builder::{DEFAULT_TARGET, TARGETS};
+        // Let people opt-in to only having specific targets
+        // Ideally this would use Iterator instead of Vec so I could collect to a `HashSet`,
+        // but I had trouble with `chain()` ¯\_(ツ)_/¯
+        let mut all_targets: Vec<_> = self.default_target.as_deref().into_iter().collect();
+        match &self.extra_targets {
+            Some(targets) => all_targets.extend(targets.iter().map(|s| s.as_str())),
+            None => all_targets.extend(TARGETS.iter().copied()),
         };
-        extra_targets.remove(default_target);
-        extra_targets
+
+        // default_target unset and extra_targets set to `[]`
+        let landing_page = if all_targets.is_empty() {
+            DEFAULT_TARGET
+        } else {
+            // This `swap_remove` has to come before the `sort()` to keep the ordering
+            // `swap_remove` is ok because ordering doesn't matter except for first element
+            all_targets.swap_remove(0)
+        };
+        // Remove duplicates
+        all_targets.sort();
+        all_targets.dedup();
+        // Remove landing_page so we don't build it twice.
+        // It wasn't removed during dedup because we called `swap_remove()` first.
+        if let Ok(index) = all_targets.binary_search(&landing_page) {
+            all_targets.swap_remove(index);
+        }
+        (landing_page, all_targets)
     }
 }
 
@@ -279,6 +285,5 @@ mod test {
 
         // try it with a different default target just for sanity
         assert!(metadata.select_extra_targets("i686-pc-windows-msvc").is_empty());
-
     }
 }

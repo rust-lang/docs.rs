@@ -21,7 +21,7 @@ use super::Metadata;
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
-const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
+pub(super) const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 pub(super) const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
@@ -190,7 +190,8 @@ impl RustwideBuilder {
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
-                let res = self.execute_build(None, build, &limits, &metadata)?;
+
+                let res = self.execute_build(DEFAULT_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
                     bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -314,9 +315,10 @@ impl RustwideBuilder {
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
+                let (default_target, other_targets) = metadata.select_extra_targets();
 
                 // Do an initial build and then copy the sources in the database
-                let res = self.execute_build(None, &build, &limits, &metadata)?;
+                let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
                 if res.result.successful {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
@@ -342,10 +344,9 @@ impl RustwideBuilder {
                     )?;
 
                     successful_targets.push(res.target.clone());
-                    let targets = metadata.select_extra_targets(&res.target);
 
                     // Then build the documentation for all the targets
-                    for target in targets {
+                    for target in other_targets {
                         debug!("building package {} {} for {}", name, version, target);
                         self.build_target(
                             target,
@@ -400,7 +401,7 @@ impl RustwideBuilder {
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
     ) -> Result<()> {
-        let target_res = self.execute_build(Some(target), build, limits, metadata)?;
+        let target_res = self.execute_build(target, false, build, limits, metadata)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -416,16 +417,14 @@ impl RustwideBuilder {
 
     fn execute_build(
         &self,
-        target: Option<&str>,
+        target: &str,
+        is_default_target: bool,
         build: &Build,
         limits: &Limits,
         metadata: &Metadata,
     ) -> Result<FullBuildResult> {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
-
-        let is_default_target = target.is_none();
-        let target = target.or_else(|| metadata.default_target.as_ref().map(|s| s.as_str()));
 
         let mut rustdoc_flags: Vec<String> = vec![
             "-Z".to_string(),
@@ -448,9 +447,9 @@ impl RustwideBuilder {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
         let mut cargo_args = vec!["doc".to_owned(), "--lib".to_owned(), "--no-deps".to_owned()];
-        if let Some(explicit_target) = target {
+        if target != DEFAULT_TARGET {
             cargo_args.push("--target".to_owned());
-            cargo_args.push(explicit_target.to_owned());
+            cargo_args.push(target.to_owned());
         };
         if let Some(features) = &metadata.features {
             cargo_args.push("--features".to_owned());
@@ -488,15 +487,13 @@ impl RustwideBuilder {
         // cargo will put the output in `target/<target>/doc`.
         // However, if this is the default build, we don't want it there,
         // we want it in `target/doc`.
-        if let Some(explicit_target) = target {
-            if is_default_target {
-                // mv target/$explicit_target/doc target/doc
-                let target_dir = build.host_target_dir();
-                let old_dir = target_dir.join(explicit_target).join("doc");
-                let new_dir = target_dir.join("doc");
-                debug!("rename {} to {}", old_dir.display(), new_dir.display());
-                std::fs::rename(old_dir, new_dir)?;
-            }
+        if target != DEFAULT_TARGET && is_default_target {
+            // mv target/target/doc target/doc
+            let target_dir = build.host_target_dir();
+            let old_dir = target_dir.join(target).join("doc");
+            let new_dir = target_dir.join("doc");
+            debug!("rename {} to {}", old_dir.display(), new_dir.display());
+            std::fs::rename(old_dir, new_dir)?;
         }
 
         Ok(FullBuildResult {
@@ -507,7 +504,7 @@ impl RustwideBuilder {
                 successful,
             },
             cargo_metadata,
-            target: target.unwrap_or(DEFAULT_TARGET).to_string(),
+            target: target.to_string(),
         })
     }
 
