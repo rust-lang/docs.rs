@@ -19,7 +19,7 @@ use failure::err_msg;
 /// all-features = true
 /// no-default-features = true
 /// default-target = "x86_64-unknown-linux-gnu"
-/// extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+/// targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
 /// ```
@@ -39,16 +39,22 @@ pub struct Metadata {
     /// Set `no-default-fatures` to `false` if you want to build only certain features.
     pub no_default_features: bool,
 
-    /// Docs.rs is running on `x86_64-unknown-linux-gnu` target system and default documentation
-    /// is always built on this target. You can change default target by setting this.
+    /// docs.rs runs on `x86_64-unknown-linux-gnu`, which is the default target for documentation by default.
+    ///
+    /// You can change the default target by setting this.
+    ///
+    /// If `default_target` is unset and `targets` is non-empty,
+    /// the first element of `targets` will be used as the `default_target`.
     pub default_target: Option<String>,
 
     /// If you want a crate to build only for specific targets,
-    /// set `extra-targets` to the list of targets to build, in addition to `default-target`.
+    /// set `targets` to the list of targets to build, in addition to `default-target`.
     ///
-    /// If you do not set `extra_targets`, all of the tier 1 supported targets will be built.
-    /// If you set `extra_targets` to an empty array, only the default target will be built.
-    pub extra_targets: Option<Vec<String>>,
+    /// If you do not set `targets`, all of the tier 1 supported targets will be built.
+    /// If you set `targets` to an empty array, only the default target will be built.
+    /// If you set `targets` to a non-empty array but do not set `default_target`,
+    ///   the first element will be treated as the default.
+    pub targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
     pub rustc_args: Option<Vec<String>>,
@@ -94,7 +100,7 @@ impl Metadata {
             default_target: None,
             rustc_args: None,
             rustdoc_args: None,
-            extra_targets: None,
+            targets: None,
         }
     }
 
@@ -119,7 +125,7 @@ impl Metadata {
                         .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
                     metadata.default_target = table.get("default-target")
                         .and_then(|v| v.as_str()).map(|v| v.to_owned());
-                    metadata.extra_targets = table.get("extra-targets").and_then(|f| f.as_array())
+                    metadata.targets = table.get("extra-targets").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
@@ -136,7 +142,7 @@ impl Metadata {
         // Ideally this would use Iterator instead of Vec so I could collect to a `HashSet`,
         // but I had trouble with `chain()` ¯\_(ツ)_/¯
         let mut all_targets: Vec<_> = self.default_target.as_deref().into_iter().collect();
-        match &self.extra_targets {
+        match &self.targets {
             Some(targets) => all_targets.extend(targets.iter().map(|s| s.as_str())),
             None if all_targets.is_empty() => {
                 // Make sure HOST_TARGET is first
@@ -146,7 +152,7 @@ impl Metadata {
             None => all_targets.extend(TARGETS.iter().copied()),
         };
 
-        // default_target unset and extra_targets set to `[]`
+        // default_target unset and targets set to `[]`
         let landing_page = if all_targets.is_empty() {
             HOST_TARGET
         } else {
@@ -205,10 +211,10 @@ mod test {
 
         assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
 
-        let extra_targets = metadata.extra_targets.expect("should have explicit extra target");
-        assert_eq!(extra_targets.len(), 2);
-        assert_eq!(extra_targets[0], "x86_64-apple-darwin");
-        assert_eq!(extra_targets[1], "x86_64-pc-windows-msvc");
+        let targets = metadata.targets.expect("should have explicit extra target");
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0], "x86_64-apple-darwin");
+        assert_eq!(targets[1], "x86_64-pc-windows-msvc");
 
         let rustc_args = metadata.rustc_args.unwrap();
         assert_eq!(rustc_args.len(), 1);
@@ -220,8 +226,8 @@ mod test {
     }
 
     #[test]
-    fn test_no_extra_targets() {
-        // metadata section but no extra_targets
+    fn test_no_targets() {
+        // metadata section but no targets
         let manifest = r#"
             [package]
             name = "test"
@@ -230,24 +236,24 @@ mod test {
             features = [ "feature1", "feature2" ]
         "#;
         let metadata = Metadata::from_str(manifest);
-        assert!(metadata.extra_targets.is_none());
+        assert!(metadata.targets.is_none());
 
         // no package.metadata.docs.rs section
         let metadata = Metadata::from_str(r#"
             [package]
             name = "test"
         "#);
-        assert!(metadata.extra_targets.is_none());
+        assert!(metadata.targets.is_none());
 
         // extra targets explicitly set to empty array
         let metadata = Metadata::from_str(r#"
             [package.metadata.docs.rs]
             extra-targets = []
         "#);
-        assert!(metadata.extra_targets.unwrap().is_empty());
+        assert!(metadata.targets.unwrap().is_empty());
     }
     #[test]
-    fn test_select_extra_targets() {
+    fn test_select_targets() {
         use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
         let mut metadata = Metadata::default();
@@ -267,26 +273,26 @@ mod test {
         }
 
         // unchanged default_target, extra targets specified to be empty
-        metadata.extra_targets = Some(Vec::new());
+        metadata.targets = Some(Vec::new());
         let (default, others) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // unchanged default_target, extra targets non-empty
-        metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
+        metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-apple-darwin"));
 
         // make sure that default_target is not built twice
-        metadata.extra_targets = Some(vec![HOST_TARGET.into()]);
+        metadata.targets = Some(vec![HOST_TARGET.into()]);
         let (default, others) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // make sure that duplicates are removed
-        metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
+        metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
@@ -299,13 +305,13 @@ mod test {
         assert!(others.contains(&"i686-pc-windows-msvc"));
 
         // make sure that `default_target` takes priority over `HOST_TARGET`
-        metadata.extra_targets = Some(vec![]);
+        metadata.targets = Some(vec![]);
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
 
-        // and if `extra_targets` is unset, it should still be set to `TARGETS`
-        metadata.extra_targets = None;
+        // and if `targets` is unset, it should still be set to `TARGETS`
+        metadata.targets = None;
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         let tier_one_targets_no_default: Vec<_> = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
