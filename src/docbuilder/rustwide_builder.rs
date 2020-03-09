@@ -491,7 +491,7 @@ impl RustwideBuilder {
         // However, if this is the default build, we don't want it there,
         // we want it in `target/doc`.
         if target != HOST_TARGET && is_default_target {
-            // mv target/target/doc target/doc
+            // mv target/$target/doc target/doc
             let target_dir = build.host_target_dir();
             let old_dir = target_dir.join(target).join("doc");
             let new_dir = target_dir.join("doc");

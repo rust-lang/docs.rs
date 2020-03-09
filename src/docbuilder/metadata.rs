@@ -316,6 +316,5 @@ mod test {
         assert_eq!(default, "i686-apple-darwin");
         let tier_one_targets_no_default: Vec<_> = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
         assert_eq!(others, tier_one_targets_no_default);
-
     }
 }
