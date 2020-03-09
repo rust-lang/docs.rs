@@ -21,7 +21,10 @@ use super::Metadata;
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
-pub(super) const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
+// It is crucial that this be the same as the host that `docs.rs` is being run on.
+// Other values may cause strange and hard-to-debug errors.
+// TODO: use `TARGET` instead? I think `TARGET` is only set for build scripts, though.
+pub(super) const HOST_TARGET: &str = "x86_64-unknown-linux-gnu";
 pub(super) const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
@@ -191,7 +194,7 @@ impl RustwideBuilder {
             .run(|build| {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
-                let res = self.execute_build(DEFAULT_TARGET, true, build, &limits, &metadata)?;
+                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
                     bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -447,7 +450,7 @@ impl RustwideBuilder {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
         let mut cargo_args = vec!["doc".to_owned(), "--lib".to_owned(), "--no-deps".to_owned()];
-        if target != DEFAULT_TARGET {
+        if target != HOST_TARGET {
             cargo_args.push("--target".to_owned());
             cargo_args.push(target.to_owned());
         };
@@ -487,7 +490,7 @@ impl RustwideBuilder {
         // cargo will put the output in `target/<target>/doc`.
         // However, if this is the default build, we don't want it there,
         // we want it in `target/doc`.
-        if target != DEFAULT_TARGET && is_default_target {
+        if target != HOST_TARGET && is_default_target {
             // mv target/target/doc target/doc
             let target_dir = build.host_target_dir();
             let old_dir = target_dir.join(target).join("doc");
