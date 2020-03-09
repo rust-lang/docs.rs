@@ -125,7 +125,7 @@ impl Metadata {
                         .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
                     metadata.default_target = table.get("default-target")
                         .and_then(|v| v.as_str()).map(|v| v.to_owned());
-                    metadata.targets = table.get("extra-targets").and_then(|f| f.as_array())
+                    metadata.targets = table.get("targets").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
                     metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
                         .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
@@ -191,7 +191,7 @@ mod test {
             all-features = true
             no-default-features = true
             default-target = "x86_64-unknown-linux-gnu"
-            extra-targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+            targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
             rustc-args = [ "--example-rustc-arg" ]
             rustdoc-args = [ "--example-rustdoc-arg" ]
         "#;
@@ -248,7 +248,7 @@ mod test {
         // extra targets explicitly set to empty array
         let metadata = Metadata::from_str(r#"
             [package.metadata.docs.rs]
-            extra-targets = []
+            targets = []
         "#);
         assert!(metadata.targets.unwrap().is_empty());
     }
@@ -257,7 +257,7 @@ mod test {
         use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
         let mut metadata = Metadata::default();
-        // unchanged default_target, extra targets not specified
+        // unchanged default_target, targets not specified
         let (default, tier_one) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         // should be equal to TARGETS \ {HOST_TARGET}
