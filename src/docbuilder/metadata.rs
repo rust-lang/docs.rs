@@ -290,5 +290,26 @@ mod test {
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
+
+        // make sure that `default_target` always takes priority over `targets`
+        metadata.default_target = Some("i686-apple-darwin".into());
+        let (default, others) = metadata.targets();
+        assert_eq!(default, "i686-apple-darwin");
+        assert_eq!(others.len(), 1);
+        assert!(others.contains(&"i686-pc-windows-msvc"));
+
+        // make sure that `default_target` takes priority over `HOST_TARGET`
+        metadata.extra_targets = Some(vec![]);
+        let (default, others) = metadata.targets();
+        assert_eq!(default, "i686-apple-darwin");
+        assert!(others.is_empty());
+
+        // and if `extra_targets` is unset, it should still be set to `TARGETS`
+        metadata.extra_targets = None;
+        let (default, others) = metadata.targets();
+        assert_eq!(default, "i686-apple-darwin");
+        let tier_one_targets_no_default: Vec<_> = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
+        assert_eq!(others, tier_one_targets_no_default);
+
     }
 }
