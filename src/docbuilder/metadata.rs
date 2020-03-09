@@ -129,7 +129,8 @@ impl Metadata {
 
         metadata
     }
-    pub(super) fn select_extra_targets<'a: 'ret, 'b: 'ret, 'ret>(&'a self) -> (&'ret str, Vec<&'ret str>) {
+    // Return (default_target, all other targets that should be built with duplicates removed)
+    pub(super) fn targets(&self) -> (&str, Vec<&str>) {
         use super::rustwide_builder::{HOST_TARGET, TARGETS};
         // Let people opt-in to only having specific targets
         // Ideally this would use Iterator instead of Vec so I could collect to a `HashSet`,
@@ -251,7 +252,7 @@ mod test {
 
         let mut metadata = Metadata::default();
         // unchanged default_target, extra targets not specified
-        let (default, tier_one) = metadata.select_extra_targets();
+        let (default, tier_one) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
@@ -267,26 +268,26 @@ mod test {
 
         // unchanged default_target, extra targets specified to be empty
         metadata.extra_targets = Some(Vec::new());
-        let (default, others) = metadata.select_extra_targets();
+        let (default, others) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // unchanged default_target, extra targets non-empty
         metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
-        let (default, others) = metadata.select_extra_targets();
+        let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-apple-darwin"));
 
         // make sure that default_target is not built twice
         metadata.extra_targets = Some(vec![HOST_TARGET.into()]);
-        let (default, others) = metadata.select_extra_targets();
+        let (default, others) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // make sure that duplicates are removed
         metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
-        let (default, others) = metadata.select_extra_targets();
+        let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
     }
