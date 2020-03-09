@@ -137,6 +137,11 @@ impl Metadata {
         let mut all_targets: Vec<_> = self.default_target.as_deref().into_iter().collect();
         match &self.extra_targets {
             Some(targets) => all_targets.extend(targets.iter().map(|s| s.as_str())),
+            None if all_targets.is_empty() => {
+                // Make sure HOST_TARGET is first
+                all_targets.push(HOST_TARGET);
+                all_targets.extend(TARGETS.iter().copied().filter(|&t| t != HOST_TARGET));
+            }
             None => all_targets.extend(TARGETS.iter().copied()),
         };
 
@@ -242,23 +247,19 @@ mod test {
     }
     #[test]
     fn test_select_extra_targets() {
-        use crate::docbuilder::rustwide_builder::TARGETS;
+        use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
-        let mut metadata = Metadata {
-            extra_targets: None,
-            ..Metadata::default()
-        };
-        const DEFAULT_TARGET: &str = "x86-unknown-linux-gnu";
-
+        let mut metadata = Metadata::default();
         // unchanged default_target, extra targets not specified
-        let tier_one = metadata.select_extra_targets(DEFAULT_TARGET);
-        // should be equal to TARGETS except for DEFAULT_TARGET
+        let (default, tier_one) = metadata.select_extra_targets();
+        assert_eq!(default, HOST_TARGET);
+        // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
             assert!(TARGETS.contains(actual));
         }
         for expected in TARGETS {
-            if *expected == DEFAULT_TARGET {
-                assert!(!tier_one.contains(DEFAULT_TARGET));
+            if *expected == HOST_TARGET {
+                assert!(!tier_one.contains(&HOST_TARGET));
             } else {
                 assert!(tier_one.contains(expected));
             }
@@ -266,24 +267,27 @@ mod test {
 
         // unchanged default_target, extra targets specified to be empty
         metadata.extra_targets = Some(Vec::new());
-        assert!(metadata.select_extra_targets(DEFAULT_TARGET).is_empty());
+        let (default, others) = metadata.select_extra_targets();
+        assert_eq!(default, HOST_TARGET);
+        assert!(others.is_empty());
 
-        // unchanged default_target, extra targets includes targets besides default_target
+        // unchanged default_target, extra targets non-empty
         metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
-        let extras = metadata.select_extra_targets(DEFAULT_TARGET);
-        assert_eq!(extras.len(), 2);
-        assert!(extras.contains("i686-pc-windows-msvc"));
-        assert!(extras.contains("i686-apple-darwin"));
+        let (default, others) = metadata.select_extra_targets();
+        assert_eq!(default, "i686-pc-windows-msvc");
+        assert_eq!(others.len(), 1);
+        assert!(others.contains(&"i686-apple-darwin"));
 
         // make sure that default_target is not built twice
-        metadata.extra_targets = Some(vec![DEFAULT_TARGET.into()]);
-        assert!(metadata.select_extra_targets(DEFAULT_TARGET).is_empty());
+        metadata.extra_targets = Some(vec![HOST_TARGET.into()]);
+        let (default, others) = metadata.select_extra_targets();
+        assert_eq!(default, HOST_TARGET);
+        assert!(others.is_empty());
 
         // make sure that duplicates are removed
         metadata.extra_targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
-        assert_eq!(metadata.select_extra_targets(DEFAULT_TARGET).len(), 1);
-
-        // try it with a different default target just for sanity
-        assert!(metadata.select_extra_targets("i686-pc-windows-msvc").is_empty());
+        let (default, others) = metadata.select_extra_targets();
+        assert_eq!(default, "i686-pc-windows-msvc");
+        assert!(others.is_empty());
     }
 }
