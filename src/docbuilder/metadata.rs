@@ -130,7 +130,7 @@ impl Metadata {
         metadata
     }
     pub(super) fn select_extra_targets<'a: 'ret, 'b: 'ret, 'ret>(&'a self) -> (&'ret str, Vec<&'ret str>) {
-        use super::rustwide_builder::{DEFAULT_TARGET, TARGETS};
+        use super::rustwide_builder::{HOST_TARGET, TARGETS};
         // Let people opt-in to only having specific targets
         // Ideally this would use Iterator instead of Vec so I could collect to a `HashSet`,
         // but I had trouble with `chain()` ¯\_(ツ)_/¯
@@ -142,7 +142,7 @@ impl Metadata {
 
         // default_target unset and extra_targets set to `[]`
         let landing_page = if all_targets.is_empty() {
-            DEFAULT_TARGET
+            HOST_TARGET
         } else {
             // This `swap_remove` has to come before the `sort()` to keep the ordering
             // `swap_remove` is ok because ordering doesn't matter except for first element
