@@ -211,7 +211,7 @@ mod test {
 
         assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
 
-        let targets = metadata.targets.expect("should have explicit extra target");
+        let targets = metadata.targets.expect("should have explicit target");
         assert_eq!(targets.len(), 2);
         assert_eq!(targets[0], "x86_64-apple-darwin");
         assert_eq!(targets[1], "x86_64-pc-windows-msvc");
@@ -245,7 +245,7 @@ mod test {
         "#);
         assert!(metadata.targets.is_none());
 
-        // extra targets explicitly set to empty array
+        // targets explicitly set to empty array
         let metadata = Metadata::from_str(r#"
             [package.metadata.docs.rs]
             targets = []
@@ -272,13 +272,13 @@ mod test {
             }
         }
 
-        // unchanged default_target, extra targets specified to be empty
+        // unchanged default_target, targets specified to be empty
         metadata.targets = Some(Vec::new());
         let (default, others) = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
-        // unchanged default_target, extra targets non-empty
+        // unchanged default_target, targets non-empty
         metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
         let (default, others) = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
