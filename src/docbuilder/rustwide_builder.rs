@@ -314,11 +314,13 @@ impl RustwideBuilder {
         let res = build_dir
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
+                use docbuilder::metadata::BuildTargets;
+
                 let mut files_list = None;
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
-                let (default_target, other_targets) = metadata.targets();
+                let BuildTargets { default_target, other_targets } = metadata.targets();
 
                 // Do an initial build and then copy the sources in the database
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;

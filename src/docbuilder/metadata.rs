@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use toml::Value;
 use error::Result;
@@ -63,7 +64,16 @@ pub struct Metadata {
     pub rustdoc_args: Option<Vec<String>>,
 }
 
-
+/// The targets that should be built for a crate.
+///
+/// The `default_target` is the target to be used as the home page for that crate.
+///
+/// # See also
+/// - [`Metadata::targets`](struct.Metadata.html#method.targets)
+pub(super) struct BuildTargets<'a> {
+    pub(super) default_target: &'a str,
+    pub(super) other_targets: HashSet<&'a str>,
+}
 
 impl Metadata {
     pub(crate) fn from_source_dir(source_dir: &Path) -> Result<Metadata> {
@@ -136,39 +146,21 @@ impl Metadata {
         metadata
     }
     // Return (default_target, all other targets that should be built with duplicates removed)
-    pub(super) fn targets(&self) -> (&str, Vec<&str>) {
+    pub(super) fn targets(&self) -> BuildTargets<'_> {
         use super::rustwide_builder::{HOST_TARGET, TARGETS};
-        // Let people opt-in to only having specific targets
-        // Ideally this would use Iterator instead of Vec so I could collect to a `HashSet`,
-        // but I had trouble with `chain()` ¯\_(ツ)_/¯
-        let mut all_targets: Vec<_> = self.default_target.as_deref().into_iter().collect();
-        match &self.targets {
-            Some(targets) => all_targets.extend(targets.iter().map(|s| s.as_str())),
-            None if all_targets.is_empty() => {
-                // Make sure HOST_TARGET is first
-                all_targets.push(HOST_TARGET);
-                all_targets.extend(TARGETS.iter().copied().filter(|&t| t != HOST_TARGET));
-            }
-            None => all_targets.extend(TARGETS.iter().copied()),
-        };
 
-        // default_target unset and targets set to `[]`
-        let landing_page = if all_targets.is_empty() {
-            HOST_TARGET
-        } else {
-            // This `swap_remove` has to come before the `sort()` to keep the ordering
-            // `swap_remove` is ok because ordering doesn't matter except for first element
-            all_targets.swap_remove(0)
-        };
-        // Remove duplicates
-        all_targets.sort();
-        all_targets.dedup();
-        // Remove landing_page so we don't build it twice.
-        // It wasn't removed during dedup because we called `swap_remove()` first.
-        if let Ok(index) = all_targets.binary_search(&landing_page) {
-            all_targets.swap_remove(index);
-        }
-        (landing_page, all_targets)
+        let default_target = self.default_target.as_deref()
+            // Use the first element of `targets` if `default_target` is unset and `targets` is non-empty
+            .or_else(|| self.targets.as_ref().and_then(|targets| targets.iter().next().map(String::as_str)))
+            .unwrap_or(HOST_TARGET);
+
+        // Let people opt-in to only having specific targets
+        let mut targets: HashSet<_> = self.targets.as_ref()
+            .map(|targets| targets.iter().map(String::as_str).collect())
+            .unwrap_or_else(|| TARGETS.iter().copied().collect());
+
+        targets.remove(&default_target);
+        BuildTargets { default_target, other_targets: targets }
     }
 }
 
@@ -255,10 +247,11 @@ mod test {
     #[test]
     fn test_select_targets() {
         use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
+        use super::BuildTargets;
 
         let mut metadata = Metadata::default();
         // unchanged default_target, targets not specified
-        let (default, tier_one) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: tier_one } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
@@ -274,47 +267,47 @@ mod test {
 
         // unchanged default_target, targets specified to be empty
         metadata.targets = Some(Vec::new());
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // unchanged default_target, targets non-empty
         metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-apple-darwin"));
 
         // make sure that default_target is not built twice
         metadata.targets = Some(vec![HOST_TARGET.into()]);
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // make sure that duplicates are removed
         metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
 
         // make sure that `default_target` always takes priority over `targets`
         metadata.default_target = Some("i686-apple-darwin".into());
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-pc-windows-msvc"));
 
         // make sure that `default_target` takes priority over `HOST_TARGET`
         metadata.targets = Some(vec![]);
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
 
         // and if `targets` is unset, it should still be set to `TARGETS`
         metadata.targets = None;
-        let (default, others) = metadata.targets();
+        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
-        let tier_one_targets_no_default: Vec<_> = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
+        let tier_one_targets_no_default = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
         assert_eq!(others, tier_one_targets_no_default);
     }
 }
