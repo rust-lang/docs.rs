@@ -145,7 +145,6 @@ impl Metadata {
 
         metadata
     }
-    // Return (default_target, all other targets that should be built with duplicates removed)
     pub(super) fn targets(&self) -> BuildTargets<'_> {
         use super::rustwide_builder::{HOST_TARGET, TARGETS};
 
