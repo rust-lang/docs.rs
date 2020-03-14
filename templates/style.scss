@@ -84,6 +84,15 @@ div.rustdoc {
             }
         }
     }
+
+    // this is actual fix for docs.rs navigation and rustdoc sidebar
+    position: fixed;
+    top: $top-navbar-height;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: block;
+    overflow-y: auto;
 }
 
 body {
@@ -801,9 +810,4 @@ div.search-page-search-form {
 i.dependencies.normal {
   visibility: hidden;
   display: none;
-}
-
-// Fix position of theme-picker
-.theme-picker {
-	margin-top: $top-navbar-height;
 }
