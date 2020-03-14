@@ -809,9 +809,16 @@ i.dependencies.normal {
 }
 
 // Fix for anchors, so that they are well positioned right below the sticky header
-.section-header::before {
+// FIXME: This is a hack and should be replaced with a proper solution.
+.small-section-header::before, .section-header::before, h3[class="method"]::before {
     display: block;
     content: "";
     height: 3rem;
     margin-top: -3rem;
+}
+
+// Due to the anchor fix and sub-optimal rustdoc css, the method collapser is mispositioned.
+// FIXME: Workaround by applying a top margin.
+h3[class="method"] > a[class="collapse-toggle"] {
+    margin-top: 3rem;
 }
