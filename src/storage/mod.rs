@@ -1,8 +1,8 @@
 mod database;
 mod s3;
 
-use self::database::DatabaseBackend;
-use self::s3::S3Backend;
+pub(crate) use self::database::DatabaseBackend;
+pub(crate) use self::s3::S3Backend;
 use failure::Error;
 use time::Timespec;
 

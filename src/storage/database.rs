@@ -1,7 +1,6 @@
 use super::Blob;
 use failure::{Error, Fail};
 use postgres::Connection;
-use time::Timespec;
 
 #[derive(Debug, Fail)]
 #[fail(display = "the path is not present in the database")]
@@ -12,7 +11,7 @@ pub(crate) struct DatabaseBackend<'a> {
 }
 
 impl<'a> DatabaseBackend<'a> {
-    pub(super) fn new(conn: &'a Connection) -> Self {
+    pub(crate) fn new(conn: &'a Connection) -> Self {
         Self { conn }
     }
 

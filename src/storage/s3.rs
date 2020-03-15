@@ -11,7 +11,7 @@ pub(crate) struct S3Backend<'a> {
 }
 
 impl<'a> S3Backend<'a> {
-    pub(super) fn new(client: &'a S3Client, bucket: &'a str) -> Self {
+    pub(crate) fn new(client: &'a S3Client, bucket: &'a str) -> Self {
         Self {
             client,
             bucket,
