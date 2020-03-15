@@ -60,60 +60,15 @@ fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
 }
 
 pub(crate) fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
-    if let Some(client) = s3_client() {
-        let res = client
-            .get_object(GetObjectRequest {
-                bucket: S3_BUCKET_NAME.into(),
-                key: path.into(),
-                ..Default::default()
-            })
-            .sync();
-
-        let res = match res {
-            Ok(r) => r,
-            Err(_) => {
-                return None;
-            }
-        };
-
-        let mut b = res.body.unwrap().into_blocking_read();
-        let mut content = Vec::new();
-        b.read_to_end(&mut content).unwrap();
-
-        let last_modified = res.last_modified.unwrap();
-        let last_modified = time::strptime(&last_modified, "%a, %d %b %Y %H:%M:%S %Z")
-            .unwrap_or_else(|e| panic!("failed to parse {:?} as timespec: {:?}", last_modified, e))
-            .to_timespec();
-
-        Some(Blob {
-            path: path.into(),
-            mime: res.content_type.unwrap(),
-            date_updated: last_modified,
-            content,
-        })
+    use crate::storage::{DatabaseBackend, S3Backend, Storage};
+    let client;
+    let backend = if let Some(c) = s3_client() {
+        client = c;
+        Storage::from(S3Backend::new(&client, S3_BUCKET_NAME))
     } else {
-        let rows = conn
-            .query(
-                "SELECT path, mime, date_updated, content
-                            FROM files
-                            WHERE path = $1",
-                &[&path],
-            )
-            .unwrap();
-
-        if rows.is_empty() {
-            None
-        } else {
-            let row = rows.get(0);
-
-            Some(Blob {
-                path: row.get(0),
-                mime: row.get(1),
-                date_updated: row.get(2),
-                content: row.get(3),
-            })
-        }
-    }
+        DatabaseBackend::new(conn).into()
+    };
+    backend.get(path).ok()
 }
 
 pub(super) fn s3_client() -> Option<S3Client> {
