@@ -201,3 +201,39 @@ impl<'a> FakeRelease<'a> {
         Ok(release_id)
     }
 }
+
+use crate::storage::Blob;
+use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+use rusoto_s3::S3Client;
+enum State {
+    NoRequestMade { path: String },
+    RequestMade { found: bool },
+}
+pub(crate) struct FakeUpload { state: State, pub(crate) client: S3Client }
+
+impl FakeUpload {
+    pub(crate) fn new(blob: Blob) -> Self {
+        let state = State::NoRequestMade { path: blob.path };
+        // TODO: different behavior with different filenames
+        // TODO: is this even possible with `MockRequestDispatcher`?
+        let dispatcher = MockRequestDispatcher::default()
+            .with_body(&String::from_utf8(blob.content).unwrap())
+            .with_header("Content-Type", &blob.mime)
+            //.with_header("Last-Modified", blob.date_updated.to_string())
+            .with_request_checker(move |req| {
+                match &state {
+                    State::NoRequestMade { path } => {
+                        state = State::RequestMade { found: req.path == *path };
+                    }
+                    _ => {}
+                }
+            });
+
+        let client = S3Client::new_with(
+            dispatcher,
+            MockCredentialsProvider,
+            Default::default()
+        );
+        Self { client, state }
+    }
+}

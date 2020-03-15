@@ -37,6 +37,7 @@ impl<'a> DatabaseBackend<'a> {
 
 #[cfg(test)]
 mod tests {
+    use time::Timespec;
     use super::*;
 
     #[test]

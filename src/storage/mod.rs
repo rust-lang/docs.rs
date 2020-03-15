@@ -6,7 +6,7 @@ pub(crate) use self::s3::S3Backend;
 use failure::Error;
 use time::Timespec;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
     pub(crate) path: String,
     pub(crate) mime: String,
