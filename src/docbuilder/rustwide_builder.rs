@@ -333,7 +333,7 @@ impl RustwideBuilder {
                 let BuildTargets {
                     default_target,
                     other_targets,
-                } = metadata.targets();
+                } = metadata.targets(self.config.include_default_targets);
 
                 // Perform an initial build
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;

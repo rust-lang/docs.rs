@@ -20,7 +20,7 @@
 //! let metadata = Metadata::from_crate_root(&source_root)?;
 //!
 //! // Next, learn what arguments we need to pass to `cargo`.
-//! let targets = metadata.targets();
+//! let targets = metadata.targets(/* include_default_targets: */ true);
 //! let mut cargo_args = metadata.cargo_args(&[], &[]);
 //! cargo_args.push(targets.default_target.into());
 //!
@@ -190,7 +190,10 @@ impl Metadata {
     /// Return the targets that should be built.
     ///
     /// The `default_target` will never be one of the `other_targets`.
-    pub fn targets(&self) -> BuildTargets<'_> {
+    /// If `include_default_targets` is `true` and `targets` is unset, this also includes
+    /// [`DEFAULT_TARGETS`]. Otherwise, if `include_default_targets` is `false` and `targets`
+    /// is unset, `other_targets` will be empty.
+    pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
         let default_target = self
             .default_target
             .as_deref()
@@ -202,12 +205,16 @@ impl Metadata {
             })
             .unwrap_or(HOST_TARGET);
 
-        // Let people opt-in to only having specific targets
-        let mut targets: HashSet<_> = self
+        let crate_targets = self
             .targets
             .as_ref()
-            .map(|targets| targets.iter().map(String::as_str).collect())
-            .unwrap_or_else(|| DEFAULT_TARGETS.iter().copied().collect());
+            .map(|targets| targets.iter().map(String::as_str).collect());
+        // Let people opt-in to only having specific targets
+        let mut targets: HashSet<_> = if include_default_targets {
+            crate_targets.unwrap_or_else(|| DEFAULT_TARGETS.iter().copied().collect())
+        } else {
+            crate_targets.unwrap_or_default()
+        };
 
         targets.remove(&default_target);
         BuildTargets {
@@ -412,7 +419,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: tier_one,
-        } = metadata.targets();
+        } = metadata.targets(true);
         assert_eq!(default, HOST_TARGET);
 
         // should be equal to TARGETS \ {HOST_TARGET}
@@ -434,7 +441,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
@@ -448,7 +455,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
@@ -459,7 +466,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
@@ -473,7 +480,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
@@ -483,7 +490,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, "i686-apple-darwin");
         assert_eq!(others.len(), 1);
@@ -494,7 +501,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
@@ -504,7 +511,7 @@ mod test_targets {
         let BuildTargets {
             default_target: default,
             other_targets: others,
-        } = metadata.targets();
+        } = metadata.targets(true);
 
         assert_eq!(default, "i686-apple-darwin");
         let tier_one_targets_no_default = DEFAULT_TARGETS
@@ -514,6 +521,17 @@ mod test_targets {
             .collect();
 
         assert_eq!(others, tier_one_targets_no_default);
+    }
+
+    #[test]
+    fn no_default_targets() {
+        // if `targets` is unset, `other_targets` should be empty
+        let metadata = Metadata::default();
+        let BuildTargets {
+            other_targets: others,
+            ..
+        } = metadata.targets(false);
+        assert!(others.is_empty(), "{:?}", others);
     }
 }
 

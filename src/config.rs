@@ -7,9 +7,6 @@ use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Config {
-    // Build params
-    pub(crate) build_attempts: u16,
-
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
@@ -41,11 +38,14 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 
+    // Build params
+    pub(crate) build_attempts: u16,
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) inside_docker: bool,
     pub(crate) local_docker_image: Option<String>,
     pub(crate) toolchain: String,
     pub(crate) build_cpu_limit: Option<u32>,
+    pub(crate) include_default_targets: bool,
 }
 
 impl Config {
@@ -89,6 +89,7 @@ impl Config {
             local_docker_image: maybe_env("DOCS_RS_LOCAL_DOCKER_IMAGE")?,
             toolchain: env("CRATESFYI_TOOLCHAIN", "nightly".to_string())?,
             build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
+            include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
         })
     }
 
