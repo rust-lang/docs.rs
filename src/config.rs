@@ -106,7 +106,7 @@ impl Config {
             local_docker_image: maybe_env("DOCS_RS_LOCAL_DOCKER_IMAGE")?,
             toolchain: env("CRATESFYI_TOOLCHAIN", "nightly".to_string())?,
             build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
-            include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
+            include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", false)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
         })
     }
