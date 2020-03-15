@@ -7,14 +7,14 @@ use time::Timespec;
 
 pub(crate) struct S3Backend<'a> {
     client: &'a S3Client,
-    bucket: String,
+    bucket: &'a str,
 }
 
 impl<'a> S3Backend<'a> {
-    pub(super) fn new(client: &'a S3Client, bucket: &str) -> Self {
+    pub(super) fn new(client: &'a S3Client, bucket: &'a str) -> Self {
         Self {
             client,
-            bucket: bucket.into(),
+            bucket,
         }
     }
 
@@ -22,7 +22,7 @@ impl<'a> S3Backend<'a> {
         let res = self
             .client
             .get_object(GetObjectRequest {
-                bucket: self.bucket.clone(),
+                bucket: self.bucket.to_string(),
                 key: path.into(),
                 ..Default::default()
             })
