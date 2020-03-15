@@ -1,5 +1,6 @@
 mod fakes;
 
+use crate::storage::Blob;
 use crate::web::Server;
 use failure::Error;
 use log::error;
@@ -114,6 +115,10 @@ impl TestEnvironment {
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
         self.frontend.get_or_init(|| TestFrontend::new(self.db()))
+    }
+
+    pub(crate) fn s3_upload(&mut self, blob: Blob) -> fakes::FakeUpload {
+        fakes::FakeUpload::new(blob)
     }
 }
 

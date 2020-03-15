@@ -74,4 +74,48 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    fn test_path_get() {
+        crate::test::wrapper(|env| {
+            let blob = Blob {
+                path: "dir/foo.txt".into(),
+                mime: "text/plain".into(),
+                date_updated: Timespec::new(42, 0),
+                content: "Hello world!".into(),
+            };
+
+            // Add a test file to the database
+            let s3 = env.s3_upload(blob);
+
+            let backend = S3Backend::new(&s3.client, "<test bucket>");
+
+            // Test that the proper file was returned
+            assert_eq!(
+                Blob {
+                    path: "dir/foo.txt".into(),
+                    mime: "text/plain".into(),
+                    date_updated: Timespec::new(42, 0),
+                    content: "Hello world!".bytes().collect(),
+                },
+                backend.get("dir/foo.txt")?
+            );
+
+            /*
+            // Test that other files are not returned
+            assert!(backend
+                .get("dir/bar.txt")
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+            assert!(backend
+                .get("foo.txt")
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+            */
+
+            Ok(())
+        });
+    }
 }
