@@ -27,3 +27,15 @@ impl Storage<'_> {
         }
     }
 }
+
+impl<'a> From<DatabaseBackend<'a>> for Storage<'a> {
+    fn from(db: DatabaseBackend<'a>) -> Self {
+        Self::Database(db)
+    }
+}
+
+impl<'a> From<S3Backend<'a>> for Storage<'a> {
+    fn from(db: S3Backend<'a>) -> Self {
+        Self::S3(db)
+    }
+}
