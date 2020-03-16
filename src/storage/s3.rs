@@ -47,8 +47,13 @@ impl<'a> S3Backend<'a> {
     }
 }
 
+#[cfg(not(test))]
+const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
+#[cfg(test)]
+pub(crate) const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
+
 fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
-    Ok(time::strptime(raw, "%a, %d %b %Y %H:%M:%S %Z")?.to_timespec())
+    Ok(time::strptime(raw, TIME_FMT)?.to_timespec())
 }
 
 #[cfg(test)]
@@ -86,20 +91,12 @@ mod tests {
             };
 
             // Add a test file to the database
-            let s3 = env.s3_upload(blob);
+            let s3 = env.s3_upload(blob.clone(), "<test bucket>");
 
-            let backend = S3Backend::new(&s3.client, "<test bucket>");
+            let backend = S3Backend::new(&s3.client, &s3.bucket);
 
             // Test that the proper file was returned
-            assert_eq!(
-                Blob {
-                    path: "dir/foo.txt".into(),
-                    mime: "text/plain".into(),
-                    date_updated: Timespec::new(42, 0),
-                    content: "Hello world!".bytes().collect(),
-                },
-                backend.get("dir/foo.txt")?
-            );
+            assert_eq!(blob, backend.get("dir/foo.txt")?);
 
             /*
             // Test that other files are not returned
