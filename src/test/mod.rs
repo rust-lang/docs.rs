@@ -117,8 +117,8 @@ impl TestEnvironment {
         self.frontend.get_or_init(|| TestFrontend::new(self.db()))
     }
 
-    pub(crate) fn s3_upload(&mut self, blob: Blob) -> fakes::FakeUpload {
-        fakes::FakeUpload::new(blob)
+    pub(crate) fn s3_upload(&self, blob: Blob, bucket: &'static str) -> fakes::FakeUpload {
+        fakes::FakeUpload::new(blob, bucket)
     }
 }
 
