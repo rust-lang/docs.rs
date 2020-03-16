@@ -204,6 +204,8 @@ impl<'a> FakeRelease<'a> {
 
 use crate::storage::{Blob, TIME_FMT};
 use rusoto_s3::S3Client;
+use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+
 pub(crate) struct FakeUpload {
     pub(crate) client: S3Client,
     pub(crate) bucket: &'static str,
@@ -211,7 +213,6 @@ pub(crate) struct FakeUpload {
 
 impl FakeUpload {
     pub(crate) fn new(blob: Blob, bucket: &'static str) -> Self {
-        use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
 
         let path = blob.path;
         let datetime = time::at_utc(blob.date_updated);
@@ -224,6 +225,18 @@ impl FakeUpload {
                 assert_eq!(req.path, format!("/{}/{}", bucket, path));
             });
 
+        let client = S3Client::new_with(
+            dispatcher,
+            MockCredentialsProvider,
+            Default::default()
+        );
+        Self { client, bucket }
+    }
+    pub(crate) fn not_found(path: &'static str, bucket: &'static str) -> Self {
+        let dispatcher = MockRequestDispatcher::with_status(404)
+            .with_request_checker(move |req| {
+                assert_eq!(req.path, format!("/{}/{}", bucket, path));
+            });
         let client = S3Client::new_with(
             dispatcher,
             MockCredentialsProvider,
