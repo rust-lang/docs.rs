@@ -213,30 +213,24 @@ pub(crate) struct FakeUpload {
 
 impl FakeUpload {
     pub(crate) fn new(blob: Blob, bucket: &'static str) -> Self {
-
-        let path = blob.path;
         let datetime = time::at_utc(blob.date_updated);
         let datestring = time::strftime(TIME_FMT, &datetime).unwrap();
         let dispatcher = MockRequestDispatcher::default()
             .with_body(&String::from_utf8(blob.content).unwrap())
             .with_header("Content-Type", &blob.mime)
-            .with_header("Last-Modified", &datestring)
-            .with_request_checker(move |req| {
-                assert_eq!(req.path, format!("/{}/{}", bucket, path));
-            });
-
-        let client = S3Client::new_with(
-            dispatcher,
-            MockCredentialsProvider,
-            Default::default()
-        );
-        Self { client, bucket }
+            .with_header("Last-Modified", &datestring);
+        Self::with_dispatcher(blob.path, bucket, dispatcher)
     }
+
     pub(crate) fn not_found(path: &'static str, bucket: &'static str) -> Self {
-        let dispatcher = MockRequestDispatcher::with_status(404)
-            .with_request_checker(move |req| {
-                assert_eq!(req.path, format!("/{}/{}", bucket, path));
-            });
+        Self::with_dispatcher(path, bucket, MockRequestDispatcher::with_status(404))
+    }
+
+    fn with_dispatcher<S>(path: S, bucket: &'static str, dispatcher: MockRequestDispatcher) -> Self
+    where S: AsRef<str> + std::fmt::Display + Send + Sync + 'static {
+        let dispatcher = dispatcher.with_request_checker(move |req| {
+            assert_eq!(req.path, format!("/{}/{}", bucket, path));
+        });
         let client = S3Client::new_with(
             dispatcher,
             MockCredentialsProvider,
