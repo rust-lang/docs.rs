@@ -90,6 +90,7 @@ pub(crate) fn assert_redirect(
 pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     frontend: OnceCell<TestFrontend>,
+    s3: OnceCell<TestS3>,
 }
 
 impl TestEnvironment {
@@ -99,6 +100,7 @@ impl TestEnvironment {
         Self {
             db: OnceCell::new(),
             frontend: OnceCell::new(),
+            s3: OnceCell::new(),
         }
     }
 
@@ -117,8 +119,8 @@ impl TestEnvironment {
         self.frontend.get_or_init(|| TestFrontend::new(self.db()))
     }
 
-    pub(crate) fn s3_upload(&self, blob: Blob, bucket: &'static str) -> fakes::FakeUpload {
-        fakes::FakeUpload::new(blob, bucket)
+    pub(crate) fn s3(&self) -> &TestS3 {
+        self.s3.get_or_init(|| TestS3 { bucket: "<test-bucket>" })
     }
 }
 
@@ -189,5 +191,16 @@ impl TestFrontend {
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         self.build_request(Method::GET, url)
+    }
+}
+
+pub(crate) struct TestS3 { bucket: &'static str }
+
+impl TestS3 {
+    pub(crate) fn upload(&self, blob: Blob) -> fakes::FakeUpload {
+        fakes::FakeUpload::new(blob, self.bucket)
+    }
+    pub(crate) fn not_found(&self, path: &'static str) -> fakes::FakeUpload {
+        fakes::FakeUpload::not_found(path, &self.bucket)
     }
 }

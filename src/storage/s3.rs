@@ -58,7 +58,22 @@ fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::test::TestEnvironment;
     use super::*;
+
+    fn assert_s3_404(env: &TestEnvironment, path: &'static str) {
+        use rusoto_core::RusotoError;
+        use rusoto_s3::GetObjectError;
+
+        let s3 = env.s3().not_found(path);
+        let backend = S3Backend::new(&s3.client, s3.bucket);
+        let err = backend.get(path).unwrap_err();
+        let status = match err.downcast_ref::<RusotoError<GetObjectError>>().expect("wanted GetObject") {
+            RusotoError::Unknown(http) => http.status,
+            _ => panic!("wrong error"),
+        };
+        assert_eq!(status, 404);
+    }
 
     #[test]
     fn test_parse_timespec() {
@@ -91,26 +106,16 @@ mod tests {
             };
 
             // Add a test file to the database
-            let s3 = env.s3_upload(blob.clone(), "<test bucket>");
+            let s3 = env.s3().upload(blob.clone());
 
             let backend = S3Backend::new(&s3.client, &s3.bucket);
 
             // Test that the proper file was returned
             assert_eq!(blob, backend.get("dir/foo.txt")?);
 
-            /*
             // Test that other files are not returned
-            assert!(backend
-                .get("dir/bar.txt")
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
-            assert!(backend
-                .get("foo.txt")
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
-            */
+            assert_s3_404(&env, "dir/bar.txt");
+            assert_s3_404(&env, "foo.txt");
 
             Ok(())
         });
