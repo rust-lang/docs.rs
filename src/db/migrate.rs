@@ -296,6 +296,17 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             "ALTER TABLE releases ALTER COLUMN default_target DROP NOT NULL;
              ALTER TABLE releases ALTER COLUMN default_target DROP DEFAULT",
         ),
+        migration!(
+            context,
+            // version
+            9,
+            // description
+            "Allow max number of targets to be overriden",
+            // upgrade query
+            "ALTER TABLE sandbox_overrides ADD COLUMN targets INT;",
+            // downgrade query
+            "ALTER TABLE sandbox_overrides DROP COLUMN targets;"
+        ),
     ];
 
     for migration in migrations {
