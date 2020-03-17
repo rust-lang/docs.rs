@@ -84,6 +84,12 @@ impl Storage<'_> {
         }
     }
 
+    // Store all files in `root_dir` into the backend under `prefix`.
+    //
+    // If the environmenet is configured with S3 credentials, this will upload to S3;
+    // otherwise, this will store files in the database.
+    //
+    // This returns a HashMap<filename, mime type>.
     pub(crate) fn store_all(&self, conn: &Connection, prefix: &str, root_dir: &Path) -> Result<HashMap<PathBuf, String>, Error> {
         const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -188,7 +194,46 @@ impl<'a> From<S3Backend<'a>> for Storage<'a> {
 mod test {
     extern crate env_logger;
     use std::env;
+    use crate::test::wrapper;
     use super::*;
+
+    #[test]
+    fn test_uploads() {
+        use std::fs;
+        let dir = tempdir::TempDir::new("docs.rs-upload-test").unwrap();
+        let files = ["Cargo.toml", "src/main.rs"];
+        for &file in &files {
+            let path = dir.path().join(file);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(path, "data").expect("failed to write to file");
+        }
+        wrapper(|env| {
+            let db = env.db();
+            let conn = db.conn();
+            let backend = Storage::Database(DatabaseBackend::new(&conn));
+            let stored_files = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
+            assert_eq!(stored_files.len(), files.len());
+            for name in &files {
+                let name = Path::new(name);
+                assert!(stored_files.contains_key(name));
+            }
+            assert_eq!(stored_files.get(Path::new("Cargo.toml")).unwrap(), "text/toml");
+            assert_eq!(stored_files.get(Path::new("src/main.rs")).unwrap(), "text/rust");
+
+            let file = backend.get("rustdoc/Cargo.toml").unwrap();
+            assert_eq!(file.content, b"data");
+            assert_eq!(file.mime, "text/toml");
+            assert_eq!(file.path, "rustdoc/Cargo.toml");
+
+            let file = backend.get("rustdoc/src/main.rs").unwrap();
+            assert_eq!(file.content, b"data");
+            assert_eq!(file.mime, "text/rust");
+            assert_eq!(file.path, "rustdoc/src/main.rs");
+            Ok(())
+        })
+    }
 
     #[test]
     fn test_get_file_list() {
