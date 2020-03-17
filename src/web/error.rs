@@ -14,19 +14,15 @@ pub enum Nope {
 
 impl fmt::Display for Nope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-impl Error for Nope {
-    fn description(&self) -> &str {
-        match *self {
+        f.write_str(match *self {
             Nope::ResourceNotFound => "Requested resource not found",
             Nope::CrateNotFound => "Requested crate not found",
             Nope::NoResults => "Search yielded no results",
-        }
+        })
     }
 }
+
+impl Error for Nope {}
 
 impl Handler for Nope {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {

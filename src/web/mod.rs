@@ -48,7 +48,6 @@ mod routes;
 pub(crate) mod metrics;
 
 use std::{env, fmt};
-use std::error::Error;
 use std::time::Duration;
 use std::path::PathBuf;
 use std::net::SocketAddr;
@@ -98,7 +97,7 @@ impl CratesfyiHandler {
 
         // load templates
         if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e.description());
+            panic!("Failed to load handlebar templates: {}", e);
         }
 
         let mut chain = Chain::new(base);
