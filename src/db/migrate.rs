@@ -303,9 +303,9 @@ fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyM
             // description
             "Allow max number of targets to be overriden",
             // upgrade query
-            "ALTER TABLE sandbox_overrides ADD COLUMN targets INT;",
+            "ALTER TABLE sandbox_overrides ADD COLUMN max_targets INT;",
             // downgrade query
-            "ALTER TABLE sandbox_overrides DROP COLUMN targets;"
+            "ALTER TABLE sandbox_overrides DROP COLUMN max_targets;"
         ),
     ];
 
