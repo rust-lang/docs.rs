@@ -354,7 +354,8 @@ impl RustwideBuilder {
                     successful_targets.push(res.target.clone());
 
                     // Then build the documentation for all the targets
-                    for target in other_targets {
+                    // Limit the number of targets so that no one can try to build all 200000 possible targets
+                    for target in other_targets.into_iter().take(limits.targets()) {
                         debug!("building package {} {} for {}", name, version, target);
                         self.build_target(
                             target,

@@ -5,6 +5,7 @@ use std::time::Duration;
 
 pub(crate) struct Limits {
     memory: usize,
+    targets: usize,
     timeout: Duration,
     networking: bool,
     max_log_size: usize,
@@ -15,6 +16,7 @@ impl Default for Limits {
         Self {
             memory: 3 * 1024 * 1024 * 1024,  // 3 GB
             timeout: Duration::from_secs(15 * 60),  // 15 minutes
+            targets: 10,
             networking: false,
             max_log_size: 100 * 1024, // 100 KB
         }
@@ -37,6 +39,9 @@ impl Limits {
             if let Some(timeout) = row.get::<_, Option<i32>>("timeout_seconds") {
                 limits.timeout = Duration::from_secs(timeout as u64);
             }
+            if let Some(targets) = row.get::<_, Option<u32>>("max_targets") {
+                limits.targets = targets as usize;
+            }
         }
 
         Ok(limits)
@@ -58,6 +63,10 @@ impl Limits {
         self.max_log_size
     }
 
+    pub(crate) fn targets(&self) -> usize {
+        self.targets
+    }
+
     pub(crate) fn for_website(&self) -> BTreeMap<String, String> {
         let time_scale = |v| scale(v, 60, &["seconds", "minutes", "hours"]);
         let size_scale = |v| scale(v, 1024, &["bytes", "KB", "MB", "GB"]);
@@ -74,6 +83,7 @@ impl Limits {
         } else {
             res.insert("Network access".into(), "blocked".into());
         }
+        res.insert("Maximum number of build targets".into(), self.targets.to_string());
         res
     }
 }
