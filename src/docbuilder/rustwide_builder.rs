@@ -130,6 +130,9 @@ impl RustwideBuilder {
         //
         // Removing it beforehand works fine, and prevents rustup from blocking the update later in
         // the method.
+        //
+        // Note that this means that non tier-one targets will be uninstalled on every update,
+        // and will not be reinstalled until explicitly requested by a crate.
         for target in installed_targets {
             if !targets_to_install.remove(&target) {
                 self.toolchain.remove_target(&self.workspace, &target)?;
@@ -351,7 +354,8 @@ impl RustwideBuilder {
                     successful_targets.push(res.target.clone());
 
                     // Then build the documentation for all the targets
-                    for target in other_targets {
+                    // Limit the number of targets so that no one can try to build all 200000 possible targets
+                    for target in other_targets.into_iter().take(limits.targets()) {
                         debug!("building package {} {} for {}", name, version, target);
                         self.build_target(
                             target,
@@ -453,6 +457,11 @@ impl RustwideBuilder {
         }
         let mut cargo_args = vec!["doc".to_owned(), "--lib".to_owned(), "--no-deps".to_owned()];
         if target != HOST_TARGET {
+            // If the explicit target is not a tier one target, we need to install it.
+            if !TARGETS.contains(&target) {
+                // This is a no-op if the target is already installed.
+                self.toolchain.add_target(&self.workspace, target)?;
+            }
             cargo_args.push("--target".to_owned());
             cargo_args.push(target.to_owned());
         };

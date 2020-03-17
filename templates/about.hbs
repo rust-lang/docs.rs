@@ -153,18 +153,20 @@ no-default-features = true
 
 # Target to test build on, used as the default landing page (default: "x86_64-unknown-linux-gnu")
 #
-# Available targets:
+# Any target supported by rustup can be used.
+default-target = "x86_64-unknown-linux-gnu"
+
+# Targets to build (default: see below)
+#
+# Any target supported by rustup can be used.
+#
+# Default targets:
 # - x86_64-unknown-linux-gnu
 # - x86_64-apple-darwin
 # - x86_64-pc-windows-msvc
 # - i686-unknown-linux-gnu
-# - i686-apple-darwin
 # - i686-pc-windows-msvc
-default-target = "x86_64-unknown-linux-gnu"
-
-# Targets to build (default: all tier 1 targets)
 #
-# Same available targets as `default-target`.
 # Set this to `[]` to only build the default target.
 #
 # If `default-target` is unset, the first element of `targets` is treated as the default target.

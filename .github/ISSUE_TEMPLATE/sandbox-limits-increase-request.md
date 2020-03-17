@@ -16,5 +16,6 @@ assignees: ''
 
 **Requested RAM limit:**
 **Requested timeout:**
+**Requested number of targets:**
 
 **Why your crate needs the resource increases:**
