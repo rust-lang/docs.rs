@@ -1,6 +1,7 @@
 use super::Blob;
 use failure::Error;
-use rusoto_s3::{GetObjectRequest, S3Client, S3};
+use futures::Future;
+use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
@@ -44,6 +45,40 @@ impl<'a> S3Backend<'a> {
             date_updated,
             content,
         })
+    }
+
+    pub(super) fn store_batch(&self, batch: &[Blob]) -> Result<(), Error> {
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let mut attempts = 0;
+
+        loop {
+            let mut futures = Vec::new();
+            for blob in batch {
+                futures.push(self.client.put_object(PutObjectRequest {
+                    bucket: self.bucket.to_string(),
+                    key: blob.path.clone(),
+                    body: Some(blob.content.clone().into()),
+                    content_type: Some(blob.mime.clone()),
+                    ..Default::default()
+                }).inspect(|_| {
+                    crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
+                }));
+            }
+            attempts += 1;
+
+            match rt.block_on(::futures::future::join_all(futures)) {
+                // this batch was successful, start another batch if there are still more files
+                Ok(_) => break,
+                Err(err) => {
+                    error!("failed to upload to s3: {:?}", err);
+                    // if a futures error occurs, retry the batch
+                    if attempts > 2 {
+                        panic!("failed to upload 3 times, exiting");
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
