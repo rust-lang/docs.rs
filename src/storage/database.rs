@@ -1,6 +1,6 @@
 use super::Blob;
 use failure::{Error, Fail};
-use postgres::Connection;
+use postgres::{Connection, transaction::Transaction};
 
 #[derive(Debug, Fail)]
 #[fail(display = "the path is not present in the database")]
@@ -32,6 +32,22 @@ impl<'a> DatabaseBackend<'a> {
                 content: row.get("content"),
             })
         }
+    }
+    pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+        for blob in batch {
+            // check if file already exists in database
+            let rows = self.conn.query("SELECT COUNT(*) FROM files WHERE path = $1", &[&blob.path])?;
+
+            if rows.get(0).get::<usize, i64>(0) == 0 {
+                trans.query("INSERT INTO files (path, mime, content) VALUES ($1, $2, $3)",
+                                &[&blob.path, &blob.mime, &blob.content])?;
+            } else {
+                trans.query("UPDATE files SET mime = $2, content = $3, date_updated = NOW() \
+                                WHERE path = $1",
+                                &[&blob.path, &blob.mime, &blob.content])?;
+            }
+        }
+        Ok(())
     }
 }
 
