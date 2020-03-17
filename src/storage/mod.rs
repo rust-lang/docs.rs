@@ -126,14 +126,13 @@ impl Storage<'_> {
                 path: bucket_path,
                 mime,
                 content,
+                // this field is ignored by the backend
                 date_updated: Timespec::new(0, 0),
             })
         })
         .collect::<Result<Vec<_>, Error>>()?
         .chunks(MAX_CONCURRENT_UPLOADS)
-        .map(|batch| self.store_batch(batch, &trans))
-        // exhaust the iterator
-        .for_each(|_| {});
+        .try_for_each(|batch| self.store_batch(batch, &trans))?;
 
         trans.commit()?;
         Ok(file_paths_and_mimes)
