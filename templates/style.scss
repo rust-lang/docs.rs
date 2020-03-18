@@ -813,6 +813,6 @@ i.dependencies.normal {
 }
 
 /* Don't put a newline after code fragments in headers */
-h3 > code {
-  display: inline;
+h3 > code, h4 > code {
+  display: inline-block;
 }
