@@ -811,3 +811,8 @@ i.dependencies.normal {
   visibility: hidden;
   display: none;
 }
+
+/* Don't put a newline after code fragments in headers */
+h3 > code, h4 > code {
+  display: inline-block;
+}
