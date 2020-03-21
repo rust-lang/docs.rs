@@ -3,6 +3,7 @@ use postgres::Connection;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+#[derive(Debug, PartialEq)]
 pub(crate) struct Limits {
     memory: usize,
     targets: usize,
@@ -99,4 +100,40 @@ fn scale(mut value: usize, interval: usize, labels: &[&str]) -> String {
         }
     }
     format!("{} {}", value, chosen_label)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test::*;
+    #[test]
+    fn retrieve_limits() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let krate = "hexponent";
+            // limits work if no crate has limits set
+            let hexponent = Limits::for_crate(&db.conn(), krate)?;
+            assert_eq!(hexponent, Limits::default());
+
+            db.conn().query("INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)", &[&krate])?;
+            // limits work if crate has limits set
+            let hexponent = Limits::for_crate(&db.conn(), krate)?;
+            assert_eq!(hexponent, Limits { targets: 15, ..Limits::default() });
+
+            // all limits work
+            let krate = "regex";
+            let limits = Limits {
+                memory: 100_000,
+                timeout: Duration::from_secs(300),
+                targets: 1,
+                ..Limits::default()
+            };
+            db.conn().query("INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)
+                                    VALUES ($1, $2, $3, $4)",
+                                    &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)])?;
+            assert_eq!(limits, Limits::for_crate(&db.conn(), krate)?);
+            Ok(())
+        });
+    }
 }
