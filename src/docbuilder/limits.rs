@@ -136,4 +136,19 @@ mod test {
             Ok(())
         });
     }
+    #[test]
+    fn display_limits() {
+        let limits = Limits {
+            memory: 102400,
+            timeout: Duration::from_secs(300),
+            targets: 1,
+            ..Limits::default()
+        };
+        let display = limits.for_website();
+        assert_eq!(display.get("Network access".into()), Some(&"blocked".into()));
+        assert_eq!(display.get("Maximum size of a build log".into()), Some(&"100 KB".into()));
+        assert_eq!(display.get("Maximum number of build targets".into()), Some(&limits.targets.to_string()));
+        assert_eq!(display.get("Maximum rustdoc execution time".into()), Some(&"5 minutes".into()));
+        assert_eq!(display.get("Available RAM".into()), Some(&"100 KB".into()));
+    }
 }
