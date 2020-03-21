@@ -39,7 +39,7 @@ impl Limits {
             if let Some(timeout) = row.get::<_, Option<i32>>("timeout_seconds") {
                 limits.timeout = Duration::from_secs(timeout as u64);
             }
-            if let Some(targets) = row.get::<_, Option<u32>>("max_targets") {
+            if let Some(targets) = row.get::<_, Option<i32>>("max_targets") {
                 limits.targets = targets as usize;
             }
         }
