@@ -457,25 +457,28 @@ impl RustwideBuilder {
         if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
-        let mut cargo_args = vec!["doc".to_owned(), "--lib".to_owned(), "--no-deps".to_owned()];
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
         if target != HOST_TARGET {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
                 // This is a no-op if the target is already installed.
                 self.toolchain.add_target(&self.workspace, target)?;
             }
-            cargo_args.push("--target".to_owned());
-            cargo_args.push(target.to_owned());
+            cargo_args.push("--target");
+            cargo_args.push(target);
         };
+
+        let tmp;
         if let Some(features) = &metadata.features {
-            cargo_args.push("--features".to_owned());
-            cargo_args.push(features.join(" "));
+            cargo_args.push("--features");
+            tmp = features.join(" ");
+            cargo_args.push(&tmp);
         }
         if metadata.all_features {
-            cargo_args.push("--all-features".to_owned());
+            cargo_args.push("--all-features");
         }
         if metadata.no_default_features {
-            cargo_args.push("--no-default-features".to_owned());
+            cargo_args.push("--no-default-features");
         }
 
         let mut storage = LogStorage::new(LevelFilter::Info);
