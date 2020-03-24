@@ -455,7 +455,7 @@ impl RustwideBuilder {
         if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps", "-j2"];
         if target != HOST_TARGET {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
