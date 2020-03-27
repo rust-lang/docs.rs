@@ -543,6 +543,15 @@ mod test {
     }
 
     #[test]
+    fn test_favicon_is_present() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert!(web.get("/favicon.ico").send()?.status().is_success());
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_show_clipboard_for_crate_pages() {
         wrapper(|env| {
             env.db()
