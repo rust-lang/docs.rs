@@ -33,7 +33,8 @@ jobs:
       - name: Prepare the test environment
         run: |
           prefix=$(pwd)/ignored/prefix
-          mkdir -p ${prefix}/public-html
+          mkdir -p ${prefix}
+          ln -s ../../static ${prefix}/public_html
           echo "::set-env name=CRATESFYI_PREFIX::${prefix}"
 
       - name: Test docs.rs
