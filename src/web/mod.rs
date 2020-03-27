@@ -48,14 +48,12 @@ mod routes;
 pub(crate) mod metrics;
 
 use std::{env, fmt};
-use std::path::PathBuf;
 use std::net::SocketAddr;
 use iron::prelude::*;
 use iron::{self, Listening, Handler, Url, status};
 use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
 use iron::modifiers::Redirect;
 use router::NoRoute;
-use staticfile::Static;
 use handlebars_iron::{HandlebarsEngine, DirectorySource};
 use time;
 use postgres::Connection;
@@ -83,7 +81,6 @@ struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
-    static_handler: Box<dyn Handler>,
     pool_factory: PoolFactory,
 }
 
@@ -111,8 +108,6 @@ impl CratesfyiHandler {
 
         let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(&pool_factory, routes.iron_router());
-        let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").expect("the CRATESFYI_PREFIX environment variable is not set")).join("public_html");
-        let static_handler = Static::new(prefix);
 
         CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
@@ -121,7 +116,6 @@ impl CratesfyiHandler {
                 blacklisted_prefixes,
                 Box::new(file::DatabaseFileHandler),
             )),
-            static_handler: Box::new(static_handler),
             pool_factory,
         }
     }
@@ -140,10 +134,6 @@ impl Handler for CratesfyiHandler {
             .or_else(|e| {
                 // if router fails try to serve files from database first
                 self.database_file_handler.handle(req).or(Err(e))
-            })
-            .or_else(|e| {
-                // and then try static handler. if all of them fails, return 404
-                self.static_handler.handle(req).or(Err(e))
             })
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {

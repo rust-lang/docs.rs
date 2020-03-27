@@ -25,7 +25,6 @@ use ::{
 pub fn start_daemon(background: bool) {
     // first check required environment variables
     for v in ["CRATESFYI_PREFIX",
-              "CRATESFYI_PREFIX",
               "CRATESFYI_GITHUB_USERNAME",
               "CRATESFYI_GITHUB_ACCESSTOKEN"]
         .iter() {

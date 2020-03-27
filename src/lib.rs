@@ -18,7 +18,6 @@ extern crate semver;
 extern crate slug;
 extern crate iron;
 extern crate router;
-extern crate staticfile;
 extern crate handlebars_iron;
 extern crate comrak;
 extern crate r2d2;
