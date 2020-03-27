@@ -48,7 +48,6 @@ mod routes;
 pub(crate) mod metrics;
 
 use std::{env, fmt};
-use std::time::Duration;
 use std::path::PathBuf;
 use std::net::SocketAddr;
 use iron::prelude::*;
@@ -113,8 +112,7 @@ impl CratesfyiHandler {
         let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(&pool_factory, routes.iron_router());
         let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").expect("the CRATESFYI_PREFIX environment variable is not set")).join("public_html");
-        let static_handler = Static::new(prefix)
-            .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
+        let static_handler = Static::new(prefix);
 
         CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
