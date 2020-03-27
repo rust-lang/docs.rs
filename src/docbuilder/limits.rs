@@ -69,16 +69,14 @@ impl Limits {
     }
 
     pub(crate) fn for_website(&self) -> BTreeMap<String, String> {
-        let time_scale = |v| scale(v, 60, &["seconds", "minutes", "hours"]);
-        let size_scale = |v| scale(v, 1024, &["bytes", "KB", "MB", "GB"]);
 
         let mut res = BTreeMap::new();
-        res.insert("Available RAM".into(), size_scale(self.memory));
+        res.insert("Available RAM".into(), SIZE_SCALE(self.memory));
         res.insert(
             "Maximum rustdoc execution time".into(),
-            time_scale(self.timeout.as_secs() as usize),
+            TIME_SCALE(self.timeout.as_secs() as usize),
         );
-        res.insert("Maximum size of a build log".into(), size_scale(self.max_log_size));
+        res.insert("Maximum size of a build log".into(), SIZE_SCALE(self.max_log_size));
         if self.networking {
             res.insert("Network access".into(), "allowed".into());
         } else {
@@ -89,17 +87,21 @@ impl Limits {
     }
 }
 
-fn scale(mut value: usize, interval: usize, labels: &[&str]) -> String {
+const TIME_SCALE: fn(usize) -> String = |v| scale(v, 60, &["seconds", "minutes", "hours"]);
+const SIZE_SCALE: fn(usize) -> String = |v| scale(v, 1024, &["bytes", "KB", "MB", "GB"]);
+
+fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
+    let (mut value, interval) = (value as f64, interval as f64);
     let mut chosen_label = &labels[0];
     for label in &labels[1..] {
-        if (value as f64) / (interval as f64) >= 1.0 {
+        if value / interval >= 1.0 {
             chosen_label = label;
             value = value / interval;
         } else {
             break;
         }
     }
-    format!("{} {}", value, chosen_label)
+    format!("{} {}", value.round() as usize, chosen_label)
 }
 
 #[cfg(test)]
@@ -150,5 +152,23 @@ mod test {
         assert_eq!(display.get("Maximum number of build targets".into()), Some(&limits.targets.to_string()));
         assert_eq!(display.get("Maximum rustdoc execution time".into()), Some(&"5 minutes".into()));
         assert_eq!(display.get("Available RAM".into()), Some(&"100 KB".into()));
+    }
+    #[test]
+    fn scale_limits() {
+        // time
+        assert_eq!(TIME_SCALE(300), "5 minutes");
+        assert_eq!(TIME_SCALE(1), "1 seconds");
+        assert_eq!(TIME_SCALE(7200), "2 hours");
+
+        // size
+        assert_eq!(SIZE_SCALE(1), "1 bytes");
+        assert_eq!(SIZE_SCALE(100), "100 bytes");
+        assert_eq!(SIZE_SCALE(1024), "1 KB");
+        assert_eq!(SIZE_SCALE(10240), "10 KB");
+        assert_eq!(SIZE_SCALE(1048576), "1 MB");
+        assert_eq!(SIZE_SCALE(10485760), "10 MB");
+        assert_eq!(SIZE_SCALE(1073741824), "1 GB");
+        assert_eq!(SIZE_SCALE(10737418240), "10 GB");
+        assert_eq!(SIZE_SCALE(std::u32::MAX as usize), "4 GB");
     }
 }
