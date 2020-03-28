@@ -198,7 +198,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                     bucket: S3_BUCKET_NAME.into(),
                     key: bucket_path.clone(),
                     body: Some(content.clone().into()),
-                    content_type: Some(mime.clone()),
+                    content_type: Some(mime.to_owned()),
                     ..Default::default()
                 }).inspect(|_| {
                     crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
@@ -218,7 +218,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 }
             }
 
-            file_paths_and_mimes.insert(file_path.clone(), mime.clone());
+            file_paths_and_mimes.insert(file_path.clone(), mime.to_owned());
         }
 
         if !futures.is_empty() {
@@ -254,12 +254,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-fn detect_mime(file_path: &Path) -> Result<String> {
+fn detect_mime(file_path: &Path) -> Result<&'static str> {
     let mime = mime_guess::from_path(file_path).first_raw().map(|m| m).unwrap_or("text/plain");
-    correct_mime(&mime, &file_path)
-}
-
-fn correct_mime(mime: &str, file_path: &Path) -> Result<String> {
     Ok(match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.extension().and_then(OsStr::to_str) {
@@ -275,7 +271,7 @@ fn correct_mime(mime: &str, file_path: &Path) -> Result<String> {
         },
         "image/svg" => "image/svg+xml",
         _ => mime
-    }.to_owned())
+    })
 }
 
 
