@@ -355,21 +355,21 @@ mod test {
     }
     #[test]
     fn test_mime_types() {
-        check_mime("/ignored", ".gitignore", "text/plain");
-        check_mime("[package]", "hello.toml","text/toml");
-        check_mime(".ok { color:red; }", "hello.css","text/css");
-        check_mime("var x = 1", "hello.js","application/javascript");
-        check_mime("<html>", "hello.html","text/html");
-        check_mime("## HELLO", "hello.hello.md","text/markdown");
-        check_mime("## WORLD", "hello.markdown","text/markdown");
-        check_mime("{}", "hello.json","application/json");
-        check_mime("hello world", "hello.txt","text/plain");
-        check_mime("//! Simple module to ...", "file.rs", "text/rust");
-        check_mime("<svg></svg>", "important.svg", "image/svg+xml");
+        check_mime(".gitignore", "text/plain");
+        check_mime("hello.toml","text/toml");
+        check_mime("hello.css","text/css");
+        check_mime("hello.js","application/javascript");
+        check_mime("hello.html","text/html");
+        check_mime("hello.hello.md","text/markdown");
+        check_mime("hello.markdown","text/markdown");
+        check_mime("hello.json","application/json");
+        check_mime("hello.txt","text/plain");
+        check_mime("file.rs", "text/rust");
+        check_mime("important.svg", "image/svg+xml");
     }
 
-    fn check_mime(content: &str, path: &str, expected_mime: &str) {
-        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path));
+    fn check_mime(path: &str, expected_mime: &str) {
+        let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
     }
