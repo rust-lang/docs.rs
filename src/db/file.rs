@@ -17,8 +17,6 @@ use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use std::ffi::OsStr;
-#[cfg(not(windows))]
-use magic::{Cookie, flags};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -157,12 +155,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                                               prefix: &str,
                                               path: P)
                                               -> Result<Json> {
-    let trans = conn.transaction()?;
-    #[cfg(not(windows))]
-    let mime_data = load_mime_data()?;
     use std::collections::HashMap;
-    let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
     use futures::future::Future;
+
+    let trans = conn.transaction()?;
+    let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
 
@@ -194,10 +191,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             #[cfg(not(windows))]
             let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
-            #[cfg(windows)]
             let mime = detect_mime(&content, &file_path)?;
-            #[cfg(not(windows))]
-            let mime = detect_mime(&content, &file_path, &mime_data)?;
 
             if let Some(client) = &client {
                 futures.push(client.put_object(PutObjectRequest {
@@ -260,20 +254,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-#[cfg(not(windows))]
-fn load_mime_data() -> Result<Cookie> {
-    let cookie = Cookie::open(flags::MIME_TYPE)?;
-    cookie.load::<&str>(&[])?;
-    Ok(cookie)
-}
-
-#[cfg(not(windows))]
-fn detect_mime(content: &Vec<u8>, file_path: &Path, cookie: &Cookie) -> Result<String> {
-    let mime = cookie.buffer(&content)?;
-    correct_mime(&mime, &file_path)
-}
-
-#[cfg(windows)]
 fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String> {
     let mime = mime_guess::from_path(file_path).first_raw().map(|m| m).unwrap_or("text/plain");
     correct_mime(&mime, &file_path)
@@ -393,12 +373,7 @@ mod test {
     }
 
     fn check_mime(content: &str, path: &str, expected_mime: &str) {
-        #[cfg(not(windows))]
-        let mime_data = load_mime_data().unwrap();
-        #[cfg(windows)]
         let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path));
-        #[cfg(not(windows))]
-        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path), &mime_data);
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
     }

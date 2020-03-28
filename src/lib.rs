@@ -39,16 +39,13 @@ extern crate tokio;
 extern crate systemstat;
 extern crate rustwide;
 extern crate tempdir;
+extern crate mime_guess;
 
-#[cfg(not(windows))]
-extern crate magic;
 #[cfg(not(windows))]
 extern crate libc;
 
 #[cfg(windows)]
 extern crate path_slash;
-#[cfg(windows)]
-extern crate mime_guess;
 
 #[cfg(test)]
 extern crate once_cell;
