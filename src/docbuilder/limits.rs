@@ -104,7 +104,7 @@ fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
     // 2.x
     let mut value = format!("{:.1}", value);
     // 2.0 -> 2
-    if &value[value.len() - 1..] == "0" {
+    if value.ends_with(".0") {
         value.truncate(value.len() - 2);
     }
     format!("{} {}", value, chosen_label)
