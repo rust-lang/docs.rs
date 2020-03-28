@@ -197,7 +197,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
                 futures.push(client.put_object(PutObjectRequest {
                     bucket: S3_BUCKET_NAME.into(),
                     key: bucket_path.clone(),
-                    body: Some(content.clone().into()),
+                    body: Some(content.into()),
                     content_type: Some(mime.to_owned()),
                     ..Default::default()
                 }).inspect(|_| {
