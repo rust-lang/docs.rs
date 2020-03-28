@@ -191,7 +191,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
             #[cfg(not(windows))]
             let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
-            let mime = detect_mime(&content, &file_path)?;
+            let mime = detect_mime(&file_path)?;
 
             if let Some(client) = &client {
                 futures.push(client.put_object(PutObjectRequest {
@@ -254,7 +254,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(conn: &Connection,
     file_list_to_json(file_list_with_mimes)
 }
 
-fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String> {
+fn detect_mime(file_path: &Path) -> Result<String> {
     let mime = mime_guess::from_path(file_path).first_raw().map(|m| m).unwrap_or("text/plain");
     correct_mime(&mime, &file_path)
 }
