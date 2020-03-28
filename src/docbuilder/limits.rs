@@ -101,7 +101,13 @@ fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
             break;
         }
     }
-    format!("{} {}", value.round() as usize, chosen_label)
+    // 2.x
+    let mut value = format!("{:.1}", value);
+    // 2.0 -> 2
+    if &value[value.len() - 1..] == "0" {
+        value.truncate(value.len() - 2);
+    }
+    format!("{} {}", value, chosen_label)
 }
 
 #[cfg(test)]
@@ -170,5 +176,13 @@ mod test {
         assert_eq!(SIZE_SCALE(1073741824), "1 GB");
         assert_eq!(SIZE_SCALE(10737418240), "10 GB");
         assert_eq!(SIZE_SCALE(std::u32::MAX as usize), "4 GB");
+
+        // fractional sizes
+        assert_eq!(TIME_SCALE(90), "1.5 minutes");
+        assert_eq!(TIME_SCALE(5400), "1.5 hours");
+
+        assert_eq!(SIZE_SCALE(1288490189), "1.2 GB");
+        assert_eq!(SIZE_SCALE(3758096384), "3.5 GB");
+        assert_eq!(SIZE_SCALE(1048051712), "999.5 MB");
     }
 }
