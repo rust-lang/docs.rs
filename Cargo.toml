@@ -12,7 +12,7 @@ log = "0.4"
 rustc-serialize = "0.3"
 regex = "1"
 clap = "2"
-crates-index-diff = "4"
+crates-index-diff = "7"
 time = "0.1"
 reqwest = "0.9"
 semver = "0.9"
@@ -63,7 +63,7 @@ kuchiki = "0.8"
 
 [build-dependencies]
 time = "0.1"
-git2 = "0.9"
+git2 = { version = "0.13", default-features = false }
 sass-rs = "0.2"
 
 [[bin]]
