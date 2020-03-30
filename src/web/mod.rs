@@ -302,6 +302,7 @@ fn render_markdown(text: &str) -> String {
 
     let options = {
         let mut options = ComrakOptions::default();
+        options.safe = true;
         options.ext_superscript = true;
         options.ext_table = true;
         options.ext_autolink = true;
