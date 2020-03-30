@@ -18,7 +18,7 @@ use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use std::ffi::OsStr;
 
-const MAX_CONCURRENT_UPLOADS: usize = 1000;
+const MAX_CONCURRENT_UPLOADS: usize = 50;
 
 pub(super) static S3_BUCKET_NAME: &str = "rust-docs-rs";
 
