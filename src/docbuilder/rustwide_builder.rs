@@ -442,6 +442,8 @@ impl RustwideBuilder {
             format!("-{}", parse_rustc_version(&self.rustc_version)?),
             "--static-root-path".to_string(),
             "/".to_string(),
+            "--cap-lints".to_string(),
+            "warn".to_string(),
         ];
         for dep in &cargo_metadata.root_dependencies() {
             rustdoc_flags.push("--extern-html-root-url".to_string());
