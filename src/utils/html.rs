@@ -1,78 +1,38 @@
 use crate::error::Result;
 use failure::err_msg;
-
-use html5ever::driver::{parse_document, ParseOpts};
-use html5ever::rcdom::{Handle, NodeData, RcDom};
-use html5ever::serialize::{serialize, SerializeOpts};
-use html5ever::tendril::TendrilSink;
+use kuchiki::traits::TendrilSink;
+use kuchiki::NodeRef;
 
 /// Extracts the contents of the `<head>` and `<body>` tags from an HTML document, as well as the
 /// classes on the `<body>` tag, if any.
 pub fn extract_head_and_body(html: &str) -> Result<(String, String, String)> {
-    let parser = parse_document(RcDom::default(), ParseOpts::default());
-    let dom = parser.one(html);
+    let dom = kuchiki::parse_html().one(html);
 
-    let (head, body) = extract_from_rcdom(&dom)?;
-    let class = extract_class(&body);
+    let head = dom
+        .select_first("head")
+        .map_err(|_| err_msg("couldn't find <head> tag in rustdoc output"))?;
+    let body = dom
+        .select_first("body")
+        .map_err(|_| err_msg("couldn't find <body> tag in rustdoc output"))?;
 
-    Ok((stringify(head), stringify(body), class))
+    let class = body
+        .attributes
+        .borrow()
+        .get("class")
+        .map(|v| v.to_owned())
+        .unwrap_or_default();
+
+    Ok((serialize(head.as_node()), serialize(body.as_node()), class))
 }
 
-fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
-    let mut worklist = vec![dom.document.clone()];
-    let (mut head, mut body) = (None, None);
-
-    while let Some(handle) = worklist.pop() {
-        if let NodeData::Element { ref name, .. } = handle.data {
-            match name.local.as_ref() {
-                "head" => {
-                    if head.is_some() {
-                        return Err(err_msg("duplicate <head> tag"));
-                    } else {
-                        head = Some(handle.clone());
-                    }
-                }
-
-                "body" => {
-                    if body.is_some() {
-                        return Err(err_msg("duplicate <body> tag"));
-                    } else {
-                        body = Some(handle.clone());
-                    }
-                }
-
-                _ => {} // do nothing
-            }
-        }
-
-        worklist.extend(handle.children.borrow().iter().cloned());
+fn serialize(v: &NodeRef) -> String {
+    let mut contents = Vec::new();
+    for child in v.children() {
+        child
+            .serialize(&mut contents)
+            .expect("serialization failed");
     }
-
-    let head = head.ok_or_else(|| err_msg("couldn't find <head> tag in rustdoc output"))?;
-    let body = body.ok_or_else(|| err_msg("couldn't find <body> tag in rustdoc output"))?;
-    Ok((head, body))
-}
-
-fn stringify(node: Handle) -> String {
-    let mut vec = Vec::new();
-    serialize(&mut vec, &node, SerializeOpts::default()).expect("serializing into buffer failed");
-
-    String::from_utf8(vec).expect("html5ever returned non-utf8 data")
-}
-
-fn extract_class(node: &Handle) -> String {
-    match node.data {
-        NodeData::Element { ref attrs, .. } => {
-            let attrs = attrs.borrow();
-
-            attrs
-                .iter()
-                .find(|a| &a.name.local == "class")
-                .map_or(String::new(), |a| a.value.to_string())
-        }
-
-        _ => String::new(),
-    }
+    String::from_utf8(contents).expect("non utf-8 html")
 }
 
 #[cfg(test)]
@@ -82,8 +42,7 @@ mod test {
         let (head, body, class) = super::extract_head_and_body(
             r#"<head><meta name="generator" content="rustdoc"></head><body class="rustdoc struct"><p>hello</p>"#
         ).unwrap();
-
-        assert_eq!(head, r#"<meta name="generator" content="rustdoc">"#);
+        assert_eq!(head, r#"<meta content="rustdoc" name="generator">"#);
         assert_eq!(body, "<p>hello</p>");
         assert_eq!(class, "rustdoc struct");
     }
