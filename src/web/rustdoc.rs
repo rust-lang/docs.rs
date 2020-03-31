@@ -567,6 +567,7 @@ mod test {
     use super::*;
     use crate::test::*;
     use chrono::Utc;
+    use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use serde_json::json;
     use std::{collections::BTreeMap, iter::FromIterator};
@@ -575,7 +576,6 @@ mod test {
         path: &str,
         web: &TestFrontend,
     ) -> Result<Option<String>, failure::Error> {
-        use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         println!("{}", data);
@@ -872,7 +872,6 @@ mod test {
     #[test]
     fn yanked_release_shows_warning_in_nav() {
         fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, failure::Error> {
-            use html5ever::tendril::TendrilSink;
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             Ok(kuchiki::parse_html()
@@ -1083,7 +1082,6 @@ mod test {
             path: &str,
             web: &TestFrontend,
         ) -> Result<Vec<(String, String)>, failure::Error> {
-            use html5ever::tendril::TendrilSink;
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             let dom = kuchiki::parse_html().one(data);

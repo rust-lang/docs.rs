@@ -581,7 +581,7 @@ mod test {
         test::*,
         web::{handlebars_engine, match_version},
     };
-    use html5ever::tendril::TendrilSink;
+    use kuchiki::traits::TendrilSink;
     use serde_json::json;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
