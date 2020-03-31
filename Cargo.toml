@@ -17,7 +17,7 @@ time = "0.1"
 reqwest = "0.9"
 semver = "0.9"
 slug = "=0.1.1"
-env_logger = "0.6"
+env_logger = "0.7"
 r2d2 = "0.8"
 r2d2_postgres = "0.14"
 url = "1.4"
@@ -44,7 +44,7 @@ mime_guess = "2"
 iron = "0.5"
 router = "0.5"
 handlebars-iron = "0.22"
-params = "0.6"
+params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
 
 [target.'cfg(not(windows))'.dependencies]
