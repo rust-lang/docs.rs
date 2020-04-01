@@ -6,9 +6,7 @@ authors = ["Onur Aslan <onur@onur.im>"]
 license-file = "LICENSE"
 repository = "https://github.com/rust-lang/docs.rs"
 documentation = "https://docs.rs/badge"
-
-[lib]
-path = "badge.rs"
+edition = "2018"
 
 [dependencies]
 base64 = "0.9.0"
