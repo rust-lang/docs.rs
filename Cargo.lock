@@ -383,7 +383,7 @@ dependencies = [
  "rusoto_credential 0.40.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_s3 0.40.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustwide 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustwide 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sass-rs 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "schemamama 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "schemamama_postgres 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2241,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "rustwide"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3649,7 +3649,7 @@ dependencies = [
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum rusttype 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)" = "b8eb11f5b0a98c8eca2fb1483f42646d8c340e83e46ab416f8a063a0fd0eeb20"
-"checksum rustwide 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a9663f312745b9a53570c3a2170ba92f9e71a49ac3328e15ed5955dd462eaacb"
+"checksum rustwide 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "528112bbd4c9ef7e6dfa2e2b2b4157176c6f3a0948852d83a439f67d11f3fa07"
 "checksum ryu 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "7153dd96dade874ab973e098cb62fcdbb89a03682e46b144fd09550998d4a4a7"
 "checksum ryu 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "535622e6be132bccd223f4bb2b8ac8d53cda3c7a6394944d3b2b33fb974f9d76"
 "checksum safemem 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e27a8b19b835f7aea908818e871f5cc3a5a186550c30773be987e155e8163d8f"

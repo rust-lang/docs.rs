@@ -109,6 +109,13 @@ impl RustwideBuilder {
         })
     }
 
+    fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
+        SandboxBuilder::new()
+            .cpu_limit(self.cpu_limit.map(|limit| limit as f32))
+            .memory_limit(Some(limits.memory()))
+            .enable_networking(limits.networking())
+    }
+
     pub fn update_toolchain(&mut self) -> Result<()> {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
@@ -195,12 +202,8 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
-
         build_dir
-            .build(&self.toolchain, &krate, sandbox)
+            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
@@ -317,14 +320,10 @@ impl RustwideBuilder {
         };
         krate.fetch(&self.workspace)?;
 
-        let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
-
         let local_storage = ::tempdir::TempDir::new("docsrs-docs")?;
 
         let res = build_dir
-            .build(&self.toolchain, &krate, sandbox)
+            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 use crate::docbuilder::metadata::BuildTargets;
 
