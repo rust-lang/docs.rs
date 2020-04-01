@@ -90,8 +90,8 @@ mod test {
         let (head, body, class) = super::extract_head_and_body(
             r#"<head><meta name="generator" content="rustdoc"></head><body class="rustdoc struct"><p>hello</p>"#
         ).unwrap();
-        assert_eq!(head, r#"<head><meta name="generator" content="rustdoc"></head>"#);
-        assert_eq!(body, "<body><p>hello</p>");
+        assert_eq!(head, r#"<meta name="generator" content="rustdoc">"#);
+        assert_eq!(body, "<p>hello</p>");
         assert_eq!(class, "rustdoc struct");
     }
 
