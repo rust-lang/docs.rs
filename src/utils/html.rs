@@ -75,16 +75,6 @@ fn extract_class(node: &Handle) -> String {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
-    fn round_trip(a: &str) -> String {
-        let parser = parse_document(RcDom::default(), ParseOpts::default());
-        stringify(parser.one(a).document)
-    }
-    fn mostly_equal(a: &str, b: &str) -> bool {
-        round_trip(a.trim()).trim() == round_trip(b.trim()).trim()
-    }
-
     #[test]
     fn small_html() {
         let (head, body, class) = super::extract_head_and_body(
@@ -102,8 +92,8 @@ mod test {
         let expected_head = std::fs::read_to_string("tests/regex/head.html").unwrap();
         let expected_body = std::fs::read_to_string("tests/regex/body.html").unwrap();
         let (head, body, class) = super::extract_head_and_body(&original).unwrap();
-        assert!(mostly_equal(&head, &expected_head));
-        assert!(mostly_equal(&body, &expected_body));
+        assert_eq!(head, expected_head.trim());
+        assert_eq!(&body, &expected_body.trim());
         assert_eq!(class, "rustdoc struct");
     }
 }
