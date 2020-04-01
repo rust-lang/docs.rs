@@ -72,3 +72,38 @@ fn extract_class(node: &Handle) -> String {
         _ => String::new()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn round_trip(a: &str) -> String {
+        let parser = parse_document(RcDom::default(), ParseOpts::default());
+        stringify(parser.one(a).document)
+    }
+    fn mostly_equal(a: &str, b: &str) -> bool {
+        round_trip(a.trim()).trim() == round_trip(b.trim()).trim()
+    }
+
+    #[test]
+    fn small_html() {
+        let (head, body, class) = super::extract_head_and_body(
+            r#"<head><meta name="generator" content="rustdoc"></head><body class="rustdoc struct"><p>hello</p>"#
+        ).unwrap();
+        assert_eq!(head, r#"<head><meta name="generator" content="rustdoc"></head>"#);
+        assert_eq!(body, "<body><p>hello</p>");
+        assert_eq!(class, "rustdoc struct");
+    }
+
+    // more of an integration test
+    #[test]
+    fn parse_regex_html() {
+        let original = std::fs::read_to_string("benches/struct.CaptureMatches.html").unwrap();
+        let expected_head = std::fs::read_to_string("tests/regex/head.html").unwrap();
+        let expected_body = std::fs::read_to_string("tests/regex/body.html").unwrap();
+        let (head, body, class) = super::extract_head_and_body(&original).unwrap();
+        assert!(mostly_equal(&head, &expected_head));
+        assert!(mostly_equal(&body, &expected_body));
+        assert_eq!(class, "rustdoc struct");
+    }
+}
