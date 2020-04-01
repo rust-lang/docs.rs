@@ -8,9 +8,6 @@ repository = "https://github.com/rust-lang/docs.rs"
 documentation = "https://docs.rs/badge"
 edition = "2018"
 
-[lib]
-path = "badge.rs"
-
 [dependencies]
 base64 = "0.12.0"
 rusttype = "0.8.2"
