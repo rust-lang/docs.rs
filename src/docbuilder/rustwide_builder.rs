@@ -66,6 +66,7 @@ pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
     rustc_version: String,
+    cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
@@ -92,12 +93,19 @@ impl RustwideBuilder {
             .map(Cow::Owned)
             .unwrap_or_else(|_| Cow::Borrowed("nightly"));
 
+        let cpu_limit = std::env::var("DOCS_RS_BUILD_CPU_LIMIT").ok().map(|limit| {
+            limit
+                .parse::<u32>()
+                .expect("invalid DOCS_RS_BUILD_CPU_LIMIT")
+        });
+
         let toolchain = Toolchain::dist(&toolchain_name);
 
         Ok(RustwideBuilder {
             workspace,
             toolchain,
             rustc_version: String::new(),
+            cpu_limit,
         })
     }
 
@@ -456,7 +464,7 @@ impl RustwideBuilder {
         if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps", "-j2"];
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
         if target != HOST_TARGET {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
@@ -466,6 +474,12 @@ impl RustwideBuilder {
             cargo_args.push("--target");
             cargo_args.push(target);
         };
+
+        let tmp_jobs;
+        if let Some(cpu_limit) = self.cpu_limit {
+            tmp_jobs = format!("-j{}", cpu_limit);
+            cargo_args.push(&tmp_jobs);
+        }
 
         let tmp;
         if let Some(features) = &metadata.features {
