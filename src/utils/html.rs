@@ -72,3 +72,28 @@ fn extract_class(node: &Handle) -> String {
         _ => String::new()
     }
 }
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn small_html() {
+        let (head, body, class) = super::extract_head_and_body(
+            r#"<head><meta name="generator" content="rustdoc"></head><body class="rustdoc struct"><p>hello</p>"#
+        ).unwrap();
+        assert_eq!(head, r#"<meta name="generator" content="rustdoc">"#);
+        assert_eq!(body, "<p>hello</p>");
+        assert_eq!(class, "rustdoc struct");
+    }
+
+    // more of an integration test
+    #[test]
+    fn parse_regex_html() {
+        let original = std::fs::read_to_string("benches/struct.CaptureMatches.html").unwrap();
+        let expected_head = std::fs::read_to_string("tests/regex/head.html").unwrap();
+        let expected_body = std::fs::read_to_string("tests/regex/body.html").unwrap();
+        let (head, body, class) = super::extract_head_and_body(&original).unwrap();
+        assert_eq!(head, expected_head.trim());
+        assert_eq!(&body, &expected_body.trim());
+        assert_eq!(class, "rustdoc struct");
+    }
+}
