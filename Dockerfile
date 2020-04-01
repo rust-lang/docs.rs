@@ -28,6 +28,7 @@ ENV PATH=/root/.cargo/bin:$PATH
 # and doing a full build with it.
 RUN mkdir -p /build/src/web/badge
 WORKDIR /build
+COPY benches benches
 COPY Cargo.lock Cargo.toml ./
 COPY src/web/badge src/web/badge/
 RUN echo "fn main() {}" > src/main.rs && \
