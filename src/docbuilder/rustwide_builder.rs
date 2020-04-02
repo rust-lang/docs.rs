@@ -389,7 +389,7 @@ impl RustwideBuilder {
                     has_docs,
                     has_examples,
                 )?;
-                add_build_into_database(&conn, release_id, &res.result)?;
+                add_build_into_database(&conn, &release_id, &res.result)?;
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
