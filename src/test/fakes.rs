@@ -182,7 +182,7 @@ impl<'a> FakeRelease<'a> {
             self.has_docs,
             self.has_examples,
         )?;
-        crate::db::add_build_into_database(&db.conn(), release_id, &self.build_result)?;
+        crate::db::add_build_into_database(&db.conn(), &release_id, &self.build_result)?;
 
         Ok(release_id)
     }

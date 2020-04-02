@@ -62,7 +62,7 @@ impl<T: ToJson> Page<T> {
     pub fn new(content: T) -> Page<T> {
         Page {
             title: None,
-            content,
+            content: content,
             status: status::Ok,
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),
@@ -73,28 +73,28 @@ impl<T: ToJson> Page<T> {
 
     /// Sets a string variable
     pub fn set(mut self, var: &str, val: &str) -> Page<T> {
-        self.varss.insert(var.to_owned(), val.to_owned());
+        &self.varss.insert(var.to_owned(), val.to_owned());
         self
     }
 
 
     /// Sets a boolean variable
     pub fn set_bool(mut self, var: &str, val: bool) -> Page<T> {
-        self.varsb.insert(var.to_owned(), val);
+        &self.varsb.insert(var.to_owned(), val);
         self
     }
 
 
     /// Sets a boolean variable to true
     pub fn set_true(mut self, var: &str) -> Page<T> {
-        self.varsb.insert(var.to_owned(), true);
+        &self.varsb.insert(var.to_owned(), true);
         self
     }
 
 
     /// Sets an integer variable
     pub fn set_int(mut self, var: &str, val: i64) -> Page<T> {
-        self.varsi.insert(var.to_owned(), val);
+        &self.varsi.insert(var.to_owned(), val);
         self
     }
 

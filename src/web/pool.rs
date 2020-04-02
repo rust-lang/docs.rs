@@ -46,7 +46,6 @@ pub(crate) enum PoolConnection {
 }
 
 impl PoolConnection {
-    // TODO: Lifetime can be elided with DerefConnection<'_>
     pub(super) fn get<'a>(&'a self) -> DerefConnection<'a> {
         match self {
             Self::R2D2(conn) => DerefConnection::Connection(&conn),
