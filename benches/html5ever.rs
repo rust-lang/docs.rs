@@ -1,6 +1,3 @@
-extern crate criterion;
-extern crate cratesfyi;
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use cratesfyi::utils::extract_head_and_body;
 

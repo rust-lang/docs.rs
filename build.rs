@@ -1,8 +1,3 @@
-
-extern crate time;
-extern crate sass_rs;
-extern crate git2;
-
 use std::env;
 use std::path::Path;
 use std::fs::{self, File};

@@ -1,4 +1,4 @@
-use failure::Error;
+use failure::{Fail, Error};
 use postgres::Connection;
 
 #[derive(Debug, Fail)]

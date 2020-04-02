@@ -73,7 +73,7 @@ impl DocBuilderOptions {
 
     pub fn check_paths(&self) -> Result<()> {
         if !self.crates_io_index_path.exists() {
-            bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
+            failure::bail!("crates.io-index path '{}' does not exist", self.crates_io_index_path.display());
         }
         Ok(())
     }

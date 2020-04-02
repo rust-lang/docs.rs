@@ -6,7 +6,7 @@ use iron::{IronResult, Set, status};
 use iron::response::Response;
 use handlebars_iron::Template;
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref RUSTC_RESOURCE_SUFFIX: String = load_rustc_resource_suffix()
         .unwrap_or_else(|_| "???".into());
 }

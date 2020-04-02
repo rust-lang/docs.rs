@@ -80,7 +80,6 @@ pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::*;
 
     #[test]

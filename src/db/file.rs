@@ -338,7 +338,6 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use std::env;
     use super::*;
 

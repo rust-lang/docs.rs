@@ -199,7 +199,7 @@ impl RustwideBuilder {
 
                 let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
-                    bail!("failed to build dummy crate for {}", self.rustc_version);
+                    failure::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
 
                 info!("copying essential files for {}", self.rustc_version);
