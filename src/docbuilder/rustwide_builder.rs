@@ -1,3 +1,4 @@
+// REFACTOR: These imports make me cry
 use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
@@ -8,6 +9,7 @@ use crate::error::Result;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::LevelFilter;
+use log::{debug, info, warn};
 use postgres::Connection;
 use rustc_serialize::json::ToJson;
 use rustwide::cmd::{Command, SandboxBuilder};

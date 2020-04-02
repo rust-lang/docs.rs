@@ -6,6 +6,7 @@
 
 use crate::error::Result;
 use failure::err_msg;
+use log::{error, warn};
 use postgres::Connection;
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;

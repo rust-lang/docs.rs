@@ -1,9 +1,35 @@
 //! Database migrations
 
 use crate::error::Result as CratesfyiResult;
+use log::info;
 use postgres::{transaction::Transaction, Connection, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use std::borrow::Cow;
+
+#[derive(Copy, Clone)]
+enum ApplyMode {
+    Permanent,
+    #[cfg(test)]
+    Temporary,
+}
+
+#[derive(Copy, Clone)]
+struct MigrationContext {
+    apply_mode: ApplyMode,
+}
+
+impl MigrationContext {
+    fn format_query<'a>(&self, query: &'a str) -> Cow<'a, str> {
+        match self.apply_mode {
+            ApplyMode::Permanent => Cow::Borrowed(query),
+            #[cfg(test)]
+            ApplyMode::Temporary => {
+                Cow::Owned(query.replace("CREATE TABLE", "CREATE TEMPORARY TABLE"))
+            }
+        }
+    }
+}
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
 /// Downgrade query should return database to previous state.

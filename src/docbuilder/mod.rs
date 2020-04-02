@@ -12,6 +12,7 @@ pub use self::rustwide_builder::RustwideBuilder;
 
 use crate::error::Result;
 use crate::DocBuilderOptions;
+use log::debug;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::prelude::*;
