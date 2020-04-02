@@ -25,8 +25,7 @@ use ::{
 };
 
 pub fn start_daemon(background: bool) {
-    const CRATE_VARIABLES: [&str; 4] = [
-        "CRATESFYI_PREFIX",
+    const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
         "CRATESFYI_GITHUB_ACCESSTOKEN"
