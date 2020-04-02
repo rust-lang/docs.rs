@@ -2,9 +2,12 @@ use super::pool::Pool;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
-use prometheus::{Encoder, IntGauge, IntCounter, TextEncoder};
+use prometheus::{
+    opts, register_counter, register_int_counter, register_int_gauge, Encoder, IntCounter,
+    IntGauge, TextEncoder, __register_gauge,
+};
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref QUEUED_CRATES_COUNT: IntGauge = register_int_gauge!(
         "docsrs_queued_crates_count",
         "Number of crates in the build queue"

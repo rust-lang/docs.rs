@@ -86,7 +86,6 @@ impl DocBuilder {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use std::path::PathBuf;
     use crate::{DocBuilder, DocBuilderOptions};
 

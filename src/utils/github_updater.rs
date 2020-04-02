@@ -138,7 +138,6 @@ fn get_github_path(url: &str) -> Option<String> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::{get_github_path, get_github_fields, github_updater};
 
     #[test]

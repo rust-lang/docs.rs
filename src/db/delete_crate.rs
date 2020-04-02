@@ -1,5 +1,5 @@
 use super::file::{s3_client, S3_BUCKET_NAME};
-use failure::Error;
+use failure::{Fail, Error};
 use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
 

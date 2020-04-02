@@ -3,52 +3,6 @@
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate prometheus;
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
-extern crate rustc_serialize;
-extern crate postgres;
-extern crate reqwest;
-extern crate time;
-extern crate semver;
-extern crate slug;
-extern crate iron;
-extern crate router;
-extern crate staticfile;
-extern crate handlebars_iron;
-extern crate comrak;
-extern crate r2d2;
-extern crate r2d2_postgres;
-extern crate url;
-extern crate params;
-extern crate badge;
-extern crate crates_index_diff;
-extern crate toml;
-extern crate html5ever;
-extern crate schemamama;
-extern crate schemamama_postgres;
-extern crate rusoto_s3;
-extern crate rusoto_core;
-extern crate rusoto_credential;
-extern crate futures;
-extern crate tokio;
-extern crate systemstat;
-extern crate rustwide;
-extern crate tempdir;
-extern crate mime_guess;
-
-#[cfg(not(windows))]
-extern crate libc;
-
-#[cfg(windows)]
-extern crate path_slash;
-
-#[cfg(test)]
-extern crate once_cell;
 
 pub use self::docbuilder::RustwideBuilder;
 pub use self::docbuilder::DocBuilder;

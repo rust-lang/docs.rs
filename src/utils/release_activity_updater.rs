@@ -66,7 +66,6 @@ pub fn update_release_activity() -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::update_release_activity;
 
     #[test]

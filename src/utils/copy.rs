@@ -47,7 +47,6 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use std::fs;
     use super::*;
 

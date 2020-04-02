@@ -167,7 +167,6 @@ impl Metadata {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::Metadata;
 
     #[test]
