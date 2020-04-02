@@ -116,47 +116,43 @@ fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
     res.read_to_string(&mut body).unwrap();
     let json: Value = serde_json::from_str(&body[..])?;
 
-    let mut result = Vec::new();
-    if let Some(owners) = json
+    let owners = json
         .as_object()
         .and_then(|j| j.get("users"))
-        .and_then(|j| j.as_array())
-    {
-        for owner in owners {
-            // FIXME: I know there is a better way to do this
-            let avatar = owner
-                .as_object()
-                .and_then(|o| o.get("avatar"))
-                .and_then(|o| o.as_str())
-                .unwrap_or("");
-            let email = owner
-                .as_object()
-                .and_then(|o| o.get("email"))
-                .and_then(|o| o.as_str())
-                .unwrap_or("");
-            let login = owner
-                .as_object()
-                .and_then(|o| o.get("login"))
-                .and_then(|o| o.as_str())
-                .unwrap_or("");
-            let name = owner
-                .as_object()
-                .and_then(|o| o.get("name"))
-                .and_then(|o| o.as_str())
-                .unwrap_or("");
+        .and_then(|j| j.as_array());
 
-            if login.is_empty() {
-                continue;
-            }
+    let result = if let Some(owners) = owners {
+        owners
+            .iter()
+            .filter_map(|owner| {
+                fn extract<'a>(owner: &'a Value, field: &str) -> &'a str {
+                    owner
+                        .as_object()
+                        .and_then(|o| o.get(field))
+                        .and_then(|o| o.as_str())
+                        .unwrap_or_default()
+                }
 
-            result.push(CrateOwner {
-                avatar: avatar.to_string(),
-                email: email.to_string(),
-                login: login.to_string(),
-                name: name.to_string(),
-            });
-        }
-    }
+                let avatar = extract(owner, "avatar");
+                let email = extract(owner, "email");
+                let login = extract(owner, "login");
+                let name = extract(owner, "name");
+
+                if login.is_empty() {
+                    return None;
+                }
+
+                Some(CrateOwner {
+                    avatar: avatar.to_string(),
+                    email: email.to_string(),
+                    login: login.to_string(),
+                    name: name.to_string(),
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     Ok(result)
 }
