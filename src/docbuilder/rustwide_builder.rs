@@ -23,8 +23,7 @@ const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
 // It is crucial that this be the same as the host that `docs.rs` is being run on.
 // Other values may cause strange and hard-to-debug errors.
-// TODO: use `TARGET` instead? I think `TARGET` is only set for build scripts, though.
-pub(super) const HOST_TARGET: &str = "x86_64-unknown-linux-gnu";
+pub(super) const HOST_TARGET: &str = env!("CRATESFYI_HOST_TARGET"); // Set in build.rs
 pub(super) const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
