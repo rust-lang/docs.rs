@@ -466,7 +466,7 @@ fn add_authors_into_database(
 
             let author_id: i32 = {
                 let rows = conn.query("SELECT id FROM authors WHERE slug = $1", &[&slug])?;
-                if rows.is_empty() {
+                if !rows.is_empty() {
                     rows.get(0).get(0)
                 } else {
                     conn.query(
