@@ -11,7 +11,7 @@ use rustc_serialize::json::{Json, ToJson};
 use std::cmp;
 use std::fs;
 use std::io::Read;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
 use rusoto_core::region::Region;

@@ -2,7 +2,7 @@ use std::error::Error;
 use iron::prelude::*;
 use iron::Handler;
 use iron::status;
-use web::page::Page;
+use crate::web::page::Page;
 use std::fmt;
 
 #[derive(Debug, Copy, Clone)]

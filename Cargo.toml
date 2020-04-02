@@ -6,6 +6,7 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 build = "build.rs"
+edition = "2018"
 
 [dependencies]
 log = "0.4"

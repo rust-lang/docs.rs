@@ -17,8 +17,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::collections::BTreeSet;
-use DocBuilderOptions;
-use error::Result;
+use crate::DocBuilderOptions;
+use crate::error::Result;
 
 
 /// chroot based documentation builder
@@ -59,7 +59,7 @@ impl DocBuilder {
 
     fn load_database_cache(&mut self) -> Result<()> {
         debug!("Loading database cache");
-        use db::connect_db;
+        use crate::db::connect_db;
         let conn = connect_db()?;
 
         for row in &conn.query("SELECT name, version FROM crates, releases \

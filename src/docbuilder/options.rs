@@ -2,7 +2,7 @@
 
 use std::{env, fmt};
 use std::path::PathBuf;
-use error::Result;
+use crate::error::Result;
 
 #[derive(Clone)]
 pub struct DocBuilderOptions {

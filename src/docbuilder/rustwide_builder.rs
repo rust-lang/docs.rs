@@ -1,9 +1,9 @@
 use super::DocBuilder;
-use db::blacklist::is_blacklisted;
-use db::file::add_path_into_database;
-use db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
-use docbuilder::{crates::crates_from_path, Limits};
-use error::Result;
+use crate::db::blacklist::is_blacklisted;
+use crate::db::file::add_path_into_database;
+use crate::db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
+use crate::docbuilder::{crates::crates_from_path, Limits};
+use crate::error::Result;
 use failure::ResultExt;
 use log::LevelFilter;
 use postgres::Connection;
@@ -15,7 +15,7 @@ use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
-use utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
+use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use super::Metadata;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -317,7 +317,7 @@ impl RustwideBuilder {
         let res = build_dir
             .build(&self.toolchain, &krate, sandbox)
             .run(|build| {
-                use docbuilder::metadata::BuildTargets;
+                use crate::docbuilder::metadata::BuildTargets;
 
                 let mut files_list = None;
                 let mut has_docs = false;
@@ -371,11 +371,11 @@ impl RustwideBuilder {
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
                 if res.result.successful {
-                    ::web::metrics::SUCCESSFUL_BUILDS.inc();
+                    crate::web::metrics::SUCCESSFUL_BUILDS.inc();
                 } else if res.cargo_metadata.root().is_library() {
-                    ::web::metrics::FAILED_BUILDS.inc();
+                    crate::web::metrics::FAILED_BUILDS.inc();
                 } else {
-                    ::web::metrics::NON_LIBRARY_BUILDS.inc();
+                    crate::web::metrics::NON_LIBRARY_BUILDS.inc();
                 }
                 let release_id = add_package_into_database(
                     &conn,
@@ -519,7 +519,7 @@ impl RustwideBuilder {
             result: BuildResult {
                 build_log: storage.to_string(),
                 rustc_version: self.rustc_version.clone(),
-                docsrs_version: format!("docsrs {}", ::BUILD_VERSION),
+                docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                 successful,
             },
             cargo_metadata,

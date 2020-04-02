@@ -8,11 +8,13 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
 use std::path::PathBuf;
 use time;
-use docbuilder::RustwideBuilder;
-use DocBuilderOptions;
-use DocBuilder;
-use utils::{update_release_activity, github_updater, pubsubhubbub};
-use db::{connect_db, update_search_index};
+use crate::{
+    docbuilder::RustwideBuilder,
+    DocBuilderOptions,
+    DocBuilder,
+    utils::{update_release_activity, github_updater, pubsubhubbub},
+    db::{connect_db, update_search_index},
+};
 
 #[cfg(not(target_os = "windows"))]
 use ::{
@@ -250,7 +252,7 @@ pub fn start_daemon(background: bool) {
 
     // at least start web server
     info!("Starting web server");
-    ::Server::start(None);
+    crate::Server::start(None);
 }
 
 
