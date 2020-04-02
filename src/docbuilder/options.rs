@@ -60,12 +60,11 @@ impl fmt::Debug for DocBuilderOptions {
 impl DocBuilderOptions {
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (prefix, crates_io_index_path) =
-            generate_paths(prefix);
+        let (prefix, crates_io_index_path) = generate_paths(prefix);
+        
         DocBuilderOptions {
-            prefix: prefix,
-            crates_io_index_path: crates_io_index_path,
-
+            prefix,
+            crates_io_index_path,
             ..Default::default()
         }
     }

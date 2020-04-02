@@ -475,29 +475,29 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
-        for row in &conn.query("SELECT crates.name,
-                                       releases.version,
-                                       releases.description,
-                                       releases.target_name,
-                                       releases.rustdoc_status,
-                                       releases.default_target
-                                FROM releases
-                                INNER JOIN crates ON crates.id = releases.crate_id
-                                WHERE crates.name = $1 AND releases.version = $2",
-                   &[&name, &version])
-            .unwrap() {
+        let rows = conn.query(
+        "SELECT crates.name,
+                       releases.version,
+                       releases.description,
+                       releases.target_name,
+                       releases.rustdoc_status,
+                       releases.default_target
+                FROM releases
+                INNER JOIN crates ON crates.id = releases.crate_id
+                WHERE crates.name = $1 AND releases.version = $2",
+            &[&name, &version]
+        ).unwrap();
 
-            return Some(MetaData {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                rustdoc_status: row.get(4),
-                default_target: row.get(5),
-            });
-        }
+        let row = rows.iter().next()?;
 
-        None
+        Some(MetaData {
+            name: row.get(0),
+            version: row.get(1),
+            description: row.get(2),
+            target_name: row.get(3),
+            rustdoc_status: row.get(4),
+            default_target: row.get(5),
+        })
     }
 }
 

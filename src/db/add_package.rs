@@ -356,7 +356,11 @@ fn get_release_time_yanked_downloads(
         }
     }
 
-    Ok((release_time.unwrap_or(time::get_time()), yanked.unwrap_or(false), downloads.unwrap_or(0)))
+    Ok((
+        release_time.unwrap_or_else(time::get_time),
+        yanked.unwrap_or(false),
+        downloads.unwrap_or(0),
+    ))
 }
 
 
@@ -376,8 +380,7 @@ fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_
             }
         };
         // add releationship
-        let _ = conn.query("INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
-                           &[release_id, &keyword_id]);
+        let _ = conn.query("INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)", &[&release_id, &keyword_id]);
     }
 
     Ok(())
@@ -496,8 +499,7 @@ fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: 
         };
 
         // add relationship
-        let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
-                           &[crate_id, &owner_id]);
+        let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)", &[&crate_id, &owner_id]);
     }
     Ok(())
 }

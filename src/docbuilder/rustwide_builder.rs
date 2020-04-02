@@ -215,7 +215,7 @@ impl RustwideBuilder {
                     let file_name = if versioned {
                         format!("{}-{}.{}", segments[1], rustc_version, segments[0])
                     } else {
-                        file.to_string()
+                        (*file).to_string()
                     };
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
