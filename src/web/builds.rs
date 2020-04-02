@@ -90,28 +90,29 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         &[&name, &version]
     ));
 
-    let mut build_list: Vec<Build> = Vec::with_capacity(query.len());
     let mut build_details = None;
-
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    for row in query.iter() {
-        let id: i32 = row.get(5);
+    let mut build_list = query
+        .into_iter()
+        .map(|row| {
+            let id: i32 = row.get(5);
 
-        let build = Build {
-            id,
-            rustc_version: row.get(6),
-            cratesfyi_version: row.get(7),
-            build_status: row.get(8),
-            build_time: row.get(9),
-            output: row.get(10),
-        };
+            let build = Build {
+                id,
+                rustc_version: row.get(6),
+                cratesfyi_version: row.get(7),
+                build_status: row.get(8),
+                build_time: row.get(9),
+                output: row.get(10),
+            };
 
-        if id == req_build_id {
-            build_details = Some(build.clone());
-        }
+            if id == req_build_id {
+                build_details = Some(build.clone());
+            }
 
-        build_list.push(build);
-    }
+            build
+        })
+        .collect::<Vec<Build>>();
 
     if req.url.path().join("/").ends_with(".json") {
         use iron::headers::{
