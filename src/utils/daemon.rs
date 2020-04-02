@@ -53,7 +53,7 @@ pub fn start_daemon(background: bool) {
                     .expect("Failed to create pid file");
                 writeln!(&mut file, "{}", pid).expect("Failed to write pid");
 
-                info!("cratesfyi {} daemon started on: {}", crate::BUILD_VERSION, pid);
+                info!("cratesfyi {} daemon started on: {}", ::BUILD_VERSION, pid);
                 exit(0);
             }
         }
