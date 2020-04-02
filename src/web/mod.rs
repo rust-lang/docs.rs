@@ -1,6 +1,5 @@
 //! Web interface of cratesfyi
 
-
 pub(crate) mod page;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
@@ -9,10 +8,12 @@ macro_rules! ctry {
     ($result:expr) => (match $result {
         Ok(v) => v,
         Err(e) => {
-            return $crate::web::page::Page::new(format!("{:?}", e)).title("An error has occured")
-                .set_status(::iron::status::BadRequest).to_resp("resp");
+            return $crate::web::page::Page::new(format!("{:?}", e))
+                .title("An error has occured")
+                .set_status(::iron::status::BadRequest)
+                .to_resp("resp");
         }
-    })
+    });
 }
 
 /// cexpect will check an option and if it's not Some
@@ -23,16 +24,17 @@ macro_rules! cexpect {
         None => {
             return $crate::web::page::Page::new("Resource not found".to_owned())
                 .title("An error has occured")
-                .set_status(::iron::status::BadRequest).to_resp("resp");
+                .set_status(::iron::status::BadRequest)
+                .to_resp("resp");
         }
-    })
+    });
 }
 
 /// Gets an extension from Request
 macro_rules! extension {
     ($req:expr, $ext:ty) => (
         cexpect!($req.extensions.get::<$ext>())
-        )
+    );
 }
 
 mod rustdoc;
@@ -70,10 +72,10 @@ use std::sync::{Arc, Mutex};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
-const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-const MENU_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
-const INDEX_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
+const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
+const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
+const OPENSEARCH_XML: & [u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
@@ -87,7 +89,6 @@ struct CratesfyiHandler {
     static_handler: Box<dyn Handler>,
     pool_factory: PoolFactory,
 }
-
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
@@ -112,7 +113,11 @@ impl CratesfyiHandler {
 
         let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(&pool_factory, routes.iron_router());
-        let prefix = PathBuf::from(env::var("CRATESFYI_PREFIX").expect("the CRATESFYI_PREFIX environment variable is not set")).join("public_html");
+        let prefix = PathBuf::from(
+            env::var("CRATESFYI_PREFIX")
+                .expect("the CRATESFYI_PREFIX environment variable is not set"),
+        )
+        .join("public_html");
         let static_handler = Static::new(prefix)
             .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
@@ -220,55 +225,61 @@ impl MatchVersion {
 /// `version` may be an exact version number or loose semver version requirement. The return value
 /// will indicate whether the given version exactly matched a version number from the database.
 fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchVersion {
+    use std::borrow::Cow;
 
     // version is an Option<&str> from router::Router::get
     // need to decode first
     use url::percent_encoding::percent_decode;
-    let req_version = version.and_then(|v| {
-            match percent_decode(v.as_bytes()).decode_utf8() {
-                Ok(p) => Some(p.into_owned()),
-                Err(_) => None,
-            }
+    let req_version = version
+        .and_then(|v| {
+            percent_decode(v.as_bytes())
+                .decode_utf8()
+                .ok()
+                .map(Cow::into_owned)
         })
         .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
-        .unwrap_or("*".to_string());
+        .unwrap_or_else(|| "*".to_string());
 
     let versions: Vec<(String, i32)> = {
         let query = "SELECT version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE name = $1 AND yanked = false";
         let rows = conn.query(query, &[&name]).unwrap();
-        if rows.len() == 0 {
+        
+        if rows.is_empty()  {
             return MatchVersion::None;
         }
+
         rows.iter().map(|row| (row.get(0), row.get(1))).collect()
     };
 
     // first check for exact match
     // we can't expect users to use semver in query
-    for version in &versions {
-        if version.0 == req_version {
-            return MatchVersion::Exact(version.clone());
-        }
+    if let Some(exact) = versions.iter().find(|(vers, _)| vers == &req_version) {
+        // REFACTOR: Get around the .clone()
+        return MatchVersion::Exact(exact.clone());
     }
 
     // Now try to match with semver
-    let req_sem_ver = match VersionReq::parse(&req_version) {
-        Ok(v) => v,
-        Err(_) => return MatchVersion::None,
+    let req_sem_ver = if let Ok(version) = VersionReq::parse(&req_version) {
+        version
+    } else {
+        return MatchVersion::None;
     };
 
     // we need to sort versions first
     let versions_sem = {
-        let mut versions_sem: Vec<(Version, i32)> = Vec::new();
+        let mut versions_sem: Vec<(Version, i32)> = Vec::with_capacity(versions.len());
 
-        for version in &versions {
+        for (vers, id) in &versions {
             // in theory a crate must always have a semver compatible version
             // but check result just in case
-            let version = match Version::parse(&version.0) {
-                Ok(v) => (v, version.1),
-                Err(_) => return MatchVersion::None,
+            let version = if let Ok(v) = Version::parse(&vers) {
+                (v, *id)
+            } else {
+                return MatchVersion::None;
             };
+
             versions_sem.push(version);
         }
 
@@ -277,10 +288,8 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         versions_sem
     };
 
-    for version in &versions_sem {
-        if req_sem_ver.matches(&version.0) {
-            return MatchVersion::Semver((version.0.to_string(), version.1));
-        }
+    if let Some((version, id)) = versions_sem.iter().find(|(vers, _)| req_sem_ver.matches(vers)) {
+        return MatchVersion::Semver((version.to_string(), *id));
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
@@ -291,10 +300,6 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
 
     MatchVersion::None
 }
-
-
-
-
 
 /// Wrapper around the Markdown parser and renderer to render markdown
 fn render_markdown(text: &str) -> String {
@@ -314,15 +319,13 @@ fn render_markdown(text: &str) -> String {
     markdown_to_html(text, &options)
 }
 
-
-
 pub struct Server {
     inner: Listening,
 }
 
 impl Server {
     pub fn start(addr: Option<&str>) -> Self {
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(|| Pool::new()));
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(Pool::new));
         info!("Running docs.rs web server on http://{}", server.addr());
         server
     }
@@ -364,33 +367,31 @@ impl Server {
     }
 }
 
-
 /// Converts Timespec to nice readable relative time string
 fn duration_to_str(ts: time::Timespec) -> String {
-
     let tm = time::at(ts);
     let delta = time::now() - tm;
+    let delta = (
+        delta.num_days(),
+        delta.num_hours(),
+        delta.num_minutes(),
+        delta.num_seconds(),
+    );
 
-    if delta.num_days() > 5 {
-        format!("{}", tm.strftime("%b %d, %Y").unwrap())
-    } else if delta.num_days() > 1 {
-        format!("{} days ago", delta.num_days())
-    } else if delta.num_days() == 1 {
-        "one day ago".to_string()
-    } else if delta.num_hours() > 1 {
-        format!("{} hours ago", delta.num_hours())
-    } else if delta.num_hours() == 1 {
-        "an hour ago".to_string()
-    } else if delta.num_minutes() > 1 {
-        format!("{} minutes ago", delta.num_minutes())
-    } else if delta.num_minutes() == 1 {
-        "one minute ago".to_string()
-    } else if delta.num_seconds() > 0 {
-        format!("{} seconds ago", delta.num_seconds())
-    } else {
-        "just now".to_string()
+    match delta {
+        (days, _, _, _) if days > 5 => format!("{}", tm.strftime("%b %d, %Y").unwrap()),
+        (days, _, _, _) if days > 1 => format!("{} days ago", days),
+        (days, _, _, _) if days == 1 => "one day ago".to_string(),
+
+        (_, hours, _, _) if hours > 1 => format!("{} hours ago", hours),
+        (_, hours, _, _) if hours == 1 => "an hour ago".to_string(),
+
+        (_, _, minutes, _) if minutes > 1 => format!("{} minutes ago", minutes),
+        (_, _, minutes, _) if minutes == 1 => "one minute ago".to_string(),
+
+        (_, _, _, seconds) if seconds > 0 => format!("{} seconds ago", seconds),
+        _ => "just now".to_string(),
     }
-
 }
 
 /// Creates a `Response` which redirects to the given path on the scheme/host/port from the given
@@ -422,28 +423,40 @@ fn redirect_base(req: &Request) -> String {
 
 fn style_css_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, STYLE_CSS));
-    let cache = vec![CacheDirective::Public,
-                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    let cache = vec![
+        CacheDirective::Public,
+        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
+    ];
+
     response.headers.set(ContentType("text/css".parse().unwrap()));
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
 fn load_js(file_path_str: &'static str) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, file_path_str));
-    let cache = vec![CacheDirective::Public,
-                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    let cache = vec![
+        CacheDirective::Public,
+        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
+    ];
+
     response.headers.set(ContentType("application/javascript".parse().unwrap()));
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
 fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
-    let cache = vec![CacheDirective::Public,
-                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)];
+    let cache = vec![
+        CacheDirective::Public,
+        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)
+    ];
+
     response.headers.set(ContentType("application/opensearchdescription+xml".parse().unwrap()));
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
@@ -471,7 +484,6 @@ pub(crate) struct MetaData {
     rustdoc_status: bool,
     pub default_target: String,
 }
-
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
@@ -501,7 +513,6 @@ impl MetaData {
     }
 }
 
-
 impl ToJson for MetaData {
     fn to_json(&self) -> Json {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
@@ -511,6 +522,7 @@ impl ToJson for MetaData {
         m.insert("target_name".to_owned(), self.target_name.to_json());
         m.insert("rustdoc_status".to_owned(), self.rustdoc_status.to_json());
         m.insert("default_target".to_owned(), self.default_target.to_json());
+
         m.to_json()
     }
 }
@@ -527,6 +539,7 @@ mod test {
     fn release(version: &str, db: &TestDatabase) -> i32 {
         db.fake_release().name("foo").version(version).create().unwrap()
     }
+
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
         match_version(&db.conn(), "foo", v).strip_id()
     }
@@ -564,15 +577,18 @@ mod test {
                 .source_file("test.rs", &[])
                 .create()
                 .unwrap();
+
             let web = env.frontend();
             assert!(clipboard_is_present_for_path(
                 "/crate/fake_crate/0.0.1",
                 web
             ));
+
             assert!(clipboard_is_present_for_path(
                 "/crate/fake_crate/0.0.1/source/",
                 web
             ));
+
             Ok(())
         });
     }
@@ -586,7 +602,9 @@ mod test {
                 .version("0.0.1")
                 .create()
                 .unwrap();
+
             let web = env.frontend();
+
             assert!(!clipboard_is_present_for_path("/about", web));
             assert!(!clipboard_is_present_for_path("/releases", web));
             assert!(!clipboard_is_present_for_path("/", web));
@@ -594,7 +612,9 @@ mod test {
                 "/fake_crate/0.0.1/fake_crate",
                 web
             ));
+
             assert!(!clipboard_is_present_for_path("/not/a/real/path", web));
+
             Ok(())
         });
     }
@@ -605,6 +625,7 @@ mod test {
             let web = env.frontend();
             for krate in &["std", "alloc", "core", "proc_macro", "test"] {
                 let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
+
                 // with or without slash
                 assert_redirect(&format!("/{}", krate), &target, web)?;
                 assert_redirect(&format!("/{}/", krate), &target, web)?;
@@ -617,15 +638,23 @@ mod test {
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("bat").version("0.2.0").binary(true)
-              .create().unwrap();
+            db.fake_release()
+                .name("bat")
+                .version("0.2.0")
+                .binary(true)
+                .create()
+                .unwrap();
+
             let web = env.frontend();
+
             assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu", "/crate/bat/0.2.0", web)?;
+
             /* TODO: this should work (https://github.com/rust-lang/docs.rs/issues/603)
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
             */
+
             Ok(())
         })
     }
@@ -634,14 +663,19 @@ mod test {
     fn can_view_source() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("regex").version("0.3.0")
-              .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-              .create().unwrap();
+            db.fake_release()
+                .name("regex")
+                .version("0.3.0")
+                .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
+                .create()
+                .unwrap();
+
             let web = env.frontend();
             assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
             assert_success("/crate/regex/0.3.0/source", web)?;
             assert_success("/crate/regex/0.3.0/source/src", web)?;
             assert_success("/regex/0.3.0/src/regex/main.rs", web)?;
+
             Ok(())
         })
     }
@@ -663,8 +697,10 @@ mod test {
             release("0.3.0");
             let three = semver("0.3.0");
             assert_eq!(version(None), three);
+
             // same thing but with "*"
             assert_eq!(version(Some("*")), three);
+
             // make sure exact matches still work
             assert_eq!(version(Some("0.3.0")), exact("0.3.0"));
 
@@ -680,6 +716,7 @@ mod test {
 
             let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+
             db.conn().query(query, &[&release_id]).unwrap();
             assert_eq!(version(None, db), None);
             assert_eq!(version(Some("0.3"), db), None);

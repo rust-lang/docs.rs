@@ -108,12 +108,10 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
                                         .and_then(|d| d.as_string())
                                         .unwrap_or(""),
                                     "%Y-%m-%dT%H:%M:%S")
-            .unwrap_or(time::now())
+            .unwrap_or_else(|_| time::now())
             .to_timespec(),
     })
 }
-
-
 
 fn get_github_path(url: &str) -> Option<String> {
     let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
@@ -121,14 +119,18 @@ fn get_github_path(url: &str) -> Option<String> {
         Some(cap) => {
             let username = cap.get(1).unwrap().as_str();
             let reponame = cap.get(2).unwrap().as_str();
-            Some(format!("{}/{}",
-                         username,
-                         if reponame.ends_with(".git") {
-                             reponame.split(".git").nth(0).unwrap()
-                         } else {
-                             reponame
-                         }))
+
+            Some(format!(
+                "{}/{}",
+                username,
+                if reponame.ends_with(".git") {
+                   reponame.split(".git").next().unwrap()
+                } else {
+                    reponame
+                }
+            ))
         }
+
         None => None,
     }
 }

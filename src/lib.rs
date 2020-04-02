@@ -4,21 +4,20 @@
 #[macro_use]
 extern crate log;
 
-pub use self::docbuilder::RustwideBuilder;
-pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::options::DocBuilderOptions;
+pub use self::docbuilder::DocBuilder;
+pub use self::docbuilder::RustwideBuilder;
 pub use self::web::Server;
 
-mod error;
 pub mod db;
-pub mod utils;
 mod docbuilder;
-mod web;
+mod error;
 #[cfg(test)]
 mod test;
+pub mod utils;
+mod web;
 
 use web::page::GlobalAlert;
-
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
 pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;
@@ -31,10 +30,10 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
 });
 */
 
-
 /// Version string generated at build time contains last git
 /// commit hash and build date
-pub const BUILD_VERSION: &'static str = concat!(env!("CARGO_PKG_VERSION"),
-                                                " ",
-                                                include_str!(concat!(env!("OUT_DIR"),
-                                                                     "/git_version")));
+pub const BUILD_VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " ",
+    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+);

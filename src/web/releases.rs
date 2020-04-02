@@ -398,7 +398,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool).get();
     let author = ctry!(router.find("author")
-        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
+        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound)));
 
     let (author_name, packages) = if author.starts_with('@') {
         let mut author = author.clone().split('@');
@@ -522,7 +522,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
         let search_query = query.replace(" ", " & ");
         get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
-            .ok_or(IronError::new(Nope::NoResults, status::NotFound))
+            .ok_or_else(|| IronError::new(Nope::NoResults, status::NotFound))
             .and_then(|(_, results)| {
                 // FIXME: There is no pagination
                 Page::new(results)

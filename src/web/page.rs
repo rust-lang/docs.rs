@@ -62,7 +62,7 @@ impl<T: ToJson> Page<T> {
     pub fn new(content: T) -> Page<T> {
         Page {
             title: None,
-            content: content,
+            content,
             status: status::Ok,
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),
@@ -73,28 +73,28 @@ impl<T: ToJson> Page<T> {
 
     /// Sets a string variable
     pub fn set(mut self, var: &str, val: &str) -> Page<T> {
-        &self.varss.insert(var.to_owned(), val.to_owned());
+        self.varss.insert(var.to_owned(), val.to_owned());
         self
     }
 
 
     /// Sets a boolean variable
     pub fn set_bool(mut self, var: &str, val: bool) -> Page<T> {
-        &self.varsb.insert(var.to_owned(), val);
+        self.varsb.insert(var.to_owned(), val);
         self
     }
 
 
     /// Sets a boolean variable to true
     pub fn set_true(mut self, var: &str) -> Page<T> {
-        &self.varsb.insert(var.to_owned(), true);
+        self.varsb.insert(var.to_owned(), true);
         self
     }
 
 
     /// Sets an integer variable
     pub fn set_int(mut self, var: &str, val: i64) -> Page<T> {
-        &self.varsi.insert(var.to_owned(), val);
+        self.varsi.insert(var.to_owned(), val);
         self
     }
 
@@ -118,6 +118,7 @@ impl<T: ToJson> Page<T> {
         let status = self.status;
         let temp = Template::new(template, self);
         resp.set_mut(temp).set_mut(status);
+
         Ok(resp)
     }
 }
@@ -139,8 +140,14 @@ impl<T: ToJson> ToJson for Page<T> {
         tree.insert("content".to_owned(), self.content.to_json());
         tree.insert("rustc_resource_suffix".to_owned(), self.rustc_resource_suffix.to_json());
         tree.insert("cratesfyi_version".to_owned(), crate::BUILD_VERSION.to_json());
-        tree.insert("cratesfyi_version_safe".to_owned(),
-                    crate::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
+        tree.insert(
+            "cratesfyi_version_safe".to_owned(),
+            crate::BUILD_VERSION
+                .replace(" ", "-")
+                .replace("(", "")
+                .replace(")", "")
+                .to_json()
+        );
         tree.insert("varss".to_owned(), self.varss.to_json());
         tree.insert("varsb".to_owned(), self.varsb.to_json());
         tree.insert("varsi".to_owned(), self.varsi.to_json());

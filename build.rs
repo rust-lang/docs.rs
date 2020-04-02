@@ -13,7 +13,7 @@ fn main() {
 
 
 fn write_git_version() {
-    let git_hash = get_git_hash().unwrap_or("???????".to_owned());
+    let git_hash = get_git_hash().unwrap_or_else(|| "???????".to_owned());
     let build_date = time::strftime("%Y-%m-%d", &time::now_utc()).unwrap();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("git_version");
     let mut file = File::create(&dest_path).unwrap();

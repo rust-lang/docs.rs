@@ -1,42 +1,50 @@
-
 use crate::db::connect_db;
-use time::{now, Duration};
-use std::collections::BTreeMap;
-use rustc_serialize::json::ToJson;
 use crate::error::Result;
-
+use rustc_serialize::json::ToJson;
+use std::collections::BTreeMap;
+use time::{now, Duration};
 
 pub fn update_release_activity() -> Result<()> {
-
     let conn = connect_db()?;
-    let mut dates = Vec::new();
-    let mut crate_counts = Vec::new();
-    let mut failure_counts = Vec::new();
+    let mut dates = Vec::with_capacity(30);
+    let mut crate_counts = Vec::with_capacity(30);
+    let mut failure_counts = Vec::with_capacity(30);
 
     for day in 0..30 {
-        let rows = conn.query(&format!("SELECT COUNT(*)
-                                             FROM releases
-                                             WHERE release_time < NOW() - INTERVAL '{} day' AND
-                                                   release_time > NOW() - INTERVAL '{} day'",
-                                            day,
-                                            day + 1),
-                                   &[])?;
+        let rows = conn.query(
+            &format!(
+                "SELECT COUNT(*)
+                 FROM releases
+                 WHERE release_time < NOW() - INTERVAL '{} day' AND
+                       release_time > NOW() - INTERVAL '{} day'",
+                day,
+                day + 1
+            ),
+            &[],
+        )?;
+
         let failures_count_rows = conn.query(
-                                   &format!("SELECT COUNT(*)
-                                             FROM releases
-                                             WHERE is_library = TRUE AND
-                                                   build_status = FALSE AND
-                                                   release_time < NOW() - INTERVAL '{} day' AND
-                                                   release_time > NOW() - INTERVAL '{} day'",
-                                            day,
-                                            day + 1),
-                                   &[])?;
+            &format!(
+                "SELECT COUNT(*)
+                 FROM releases
+                 WHERE is_library = TRUE AND
+                       build_status = FALSE AND
+                       release_time < NOW() - INTERVAL '{} day' AND
+                       release_time > NOW() - INTERVAL '{} day'",
+                day,
+                day + 1
+            ),
+            &[],
+        )?;
+
         let release_count: i64 = rows.get(0).get(0);
         let failure_count: i64 = failures_count_rows.get(0).get(0);
         let now = now();
         let date = now - Duration::days(day);
+
+        // unwrap is fine here, as our date format is always valid
         dates.push(format!("{}", date.strftime("%d %b").unwrap()));
-        // unwrap is fine here,             ~~~~~~~~~~~~^  our date format is always valid
+
         crate_counts.push(release_count);
         failure_counts.push(failure_count);
     }
@@ -50,19 +58,23 @@ pub fn update_release_activity() -> Result<()> {
         map.insert("dates".to_owned(), dates.to_json());
         map.insert("counts".to_owned(), crate_counts.to_json());
         map.insert("failures".to_owned(), failure_counts.to_json());
+
         map.to_json()
     };
 
-    conn.query("INSERT INTO config (name, value) VALUES ('release_activity', $1)",
-               &[&map])
-        .or_else(|_| {
-            conn.query("UPDATE config SET value = $1 WHERE name = 'release_activity'",
-                       &[&map])
-        })?;
+    conn.query(
+        "INSERT INTO config (name, value) VALUES ('release_activity', $1)",
+        &[&map],
+    )
+    .or_else(|_| {
+        conn.query(
+            "UPDATE config SET value = $1 WHERE name = 'release_activity'",
+            &[&map],
+        )
+    })?;
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod test {

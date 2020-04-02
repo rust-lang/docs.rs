@@ -103,7 +103,7 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
                             FROM files
                             WHERE path = $1", &[&path]).unwrap();
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             None
         } else {
             let row = rows.get(0);
@@ -124,6 +124,7 @@ pub(super) fn s3_client() -> Option<S3Client> {
     if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
         return None;
     }
+
     let creds = match DefaultCredentialsProvider::new() {
         Ok(creds) => creds,
         Err(err) => {
@@ -131,6 +132,7 @@ pub(super) fn s3_client() -> Option<S3Client> {
             return None;
         }
     };
+    
     Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         creds,

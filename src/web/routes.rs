@@ -1,11 +1,12 @@
+use crate::web::{INDEX_JS, MENU_JS};
 use iron::middleware::Handler;
+use iron::Request;
 use router::Router;
 use std::collections::HashSet;
-use crate::web::{MENU_JS, INDEX_JS};
-use iron::Request;
 
 const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] = &["alloc", "core", "proc_macro", "std", "test"];
 
+// REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
 
@@ -197,7 +198,7 @@ impl Routes {
         if !pattern.ends_with('/') {
             let pattern = format!("{}/", pattern);
             self.get.push((
-                pattern.to_string(),
+                pattern,
                 Box::new(SimpleRedirect::new(|url| {
                     url.set_path(&url.path().trim_end_matches('/').to_string())
                 })),
