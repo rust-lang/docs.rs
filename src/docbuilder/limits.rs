@@ -96,7 +96,7 @@ fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
     for label in &labels[1..] {
         if value / interval >= 1.0 {
             chosen_label = label;
-            value /= interval;
+            value = value / interval;
         } else {
             break;
         }

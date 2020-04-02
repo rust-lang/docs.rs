@@ -97,7 +97,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         let id: i32 = row.get(5);
 
         let build = Build {
-            id,
+            id: id,
             rustc_version: row.get(6),
             cratesfyi_version: row.get(7),
             build_status: row.get(8),
@@ -134,7 +134,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         let builds_page = BuildsPage {
             metadata: MetaData::from_crate(&conn, &name, &version),
             builds: build_list,
-            build_details,
+            build_details: build_details,
             limits,
         };
         Page::new(builds_page)

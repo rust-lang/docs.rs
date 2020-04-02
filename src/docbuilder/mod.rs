@@ -32,7 +32,7 @@ pub struct DocBuilder {
 impl DocBuilder {
     pub fn new(options: DocBuilderOptions) -> DocBuilder {
         DocBuilder {
-            options,
+            options: options,
             cache: BTreeSet::new(),
             db_cache: BTreeSet::new(),
         }
@@ -43,7 +43,7 @@ impl DocBuilder {
     pub fn load_cache(&mut self) -> Result<()> {
         debug!("Loading cache");
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let reader = fs::File::open(path).map(BufReader::new);
+        let reader = fs::File::open(path).map(|f| BufReader::new(f));
 
         if let Ok(reader) = reader {
             for line in reader.lines() {

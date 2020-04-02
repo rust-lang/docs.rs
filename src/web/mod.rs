@@ -70,10 +70,10 @@ use std::sync::{Arc, Mutex};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
-const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
-const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
+const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const MENU_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
+const INDEX_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
+const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
@@ -231,14 +231,14 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
             }
         })
         .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
-        .unwrap_or_else(|| "*".to_string());
+        .unwrap_or("*".to_string());
 
     let versions: Vec<(String, i32)> = {
         let query = "SELECT version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE name = $1 AND yanked = false";
         let rows = conn.query(query, &[&name]).unwrap();
-        if rows.is_empty() {
+        if rows.len() == 0 {
             return MatchVersion::None;
         }
         rows.iter().map(|row| (row.get(0), row.get(1))).collect()
@@ -322,7 +322,7 @@ pub struct Server {
 
 impl Server {
     pub fn start(addr: Option<&str>) -> Self {
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(Pool::new));
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(|| Pool::new()));
         info!("Running docs.rs web server on http://{}", server.addr());
         server
     }
@@ -475,28 +475,29 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
-        let rows = conn.query(
-        "SELECT crates.name,
-                       releases.version,
-                       releases.description,
-                       releases.target_name,
-                       releases.rustdoc_status,
-                       releases.default_target
-                FROM releases
-                INNER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
-            &[&name, &version]
-        ).unwrap();
+        for row in &conn.query("SELECT crates.name,
+                                       releases.version,
+                                       releases.description,
+                                       releases.target_name,
+                                       releases.rustdoc_status,
+                                       releases.default_target
+                                FROM releases
+                                INNER JOIN crates ON crates.id = releases.crate_id
+                                WHERE crates.name = $1 AND releases.version = $2",
+                   &[&name, &version])
+            .unwrap() {
 
-        let row = rows.iter().next()?;
-        Some(MetaData {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            rustdoc_status: row.get(4),
-            default_target: row.get(5),
-        })
+            return Some(MetaData {
+                name: row.get(0),
+                version: row.get(1),
+                description: row.get(2),
+                target_name: row.get(3),
+                rustdoc_status: row.get(4),
+                default_target: row.get(5),
+            });
+        }
+
+        None
     }
 }
 
