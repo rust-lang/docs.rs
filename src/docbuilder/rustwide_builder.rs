@@ -90,7 +90,7 @@ impl RustwideBuilder {
         workspace.purge_all_build_dirs()?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
-            .map(|t| Cow::Owned(t))
+            .map(Cow::Owned)
             .unwrap_or_else(|_| Cow::Borrowed("nightly"));
 
         let toolchain = Toolchain::dist(&toolchain_name);
@@ -108,7 +108,7 @@ impl RustwideBuilder {
 
         let mut targets_to_install = TARGETS
             .iter()
-            .map(|t| t.to_string())
+            .map(|t| (*t).to_string())
             .collect::<HashSet<_>>();
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
             Ok(targets) => targets,
@@ -146,7 +146,7 @@ impl RustwideBuilder {
         }
 
         self.rustc_version = self.detect_rustc_version()?;
-        if old_version.as_ref().map(|s| s.as_str()) != Some(&self.rustc_version) {
+        if old_version.as_deref() != Some(&self.rustc_version) {
             self.add_essential_files()?;
         }
 
@@ -215,7 +215,7 @@ impl RustwideBuilder {
                     let file_name = if versioned {
                         format!("{}-{}.{}", segments[1], rustc_version, segments[0])
                     } else {
-                        file.to_string()
+                        (*file).to_string()
                     };
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
@@ -389,7 +389,7 @@ impl RustwideBuilder {
                     has_docs,
                     has_examples,
                 )?;
-                add_build_into_database(&conn, &release_id, &res.result)?;
+                add_build_into_database(&conn, release_id, &res.result)?;
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)

@@ -197,7 +197,7 @@ impl Routes {
         if !pattern.ends_with('/') {
             let pattern = format!("{}/", pattern);
             self.get.push((
-                pattern.to_string(),
+                pattern,
                 Box::new(SimpleRedirect::new(|url| {
                     url.set_path(&url.path().trim_end_matches('/').to_string())
                 })),

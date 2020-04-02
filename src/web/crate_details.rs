@@ -146,7 +146,7 @@ impl CrateDetails {
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             return None;
         }
 
@@ -158,15 +158,15 @@ impl CrateDetails {
             let mut versions: Vec<semver::Version> = Vec::new();
             let versions_from_db: Json = rows.get(0).get(17);
 
-            versions_from_db.as_array().map(|vers| {
+            if let Some(vers) = versions_from_db.as_array() {
                 for version in vers {
-                    version.as_string().map(|version| {
+                    if let Some(version) = version.as_string() {
                         if let Ok(sem_ver) = semver::Version::parse(&version) {
                             versions.push(sem_ver);
-                        };
-                    });
+                        }
+                    }
                 }
-            });
+            }
 
             versions.sort();
             versions.reverse();
@@ -206,7 +206,7 @@ impl CrateDetails {
             github_stars: rows.get(0).get(18),
             github_forks: rows.get(0).get(19),
             github_issues: rows.get(0).get(20),
-            metadata: metadata,
+            metadata,
             is_library: rows.get(0).get(21),
             doc_targets: rows.get(0).get(22),
             license: rows.get(0).get(23),
