@@ -400,12 +400,14 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     let author = ctry!(router.find("author")
         .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
-    let (author_name, packages) = if author.starts_with("@") {
-        let mut author = author.clone().split("@");
-        get_releases_by_owner(&conn,
-                              page_number,
-                              RELEASES_IN_RELEASES,
-                              cexpect!(author.nth(1)))
+    let (author_name, packages) = if author.starts_with('@') {
+        let mut author = author.clone().split('@');
+        get_releases_by_owner(
+            &conn,
+            page_number,
+            RELEASES_IN_RELEASES,
+            cexpect!(author.nth(1)),
+        )
     } else {
         get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
     };

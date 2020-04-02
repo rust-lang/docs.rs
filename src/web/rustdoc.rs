@@ -374,7 +374,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                                          FROM releases
                                          WHERE releases.id = $1",
                                         &[&id]));
-            if rows.len() > 0 && rows.get(0).get(0) {
+            if !rows.is_empty() && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
                     status: version,

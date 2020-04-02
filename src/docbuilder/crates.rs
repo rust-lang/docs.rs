@@ -11,7 +11,7 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
     where F: FnMut(&str, &str) -> ()
 {
 
-    let reader = fs::File::open(path).map(|f| BufReader::new(f))?;
+    let reader = fs::File::open(path).map(BufReader::new)?;
 
     let mut name = String::new();
     let mut versions = Vec::new();
@@ -43,7 +43,7 @@ fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
 
         name.clear();
         name.push_str(crate_name);
-        versions.push(format!("{}", vers));
+        versions.push(vers.to_string());
     }
 
     if !name.is_empty() {
