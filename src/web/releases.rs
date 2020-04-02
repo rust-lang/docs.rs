@@ -398,7 +398,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool).get();
     let author = ctry!(router.find("author")
-        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound)));
+        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
     let (author_name, packages) = if author.starts_with('@') {
         let mut author = author.clone().split('@');
