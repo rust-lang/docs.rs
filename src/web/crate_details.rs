@@ -146,7 +146,7 @@ impl CrateDetails {
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             return None;
         }
 

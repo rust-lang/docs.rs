@@ -30,10 +30,12 @@ impl DocBuilder {
 
     pub fn get_queue_count(&self) -> Result<i64> {
         let conn = connect_db()?;
-        Ok(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])
-            .unwrap()
-            .get(0)
-            .get(0))
+
+        Ok(
+            conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])?
+                .get(0)
+                .get(0)
+        )
     }
 
     /// Builds the top package from the queue. Returns whether the queue was empty.
@@ -66,8 +68,10 @@ impl DocBuilder {
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = conn.query("UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
-                                           &[&id])?;
+                let rows = conn.query(
+                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                    &[&id],
+                )?;
                 let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
                     crate::web::metrics::FAILED_BUILDS.inc();
