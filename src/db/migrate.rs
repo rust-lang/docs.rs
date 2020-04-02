@@ -1,6 +1,6 @@
 //! Database migrations
 
-use error::Result as CratesfyiResult;
+use crate::error::Result as CratesfyiResult;
 use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};

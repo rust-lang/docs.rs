@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 use postgres::Connection;
 use std::collections::BTreeMap;
 use std::time::Duration;

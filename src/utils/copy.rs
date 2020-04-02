@@ -1,7 +1,7 @@
 
 use std::path::Path;
 use std::fs;
-use error::Result;
+use crate::error::Result;
 
 use regex::Regex;
 

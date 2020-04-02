@@ -1,6 +1,6 @@
 
 
-use docbuilder::Limits;
+use crate::docbuilder::Limits;
 use std::collections::BTreeMap;
 use super::MetaData;
 use super::pool::Pool;

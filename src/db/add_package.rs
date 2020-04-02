@@ -1,6 +1,6 @@
 
-use utils::MetadataPackage;
-use docbuilder::BuildResult;
+use crate::utils::MetadataPackage;
+use crate::docbuilder::BuildResult;
 use regex::Regex;
 
 use std::io::prelude::*;
@@ -16,7 +16,7 @@ use reqwest::header::ACCEPT;
 use semver::Version;
 use postgres::Connection;
 use time;
-use error::Result;
+use crate::error::Result;
 use failure::err_msg;
 
 /// Adds a package into database.

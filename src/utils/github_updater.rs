@@ -1,8 +1,6 @@
-
-use ::db::connect_db;
 use regex::Regex;
 use time;
-use error::Result;
+use crate::{db::connect_db, error::Result};
 use failure::err_msg;
 
 

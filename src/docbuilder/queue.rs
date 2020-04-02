@@ -1,10 +1,10 @@
 //! Updates crates.io index and builds new packages
 
 use super::{DocBuilder, RustwideBuilder};
-use db::connect_db;
-use error::Result;
+use crate::db::connect_db;
+use crate::error::Result;
 use crates_index_diff::{ChangeKind, Index};
-use utils::add_crate_to_queue;
+use crate::utils::add_crate_to_queue;
 
 
 impl DocBuilder {
@@ -62,7 +62,7 @@ impl DocBuilder {
         match builder.build_package(self, &name, &version, None) {
             Ok(_) => {
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-                ::web::metrics::TOTAL_BUILDS.inc();
+                crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
                 // Increase attempt count
@@ -70,8 +70,8 @@ impl DocBuilder {
                                            &[&id])?;
                 let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
-                    ::web::metrics::FAILED_BUILDS.inc();
-                    ::web::metrics::TOTAL_BUILDS.inc();
+                    crate::web::metrics::FAILED_BUILDS.inc();
+                    crate::web::metrics::TOTAL_BUILDS.inc();
                 }
                 error!("Failed to build package {}-{} from queue: {}",
                        name,
@@ -88,7 +88,7 @@ impl DocBuilder {
 mod test {
     extern crate env_logger;
     use std::path::PathBuf;
-    use {DocBuilder, DocBuilderOptions};
+    use crate::{DocBuilder, DocBuilderOptions};
 
     #[test]
     #[ignore]

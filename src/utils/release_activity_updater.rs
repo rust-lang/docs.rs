@@ -1,9 +1,9 @@
 
-use db::connect_db;
+use crate::db::connect_db;
 use time::{now, Duration};
 use std::collections::BTreeMap;
 use rustc_serialize::json::ToJson;
-use error::Result;
+use crate::error::Result;
 
 
 pub fn update_release_activity() -> Result<()> {

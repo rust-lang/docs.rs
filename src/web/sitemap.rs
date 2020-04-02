@@ -45,7 +45,7 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
         }
     }
 
-    content.insert("limits".to_string(), ::docbuilder::Limits::default().for_website().to_json());
+    content.insert("limits".to_string(), crate::docbuilder::Limits::default().for_website().to_json());
 
     Page::new(content).title("About Docs.rs").to_resp("about")
 }

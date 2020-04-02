@@ -520,7 +520,7 @@ impl ToJson for MetaData {
 mod test {
     use crate::test::*;
     use html5ever::tendril::TendrilSink;
-    use web::{match_version, MatchVersion};
+    use crate::web::{match_version, MatchVersion};
 
     const DEFAULT_ID: i32 = 0;
 
