@@ -1,3 +1,4 @@
+// REFACTOR: These imports make me cry
 use super::DocBuilder;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
@@ -17,6 +18,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use super::Metadata;
+use log::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";

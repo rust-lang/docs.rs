@@ -2,6 +2,7 @@ use regex::Regex;
 use time;
 use crate::{db::connect_db, error::Result};
 use failure::err_msg;
+use log::debug;
 
 
 /// Fields we need use in cratesfyi

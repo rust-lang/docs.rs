@@ -18,6 +18,7 @@ use postgres::Connection;
 use time;
 use crate::error::Result;
 use failure::err_msg;
+use log::debug;
 
 /// Adds a package into database.
 ///

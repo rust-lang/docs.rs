@@ -5,6 +5,7 @@ use crate::db::connect_db;
 use crate::error::Result;
 use crates_index_diff::{ChangeKind, Index};
 use crate::utils::add_crate_to_queue;
+use log::{debug, error};
 
 
 impl DocBuilder {
@@ -91,6 +92,7 @@ impl DocBuilder {
 #[cfg(test)]
 mod test {
     use std::path::PathBuf;
+    use log::error;
     use crate::{DocBuilder, DocBuilderOptions};
 
     #[test]

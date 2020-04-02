@@ -10,7 +10,7 @@ pub use self::rustwide_builder::RustwideBuilder;
 pub(crate) use self::rustwide_builder::BuildResult;
 pub(crate) use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
-
+use log::debug;
 
 use std::fs;
 use std::io::prelude::*;

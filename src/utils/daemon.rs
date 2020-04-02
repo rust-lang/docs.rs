@@ -2,7 +2,7 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-
+use log::{debug, error, info, warn};
 use std::{env, thread};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;

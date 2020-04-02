@@ -5,7 +5,7 @@ use postgres::{Connection, transaction::Transaction, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 use std::borrow::Cow;
-
+use log::info;
 
 #[derive(Copy, Clone)]
 enum ApplyMode {

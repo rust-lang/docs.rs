@@ -3,6 +3,8 @@
 
 pub(crate) mod page;
 
+use log::{debug, info};
+
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
 macro_rules! ctry {

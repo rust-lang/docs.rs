@@ -4,7 +4,7 @@
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 
-
+use log::{error, warn};
 use std::path::{PathBuf, Path};
 use postgres::Connection;
 use rustc_serialize::json::{Json, ToJson};
