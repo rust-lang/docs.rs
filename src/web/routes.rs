@@ -1,8 +1,8 @@
+use crate::web::{INDEX_JS, MENU_JS};
 use iron::middleware::Handler;
+use iron::Request;
 use router::Router;
 use std::collections::HashSet;
-use crate::web::{MENU_JS, INDEX_JS};
-use iron::Request;
 
 const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] = &["alloc", "core", "proc_macro", "std", "test"];
 

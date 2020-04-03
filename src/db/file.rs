@@ -4,18 +4,18 @@
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 
-use std::path::{PathBuf, Path};
-use postgres::Connection;
-use rustc_serialize::json::{Json, ToJson};
-use std::cmp;
-use std::fs;
-use std::io::Read;
 use crate::error::Result;
 use failure::err_msg;
-use rusoto_s3::{S3, PutObjectRequest, GetObjectRequest, S3Client};
+use postgres::Connection;
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
+use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
+use rustc_serialize::json::{Json, ToJson};
+use std::cmp;
 use std::ffi::OsStr;
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 const MAX_CONCURRENT_UPLOADS: usize = 50;
 
@@ -160,8 +160,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     prefix: &str,
     path: P,
 ) -> Result<Json> {
-    use std::collections::HashMap;
     use futures::future::Future;
+    use std::collections::HashMap;
 
     let trans = conn.transaction()?;
     let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
@@ -359,8 +359,8 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
 
 #[cfg(test)]
 mod test {
-    use std::env;
     use super::*;
+    use std::env;
 
     #[test]
     fn test_get_file_list() {

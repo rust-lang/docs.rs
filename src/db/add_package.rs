@@ -1,22 +1,22 @@
-use crate::utils::MetadataPackage;
 use crate::docbuilder::BuildResult;
+use crate::utils::MetadataPackage;
 use regex::Regex;
 
+use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
-use std::fs;
 
-use time::Timespec;
-use rustc_serialize::json::{Json, ToJson};
-use slug::slugify;
-use reqwest::Client;
-use reqwest::header::ACCEPT;
-use semver::Version;
-use postgres::Connection;
-use time;
 use crate::error::Result;
 use failure::err_msg;
+use postgres::Connection;
+use reqwest::header::ACCEPT;
+use reqwest::Client;
+use rustc_serialize::json::{Json, ToJson};
+use semver::Version;
+use slug::slugify;
+use time;
+use time::Timespec;
 
 /// Adds a package into database.
 ///

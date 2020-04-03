@@ -1,10 +1,10 @@
-use std::io::prelude::*;
-use std::io::BufReader;
-use std::fs;
-use std::path::PathBuf;
-use rustc_serialize::json::Json;
 use crate::error::Result;
 use failure::err_msg;
+use rustc_serialize::json::Json;
+use std::fs;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::path::PathBuf;
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
 where

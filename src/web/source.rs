@@ -1,15 +1,15 @@
 //! Source code browser
 
-use std::collections::BTreeMap;
-use std::cmp::Ordering;
-use super::MetaData;
+use super::file::File as DbFile;
 use super::page::Page;
 use super::pool::Pool;
-use super::file::File as DbFile;
+use super::MetaData;
 use iron::prelude::*;
+use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
-use postgres::Connection;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 #[derive(PartialEq, PartialOrd)]
 enum FileType {
@@ -232,8 +232,8 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
     if list.is_none() {
-        use iron::status;
         use super::error::Nope;
+        use iron::status;
         return Err(IronError::new(Nope::NoResults, status::NotFound));
     }
 

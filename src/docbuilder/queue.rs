@@ -3,8 +3,8 @@
 use super::{DocBuilder, RustwideBuilder};
 use crate::db::connect_db;
 use crate::error::Result;
-use crates_index_diff::{ChangeKind, Index};
 use crate::utils::add_crate_to_queue;
+use crates_index_diff::{ChangeKind, Index};
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
@@ -90,8 +90,8 @@ impl DocBuilder {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
     use crate::{DocBuilder, DocBuilderOptions};
+    use std::path::PathBuf;
 
     #[test]
     #[ignore]

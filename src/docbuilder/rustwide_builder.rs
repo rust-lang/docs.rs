@@ -1,9 +1,11 @@
 use super::DocBuilder;
+use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
+use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::LevelFilter;
 use postgres::Connection;
@@ -15,8 +17,6 @@ use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
-use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use super::Metadata;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";

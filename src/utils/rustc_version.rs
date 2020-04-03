@@ -1,6 +1,6 @@
-use regex::Regex;
 use crate::error::Result;
 use failure::err_msg;
+use regex::Regex;
 
 /// Parses rustc commit hash from rustc version string
 pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {

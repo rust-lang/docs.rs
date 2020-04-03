@@ -53,23 +53,23 @@ mod rustdoc;
 mod sitemap;
 mod source;
 
-use std::{env, fmt};
-use std::time::Duration;
-use std::path::PathBuf;
-use std::net::SocketAddr;
-use iron::prelude::*;
-use iron::{self, Listening, Handler, Url, status};
-use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
-use iron::modifiers::Redirect;
-use router::NoRoute;
-use staticfile::Static;
-use handlebars_iron::{HandlebarsEngine, DirectorySource};
-use time;
-use postgres::Connection;
-use semver::{Version, VersionReq};
-use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
 use self::pool::Pool;
+use handlebars_iron::{DirectorySource, HandlebarsEngine};
+use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::{self, status, Handler, Listening, Url};
+use postgres::Connection;
+use router::NoRoute;
+use rustc_serialize::json::{Json, ToJson};
+use semver::{Version, VersionReq};
+use staticfile::Static;
+use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{env, fmt};
+use time;
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -539,8 +539,8 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     use crate::test::*;
-    use html5ever::tendril::TendrilSink;
     use crate::web::{match_version, MatchVersion};
+    use html5ever::tendril::TendrilSink;
 
     impl MatchVersion {
         fn strip_id(self) -> Option<String> {

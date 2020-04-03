@@ -1,7 +1,7 @@
 //! Utilities for interacting with the build queue
 
-use postgres::Connection;
 use crate::error::Result;
+use postgres::Connection;
 
 pub fn add_crate_to_queue(
     conn: &Connection,

@@ -1,16 +1,16 @@
 //! Releases web handlers
 
-use super::{duration_to_str, match_version, redirect_base};
 use super::error::Nope;
 use super::page::Page;
 use super::pool::Pool;
+use super::{duration_to_str, match_version, redirect_base};
 use iron::prelude::*;
 use iron::status;
+use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use time;
-use postgres::Connection;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -493,8 +493,8 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         // if there is a match
         // TODO: Redirecting to latest doc might be more useful
         if params.find(&["i-am-feeling-lucky"]).is_some() {
-            use iron::Url;
             use iron::modifiers::Redirect;
+            use iron::Url;
 
             // redirect to a random crate if query is empty
             if query.is_empty() {

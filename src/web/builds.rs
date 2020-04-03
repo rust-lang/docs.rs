@@ -1,13 +1,13 @@
-use crate::docbuilder::Limits;
-use std::collections::BTreeMap;
-use super::MetaData;
-use super::pool::Pool;
 use super::duration_to_str;
 use super::page::Page;
+use super::pool::Pool;
+use super::MetaData;
+use crate::docbuilder::Limits;
 use iron::prelude::*;
-use time;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
+use std::collections::BTreeMap;
+use time;
 
 #[derive(Clone)]
 struct Build {
@@ -111,10 +111,10 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     if req.url.path().join("/").ends_with(".json") {
-        use iron::status;
         use iron::headers::{
-            Expires, HttpDate, CacheControl, CacheDirective, ContentType, AccessControlAllowOrigin,
+            AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
         };
+        use iron::status;
 
         // Remove build output from build list for json output
         for build in build_list.as_mut_slice() {

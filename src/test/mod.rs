@@ -5,8 +5,8 @@ use failure::Error;
 use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::panic;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let env = TestEnvironment::new();

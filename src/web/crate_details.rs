@@ -1,15 +1,17 @@
-use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion, redirect_base};
 use super::error::Nope;
 use super::page::Page;
+use super::pool::Pool;
+use super::{
+    duration_to_str, match_version, redirect_base, render_markdown, MatchVersion, MetaData,
+};
 use iron::prelude::*;
-use iron::{Url, status};
+use iron::{status, Url};
+use postgres::Connection;
+use router::Router;
+use rustc_serialize::json::{Json, ToJson};
+use semver;
 use std::collections::BTreeMap;
 use time;
-use rustc_serialize::json::{Json, ToJson};
-use router::Router;
-use postgres::Connection;
-use semver;
 
 // TODO: Add target name and versions
 

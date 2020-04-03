@@ -1,11 +1,11 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use clap::{Arg, App, AppSettings, SubCommand};
-use cratesfyi::{DocBuilder, RustwideBuilder, DocBuilderOptions, db};
+use clap::{App, AppSettings, Arg, SubCommand};
+use cratesfyi::db::{add_path_into_database, connect_db};
 use cratesfyi::utils::add_crate_to_queue;
 use cratesfyi::Server;
-use cratesfyi::db::{add_path_into_database, connect_db};
+use cratesfyi::{db, DocBuilder, DocBuilderOptions, RustwideBuilder};
 
 #[allow(clippy::cognitive_complexity)]
 pub fn main() {

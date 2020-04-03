@@ -1,23 +1,23 @@
 //! rustdoc handler
 
-use super::pool::Pool;
-use super::file::File;
-use super::redirect_base;
 use super::crate_details::CrateDetails;
-use iron::prelude::*;
-use iron::{status, Url};
-use iron::modifiers::Redirect;
-use router::Router;
-use super::{match_version, MatchVersion};
 use super::error::Nope;
+use super::file::File;
 use super::page::Page;
+use super::pool::Pool;
+use super::redirect_base;
+use super::{match_version, MatchVersion};
+use crate::utils;
+use iron::headers::{CacheControl, CacheDirective, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::Handler;
+use iron::{status, Url};
+use postgres::Connection;
+use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
-use postgres::Connection;
 use time;
-use iron::Handler;
-use crate::utils;
 
 #[derive(Debug)]
 struct RustdocPage {
@@ -350,9 +350,9 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
+    use badge::{Badge, BadgeOptions};
     use iron::headers::ContentType;
     use params::{Params, Value};
-    use badge::{Badge, BadgeOptions};
 
     let version = {
         let params = ctry!(req.get_ref::<Params>());

@@ -1,6 +1,6 @@
-use std::{env, fmt};
-use std::path::PathBuf;
 use crate::error::Result;
+use std::path::PathBuf;
+use std::{env, fmt};
 
 #[derive(Clone)]
 pub struct DocBuilderOptions {

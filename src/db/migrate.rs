@@ -1,7 +1,7 @@
 //! Database migrations
 
 use crate::error::Result as CratesfyiResult;
-use postgres::{Connection, transaction::Transaction, Error as PostgresError};
+use postgres::{transaction::Transaction, Connection, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 use std::borrow::Cow;

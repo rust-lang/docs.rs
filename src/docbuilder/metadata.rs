@@ -1,8 +1,8 @@
+use crate::error::Result;
+use failure::err_msg;
 use std::collections::HashSet;
 use std::path::Path;
 use toml::Value;
-use crate::error::Result;
-use failure::err_msg;
 
 /// Metadata for custom builds
 ///
@@ -278,8 +278,8 @@ mod test {
     }
     #[test]
     fn test_select_targets() {
-        use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
         use super::BuildTargets;
+        use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
         let mut metadata = Metadata::default();
         // unchanged default_target, targets not specified

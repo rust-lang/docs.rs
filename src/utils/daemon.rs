@@ -2,20 +2,20 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-use std::{env, thread};
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::time::Duration;
-use std::path::PathBuf;
-use time;
 use crate::{
-    docbuilder::RustwideBuilder,
-    DocBuilderOptions, DocBuilder,
-    utils::{update_release_activity, github_updater, pubsubhubbub},
     db::{connect_db, update_search_index},
+    docbuilder::RustwideBuilder,
+    utils::{github_updater, pubsubhubbub, update_release_activity},
+    DocBuilder, DocBuilderOptions,
 };
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{env, thread};
+use time;
 
 #[cfg(not(target_os = "windows"))]
-use ::{libc::fork, std::process::exit, std::fs::File, std::io::Write};
+use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};
 
 pub fn start_daemon(background: bool) {
     // first check required environment variables

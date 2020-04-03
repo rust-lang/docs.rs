@@ -1,6 +1,6 @@
-use std::path::Path;
-use std::fs;
 use crate::error::Result;
+use std::fs;
+use std::path::Path;
 
 use regex::Regex;
 
@@ -42,8 +42,8 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -
 
 #[cfg(test)]
 mod test {
-    use std::fs;
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_copy_doc_dir() {

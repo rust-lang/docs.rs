@@ -1,10 +1,10 @@
 //! Generic page struct
 
-use std::collections::BTreeMap;
-use rustc_serialize::json::{Json, ToJson};
-use iron::{IronResult, Set, status};
-use iron::response::Response;
 use handlebars_iron::Template;
+use iron::response::Response;
+use iron::{status, IronResult, Set};
+use rustc_serialize::json::{Json, ToJson};
+use std::collections::BTreeMap;
 
 lazy_static::lazy_static! {
     static ref RUSTC_RESOURCE_SUFFIX: String = load_rustc_resource_suffix()

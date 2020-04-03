@@ -5,18 +5,18 @@ pub(crate) mod options;
 mod queue;
 mod rustwide_builder;
 
-pub use self::rustwide_builder::RustwideBuilder;
-pub(crate) use self::rustwide_builder::BuildResult;
 pub(crate) use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
+pub(crate) use self::rustwide_builder::BuildResult;
+pub use self::rustwide_builder::RustwideBuilder;
 
+use crate::error::Result;
+use crate::DocBuilderOptions;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
-use std::collections::BTreeSet;
-use crate::DocBuilderOptions;
-use crate::error::Result;
 
 /// chroot based documentation builder
 pub struct DocBuilder {

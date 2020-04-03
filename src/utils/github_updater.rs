@@ -1,7 +1,7 @@
-use regex::Regex;
-use time;
 use crate::{db::connect_db, error::Result};
 use failure::err_msg;
+use regex::Regex;
+use time;
 
 /// Fields we need use in cratesfyi
 #[derive(Debug)]
@@ -74,10 +74,10 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
     use rustc_serialize::json::Json;
 
     let body = {
-        use std::io::Read;
-        use reqwest::{Client, StatusCode};
         use reqwest::header::USER_AGENT;
+        use reqwest::{Client, StatusCode};
         use std::env;
+        use std::io::Read;
 
         let client = Client::new();
         let mut body = String::new();
@@ -152,7 +152,7 @@ fn get_github_path(url: &str) -> Option<String> {
 
 #[cfg(test)]
 mod test {
-    use super::{get_github_path, get_github_fields, github_updater};
+    use super::{get_github_fields, get_github_path, github_updater};
 
     #[test]
     fn test_get_github_path() {

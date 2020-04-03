@@ -1,9 +1,9 @@
 use crate::error::Result;
 use failure::err_msg;
 
-use html5ever::serialize::{serialize, SerializeOpts};
-use html5ever::rcdom::{RcDom, NodeData, Handle};
 use html5ever::driver::{parse_document, ParseOpts};
+use html5ever::rcdom::{Handle, NodeData, RcDom};
+use html5ever::serialize::{serialize, SerializeOpts};
 use html5ever::tendril::TendrilSink;
 
 /// Extracts the contents of the `<head>` and `<body>` tags from an HTML document, as well as the
