@@ -128,7 +128,7 @@ impl Metadata {
 
         if let Some(table) = fetch_manifest_tables(&manifest) {
             let collect_into_array =
-                |f: &Vec<Value>| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
+                |f: &[Value]| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
 
             metadata.features = table
                 .get("features")
