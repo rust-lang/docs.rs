@@ -397,6 +397,8 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
 
     let conn = extension!(req, Pool).get();
+
+    #[allow(clippy::or_fun_call)]
     let author = ctry!(router.find("author")
         .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
@@ -519,6 +521,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 
         let search_query = query.replace(" ", " & ");
+        #[allow(clippy::or_fun_call)]
         get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
             .ok_or(IronError::new(Nope::NoResults, status::NotFound))
             .and_then(|(_, results)| {
