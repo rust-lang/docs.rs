@@ -31,7 +31,7 @@ jobs:
         run: cargo build --locked
 
       - name: Run clippy
-        run: cargo clippy -- -D clippy::all -D unused-imports
+        run: cargo clippy -- -D warnings
 
       - name: Prepare the test environment
         run: |
