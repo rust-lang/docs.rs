@@ -146,9 +146,9 @@ pub(crate) fn add_package_into_database(conn: &Connection,
     };
 
 
-    add_keywords_into_database(&conn, &metadata_pkg, &release_id)?;
-    add_authors_into_database(&conn, &metadata_pkg, &release_id)?;
-    add_owners_into_database(&conn, &cratesio_data.owners, &crate_id)?;
+    add_keywords_into_database(&conn, &metadata_pkg, release_id)?;
+    add_authors_into_database(&conn, &metadata_pkg, release_id)?;
+    add_owners_into_database(&conn, &cratesio_data.owners, crate_id)?;
 
 
     // Update versions
@@ -180,7 +180,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
 
 /// Adds a build into database
 pub(crate) fn add_build_into_database(conn: &Connection,
-                               release_id: &i32,
+                               release_id: i32,
                                res: &BuildResult)
                                -> Result<i32> {
     debug!("Adding build into database");
@@ -189,7 +189,7 @@ pub(crate) fn add_build_into_database(conn: &Connection,
                                                     build_status, output)
                                 VALUES ($1, $2, $3, $4, $5)
                                 RETURNING id",
-                               &[release_id,
+                               &[&release_id,
                                  &res.rustc_version,
                                  &res.docsrs_version,
                                  &res.successful,
@@ -361,7 +361,7 @@ fn get_release_time_yanked_downloads(
 
 
 /// Adds keywords into database
-fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: &i32) -> Result<()> {
+fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: i32) -> Result<()> {
     for keyword in &pkg.keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
@@ -377,7 +377,7 @@ fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_
         };
         // add releationship
         let _ = conn.query("INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
-                           &[release_id, &keyword_id]);
+                           &[&release_id, &keyword_id]);
     }
 
     Ok(())
@@ -386,7 +386,7 @@ fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_
 
 
 /// Adds authors into database
-fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: &i32) -> Result<()> {
+fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_id: i32) -> Result<()> {
 
     let author_capture_re = Regex::new("^([^><]+)<*(.*?)>*$").unwrap();
     for author in &pkg.authors {
@@ -410,7 +410,7 @@ fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_i
 
             // add relationship
             let _ = conn.query("INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
-                               &[release_id, &author_id]);
+                               &[&release_id, &author_id]);
         }
     }
 
@@ -479,7 +479,7 @@ fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
 }
 
 /// Adds owners into database
-fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: &i32) -> Result<()> {
+fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: i32) -> Result<()> {
     for owner in owners {
         let owner_id: i32 = {
             let rows = conn.query("SELECT id FROM owners WHERE login = $1", &[&owner.login])?;
@@ -497,7 +497,7 @@ fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: 
 
         // add relationship
         let _ = conn.query("INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
-                           &[crate_id, &owner_id]);
+                           &[&crate_id, &owner_id]);
     }
     Ok(())
 }
