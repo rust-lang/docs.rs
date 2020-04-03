@@ -1,8 +1,7 @@
-use regex::Regex;
-use time;
 use crate::{db::connect_db, error::Result};
 use failure::err_msg;
-
+use regex::Regex;
+use time;
 
 /// Fields we need use in cratesfyi
 #[derive(Debug)]
@@ -14,14 +13,14 @@ struct GitHubFields {
     last_commit: time::Timespec,
 }
 
-
 /// Updates github fields in crates table
 pub fn github_updater() -> Result<()> {
     let conn = connect_db()?;
 
     // TODO: This query assumes repository field in Cargo.toml is
     //       always the same across all versions of a crate
-    for row in &conn.query("SELECT DISTINCT ON (crates.name)
+    for row in &conn.query(
+        "SELECT DISTINCT ON (crates.name)
                                         crates.name,
                                         crates.id,
                                         releases.repository_url
@@ -31,7 +30,8 @@ pub fn github_updater() -> Result<()> {
                                        (crates.github_last_update < NOW() - INTERVAL '1 day' OR
                                         crates.github_last_update IS NULL)
                                  ORDER BY crates.name, releases.release_time DESC",
-                                &[])? {
+        &[],
+    )? {
         let crate_name: String = row.get(0);
         let crate_id: i32 = row.get(1);
         let repository_url: String = row.get(2);
@@ -40,19 +40,24 @@ pub fn github_updater() -> Result<()> {
             .ok_or_else(|| err_msg("Failed to get github path"))
             .and_then(|path| get_github_fields(&path[..]))
             .and_then(|fields| {
-                conn.execute("UPDATE crates
+                conn.execute(
+                    "UPDATE crates
                               SET github_description = $1,
                                   github_stars = $2, github_forks = $3,
                                   github_issues = $4, github_last_commit = $5,
                                   github_last_update = NOW() WHERE id = $6",
-                             &[&fields.description,
-                               &(fields.stars as i32),
-                               &(fields.forks as i32),
-                               &(fields.issues as i32),
-                               &(fields.last_commit),
-                               &crate_id])
-                    .or_else(|e| Err(e.into()))
-            }) {
+                    &[
+                        &fields.description,
+                        &(fields.stars as i32),
+                        &(fields.forks as i32),
+                        &(fields.issues as i32),
+                        &(fields.last_commit),
+                        &crate_id,
+                    ],
+                )
+                .or_else(|e| Err(e.into()))
+            })
+        {
             debug!("Failed to update github fields of: {} {}", crate_name, err);
         }
 
@@ -65,21 +70,24 @@ pub fn github_updater() -> Result<()> {
     Ok(())
 }
 
-
 fn get_github_fields(path: &str) -> Result<GitHubFields> {
     use rustc_serialize::json::Json;
 
     let body = {
-        use std::io::Read;
-        use reqwest::{Client, StatusCode};
         use reqwest::header::USER_AGENT;
+        use reqwest::{Client, StatusCode};
         use std::env;
+        use std::io::Read;
 
         let client = Client::new();
         let mut body = String::new();
 
-        let mut resp = client.get(&format!("https://api.github.com/repos/{}", path)[..])
-            .header(USER_AGENT, format!("cratesfyi/{}", env!("CARGO_PKG_VERSION")))
+        let mut resp = client
+            .get(&format!("https://api.github.com/repos/{}", path)[..])
+            .header(
+                USER_AGENT,
+                format!("cratesfyi/{}", env!("CARGO_PKG_VERSION")),
+            )
             .basic_auth(
                 env::var("CRATESFYI_GITHUB_USERNAME")
                     .ok()
@@ -100,20 +108,27 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
     let obj = json.as_object().unwrap();
 
     Ok(GitHubFields {
-        description: obj.get("description").and_then(|d| d.as_string()).unwrap_or("").to_string(),
-        stars: obj.get("stargazers_count").and_then(|d| d.as_i64()).unwrap_or(0),
+        description: obj
+            .get("description")
+            .and_then(|d| d.as_string())
+            .unwrap_or("")
+            .to_string(),
+        stars: obj
+            .get("stargazers_count")
+            .and_then(|d| d.as_i64())
+            .unwrap_or(0),
         forks: obj.get("forks_count").and_then(|d| d.as_i64()).unwrap_or(0),
         issues: obj.get("open_issues").and_then(|d| d.as_i64()).unwrap_or(0),
-        last_commit: time::strptime(obj.get("pushed_at")
-                                        .and_then(|d| d.as_string())
-                                        .unwrap_or(""),
-                                    "%Y-%m-%dT%H:%M:%S")
-            .unwrap_or_else(|_| time::now())
-            .to_timespec(),
+        last_commit: time::strptime(
+            obj.get("pushed_at")
+                .and_then(|d| d.as_string())
+                .unwrap_or(""),
+            "%Y-%m-%dT%H:%M:%S",
+        )
+        .unwrap_or_else(|_| time::now())
+        .to_timespec(),
     })
 }
-
-
 
 fn get_github_path(url: &str) -> Option<String> {
     let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
@@ -121,38 +136,47 @@ fn get_github_path(url: &str) -> Option<String> {
         Some(cap) => {
             let username = cap.get(1).unwrap().as_str();
             let reponame = cap.get(2).unwrap().as_str();
-            Some(format!("{}/{}",
-                         username,
-                         if reponame.ends_with(".git") {
-                             reponame.split(".git").next().unwrap()
-                         } else {
-                             reponame
-                         }))
+            Some(format!(
+                "{}/{}",
+                username,
+                if reponame.ends_with(".git") {
+                    reponame.split(".git").next().unwrap()
+                } else {
+                    reponame
+                }
+            ))
         }
         None => None,
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use super::{get_github_path, get_github_fields, github_updater};
+    use super::{get_github_fields, get_github_path, github_updater};
 
     #[test]
     fn test_get_github_path() {
-        assert_eq!(get_github_path("https://github.com/onur/cratesfyi"),
-                   Some("onur/cratesfyi".to_string()));
-        assert_eq!(get_github_path("http://github.com/onur/cratesfyi"),
-                   Some("onur/cratesfyi".to_string()));
-        assert_eq!(get_github_path("https://github.com/onur/cratesfyi.git"),
-                   Some("onur/cratesfyi".to_string()));
-        assert_eq!(get_github_path("https://github.com/onur23cmD_M_R_L_/crates_fy-i"),
-                   Some("onur23cmD_M_R_L_/crates_fy-i".to_string()));
-        assert_eq!(get_github_path("https://github.com/docopt/docopt.rs"),
-                   Some("docopt/docopt.rs".to_string()));
+        assert_eq!(
+            get_github_path("https://github.com/onur/cratesfyi"),
+            Some("onur/cratesfyi".to_string())
+        );
+        assert_eq!(
+            get_github_path("http://github.com/onur/cratesfyi"),
+            Some("onur/cratesfyi".to_string())
+        );
+        assert_eq!(
+            get_github_path("https://github.com/onur/cratesfyi.git"),
+            Some("onur/cratesfyi".to_string())
+        );
+        assert_eq!(
+            get_github_path("https://github.com/onur23cmD_M_R_L_/crates_fy-i"),
+            Some("onur23cmD_M_R_L_/crates_fy-i".to_string())
+        );
+        assert_eq!(
+            get_github_path("https://github.com/docopt/docopt.rs"),
+            Some("docopt/docopt.rs".to_string())
+        );
     }
-
 
     #[test]
     #[ignore]
@@ -170,7 +194,6 @@ mod test {
         use time;
         assert!(fields.last_commit <= time::now().to_timespec());
     }
-
 
     #[test]
     #[ignore]

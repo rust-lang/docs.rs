@@ -13,10 +13,12 @@ fn ping_hub(url: &str) -> Result<Response> {
 /// Ping the two predefined hubs. Return either the number of successfully
 /// pinged hubs, or the first error.
 pub fn ping_hubs() -> Result<usize> {
-    vec!["https://pubsubhubbub.appspot.com",
-         "https://pubsubhubbub.superfeedr.com"]
-            .into_iter()
-            .map(ping_hub)
-            .collect::<Result<Vec<_>>>()
-            .map(|v| v.len())
+    vec![
+        "https://pubsubhubbub.appspot.com",
+        "https://pubsubhubbub.superfeedr.com",
+    ]
+    .into_iter()
+    .map(ping_hub)
+    .collect::<Result<Vec<_>>>()
+    .map(|v| v.len())
 }

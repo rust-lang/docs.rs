@@ -143,7 +143,13 @@ impl<'a> FakeRelease<'a> {
                 fs::write(file, data)?;
             }
 
-            let prefix = format!("{}/{}/{}/{}", prefix, package.name, package.version, target.unwrap_or(""));
+            let prefix = format!(
+                "{}/{}/{}/{}",
+                prefix,
+                package.name,
+                package.version,
+                target.unwrap_or("")
+            );
             log::debug!("adding directory {} from {}", prefix, path_prefix.display());
             crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
         };

@@ -1,11 +1,10 @@
 //! Database migrations
 
 use crate::error::Result as CratesfyiResult;
-use postgres::{Connection, transaction::Transaction, Error as PostgresError};
+use postgres::{transaction::Transaction, Connection, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 use std::borrow::Cow;
-
 
 #[derive(Copy, Clone)]
 enum ApplyMode {
@@ -30,7 +29,6 @@ impl MigrationContext {
         }
     }
 }
-
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
 /// Downgrade query should return database to previous state.
@@ -58,18 +56,29 @@ macro_rules! migration {
         }
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &Transaction) -> Result<(), PostgresError> {
-                info!("Applying migration {}: {}", self.version(), self.description());
-                transaction.batch_execute(&self.ctx.format_query($up)).map(|_| ())
+                info!(
+                    "Applying migration {}: {}",
+                    self.version(),
+                    self.description()
+                );
+                transaction
+                    .batch_execute(&self.ctx.format_query($up))
+                    .map(|_| ())
             }
             fn down(&self, transaction: &Transaction) -> Result<(), PostgresError> {
-                info!("Removing migration {}: {}", self.version(), self.description());
-                transaction.batch_execute(&self.ctx.format_query($down)).map(|_| ())
+                info!(
+                    "Removing migration {}: {}",
+                    self.version(),
+                    self.description()
+                );
+                transaction
+                    .batch_execute(&self.ctx.format_query($down))
+                    .map(|_| ())
             }
         }
         Box::new(Amigration { ctx: $context })
     }};
 }
-
 
 pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
     migrate_inner(version, conn, ApplyMode::Permanent)
@@ -80,12 +89,16 @@ pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> Cratesf
     migrate_inner(version, conn, ApplyMode::Temporary)
 }
 
-fn migrate_inner(version: Option<Version>, conn: &Connection, apply_mode: ApplyMode) -> CratesfyiResult<()> {
+fn migrate_inner(
+    version: Option<Version>,
+    conn: &Connection,
+    apply_mode: ApplyMode,
+) -> CratesfyiResult<()> {
     let context = MigrationContext { apply_mode };
 
     conn.execute(
         &context.format_query(
-            "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);"
+            "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
         ),
         &[],
     )?;
