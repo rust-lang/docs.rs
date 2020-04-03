@@ -83,8 +83,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
             .basic_auth(
                 env::var("CRATESFYI_GITHUB_USERNAME")
                     .ok()
-                    .and_then(|u| Some(u.to_string()))
-                    .unwrap_or("".to_string()),
+                    .unwrap_or_default(),
                 env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
             )
             .send()?;
