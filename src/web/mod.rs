@@ -209,10 +209,6 @@ impl MatchVersion {
             MatchVersion::None => None,
         }
     }
-
-    fn strip_id(self) -> Option<String> {
-        self.into_option().map(|(version, _id)| version)
-    }
 }
 
 /// Checks the database for crate releases that match the given name and version.
@@ -521,6 +517,12 @@ mod test {
     use crate::test::*;
     use html5ever::tendril::TendrilSink;
     use crate::web::{match_version, MatchVersion};
+
+    impl MatchVersion {
+        fn strip_id(self) -> Option<String> {
+            self.into_option().map(|(version, _id)| version)
+        }
+    }
 
     const DEFAULT_ID: i32 = 0;
 
