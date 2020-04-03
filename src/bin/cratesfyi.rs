@@ -292,8 +292,7 @@ fn logger_init() {
                 record.target(),
                 record.args())
     });
-    builder.parse_filters(&env::var("RUST_LOG")
-           .unwrap_or("cratesfyi=info".to_owned()));
+    builder.parse_filters(env::var("RUST_LOG").ok().as_deref().unwrap_or("cratesfyi=info"));
 
     rustwide::logging::init_with(builder.build());
 }
