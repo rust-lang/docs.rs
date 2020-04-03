@@ -30,6 +30,9 @@ jobs:
       - name: Build docs.rs
         run: cargo build --locked
 
+      - name: Run clippy
+        run: cargo clippy -- -D clippy::all -D unused-imports
+
       - name: Prepare the test environment
         run: |
           prefix=$(pwd)/ignored/prefix
