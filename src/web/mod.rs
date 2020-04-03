@@ -577,18 +577,15 @@ mod test {
                 .source_file("test.rs", &[])
                 .create()
                 .unwrap();
-
             let web = env.frontend();
             assert!(clipboard_is_present_for_path(
                 "/crate/fake_crate/0.0.1",
                 web
             ));
-
             assert!(clipboard_is_present_for_path(
                 "/crate/fake_crate/0.0.1/source/",
                 web
             ));
-
             Ok(())
         });
     }
@@ -602,9 +599,7 @@ mod test {
                 .version("0.0.1")
                 .create()
                 .unwrap();
-
             let web = env.frontend();
-
             assert!(!clipboard_is_present_for_path("/about", web));
             assert!(!clipboard_is_present_for_path("/releases", web));
             assert!(!clipboard_is_present_for_path("/", web));
@@ -612,9 +607,7 @@ mod test {
                 "/fake_crate/0.0.1/fake_crate",
                 web
             ));
-
             assert!(!clipboard_is_present_for_path("/not/a/real/path", web));
-
             Ok(())
         });
     }
@@ -638,23 +631,16 @@ mod test {
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release()
-                .name("bat")
-                .version("0.2.0")
-                .binary(true)
-                .create()
-                .unwrap();
+            db.fake_release().name("bat").version("0.2.0").binary(true)
+              .create().unwrap();
 
             let web = env.frontend();
-
             assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu", "/crate/bat/0.2.0", web)?;
-
             /* TODO: this should work (https://github.com/rust-lang/docs.rs/issues/603)
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
             */
-
             Ok(())
         })
     }
@@ -663,19 +649,15 @@ mod test {
     fn can_view_source() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release()
-                .name("regex")
-                .version("0.3.0")
-                .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-                .create()
-                .unwrap();
+            db.fake_release().name("regex").version("0.3.0")
+              .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
+              .create().unwrap();
 
             let web = env.frontend();
             assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
             assert_success("/crate/regex/0.3.0/source", web)?;
             assert_success("/crate/regex/0.3.0/source/src", web)?;
             assert_success("/regex/0.3.0/src/regex/main.rs", web)?;
-
             Ok(())
         })
     }
@@ -697,10 +679,8 @@ mod test {
             release("0.3.0");
             let three = semver("0.3.0");
             assert_eq!(version(None), three);
-
             // same thing but with "*"
             assert_eq!(version(Some("*")), three);
-
             // make sure exact matches still work
             assert_eq!(version(Some("0.3.0")), exact("0.3.0"));
 
@@ -738,7 +718,6 @@ mod test {
             release("0.1.0+4.1", db);
             release("0.1.1", db);
             assert_eq!(version(None, db), semver("0.1.1"));
-
             release("0.5.1+zstd.1.4.4", db);
             assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
             assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
