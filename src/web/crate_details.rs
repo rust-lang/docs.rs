@@ -206,7 +206,7 @@ impl CrateDetails {
             github_stars: rows.get(0).get(18),
             github_forks: rows.get(0).get(19),
             github_issues: rows.get(0).get(20),
-            metadata: metadata,
+            metadata,
             is_library: rows.get(0).get(21),
             doc_targets: rows.get(0).get(22),
             license: rows.get(0).get(23),

@@ -62,7 +62,7 @@ impl<T: ToJson> Page<T> {
     pub fn new(content: T) -> Page<T> {
         Page {
             title: None,
-            content: content,
+            content,
             status: status::Ok,
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),

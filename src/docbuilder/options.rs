@@ -27,8 +27,8 @@ impl Default for DocBuilderOptions {
             generate_paths(cwd);
 
         DocBuilderOptions {
-            prefix: prefix,
-            crates_io_index_path: crates_io_index_path,
+            prefix,
+            crates_io_index_path,
 
             keep_build_directory: false,
             skip_if_exists: false,
@@ -63,9 +63,8 @@ impl DocBuilderOptions {
         let (prefix, crates_io_index_path) =
             generate_paths(prefix);
         DocBuilderOptions {
-            prefix: prefix,
-            crates_io_index_path: crates_io_index_path,
-
+            prefix,
+            crates_io_index_path,
             ..Default::default()
         }
     }

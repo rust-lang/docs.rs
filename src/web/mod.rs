@@ -70,10 +70,10 @@ use std::sync::{Arc, Mutex};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
-const STYLE_CSS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-const MENU_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
-const INDEX_JS: &'static str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const OPENSEARCH_XML: &'static [u8] = include_bytes!("opensearch.xml");
+const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
+const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
+const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
