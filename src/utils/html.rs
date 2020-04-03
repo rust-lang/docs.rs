@@ -23,8 +23,8 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
     let (mut head, mut body) = (None, None);
 
     while let Some(handle) = worklist.pop() {
-        match handle.data {
-            NodeData::Element { ref name, .. } => match name.local.as_ref() {
+        if let NodeData::Element { ref name, .. } = handle.data {
+            match name.local.as_ref() {
                 "head" => {
                     if head.is_some() {
                         return Err(err_msg("duplicate <head> tag"));
@@ -41,7 +41,6 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
                 }
                 _ => {}  // do nothing
             }
-            _ => {}  // do nothing
         }
 
         worklist.extend(handle.children.borrow().iter().cloned());

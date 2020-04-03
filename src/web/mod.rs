@@ -231,14 +231,14 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
             }
         })
         .map(|v| if v == "newest" || v == "latest" { "*".into() } else { v })
-        .unwrap_or("*".into());
+        .unwrap_or_else(|| "*".into());
 
     let versions: Vec<(String, i32)> = {
         let query = "SELECT version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE name = $1 AND yanked = false";
         let rows = conn.query(query, &[&name]).unwrap();
-        if rows.len() == 0 {
+        if rows.is_empty() {
             return MatchVersion::None;
         }
         rows.iter().map(|row| (row.get(0), row.get(1))).collect()
@@ -322,7 +322,7 @@ pub struct Server {
 
 impl Server {
     pub fn start(addr: Option<&str>) -> Self {
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(|| Pool::new()));
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(Pool::new));
         info!("Running docs.rs web server on http://{}", server.addr());
         server
     }

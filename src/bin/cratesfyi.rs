@@ -169,7 +169,7 @@ pub fn main() {
 
         let mut docbuilder = DocBuilder::new(docbuilder_opts);
 
-        if let Some(_) = matches.subcommand_matches("world") {
+        if matches.subcommand_matches("world").is_some() {
             docbuilder.load_cache().expect("Failed to load cache");
             let mut builder = RustwideBuilder::init().unwrap();
             builder.build_world(&mut docbuilder).expect("Failed to build world");
@@ -197,11 +197,11 @@ pub fn main() {
         } else if matches.subcommand_matches("add-essential-files").is_some() {
             let mut builder = RustwideBuilder::init().unwrap();
             builder.add_essential_files().expect("failed to add essential files");
-        } else if let Some(_) = matches.subcommand_matches("lock") {
+        } else if matches.subcommand_matches("lock").is_some() {
             docbuilder.lock().expect("Failed to lock");
-        } else if let Some(_) = matches.subcommand_matches("unlock") {
+        } else if matches.subcommand_matches("unlock").is_some() {
             docbuilder.unlock().expect("Failed to unlock");
-        } else if let Some(_) = matches.subcommand_matches("print-options") {
+        } else if matches.subcommand_matches("print-options").is_some() {
             println!("{:?}", docbuilder.options());
         }
 
@@ -211,20 +211,20 @@ pub fn main() {
                                                           .expect("Version should be an integer"));
             db::migrate(version, &connect_db().expect("failed to connect to the database"))
                 .expect("Failed to run database migrations");
-        } else if let Some(_) = matches.subcommand_matches("update-github-fields") {
+        } else if matches.subcommand_matches("update-github-fields").is_some() {
             cratesfyi::utils::github_updater().expect("Failed to update github fields");
         } else if let Some(matches) = matches.subcommand_matches("add-directory") {
             add_path_into_database(&db::connect_db().unwrap(),
                                    matches.value_of("PREFIX").unwrap_or(""),
                                    matches.value_of("DIRECTORY").unwrap())
                 .expect("Failed to add directory into database");
-        } else if let Some(_) = matches.subcommand_matches("update-release-activity") {
+        } else if matches.subcommand_matches("update-release-activity").is_some() {
             // FIXME: This is actually util command not database
             cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
-        } else if let Some(_) = matches.subcommand_matches("update-search-index") {
+        } else if matches.subcommand_matches("update-search-index").is_some() {
             let conn = db::connect_db().unwrap();
             db::update_search_index(&conn).expect("Failed to update search index");
-        } else if let Some(_) = matches.subcommand_matches("move-to-s3") {
+        } else if matches.subcommand_matches("move-to-s3").is_some() {
             let conn = db::connect_db().unwrap();
             let mut count = 1;
             let mut total = 0;
@@ -243,7 +243,7 @@ pub fn main() {
         } else if let Some(matches) = matches.subcommand_matches("blacklist") {
             let conn = db::connect_db().expect("failed to connect to the database");
 
-            if let Some(_) = matches.subcommand_matches("list") {
+            if matches.subcommand_matches("list").is_some() {
                 let crates = db::blacklist::list_crates(&conn).expect("failed to list crates on blacklist");
                 println!("{}", crates.join("\n"));
 
@@ -260,7 +260,7 @@ pub fn main() {
     } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
         Server::start(Some(matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000")));
 
-    } else if let Some(_) = matches.subcommand_matches("daemon") {
+    } else if matches.subcommand_matches("daemon").is_some() {
         let foreground = matches.subcommand_matches("daemon")
             .map_or(false, |opts| opts.is_present("FOREGROUND"));
         cratesfyi::utils::start_daemon(!foreground);
