@@ -225,7 +225,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
 fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    let readme_path = source_dir.join(pkg.readme.clone().unwrap_or("README.md".to_owned()));
+    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md"));
 
     if !readme_path.exists() {
         return Ok(None);
