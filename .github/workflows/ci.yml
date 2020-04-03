@@ -30,6 +30,9 @@ jobs:
       - name: Build docs.rs
         run: cargo build --locked
 
+      - name: Run rustfmt
+        run: cargo fmt -- --check
+
       - name: Run clippy
         run: cargo clippy -- -D warnings
 
