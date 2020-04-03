@@ -190,7 +190,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
         .map(|dependency| {
             let name = dependency.name.clone();
             let version = dependency.req.clone();
-            let kind = dependency.kind.clone().unwrap_or_else(|| "normal".into());
+            let kind = dependency.kind.clone().unwrap_or_default();
 
             (name, version, kind)
         })
