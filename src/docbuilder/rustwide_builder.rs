@@ -107,7 +107,7 @@ impl RustwideBuilder {
 
         let mut targets_to_install = TARGETS
             .iter()
-            .map(|t| t.to_string())
+            .map(|&t| t.to_string())
             .collect::<HashSet<_>>();
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
             Ok(targets) => targets,
@@ -209,7 +209,7 @@ impl RustwideBuilder {
                     .iter()
                     .map(|f| (f, true))
                     .chain(ESSENTIAL_FILES_UNVERSIONED.iter().map(|f| (f, false)));
-                for (file, versioned) in files {
+                for (&file, versioned) in files {
                     let segments = file.rsplitn(2, '.').collect::<Vec<_>>();
                     let file_name = if versioned {
                         format!("{}-{}.{}", segments[1], rustc_version, segments[0])
