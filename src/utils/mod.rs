@@ -1,6 +1,5 @@
 //! Various utilities for cratesfyi
 
-
 pub(crate) use self::copy::copy_doc_dir;
 pub use self::github_updater::github_updater;
 pub use self::release_activity_updater::update_release_activity;
@@ -14,11 +13,11 @@ pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage}
 pub(crate) use self::cargo_metadata::{Dependency, Target};
 
 mod cargo_metadata;
-mod github_updater;
 mod copy;
-mod release_activity_updater;
 mod daemon;
-mod pubsubhubbub;
-mod rustc_version;
+mod github_updater;
 mod html;
+mod pubsubhubbub;
 mod queue;
+mod release_activity_updater;
+mod rustc_version;

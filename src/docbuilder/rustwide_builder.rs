@@ -267,8 +267,10 @@ impl RustwideBuilder {
         path: &Path,
     ) -> Result<bool> {
         self.update_toolchain()?;
-        let metadata = CargoMetadata::load(&self.workspace, &self.toolchain, path)
-            .map_err(|err| err.context(format!("failed to load local package {}", path.display())))?;
+        let metadata =
+            CargoMetadata::load(&self.workspace, &self.toolchain, path).map_err(|err| {
+                err.context(format!("failed to load local package {}", path.display()))
+            })?;
         let package = metadata.root();
         self.build_package(doc_builder, &package.name, &package.version, Some(path))
     }
@@ -322,7 +324,10 @@ impl RustwideBuilder {
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
-                let BuildTargets { default_target, other_targets } = metadata.targets();
+                let BuildTargets {
+                    default_target,
+                    other_targets,
+                } = metadata.targets();
 
                 // Do an initial build and then copy the sources in the database
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
@@ -343,12 +348,7 @@ impl RustwideBuilder {
 
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
-                        local_storage.path(),
-                        "",
-                        true,
-                    )?;
+                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
                     successful_targets.push(res.target.clone());
 

@@ -100,7 +100,6 @@ impl Metadata {
         Metadata::from_str(&s)
     }
 
-
     // This is similar to Default trait but it's private
     fn default() -> Metadata {
         Metadata {
@@ -114,7 +113,6 @@ impl Metadata {
         }
     }
 
-
     fn from_str(manifest: &str) -> Metadata {
         let mut metadata = Metadata::default();
 
@@ -123,47 +121,76 @@ impl Metadata {
             Err(_) => return metadata,
         };
 
-        if let Some(table) = manifest.get("package").and_then(|p| p.as_table())
-            .and_then(|p| p.get("metadata")).and_then(|p| p.as_table())
-                .and_then(|p| p.get("docs")).and_then(|p| p.as_table())
-                .and_then(|p| p.get("rs")).and_then(|p| p.as_table()) {
-                    metadata.features = table.get("features").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.no_default_features = table.get("no-default-features")
-                        .and_then(|v| v.as_bool()).unwrap_or(metadata.no_default_features);
-                    metadata.all_features = table.get("all-features")
-                        .and_then(|v| v.as_bool()).unwrap_or(metadata.all_features);
-                    metadata.default_target = table.get("default-target")
-                        .and_then(|v| v.as_str()).map(|v| v.to_owned());
-                    metadata.targets = table.get("targets").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.rustc_args = table.get("rustc-args").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                    metadata.rustdoc_args = table.get("rustdoc-args").and_then(|f| f.as_array())
-                        .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
-                }
+        if let Some(table) = manifest
+            .get("package")
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("metadata"))
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("docs"))
+            .and_then(|p| p.as_table())
+            .and_then(|p| p.get("rs"))
+            .and_then(|p| p.as_table())
+        {
+            metadata.features = table
+                .get("features")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.no_default_features = table
+                .get("no-default-features")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(metadata.no_default_features);
+            metadata.all_features = table
+                .get("all-features")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(metadata.all_features);
+            metadata.default_target = table
+                .get("default-target")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_owned());
+            metadata.targets = table
+                .get("targets")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.rustc_args = table
+                .get("rustc-args")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+            metadata.rustdoc_args = table
+                .get("rustdoc-args")
+                .and_then(|f| f.as_array())
+                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+        }
 
         metadata
     }
     pub(super) fn targets(&self) -> BuildTargets<'_> {
         use super::rustwide_builder::{HOST_TARGET, TARGETS};
 
-        let default_target = self.default_target.as_deref()
+        let default_target = self
+            .default_target
+            .as_deref()
             // Use the first element of `targets` if `default_target` is unset and `targets` is non-empty
-            .or_else(|| self.targets.as_ref().and_then(|targets| targets.iter().next().map(String::as_str)))
+            .or_else(|| {
+                self.targets
+                    .as_ref()
+                    .and_then(|targets| targets.iter().next().map(String::as_str))
+            })
             .unwrap_or(HOST_TARGET);
 
         // Let people opt-in to only having specific targets
-        let mut targets: HashSet<_> = self.targets.as_ref()
+        let mut targets: HashSet<_> = self
+            .targets
+            .as_ref()
             .map(|targets| targets.iter().map(String::as_str).collect())
             .unwrap_or_else(|| TARGETS.iter().copied().collect());
 
         targets.remove(&default_target);
-        BuildTargets { default_target, other_targets: targets }
+        BuildTargets {
+            default_target,
+            other_targets: targets,
+        }
     }
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -199,7 +226,10 @@ mod test {
         assert_eq!(features[0], "feature1".to_owned());
         assert_eq!(features[1], "feature2".to_owned());
 
-        assert_eq!(metadata.default_target.unwrap(), "x86_64-unknown-linux-gnu".to_owned());
+        assert_eq!(
+            metadata.default_target.unwrap(),
+            "x86_64-unknown-linux-gnu".to_owned()
+        );
 
         let targets = metadata.targets.expect("should have explicit target");
         assert_eq!(targets.len(), 2);
@@ -229,17 +259,21 @@ mod test {
         assert!(metadata.targets.is_none());
 
         // no package.metadata.docs.rs section
-        let metadata = Metadata::from_str(r#"
+        let metadata = Metadata::from_str(
+            r#"
             [package]
             name = "test"
-        "#);
+        "#,
+        );
         assert!(metadata.targets.is_none());
 
         // targets explicitly set to empty array
-        let metadata = Metadata::from_str(r#"
+        let metadata = Metadata::from_str(
+            r#"
             [package.metadata.docs.rs]
             targets = []
-        "#);
+        "#,
+        );
         assert!(metadata.targets.unwrap().is_empty());
     }
     #[test]
@@ -249,7 +283,10 @@ mod test {
 
         let mut metadata = Metadata::default();
         // unchanged default_target, targets not specified
-        let BuildTargets { default_target: default, other_targets: tier_one } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: tier_one,
+        } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
@@ -265,47 +302,78 @@ mod test {
 
         // unchanged default_target, targets specified to be empty
         metadata.targets = Some(Vec::new());
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // unchanged default_target, targets non-empty
-        metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-apple-darwin".into()]);
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        metadata.targets = Some(vec![
+            "i686-pc-windows-msvc".into(),
+            "i686-apple-darwin".into(),
+        ]);
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-apple-darwin"));
 
         // make sure that default_target is not built twice
         metadata.targets = Some(vec![HOST_TARGET.into()]);
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
         // make sure that duplicates are removed
-        metadata.targets = Some(vec!["i686-pc-windows-msvc".into(), "i686-pc-windows-msvc".into()]);
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        metadata.targets = Some(vec![
+            "i686-pc-windows-msvc".into(),
+            "i686-pc-windows-msvc".into(),
+        ]);
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
 
         // make sure that `default_target` always takes priority over `targets`
         metadata.default_target = Some("i686-apple-darwin".into());
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-pc-windows-msvc"));
 
         // make sure that `default_target` takes priority over `HOST_TARGET`
         metadata.targets = Some(vec![]);
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
 
         // and if `targets` is unset, it should still be set to `TARGETS`
         metadata.targets = None;
-        let BuildTargets { default_target: default, other_targets: others } = metadata.targets();
+        let BuildTargets {
+            default_target: default,
+            other_targets: others,
+        } = metadata.targets();
         assert_eq!(default, "i686-apple-darwin");
-        let tier_one_targets_no_default = TARGETS.iter().filter(|&&t| t != "i686-apple-darwin").copied().collect();
+        let tier_one_targets_no_default = TARGETS
+            .iter()
+            .filter(|&&t| t != "i686-apple-darwin")
+            .copied()
+            .collect();
         assert_eq!(others, tier_one_targets_no_default);
     }
 }
