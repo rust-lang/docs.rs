@@ -45,9 +45,9 @@ pub(crate) fn add_package_into_database(conn: &Connection,
 
     let release_id: i32 = {
         let rows = conn.query("SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
-                                   &[&crate_id, &format!("{}", metadata_pkg.version)])?;
+                                   &[&crate_id, &metadata_pkg.version.to_string()])?;
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             let rows = conn.query("INSERT INTO releases (
                                             crate_id, version, release_time,
                                             dependencies, target_name, yanked, build_status,
@@ -117,7 +117,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                                  default_target = $25
                              WHERE crate_id = $1 AND version = $2",
                             &[&crate_id,
-                              &format!("{}", metadata_pkg.version),
+                              &metadata_pkg.version.to_string(),
                               &cratesio_data.release_time,
                               &dependencies.to_json(),
                               &metadata_pkg.package_name(),
@@ -167,7 +167,7 @@ pub(crate) fn add_package_into_database(conn: &Connection,
                 }
             }
             if !found {
-                versions_array.push(format!("{}", &metadata_pkg.version).to_json());
+                versions_array.push(metadata_pkg.version.to_string().to_json());
             }
         }
         let _ = conn.query("UPDATE crates SET versions = $1 WHERE id = $2",
@@ -201,7 +201,7 @@ pub(crate) fn add_build_into_database(conn: &Connection,
 fn initialize_package_in_database(conn: &Connection, pkg: &MetadataPackage) -> Result<i32> {
     let mut rows = conn.query("SELECT id FROM crates WHERE name = $1", &[&pkg.name])?;
     // insert crate into database if it is not exists
-    if rows.len() == 0 {
+    if rows.is_empty() {
         rows = conn.query("INSERT INTO crates (name) VALUES ($1) RETURNING id",
                                &[&pkg.name])?;
     }
@@ -231,7 +231,7 @@ fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>
         return Ok(None);
     }
 
-    let mut reader = fs::File::open(readme_path).map(|f| BufReader::new(f))?;
+    let mut reader = fs::File::open(readme_path).map(BufReader::new)?;
     let mut readme = String::new();
     reader.read_to_string(&mut readme)?;
 
