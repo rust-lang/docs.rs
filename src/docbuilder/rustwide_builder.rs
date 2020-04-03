@@ -89,7 +89,7 @@ impl RustwideBuilder {
         workspace.purge_all_build_dirs()?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
-            .map(|t| Cow::Owned(t))
+            .map(Cow::Owned)
             .unwrap_or_else(|_| Cow::Borrowed("nightly"));
 
         let toolchain = Toolchain::dist(&toolchain_name);
@@ -145,7 +145,7 @@ impl RustwideBuilder {
         }
 
         self.rustc_version = self.detect_rustc_version()?;
-        if old_version.as_ref().map(|s| s.as_str()) != Some(&self.rustc_version) {
+        if old_version.as_deref() != Some(&self.rustc_version) {
             self.add_essential_files()?;
         }
 

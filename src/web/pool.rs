@@ -46,7 +46,7 @@ pub(crate) enum PoolConnection {
 }
 
 impl PoolConnection {
-    pub(super) fn get<'a>(&'a self) -> DerefConnection<'a> {
+    pub(super) fn get(&self) -> DerefConnection<'_> {
         match self {
             Self::R2D2(conn) => DerefConnection::Connection(&conn),
             #[cfg(test)]

@@ -94,7 +94,7 @@ impl Metadata {
             Err(_) => return Metadata::default(),
         };
         let mut s = String::new();
-        if let Err(_) = f.read_to_string(&mut s) {
+        if f.read_to_string(&mut s).is_err() {
             return Metadata::default();
         }
         Metadata::from_str(&s)
