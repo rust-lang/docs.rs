@@ -27,11 +27,12 @@ use ::{
 pub fn start_daemon(background: bool) {
     // first check required environment variables
     for v in ["CRATESFYI_PREFIX",
-              "CRATESFYI_PREFIX",
               "CRATESFYI_GITHUB_USERNAME",
               "CRATESFYI_GITHUB_ACCESSTOKEN"]
         .iter() {
-        env::var(v).expect(&format!("Environment variable {} not found", v));
+        if env::var(v).is_err() {
+            panic!("Environment variable {} not found", v);
+        }
     }
 
     let dbopts = opts();
