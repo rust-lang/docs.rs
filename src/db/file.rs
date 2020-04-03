@@ -294,21 +294,29 @@ fn detect_mime(file_path: &Path) -> Result<&'static str> {
 }
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
-    let mut file_list_json: Vec<Json> = Vec::with_capacity(file_list.len());
+    // Only ever allocate the vector once, and re-use it for each iteration over file_list
+    let mut temp_json = Vec::with_capacity(2);
+    let file_list = file_list
+        .into_iter()
+        .map(|(name, path)| {
+            temp_json.push(name);
+            temp_json.push(path.to_str().unwrap().to_owned());
 
-    for file in file_list {
-        let mut v: Vec<String> = Vec::with_capacity(2);
-        v.push(file.0.clone());
-        v.push(file.1.into_os_string().into_string().unwrap());
-        file_list_json.push(v.to_json());
-    }
+            let json = temp_json.to_json();
+            temp_json.clear();
 
-    Ok(file_list_json.to_json())
+            json
+        })
+        .collect::<Vec<Json>>();
+
+    Ok(file_list.to_json())
 }
 
 pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
     let trans = conn.transaction()?;
     let client = s3_client().expect("configured s3");
+
+    let mut rt = ::tokio::runtime::Runtime::new().unwrap();
 
     let rows = trans.query(
         &format!(
@@ -319,26 +327,27 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
     )?;
     let count = rows.len();
 
-    let mut rt = ::tokio::runtime::Runtime::new().unwrap();
-    let mut futures = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let path: String = row.get(0);
-        let mime: String = row.get(1);
-        let content: Vec<u8> = row.get(2);
-        let path_1 = path.clone();
-        futures.push(
-            client
-                .put_object(PutObjectRequest {
-                    bucket: S3_BUCKET_NAME.into(),
-                    key: path.clone(),
-                    body: Some(content.into()),
-                    content_type: Some(mime),
-                    ..Default::default()
-                })
+    let futures = rows
+        .into_iter()
+        .map(|row| {
+            let path: String = row.get(0);
+            let mime: String = row.get(1);
+            let content: Vec<u8> = row.get(2);
+            let path_1 = path.clone();
+
+            let client_object = client.put_object(PutObjectRequest {
+                bucket: S3_BUCKET_NAME.into(),
+                key: path.clone(),
+                body: Some(content.into()),
+                content_type: Some(mime),
+                ..Default::default()
+            });
+
+            client_object
                 .map(move |_| path_1)
-                .map_err(move |e| panic!("failed to upload to {}: {:?}", path, e)),
-        );
-    }
+                .map_err(move |e| panic!("failed to upload to {}: {:?}", path, e))
+        })
+        .collect::<Vec<_>>();
 
     use ::futures::future::Future;
     match rt.block_on(::futures::future::join_all(futures)) {

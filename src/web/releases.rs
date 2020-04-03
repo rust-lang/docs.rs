@@ -134,9 +134,9 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
     };
     let query = conn.query(&query, &[&limit, &offset]).unwrap();
 
-    let mut packages = Vec::with_capacity(query.len());
-    for row in query.iter() {
-        let package = Release {
+    query
+        .into_iter()
+        .map(|row| Release {
             name: row.get(0),
             version: row.get(1),
             description: row.get(2),
@@ -144,12 +144,8 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
             release_time: row.get(4),
             rustdoc_status: row.get(5),
             stars: row.get(6),
-        };
-
-        packages.push(package);
-    }
-
-    packages
+        })
+        .collect()
 }
 
 fn get_releases_by_author(
@@ -177,24 +173,27 @@ fn get_releases_by_author(
                  LIMIT $2 OFFSET $3";
     let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
 
-    let mut author_name = String::new();
-    let mut packages = Vec::with_capacity(query.len());
-    for row in query.iter() {
-        let package = Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            release_time: row.get(4),
-            rustdoc_status: row.get(5),
-            stars: row.get(6),
-        };
+    let mut author_name = None;
+    let packages = query
+        .into_iter()
+        .map(|row| {
+            if author_name.is_none() {
+                author_name = Some(row.get(7));
+            }
 
-        author_name = row.get(7);
-        packages.push(package);
-    }
+            Release {
+                name: row.get(0),
+                version: row.get(1),
+                description: row.get(2),
+                target_name: row.get(3),
+                release_time: row.get(4),
+                rustdoc_status: row.get(5),
+                stars: row.get(6),
+            }
+        })
+        .collect();
 
-    (author_name, packages)
+    (author_name.unwrap_or_default(), packages)
 }
 
 fn get_releases_by_owner(
@@ -223,28 +222,31 @@ fn get_releases_by_owner(
                  LIMIT $2 OFFSET $3";
     let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
 
-    let mut author_name = String::new();
-    let mut packages = Vec::with_capacity(query.len());
-    for row in query.iter() {
-        let package = Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            release_time: row.get(4),
-            rustdoc_status: row.get(5),
-            stars: row.get(6),
-        };
+    let mut author_name = None;
+    let packages = query
+        .into_iter()
+        .map(|row| {
+            if author_name.is_none() {
+                author_name = Some(if !row.get::<usize, String>(7).is_empty() {
+                    row.get(7)
+                } else {
+                    row.get(8)
+                });
+            }
 
-        author_name = if !row.get::<usize, String>(7).is_empty() {
-            row.get(7)
-        } else {
-            row.get(8)
-        };
-        packages.push(package);
-    }
+            Release {
+                name: row.get(0),
+                version: row.get(1),
+                description: row.get(2),
+                target_name: row.get(3),
+                release_time: row.get(4),
+                rustdoc_status: row.get(5),
+                stars: row.get(6),
+            }
+        })
+        .collect();
 
-    (author_name, packages)
+    (author_name.unwrap_or_default(), packages)
 }
 
 fn get_search_results(
@@ -277,10 +279,9 @@ fn get_search_results(
         Err(_) => return None,
     };
 
-    let mut packages = Vec::with_capacity(rows.len());
-
-    for row in &rows {
-        let package = Release {
+    let packages = rows
+        .into_iter()
+        .map(|row| Release {
             name: row.get(0),
             version: row.get(1),
             description: row.get(2),
@@ -288,10 +289,8 @@ fn get_search_results(
             release_time: row.get(4),
             rustdoc_status: row.get(5),
             ..Release::default()
-        };
-
-        packages.push(package);
-    }
+        })
+        .collect::<Vec<Release>>();
 
     if !packages.is_empty() {
         // get count of total results
@@ -617,17 +616,20 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         )
         .unwrap();
 
-    let mut crates: Vec<(String, String, i32)> = Vec::with_capacity(query.len());
-    for krate in query.iter() {
-        crates.push((
-            krate.get("name"),
-            krate.get("version"),
-            // The priority here is inverted: in the database if a crate has a higher priority it
-            // will be built after everything else, which is counter-intuitive for people not
-            // familiar with docs.rs's inner workings.
-            -krate.get::<_, i32>("priority"),
-        ));
-    }
+    let crates = query
+        .into_iter()
+        .map(|krate| {
+            (
+                krate.get("name"),
+                krate.get("version"),
+                // The priority here is inverted: in the database if a crate has a higher priority it
+                // will be built after everything else, which is counter-intuitive for people not
+                // familiar with docs.rs's inner workings.
+                -krate.get::<_, i32>("priority"),
+            )
+        })
+        .collect::<Vec<(String, String, i32)>>();
+
     let is_empty = crates.is_empty();
     Page::new(crates)
         .title("Build queue")

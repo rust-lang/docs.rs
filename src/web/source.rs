@@ -36,26 +36,26 @@ impl ToJson for FileList {
 
         m.insert("metadata".to_string(), self.metadata.to_json());
 
-        let mut file_vec: Vec<Json> = Vec::with_capacity(self.files.len());
+        let files = self
+            .files
+            .iter()
+            .map(|file| {
+                let mut file_map: BTreeMap<String, Json> = BTreeMap::new();
+                file_map.insert("name".to_string(), file.name.to_json());
 
-        for file in &self.files {
-            let mut file_m: BTreeMap<String, Json> = BTreeMap::new();
-            file_m.insert("name".to_string(), file.name.to_json());
-
-            file_m.insert(
-                match file.file_type {
+                let file_type = match file.file_type {
                     FileType::Dir => "file_type_dir".to_string(),
                     FileType::Text => "file_type_text".to_string(),
                     FileType::Binary => "file_type_binary".to_string(),
                     FileType::RustSource => "file_type_rust_source".to_string(),
-                },
-                true.to_json(),
-            );
+                };
+                file_map.insert(file_type, true.to_json());
 
-            file_vec.push(file_m.to_json());
-        }
+                file_map.to_json()
+            })
+            .collect::<Vec<Json>>();
 
-        m.insert("files".to_string(), file_vec.to_json());
+        m.insert("files".to_string(), files.to_json());
         m.to_json()
     }
 }

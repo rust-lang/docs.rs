@@ -20,10 +20,14 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         )
         .unwrap();
 
-    let mut releases: Vec<(String, String)> = Vec::with_capacity(query.len());
-    for row in query.iter() {
-        releases.push((row.get(0), format!("{}", time::at(row.get(1)).rfc3339())));
-    }
+    let releases = query.into_iter()
+        .map(|row| {
+            let time = format!("{}", time::at(row.get(1)).rfc3339());
+
+            (row.get(0), time)
+        })
+        .collect::<Vec<(String, String)>>();
+
     let mut resp = ctry!(Page::new(releases).to_resp("sitemap"));
     resp.headers
         .set(ContentType("application/xml".parse().unwrap()));
