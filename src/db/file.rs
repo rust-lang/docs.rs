@@ -164,11 +164,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     use std::collections::HashMap;
 
     let trans = conn.transaction()?;
-    let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::new();
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
 
     let mut to_upload = get_file_list(&path)?;
+    let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::with_capacity(to_upload.len());
     let mut batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
     let mut currently_uploading: Vec<_> = to_upload.drain(..batch_size).collect();
     let mut attempts = 0;
@@ -176,7 +176,6 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     while !to_upload.is_empty() || !currently_uploading.is_empty() {
         let mut futures = Vec::with_capacity(currently_uploading.len());
         let client = s3_client();
-        file_paths_and_mimes.reserve(currently_uploading.len());
 
         for file_path in &currently_uploading {
             let path = Path::new(path.as_ref()).join(&file_path);
@@ -295,17 +294,16 @@ fn detect_mime(file_path: &Path) -> Result<&'static str> {
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
     // Only ever allocate the vector once, and re-use it for each iteration over file_list
-    let mut temp_json = Vec::with_capacity(2);
+    let mut file = Vec::with_capacity(2);
     let file_list = file_list
         .into_iter()
         .map(|(name, path)| {
-            temp_json.push(name);
-            temp_json.push(path.to_str().unwrap().to_owned());
+            file.clear();
 
-            let json = temp_json.to_json();
-            temp_json.clear();
+            file.push(name);
+            file.push(path.to_str().unwrap().to_owned());
 
-            json
+            file.to_json()
         })
         .collect::<Vec<Json>>();
 

@@ -230,7 +230,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
         .map(|dependency| {
             let name = dependency.name.clone();
             let version = dependency.req.clone();
-            let kind = dependency.kind.clone().unwrap_or_else(|| "normal".into());
+            let kind = dependency.kind.clone().unwrap_or_default();
 
             (name, version, kind)
         })
@@ -496,38 +496,38 @@ fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
         .and_then(|j| j.get("users"))
         .and_then(|j| j.as_array());
 
-    let result = if let Some(owners) = owners {
-        owners
-            .iter()
-            .filter_map(|owner| {
-                fn extract<'a>(owner: &'a Json, field: &str) -> &'a str {
-                    owner
-                        .as_object()
-                        .and_then(|o| o.get(field))
-                        .and_then(|o| o.as_string())
-                        .unwrap_or_default()
-                }
+    let result = owners
+        .map(|owners| {
+            owners
+                .iter()
+                .filter_map(|owner| {
+                    fn extract<'a>(owner: &'a Json, field: &str) -> &'a str {
+                        owner
+                            .as_object()
+                            .and_then(|o| o.get(field))
+                            .and_then(|o| o.as_string())
+                            .unwrap_or_default()
+                    }
 
-                let avatar = extract(owner, "avatar");
-                let email = extract(owner, "email");
-                let login = extract(owner, "login");
-                let name = extract(owner, "name");
+                    let avatar = extract(owner, "avatar");
+                    let email = extract(owner, "email");
+                    let login = extract(owner, "login");
+                    let name = extract(owner, "name");
 
-                if login.is_empty() {
-                    return None;
-                }
+                    if login.is_empty() {
+                        return None;
+                    }
 
-                Some(CrateOwner {
-                    avatar: avatar.to_string(),
-                    email: email.to_string(),
-                    login: login.to_string(),
-                    name: name.to_string(),
+                    Some(CrateOwner {
+                        avatar: avatar.to_string(),
+                        email: email.to_string(),
+                        login: login.to_string(),
+                        name: name.to_string(),
+                    })
                 })
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+                .collect()
+        })
+        .unwrap_or_default();
 
     Ok(result)
 }
