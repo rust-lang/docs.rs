@@ -77,8 +77,8 @@ pub(super) struct BuildTargets<'a> {
 
 impl Metadata {
     pub(crate) fn from_source_dir(source_dir: &Path) -> Result<Metadata> {
-        for c in ["Cargo.toml.orig", "Cargo.toml"].iter() {
-            let manifest_path = source_dir.clone().join(c);
+        for &c in &["Cargo.toml.orig", "Cargo.toml"] {
+            let manifest_path = source_dir.join(c);
             if manifest_path.exists() {
                 return Ok(Metadata::from_manifest(manifest_path));
             }
