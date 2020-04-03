@@ -62,10 +62,11 @@ impl DocBuilder {
         use crate::db::connect_db;
         let conn = connect_db()?;
 
-        for row in &conn.query("SELECT name, version FROM crates, releases \
-                               WHERE crates.id = releases.crate_id",
-                   &[])
-            .unwrap() {
+        for row in &conn.query(
+            "SELECT name, version FROM crates, releases \
+             WHERE crates.id = releases.crate_id",
+            &[]
+        )? {
             let name: String = row.get(0);
             let version: String = row.get(1);
             self.db_cache.insert(format!("{}-{}", name, version));
