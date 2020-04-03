@@ -475,7 +475,7 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
-        for row in &conn.query("SELECT crates.name,
+        if let Some(row) = &conn.query("SELECT crates.name,
                                        releases.version,
                                        releases.description,
                                        releases.target_name,
@@ -485,7 +485,7 @@ impl MetaData {
                                 INNER JOIN crates ON crates.id = releases.crate_id
                                 WHERE crates.name = $1 AND releases.version = $2",
                    &[&name, &version])
-            .unwrap() {
+            .unwrap().iter().next() {
 
             return Some(MetaData {
                 name: row.get(0),

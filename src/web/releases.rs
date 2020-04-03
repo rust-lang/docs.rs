@@ -401,7 +401,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
 
     let (author_name, packages) = if author.starts_with("@") {
-        let mut author = author.clone().split("@");
+        let mut author = author.split("@");
         get_releases_by_owner(&conn,
                               page_number,
                               RELEASES_IN_RELEASES,
