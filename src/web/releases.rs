@@ -645,14 +645,14 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let query = conn
         .query(
             "SELECT name, version, priority
-             FROM queue
-             WHERE attempt < 5
-             ORDER BY priority ASC, attempt ASC, id ASC",
+                          FROM queue
+                          WHERE attempt < 5
+                          ORDER BY priority ASC, attempt ASC, id ASC",
             &[],
         )
         .unwrap();
 
-    let crates = query
+    let crates: Vec<(String, String, i32)> = query
         .into_iter()
         .map(|krate| {
             (
@@ -664,7 +664,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
                 -krate.get::<_, i32>("priority"),
             )
         })
-        .collect::<Vec<(String, String, i32)>>();
+        .collect();
 
     let is_empty = crates.is_empty();
     Page::new(crates)

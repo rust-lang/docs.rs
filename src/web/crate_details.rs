@@ -254,7 +254,7 @@ impl CrateDetails {
             .unwrap();
         crate_details.authors.reserve(authors.len());
 
-        for row in authors.iter() {
+        for row in &authors {
             crate_details.authors.push((row.get(0), row.get(1)));
         }
 
@@ -270,7 +270,7 @@ impl CrateDetails {
             .unwrap();
         crate_details.owners.reserve(owners.len());
 
-        for row in owners.iter() {
+        for row in &owners {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
