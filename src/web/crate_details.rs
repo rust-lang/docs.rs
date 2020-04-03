@@ -231,33 +231,33 @@ impl CrateDetails {
         let authors = conn
             .query(
                 "SELECT name, slug
-                                FROM authors
-                                INNER JOIN author_rels ON author_rels.aid = authors.id
-                                WHERE rid = $1",
+                 FROM authors
+                 INNER JOIN author_rels ON author_rels.aid = authors.id
+                 WHERE rid = $1",
                 &[&release_id],
             )
             .unwrap();
-        crate_details.authors.reserve(authors.len());
 
-        for row in &authors {
-            crate_details.authors.push((row.get(0), row.get(1)));
-        }
+        crate_details.authors = authors
+            .into_iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect();
 
         // get owners
         let owners = conn
             .query(
                 "SELECT login, avatar
-             FROM owners
-             INNER JOIN owner_rels ON owner_rels.oid = owners.id
-             WHERE cid = $1",
+                 FROM owners
+                 INNER JOIN owner_rels ON owner_rels.oid = owners.id
+                 WHERE cid = $1",
                 &[&crate_id],
             )
             .unwrap();
-        crate_details.owners.reserve(owners.len());
 
-        for row in &owners {
-            crate_details.owners.push((row.get(0), row.get(1)));
-        }
+        crate_details.owners = owners
+            .into_iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect();
 
         if !crate_details.build_status {
             crate_details.last_successful_build = crate_details
