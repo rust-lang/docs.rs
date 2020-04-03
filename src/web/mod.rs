@@ -226,12 +226,12 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
     use url::percent_encoding::percent_decode;
     let req_version = version.and_then(|v| {
             match percent_decode(v.as_bytes()).decode_utf8() {
-                Ok(p) => Some(p.into_owned()),
+                Ok(p) => Some(p),
                 Err(_) => None,
             }
         })
-        .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
-        .unwrap_or("*".to_string());
+        .map(|v| if v == "newest" || v == "latest" { "*".into() } else { v })
+        .unwrap_or("*".into());
 
     let versions: Vec<(String, i32)> = {
         let query = "SELECT version, releases.id
