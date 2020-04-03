@@ -8,6 +8,7 @@ use cratesfyi::Server;
 use cratesfyi::db::{add_path_into_database, connect_db};
 
 
+#[allow(clippy::cognitive_complexity)]
 pub fn main() {
     logger_init();
 

@@ -113,6 +113,7 @@ impl<T: ToJson> Page<T> {
     }
 
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_resp(self, template: &str) -> IronResult<Response> {
         let mut resp = Response::new();
         let status = self.status;
