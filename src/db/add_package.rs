@@ -262,7 +262,7 @@ fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String
 
 /// Reads rustdoc from library
 fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
-    let reader = fs::File::open(file_path).map(|f| BufReader::new(f))?;
+    let reader = fs::File::open(file_path).map(BufReader::new)?;
     let mut rustdoc = String::new();
 
     for line in reader.lines() {
@@ -356,7 +356,7 @@ fn get_release_time_yanked_downloads(
         }
     }
 
-    Ok((release_time.unwrap_or(time::get_time()), yanked.unwrap_or(false), downloads.unwrap_or(0)))
+    Ok((release_time.unwrap_or_else(time::get_time), yanked.unwrap_or(false), downloads.unwrap_or(0)))
 }
 
 
@@ -366,7 +366,7 @@ fn add_keywords_into_database(conn: &Connection, pkg: &MetadataPackage, release_
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
             let rows = conn.query("SELECT id FROM keywords WHERE slug = $1", &[&slug])?;
-            if rows.len() > 0 {
+            if !rows.is_empty() {
                 rows.get(0).get(0)
             } else {
                 conn.query("INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
@@ -397,7 +397,7 @@ fn add_authors_into_database(conn: &Connection, pkg: &MetadataPackage, release_i
 
             let author_id: i32 = {
                 let rows = conn.query("SELECT id FROM authors WHERE slug = $1", &[&slug])?;
-                if rows.len() > 0 {
+                if !rows.is_empty() {
                     rows.get(0).get(0)
                 } else {
                     conn.query("INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)
@@ -483,7 +483,7 @@ fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: 
     for owner in owners {
         let owner_id: i32 = {
             let rows = conn.query("SELECT id FROM owners WHERE login = $1", &[&owner.login])?;
-            if rows.len() > 0 {
+            if !rows.is_empty() {
                 rows.get(0).get(0)
             } else {
                 conn.query("INSERT INTO owners (login, avatar, name, email)

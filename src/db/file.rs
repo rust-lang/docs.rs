@@ -103,7 +103,7 @@ pub fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
                             FROM files
                             WHERE path = $1", &[&path]).unwrap();
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             None
         } else {
             let row = rows.get(0);
