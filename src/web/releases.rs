@@ -164,21 +164,22 @@ fn get_releases_by_author(
 ) -> (String, Vec<Release>) {
     let offset = (page - 1) * limit;
 
-    let query = "SELECT crates.name,
-                        releases.version,
-                        releases.description,
-                        releases.target_name,
-                        releases.release_time,
-                        releases.rustdoc_status,
-                        crates.github_stars,
-                        authors.name
-                 FROM crates
-                 INNER JOIN releases ON releases.id = crates.latest_version_id
-                 INNER JOIN author_rels ON releases.id = author_rels.rid
-                 INNER JOIN authors ON authors.id = author_rels.aid
-                 WHERE authors.slug = $1
-                 ORDER BY crates.github_stars DESC
-                 LIMIT $2 OFFSET $3";
+    let query = "
+        SELECT crates.name,
+               releases.version,
+               releases.description,
+               releases.target_name,
+               releases.release_time,
+               releases.rustdoc_status,
+               crates.github_stars,
+               authors.name
+        FROM crates
+        INNER JOIN releases ON releases.id = crates.latest_version_id
+        INNER JOIN author_rels ON releases.id = author_rels.rid
+        INNER JOIN authors ON authors.id = author_rels.aid
+        WHERE authors.slug = $1
+        ORDER BY crates.github_stars DESC
+        LIMIT $2 OFFSET $3";
     let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
 
     let mut author_name = None;
@@ -537,13 +538,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             if query.is_empty() {
                 let rows = ctry!(conn.query(
                     "SELECT crates.name,
-                                                    releases.version,
-                                                    releases.target_name
-                                             FROM crates
-                                             INNER JOIN releases
-                                                   ON crates.latest_version_id = releases.id
-                                             WHERE github_stars >= 100 AND rustdoc_status = true
-                                             OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
+                            releases.version,
+                            releases.target_name
+                     FROM crates
+                     INNER JOIN releases
+                         ON crates.latest_version_id = releases.id
+                     WHERE github_stars >= 100 AND rustdoc_status = true
+                     OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
                     &[]
                 ));
                 //                                        ~~~~~~^
@@ -645,9 +646,9 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let query = conn
         .query(
             "SELECT name, version, priority
-                          FROM queue
-                          WHERE attempt < 5
-                          ORDER BY priority ASC, attempt ASC, id ASC",
+             FROM queue
+             WHERE attempt < 5
+             ORDER BY priority ASC, attempt ASC, id ASC",
             &[],
         )
         .unwrap();

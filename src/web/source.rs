@@ -104,8 +104,8 @@ impl FileList {
 
         let files: Value = rows.get(0).get_opt(5).unwrap().ok()?;
 
-        let mut file_list: Vec<File> = if let Some(files) = files.as_array() {
-            let mut file_list = files
+        if let Some(files) = files.as_array() {
+            let mut file_list: Vec<File> = files
                 .iter()
                 .filter_map(|file| {
                     if let Some(file) = file.as_array() {
@@ -139,7 +139,6 @@ impl FileList {
                                 file_type: ftype,
                             };
 
-                            // avoid adding duplicates, a directory may occur more than once
                             return Some(file);
                         }
                     }
@@ -148,38 +147,38 @@ impl FileList {
                 })
                 .collect::<Vec<_>>();
 
-            file_list.dedup();
-            file_list
-        } else {
-            Vec::new()
-        };
-
-        if file_list.is_empty() {
-            return None;
-        }
-
-        file_list.sort_by(|a, b| {
-            // directories must be listed first
-            if a.file_type == FileType::Dir && b.file_type != FileType::Dir {
-                Ordering::Less
-            } else if a.file_type != FileType::Dir && b.file_type == FileType::Dir {
-                Ordering::Greater
-            } else {
-                a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            if file_list.is_empty() {
+                return None;
             }
-        });
 
-        Some(FileList {
-            metadata: MetaData {
-                name: rows.get(0).get(0),
-                version: rows.get(0).get(1),
-                description: rows.get(0).get(2),
-                target_name: rows.get(0).get(3),
-                rustdoc_status: rows.get(0).get(4),
-                default_target: rows.get(0).get(6),
-            },
-            files: file_list,
-        })
+            file_list.sort_by(|a, b| {
+                // directories must be listed first
+                if a.file_type == FileType::Dir && b.file_type != FileType::Dir {
+                    Ordering::Less
+                } else if a.file_type != FileType::Dir && b.file_type == FileType::Dir {
+                    Ordering::Greater
+                } else {
+                    a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                }
+            });
+
+            // avoid adding duplicates, a directory may occur more than once
+            file_list.dedup();
+
+            Some(FileList {
+                metadata: MetaData {
+                    name: rows.get(0).get(0),
+                    version: rows.get(0).get(1),
+                    description: rows.get(0).get(2),
+                    target_name: rows.get(0).get(3),
+                    rustdoc_status: rows.get(0).get(4),
+                    default_target: rows.get(0).get(6),
+                },
+                files: file_list,
+            })
+        } else {
+            None
+        }
     }
 }
 
