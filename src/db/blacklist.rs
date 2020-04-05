@@ -83,11 +83,11 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            assert!(is_blacklisted(&db.conn(), "crate foo")? == false);
+            assert!(!is_blacklisted(&db.conn(), "crate foo")?);
             add_crate(&db.conn(), "crate foo")?;
-            assert!(is_blacklisted(&db.conn(), "crate foo")? == true);
+            assert!(is_blacklisted(&db.conn(), "crate foo")?);
             remove_crate(&db.conn(), "crate foo")?;
-            assert!(is_blacklisted(&db.conn(), "crate foo")? == false);
+            assert!(!is_blacklisted(&db.conn(), "crate foo")?);
             Ok(())
         });
     }

@@ -289,7 +289,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
 
     // we need to sort versions first
     let versions_sem = {
-        let mut versions_sem: Vec<(Version, i32)> = Vec::new();
+        let mut versions_sem: Vec<(Version, i32)> = Vec::with_capacity(versions.len());
 
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version, but check result just in case

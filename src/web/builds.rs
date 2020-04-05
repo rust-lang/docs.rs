@@ -70,11 +70,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
     let limits = ctry!(Limits::for_crate(&conn, name));
 
-    let mut build_list: Vec<Build> = Vec::new();
-    let mut build_details = None;
-
-    // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    for row in &ctry!(conn.query(
+    let query = ctry!(conn.query(
         "SELECT crates.name,
                 releases.version,
                 releases.description,
@@ -92,7 +88,13 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
          WHERE crates.name = $1 AND releases.version = $2
          ORDER BY id DESC",
         &[&name, &version]
-    )) {
+    ));
+
+    let mut build_list: Vec<Build> = Vec::with_capacity(query.len());
+    let mut build_details = None;
+
+    // FIXME: getting builds.output may cause performance issues when release have tons of builds
+    for row in query.iter() {
         let id: i32 = row.get(5);
 
         let build = Build {

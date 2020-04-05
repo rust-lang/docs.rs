@@ -185,13 +185,16 @@ fn initialize_package_in_database(conn: &Connection, pkg: &MetadataPackage) -> R
 
 /// Convert dependencies into Vec<(String, String, String)>
 fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> {
-    let mut dependencies: Vec<(String, String, String)> = Vec::new();
+    let mut dependencies: Vec<(String, String, String)> =
+        Vec::with_capacity(pkg.dependencies.len());
+
     for dependency in &pkg.dependencies {
         let name = dependency.name.clone();
         let version = dependency.req.clone();
         let kind = dependency.kind.clone().unwrap_or_else(|| "normal".into());
         dependencies.push((name, version, kind.to_string()));
     }
+
     dependencies
 }
 

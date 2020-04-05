@@ -157,25 +157,31 @@ impl CrateDetails {
 
         // sort versions with semver
         let releases = {
-            let mut versions: Vec<semver::Version> = Vec::new();
             let versions_from_db: Value = rows.get(0).get(17);
 
-            if let Some(vers) = versions_from_db.as_array() {
-                for version in vers {
-                    if let Some(version) = version.as_str() {
-                        if let Ok(sem_ver) = semver::Version::parse(&version) {
-                            versions.push(sem_ver);
+            if let Some(versions_from_db) = versions_from_db.as_array() {
+                let mut versions: Vec<semver::Version> = versions_from_db
+                    .iter()
+                    .filter_map(|version| {
+                        if let Some(version) = version.as_str() {
+                            if let Ok(sem_ver) = semver::Version::parse(&version) {
+                                return Some(sem_ver);
+                            }
                         }
-                    }
-                }
-            }
 
-            versions.sort();
-            versions.reverse();
-            versions
-                .iter()
-                .map(|version| map_to_release(&conn, crate_id, version.to_string()))
-                .collect()
+                        None
+                    })
+                    .collect();
+
+                versions.sort();
+                versions.reverse();
+                versions
+                    .iter()
+                    .map(|version| map_to_release(&conn, crate_id, version.to_string()))
+                    .collect()
+            } else {
+                Vec::new()
+            }
         };
 
         let metadata = MetaData {
@@ -237,7 +243,7 @@ impl CrateDetails {
         }
 
         // get authors
-        for row in &conn
+        let authors = conn
             .query(
                 "SELECT name, slug
                                 FROM authors
@@ -245,22 +251,26 @@ impl CrateDetails {
                                 WHERE rid = $1",
                 &[&release_id],
             )
-            .unwrap()
-        {
+            .unwrap();
+        crate_details.authors.reserve(authors.len());
+
+        for row in authors.iter() {
             crate_details.authors.push((row.get(0), row.get(1)));
         }
 
         // get owners
-        for row in &conn
+        let owners = conn
             .query(
                 "SELECT login, avatar
-                                FROM owners
-                                INNER JOIN owner_rels ON owner_rels.oid = owners.id
-                                WHERE cid = $1",
+             FROM owners
+             INNER JOIN owner_rels ON owner_rels.oid = owners.id
+             WHERE cid = $1",
                 &[&crate_id],
             )
-            .unwrap()
-        {
+            .unwrap();
+        crate_details.owners.reserve(owners.len());
+
+        for row in owners.iter() {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
@@ -394,7 +404,7 @@ mod tests {
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
         let details = CrateDetails::new(&db.conn(), package, version)
-            .ok_or(failure::err_msg("could not fetch crate details"))?;
+            .ok_or_else(|| failure::err_msg("could not fetch crate details"))?;
 
         assert_eq!(
             details.last_successful_build,

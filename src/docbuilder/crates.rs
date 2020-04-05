@@ -12,7 +12,7 @@ where
     let reader = fs::File::open(path).map(BufReader::new)?;
 
     let mut name = String::new();
-    let mut versions = Vec::new();
+    let mut versions = Vec::new(); // TODO: Find a way to pre-allocate the versions vector
 
     for line in reader.lines() {
         // some crates have invalid UTF-8 (nanny-sys-0.0.7)

@@ -234,8 +234,8 @@ mod test {
         let metadata = Metadata::from_str(manifest);
 
         assert!(metadata.features.is_some());
-        assert!(metadata.all_features == true);
-        assert!(metadata.no_default_features == true);
+        assert!(metadata.all_features);
+        assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
         assert!(metadata.rustdoc_args.is_some());
 

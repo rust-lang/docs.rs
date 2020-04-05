@@ -185,7 +185,7 @@ mod test {
         assert!(fields.is_ok());
 
         let fields = fields.unwrap();
-        assert!(fields.description != "".to_string());
+        assert!(fields.description != "");
         assert!(fields.stars >= 0);
         assert!(fields.forks >= 0);
         assert!(fields.issues >= 0);

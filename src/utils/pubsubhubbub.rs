@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use reqwest::*;
 
 fn ping_hub(url: &str) -> Result<Response> {
-    let mut params = HashMap::new();
+    let mut params = HashMap::with_capacity(2);
     params.insert("hub.mode", "publish");
     params.insert("hub.url", "https://docs.rs/releases/feed");
     let client = Client::new();
