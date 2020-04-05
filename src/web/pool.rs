@@ -31,7 +31,7 @@ impl typemap::Key for Pool {
 impl BeforeMiddleware for Pool {
     fn before(&self, req: &mut Request) -> IronResult<()> {
         req.extensions.insert::<Pool>(match self {
-            Self::R2D2(pool) => PoolConnection::R2D2(pool.get().unwrap()),
+            Self::R2D2(pool) => PoolConnection::R2D2(Box::new(pool.get().unwrap())),
             #[cfg(test)]
             Self::Simple(mutex) => PoolConnection::Simple(mutex.clone()),
         });
@@ -40,7 +40,7 @@ impl BeforeMiddleware for Pool {
 }
 
 pub(crate) enum PoolConnection {
-    R2D2(r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>),
+    R2D2(Box<r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>>),
     #[cfg(test)]
     Simple(Arc<Mutex<Connection>>),
 }

@@ -443,21 +443,26 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         let dom = kuchiki::parse_html().one(data);
-        for elems in dom.select("form ul li a.warn") {
-            for elem in elems {
-                let warning = elem.as_node().as_element().unwrap();
+
+        if let Ok(mut elements) = dom.select("form ul li a.warn") {
+            if let Some(element) = elements.next() {
+                let warning = element.as_node().as_element().unwrap();
                 let link = warning.attributes.borrow().get("href").unwrap().to_string();
                 assert_success(&link, web)?;
+
                 return Ok(link);
             }
         }
+
         panic!("no redirect found for {}", path);
     }
+
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
     fn settings_html() {
@@ -492,6 +497,7 @@ mod test {
             Ok(())
         });
     }
+
     #[test]
     fn default_target_redirects_to_base() {
         wrapper(|env| {
@@ -543,6 +549,7 @@ mod test {
             Ok(())
         });
     }
+
     #[test]
     fn go_to_latest_version() {
         wrapper(|env| {
@@ -624,6 +631,7 @@ mod test {
             Ok(())
         })
     }
+
     #[test]
     fn redirect_latest_goes_to_crate_if_build_failed() {
         wrapper(|env| {

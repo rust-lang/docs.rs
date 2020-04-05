@@ -174,8 +174,9 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     let mut attempts = 0;
 
     while !to_upload.is_empty() || !currently_uploading.is_empty() {
-        let mut futures = Vec::new();
+        let mut futures = Vec::with_capacity(currently_uploading.len());
         let client = s3_client();
+        file_paths_and_mimes.reserve(currently_uploading.len());
 
         for file_path in &currently_uploading {
             let path = Path::new(path.as_ref()).join(&file_path);
@@ -293,10 +294,10 @@ fn detect_mime(file_path: &Path) -> Result<&'static str> {
 }
 
 fn file_list_to_json(file_list: Vec<(String, PathBuf)>) -> Result<Json> {
-    let mut file_list_json: Vec<Json> = Vec::new();
+    let mut file_list_json: Vec<Json> = Vec::with_capacity(file_list.len());
 
     for file in file_list {
-        let mut v: Vec<String> = Vec::new();
+        let mut v: Vec<String> = Vec::with_capacity(2);
         v.push(file.0.clone());
         v.push(file.1.into_os_string().into_string().unwrap());
         file_list_json.push(v.to_json());
@@ -319,7 +320,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
     let count = rows.len();
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
-    let mut futures = Vec::new();
+    let mut futures = Vec::with_capacity(rows.len());
     for row in &rows {
         let path: String = row.get(0);
         let mime: String = row.get(1);
@@ -368,7 +369,7 @@ mod test {
 
         let files = get_file_list(env::current_dir().unwrap());
         assert!(files.is_ok());
-        assert!(files.unwrap().len() > 0);
+        assert!(!files.unwrap().is_empty());
 
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));

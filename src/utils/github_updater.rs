@@ -21,15 +21,15 @@ pub fn github_updater() -> Result<()> {
     //       always the same across all versions of a crate
     for row in &conn.query(
         "SELECT DISTINCT ON (crates.name)
-                                        crates.name,
-                                        crates.id,
-                                        releases.repository_url
-                                 FROM crates
-                                 INNER JOIN releases ON releases.crate_id = crates.id
-                                 WHERE releases.repository_url ~ '^https*://github.com' AND
-                                       (crates.github_last_update < NOW() - INTERVAL '1 day' OR
-                                        crates.github_last_update IS NULL)
-                                 ORDER BY crates.name, releases.release_time DESC",
+                crates.name,
+                crates.id,
+                releases.repository_url
+         FROM crates
+         INNER JOIN releases ON releases.crate_id = crates.id
+         WHERE releases.repository_url ~ '^https*://github.com' AND
+               (crates.github_last_update < NOW() - INTERVAL '1 day' OR
+                crates.github_last_update IS NULL)
+         ORDER BY crates.name, releases.release_time DESC",
         &[],
     )? {
         let crate_name: String = row.get(0);
@@ -186,7 +186,7 @@ mod test {
         assert!(fields.is_ok());
 
         let fields = fields.unwrap();
-        assert!(fields.description != "".to_string());
+        assert!(fields.description != "");
         assert!(fields.stars >= 0);
         assert!(fields.forks >= 0);
         assert!(fields.issues >= 0);

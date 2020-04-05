@@ -132,9 +132,10 @@ fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<R
              LIMIT $1 OFFSET $2"
         }
     };
+    let query = conn.query(&query, &[&limit, &offset]).unwrap();
 
-    let mut packages = Vec::new();
-    for row in &conn.query(&query, &[&limit, &offset]).unwrap() {
+    let mut packages = Vec::with_capacity(query.len());
+    for row in query.iter() {
         let package = Release {
             name: row.get(0),
             version: row.get(1),
@@ -174,10 +175,11 @@ fn get_releases_by_author(
                  WHERE authors.slug = $1
                  ORDER BY crates.github_stars DESC
                  LIMIT $2 OFFSET $3";
+    let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
 
     let mut author_name = String::new();
-    let mut packages = Vec::new();
-    for row in &conn.query(&query, &[&author, &limit, &offset]).unwrap() {
+    let mut packages = Vec::with_capacity(query.len());
+    for row in query.iter() {
         let package = Release {
             name: row.get(0),
             version: row.get(1),
@@ -219,10 +221,11 @@ fn get_releases_by_owner(
                  WHERE owners.login = $1
                  ORDER BY crates.github_stars DESC
                  LIMIT $2 OFFSET $3";
+    let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
 
     let mut author_name = String::new();
-    let mut packages = Vec::new();
-    for row in &conn.query(&query, &[&author, &limit, &offset]).unwrap() {
+    let mut packages = Vec::with_capacity(query.len());
+    for row in query.iter() {
         let package = Release {
             name: row.get(0),
             version: row.get(1),
@@ -251,7 +254,6 @@ fn get_search_results(
     limit: i64,
 ) -> Option<(i64, Vec<Release>)> {
     let offset = (page - 1) * limit;
-    let mut packages = Vec::new();
 
     let rows = match conn.query(
         "SELECT crates.name,
@@ -274,6 +276,8 @@ fn get_search_results(
         Ok(r) => r,
         Err(_) => return None,
     };
+
+    let mut packages = Vec::with_capacity(rows.len());
 
     for row in &rows {
         let package = Release {
@@ -602,17 +606,19 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get();
-    let mut crates: Vec<(String, String, i32)> = Vec::new();
-    for krate in &conn
+
+    let query = conn
         .query(
             "SELECT name, version, priority
-                              FROM queue
-                              WHERE attempt < 5
-                              ORDER BY priority ASC, attempt ASC, id ASC",
+             FROM queue
+             WHERE attempt < 5
+             ORDER BY priority ASC, attempt ASC, id ASC",
             &[],
         )
-        .unwrap()
-    {
+        .unwrap();
+
+    let mut crates: Vec<(String, String, i32)> = Vec::with_capacity(query.len());
+    for krate in query.iter() {
         crates.push((
             krate.get("name"),
             krate.get("version"),

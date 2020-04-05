@@ -8,19 +8,20 @@ use time;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get();
-    let mut releases: Vec<(String, String)> = Vec::new();
-    for row in &conn
+    let query = conn
         .query(
             "SELECT DISTINCT ON (crates.name)
-                                   crates.name,
-                                   releases.release_time
-                            FROM crates
-                            INNER JOIN releases ON releases.crate_id = crates.id
-                            WHERE rustdoc_status = true",
+                    crates.name,
+                    releases.release_time
+             FROM crates
+             INNER JOIN releases ON releases.crate_id = crates.id
+             WHERE rustdoc_status = true",
             &[],
         )
-        .unwrap()
-    {
+        .unwrap();
+
+    let mut releases: Vec<(String, String)> = Vec::with_capacity(query.len());
+    for row in query.iter() {
         releases.push((row.get(0), format!("{}", time::at(row.get(1)).rfc3339())));
     }
     let mut resp = ctry!(Page::new(releases).to_resp("sitemap"));
