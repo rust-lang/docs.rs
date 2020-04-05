@@ -20,7 +20,8 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         )
         .unwrap();
 
-    let releases = query.into_iter()
+    let releases = query
+        .into_iter()
         .map(|row| {
             let time = format!("{}", time::at(row.get(1)).rfc3339());
 

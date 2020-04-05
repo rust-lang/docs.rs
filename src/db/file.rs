@@ -168,7 +168,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
 
     let mut to_upload = get_file_list(&path)?;
-    let mut file_paths_and_mimes: HashMap<PathBuf, String> = HashMap::with_capacity(to_upload.len());
+    let mut file_paths_and_mimes: HashMap<PathBuf, String> =
+        HashMap::with_capacity(to_upload.len());
     let mut batch_size = cmp::min(to_upload.len(), MAX_CONCURRENT_UPLOADS);
     let mut currently_uploading: Vec<_> = to_upload.drain(..batch_size).collect();
     let mut attempts = 0;

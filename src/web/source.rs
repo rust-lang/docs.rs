@@ -34,7 +34,7 @@ impl ToJson for FileList {
     fn to_json(&self) -> Json {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("metadata".to_string(), self.metadata.to_json());
-        
+
         let mut file_map: BTreeMap<String, Json> = BTreeMap::new();
 
         let files = self
@@ -42,7 +42,7 @@ impl ToJson for FileList {
             .iter()
             .map(|file| {
                 file_map.clear();
-                
+
                 file_map.insert("name".to_string(), file.name.to_json());
 
                 let file_type = match file.file_type {
