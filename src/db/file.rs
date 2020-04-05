@@ -37,17 +37,15 @@ pub fn add_path_into_database<P: AsRef<Path>>(
 }
 
 fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Value> {
-    let mut file_list_json: Vec<Value> = Vec::new();
+    let file_list: Vec<_> = file_list
+        .into_iter()
+        .map(|(path, name)| {
+            Value::Array(vec![
+                Value::String(name),
+                Value::String(path.into_os_string().into_string().unwrap()),
+            ])
+        })
+        .collect();
 
-    for file in file_list {
-        let mut v = Vec::with_capacity(2);
-        v.push(Value::String(file.1));
-        v.push(Value::String(
-            file.0.into_os_string().into_string().unwrap(),
-        ));
-
-        file_list_json.push(Value::Array(v));
-    }
-
-    Ok(Value::Array(file_list_json))
+    Ok(Value::Array(file_list))
 }

@@ -579,6 +579,7 @@ mod test {
         let data = web.get(path).send()?.text()?;
         println!("{}", data);
         let dom = kuchiki::parse_html().one(data);
+
         if let Some(elem) = dom
             .select("form > ul > li > a.warn")
             .expect("invalid selector")

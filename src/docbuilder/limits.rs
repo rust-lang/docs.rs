@@ -119,6 +119,7 @@ fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
 mod test {
     use super::*;
     use crate::test::*;
+
     #[test]
     fn retrieve_limits() {
         wrapper(|env| {
@@ -151,40 +152,41 @@ mod test {
                 targets: 1,
                 ..Limits::default()
             };
-            db.conn().query("INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)
-                                    VALUES ($1, $2, $3, $4)",
-                                    &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)])?;
+            db.conn().query(
+                "INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)
+                 VALUES ($1, $2, $3, $4)",
+                &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)]
+            )?;
             assert_eq!(limits, Limits::for_crate(&db.conn(), krate)?);
             Ok(())
         });
     }
+
     #[test]
     fn display_limits() {
         let limits = Limits {
-            memory: 102400,
+            memory: 102_400,
             timeout: Duration::from_secs(300),
             targets: 1,
             ..Limits::default()
         };
         let display = limits.for_website();
+        assert_eq!(display.get("Network access"), Some(&"blocked".into()));
         assert_eq!(
-            display.get("Network access".into()),
-            Some(&"blocked".into())
-        );
-        assert_eq!(
-            display.get("Maximum size of a build log".into()),
+            display.get("Maximum size of a build log"),
             Some(&"100 KB".into())
         );
         assert_eq!(
-            display.get("Maximum number of build targets".into()),
+            display.get("Maximum number of build targets"),
             Some(&limits.targets.to_string())
         );
         assert_eq!(
-            display.get("Maximum rustdoc execution time".into()),
+            display.get("Maximum rustdoc execution time"),
             Some(&"5 minutes".into())
         );
-        assert_eq!(display.get("Available RAM".into()), Some(&"100 KB".into()));
+        assert_eq!(display.get("Available RAM"), Some(&"100 KB".into()));
     }
+
     #[test]
     fn scale_limits() {
         // time
@@ -197,18 +199,18 @@ mod test {
         assert_eq!(SIZE_SCALE(100), "100 bytes");
         assert_eq!(SIZE_SCALE(1024), "1 KB");
         assert_eq!(SIZE_SCALE(10240), "10 KB");
-        assert_eq!(SIZE_SCALE(1048576), "1 MB");
-        assert_eq!(SIZE_SCALE(10485760), "10 MB");
-        assert_eq!(SIZE_SCALE(1073741824), "1 GB");
-        assert_eq!(SIZE_SCALE(10737418240), "10 GB");
+        assert_eq!(SIZE_SCALE(1_048_576), "1 MB");
+        assert_eq!(SIZE_SCALE(10_485_760), "10 MB");
+        assert_eq!(SIZE_SCALE(1_073_741_824), "1 GB");
+        assert_eq!(SIZE_SCALE(10_737_418_240), "10 GB");
         assert_eq!(SIZE_SCALE(std::u32::MAX as usize), "4 GB");
 
         // fractional sizes
         assert_eq!(TIME_SCALE(90), "1.5 minutes");
         assert_eq!(TIME_SCALE(5400), "1.5 hours");
 
-        assert_eq!(SIZE_SCALE(1288490189), "1.2 GB");
-        assert_eq!(SIZE_SCALE(3758096384), "3.5 GB");
-        assert_eq!(SIZE_SCALE(1048051712), "999.5 MB");
+        assert_eq!(SIZE_SCALE(1_288_490_189), "1.2 GB");
+        assert_eq!(SIZE_SCALE(3_758_096_384), "3.5 GB");
+        assert_eq!(SIZE_SCALE(1_048_051_712), "999.5 MB");
     }
 }
