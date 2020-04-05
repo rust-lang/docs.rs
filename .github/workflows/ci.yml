@@ -42,9 +42,9 @@ jobs:
         uses: actions/cache@v1
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-key: |
-            ${{ runner.os }}-cargo-build-target-${{ CURRENT_RUSTC_VERSION }}-
+            ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
       - name: Install PostgreSQL
         run: |
