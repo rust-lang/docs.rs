@@ -16,6 +16,12 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Install stable Rust
+        run: rustup update stable && rustup default stable
+
+      - name: Set rustc version
+        run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
+
       # Caching
       - name: Cache Cargo Registry
         uses: actions/cache@v1
@@ -36,12 +42,9 @@ jobs:
         uses: actions/cache@v1
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-target-${{ CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-key: |
-            ${{ runner.os }}-cargo-build-target-${{ steps.rustc.outputs.version }}-
-
-      - name: Install stable Rust
-        run: rustup update stable && rustup default stable
+            ${{ runner.os }}-cargo-build-target-${{ CURRENT_RUSTC_VERSION }}-
 
       - name: Install PostgreSQL
         run: |
