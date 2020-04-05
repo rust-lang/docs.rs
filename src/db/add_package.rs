@@ -225,27 +225,19 @@ fn initialize_package_in_database(conn: &Connection, pkg: &MetadataPackage) -> R
 
 /// Convert dependencies into Vec<(String, String, String)>
 fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> {
-<<<<<<< HEAD
     pkg.dependencies
         .iter()
         .map(|dependency| {
             let name = dependency.name.clone();
             let version = dependency.req.clone();
-            let kind = dependency.kind.clone().unwrap_or_default();
+            let kind = dependency
+                .kind
+                .clone()
+                .unwrap_or_else(|| "normal".to_string());
 
             (name, version, kind)
         })
         .collect()
-=======
-    pkg.dependencies.iter().map(|dependency| {
-        let name = dependency.name.clone();
-        let version = dependency.req.clone();
-        let kind = dependency.kind.clone().unwrap_or_else(|| "normal".to_string());
-
-        (name, version, kind)
-    })
-    .collect()
->>>>>>> Added back 'normal'
 }
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
