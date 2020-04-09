@@ -238,7 +238,7 @@ impl RustwideBuilder {
                     })?;
                 }
 
-                add_path_into_database(&conn, "", &dest)?;
+                add_path_into_database(&conn, HOST_TARGET, &dest)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
