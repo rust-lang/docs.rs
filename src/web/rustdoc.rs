@@ -388,16 +388,13 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
         MatchVersion::Semver((version, _)) => {
-            let url = ctry!(Url::parse(
-                &format!(
-                    "{}/{}/badge.svg?version={}",
-                    redirect_base(req),
-                    name,
-                    version
-                )[..]
+            let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
+            let url = ctry!(url::Url::parse_with_params(
+                &base_url,
+                &[("version", version)]
             ));
-
-            return Ok(super::redirect(url));
+            let iron_url = ctry!(Url::from_generic_url(url));
+            return Ok(super::redirect(iron_url));
         }
         MatchVersion::None => BadgeOptions {
             subject: "docs".to_owned(),
@@ -648,6 +645,24 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(redirect, "/crate/dummy/0.2.0");
 
+            Ok(())
+        })
+    }
+    #[test]
+    fn badges_are_urlencoded() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("zstd")
+                .version("0.5.1+zstd.1.4.4")
+                .create()?;
+
+            let frontend = env.frontend();
+            assert_redirect(
+                "/zstd/badge.svg",
+                "/zstd/badge.svg?version=0.5.1%2Bzstd.1.4.4",
+                &frontend,
+            )?;
             Ok(())
         })
     }
