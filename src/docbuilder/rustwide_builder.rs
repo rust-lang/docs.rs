@@ -325,8 +325,8 @@ impl RustwideBuilder {
         // Builds are somewhat of a hack because we don't control where cargo outputs the documentation.
         //
         // Cargo's logic is simple:
-        // - if building for the host target, output to `target/doc`
-        // - otherwise, we're cross compiling to `$target`, output to `target/$target/doc`.
+        // - if passed the `--target` flag, output to `target/$target/doc`.
+        // - otherwise, output to `target/doc`
         //
         // Our logic _seems_ simple:
         // - if building the default target, output to `target/doc`
@@ -489,6 +489,8 @@ impl RustwideBuilder {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
         let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
+        // Note that we don't pass `--target` for the HOST_TARGET
+        // because it breaks proc-macros (https://github.com/rust-lang/cargo/issues/7677)
         if target != HOST_TARGET {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
