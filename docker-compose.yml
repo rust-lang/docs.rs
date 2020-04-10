@@ -26,6 +26,8 @@ services:
         environment:
             POSTGRES_USER: cratesfyi
             POSTGRES_PASSWORD: password
+        ports:
+            - "5432:5432"
     s3:
         image: minio/minio
         entrypoint: >

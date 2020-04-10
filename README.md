@@ -99,11 +99,11 @@ information on how to setup this environment.
 The services started by Docker-Compose are defined in [docker-compose.yml].
 Three services are defined:
 
-| name | access                | credentials                | description                            |
-|------|-----------------------|----------------------------|----------------------------------------|
-| web  | http://localhost:3000 | N/A                        | A container running the docs.rs binary |
-| db   | /                     | N/A                        | Postgres database used by web          |
-| s3   | http://localhost:9000 | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
+| name | access                                          | credentials                | description                            |
+|------|-------------------------------------------------|----------------------------|----------------------------------------|
+| web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
+| db   | postgresql://cratesfyi:password@localhost:5432/ | -                          | Postgres database used by web          |
+| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
 
 [docker-compose.yml]: ./docker-compose.yml
 
