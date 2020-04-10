@@ -207,7 +207,7 @@ impl RustwideBuilder {
             .run(|build| {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
-                let res = self.execute_build(HOST_TARGET, build, &limits, &metadata)?;
+                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
                     failure::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -322,23 +322,6 @@ impl RustwideBuilder {
 
         let local_storage = ::tempdir::TempDir::new("docsrs-docs")?;
 
-        // Builds are somewhat of a hack because we don't control where cargo outputs the documentation.
-        //
-        // Cargo's logic is simple:
-        // - if building for the host target, output to `target/doc`
-        // - otherwise, we're cross compiling to `$target`, output to `target/$target/doc`.
-        //
-        // Our logic _seems_ simple:
-        // - if building the default target, output to `target/doc`
-        // - otherwise, output to `target/$target/doc`.
-        //
-        // But wait! What happens if the default target and the host are different?
-        // Then `target/doc` will get overwritten by the host no matter what was there before.
-        // Similarly, the default target could get written to `target/$target/doc` instead of `target/doc` where we want it.
-        //
-        // The solution is to move _every_ target to a subdirectory,
-        // then only move the default to `target/doc` at the very end.
-        // Note that this 'move to target/doc' is implicit and happens in `copy_docs`, not in `build_package`.
         let res = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
@@ -354,7 +337,7 @@ impl RustwideBuilder {
                 } = metadata.targets();
 
                 // Do an initial build and then copy the sources in the database
-                let res = self.execute_build(default_target, &build, &limits, &metadata)?;
+                let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
                 if res.result.successful {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
@@ -366,22 +349,13 @@ impl RustwideBuilder {
 
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
-                        has_docs = host_target
-                            .join(default_target)
-                            .join("doc")
-                            .join(name)
-                            .is_dir();
+                        has_docs = host_target.join("doc").join(name).is_dir();
                     }
                 }
 
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
-                        local_storage.path(),
-                        default_target,
-                        true,
-                    )?;
+                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
                     successful_targets.push(res.target.clone());
 
@@ -442,7 +416,7 @@ impl RustwideBuilder {
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
     ) -> Result<()> {
-        let target_res = self.execute_build(target, build, limits, metadata)?;
+        let target_res = self.execute_build(target, false, build, limits, metadata)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -459,6 +433,7 @@ impl RustwideBuilder {
     fn execute_build(
         &self,
         target: &str,
+        is_default_target: bool,
         build: &Build,
         limits: &Limits,
         metadata: &Metadata,
@@ -539,20 +514,16 @@ impl RustwideBuilder {
                 .run()
                 .is_ok()
         });
-        // If we're passed the host target, cargo will put the output in `target/doc`.
-        // However, we don't want it there, we want it in `target/$HOST_TARGET/doc`.
-        // See comments to `build_package` for an explanation of why.
-        if target == HOST_TARGET {
-            // mv target/doc target/$target/doc
+        // If we're passed a default_target which requires a cross-compile,
+        // cargo will put the output in `target/<target>/doc`.
+        // However, if this is the default build, we don't want it there,
+        // we want it in `target/doc`.
+        if target != HOST_TARGET && is_default_target {
+            // mv target/$target/doc target/doc
             let target_dir = build.host_target_dir();
-            // target/doc
-            let old_dir = target_dir.join("doc");
-            // target/$target
-            let parent_dir = target_dir.join(target);
-            // target/$target/doc
-            let new_dir = parent_dir.join("doc");
+            let old_dir = target_dir.join(target).join("doc");
+            let new_dir = target_dir.join("doc");
             debug!("rename {} to {}", old_dir.display(), new_dir.display());
-            std::fs::create_dir(parent_dir)?;
             std::fs::rename(old_dir, new_dir)?;
         }
 
