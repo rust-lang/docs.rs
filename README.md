@@ -86,13 +86,16 @@ cargo test
 ```
 
 Some tests require access to the database. To run them, set the
-`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. You don't have to
-run the migrations on it or ensure it's empty, as all the tests use temporary
-tables to prevent conflicts with each other or existing data. See the [wiki
-page on developing outside docker-compose][wiki-no-compose] for more
-information on how to setup this environment.
+`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. If you are using
+the `docker-compose` environment to run tests against, see the
+[Docker-Compose][docker-compose-section] section for the default PostgreSQL URL.
+You don't have to run the migrations on it or ensure it's empty, as all the
+tests use temporary tables to prevent conflicts with each other or existing
+data. See the [wiki page on developing outside docker-compose][wiki-no-compose]
+for more information on how to setup this environment.
 
 [wiki-no-compose]: https://github.com/rust-lang/docs.rs/wiki/Developing-without-docker-compose
+[docker-compose-section]: #Docker-Compose
 
 ### Docker-Compose
 
