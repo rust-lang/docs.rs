@@ -86,7 +86,7 @@ impl Storage<'_> {
 
     // Store all files in `root_dir` into the backend under `prefix`.
     //
-    // If the environmenet is configured with S3 credentials, this will upload to S3;
+    // If the environment is configured with S3 credentials, this will upload to S3;
     // otherwise, this will store files in the database.
     //
     // This returns a HashMap<filename, mime type>.
