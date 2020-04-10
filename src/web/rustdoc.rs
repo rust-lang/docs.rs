@@ -87,6 +87,8 @@ impl iron::Handler for RustLangRedirector {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
+    use url::percent_encoding::percent_decode;
+
     fn redirect_to_doc(
         req: &Request,
         name: &str,
@@ -157,6 +159,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
+    let crate_name = percent_decode(crate_name.as_bytes())
+        .decode_utf8()
+        .unwrap_or_else(|_| crate_name.into());
     let req_version = router.find("version");
 
     let conn = extension!(req, Pool).get();
@@ -665,5 +670,22 @@ mod test {
             )?;
             Ok(())
         })
+    }
+    #[test]
+    fn crate_name_percent_decoded_redirect() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("fake-crate")
+                .version("0.0.1")
+                .rustdoc_file("fake_crate/index.html", b"some content")
+                .create()
+                .unwrap();
+
+            let web = env.frontend();
+            assert_redirect("/fake%2Dcrate", "/fake-crate/0.0.1/fake_crate/", web)?;
+
+            Ok(())
+        });
     }
 }
