@@ -14,10 +14,7 @@ pub(crate) struct S3Backend<'a> {
 
 impl<'a> S3Backend<'a> {
     pub(crate) fn new(client: &'a S3Client, bucket: &'a str) -> Self {
-        Self {
-            client,
-            bucket,
-        }
+        Self { client, bucket }
     }
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
@@ -55,15 +52,19 @@ impl<'a> S3Backend<'a> {
         loop {
             let mut futures = Vec::new();
             for blob in batch {
-                futures.push(self.client.put_object(PutObjectRequest {
-                    bucket: self.bucket.to_string(),
-                    key: blob.path.clone(),
-                    body: Some(blob.content.clone().into()),
-                    content_type: Some(blob.mime.clone()),
-                    ..Default::default()
-                }).inspect(|_| {
-                    crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
-                }));
+                futures.push(
+                    self.client
+                        .put_object(PutObjectRequest {
+                            bucket: self.bucket.to_string(),
+                            key: blob.path.clone(),
+                            body: Some(blob.content.clone().into()),
+                            content_type: Some(blob.mime.clone()),
+                            ..Default::default()
+                        })
+                        .inspect(|_| {
+                            crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
+                        }),
+                );
             }
             attempts += 1;
 
@@ -94,8 +95,8 @@ fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::TestEnvironment;
     use super::*;
+    use crate::test::TestEnvironment;
 
     fn assert_s3_404(env: &TestEnvironment, path: &'static str) {
         use rusoto_core::RusotoError;
@@ -104,7 +105,10 @@ mod tests {
         let s3 = env.s3().not_found(path);
         let backend = S3Backend::new(&s3.client, s3.bucket);
         let err = backend.get(path).unwrap_err();
-        let status = match err.downcast_ref::<RusotoError<GetObjectError>>().expect("wanted GetObject") {
+        let status = match err
+            .downcast_ref::<RusotoError<GetObjectError>>()
+            .expect("wanted GetObject")
+        {
             RusotoError::Unknown(http) => http.status,
             _ => panic!("wrong error"),
         };

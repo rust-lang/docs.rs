@@ -120,7 +120,9 @@ impl TestEnvironment {
     }
 
     pub(crate) fn s3(&self) -> &TestS3 {
-        self.s3.get_or_init(|| TestS3 { bucket: "<test-bucket>" })
+        self.s3.get_or_init(|| TestS3 {
+            bucket: "<test-bucket>",
+        })
     }
 }
 
@@ -194,7 +196,9 @@ impl TestFrontend {
     }
 }
 
-pub(crate) struct TestS3 { bucket: &'static str }
+pub(crate) struct TestS3 {
+    bucket: &'static str,
+}
 
 impl TestS3 {
     pub(crate) fn upload(&self, blob: Blob) -> fakes::FakeUpload {
