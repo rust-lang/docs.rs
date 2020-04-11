@@ -5,56 +5,16 @@
 //! filesystem. This module is adding files into database and retrieving them.
 
 use crate::error::Result;
-use log::warn;
+use crate::storage::Storage;
 use postgres::Connection;
-use rusoto_core::region::Region;
-use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{PutObjectRequest, S3Client, S3};
+
 use rustc_serialize::json::{Json, ToJson};
 use std::path::{Path, PathBuf};
 
 pub(crate) use crate::storage::Blob;
 
-pub(super) static S3_BUCKET_NAME: &str = "rust-docs-rs";
-
 pub(crate) fn get_path(conn: &Connection, path: &str) -> Option<Blob> {
-    use crate::storage::{DatabaseBackend, S3Backend, Storage};
-    let client;
-    let backend = if let Some(c) = s3_client() {
-        client = c;
-        Storage::from(S3Backend::new(&client, S3_BUCKET_NAME))
-    } else {
-        DatabaseBackend::new(conn).into()
-    };
-    backend.get(path).ok()
-}
-
-pub(super) fn s3_client() -> Option<S3Client> {
-    // If AWS keys aren't configured, then presume we should use the DB exclusively
-    // for file storage.
-    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
-        return None;
-    }
-
-    let creds = match DefaultCredentialsProvider::new() {
-        Ok(creds) => creds,
-        Err(err) => {
-            warn!("failed to retrieve AWS credentials: {}", err);
-            return None;
-        }
-    };
-
-    Some(S3Client::new_with(
-        rusoto_core::request::HttpClient::new().unwrap(),
-        creds,
-        std::env::var("S3_ENDPOINT")
-            .ok()
-            .map(|e| Region::Custom {
-                name: std::env::var("S3_REGION").unwrap_or_else(|_| "us-west-1".to_owned()),
-                endpoint: e,
-            })
-            .unwrap_or(Region::UsWest1),
-    ))
+    Storage::new(conn).get(path).ok()
 }
 
 /// Store all files in a directory and return [[mimetype, filename]] as Json
@@ -71,14 +31,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     prefix: &str,
     path: P,
 ) -> Result<Json> {
-    use crate::storage::{DatabaseBackend, S3Backend, Storage};
-    let client;
-    let backend = if let Some(c) = s3_client() {
-        client = c;
-        Storage::from(S3Backend::new(&client, S3_BUCKET_NAME))
-    } else {
-        DatabaseBackend::new(conn).into()
-    };
+    let backend = Storage::new(conn);
     let file_list = backend.store_all(conn, prefix, path.as_ref())?;
     file_list_to_json(file_list.into_iter().collect())
 }
@@ -94,56 +47,4 @@ fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Json> {
     }
 
     Ok(file_list_json.to_json())
-}
-
-pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize> {
-    let trans = conn.transaction()?;
-    let client = s3_client().expect("configured s3");
-
-    let rows = trans.query(
-        &format!(
-            "SELECT path, mime, content FROM files WHERE content != E'in-s3' LIMIT {}",
-            n
-        ),
-        &[],
-    )?;
-    let count = rows.len();
-
-    let mut rt = ::tokio::runtime::Runtime::new().unwrap();
-    let mut futures = Vec::new();
-    for row in &rows {
-        let path: String = row.get(0);
-        let mime: String = row.get(1);
-        let content: Vec<u8> = row.get(2);
-        let path_1 = path.clone();
-        futures.push(
-            client
-                .put_object(PutObjectRequest {
-                    bucket: S3_BUCKET_NAME.into(),
-                    key: path.clone(),
-                    body: Some(content.into()),
-                    content_type: Some(mime),
-                    ..Default::default()
-                })
-                .map(move |_| path_1)
-                .map_err(move |e| panic!("failed to upload to {}: {:?}", path, e)),
-        );
-    }
-
-    use ::futures::future::Future;
-    match rt.block_on(::futures::future::join_all(futures)) {
-        Ok(paths) => {
-            let statement = trans.prepare("DELETE FROM files WHERE path = $1").unwrap();
-            for path in paths {
-                statement.execute(&[&path]).unwrap();
-            }
-        }
-        Err(e) => {
-            panic!("results err: {:?}", e);
-        }
-    }
-
-    trans.commit()?;
-
-    Ok(count)
 }

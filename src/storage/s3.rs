@@ -1,19 +1,22 @@
 use super::Blob;
 use failure::Error;
 use futures::Future;
+use postgres::Connection;
+use rusoto_core::region::Region;
+use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
-use log::error;
+use log::{error, warn};
 
 pub(crate) struct S3Backend<'a> {
-    client: &'a S3Client,
+    client: S3Client,
     bucket: &'a str,
 }
 
 impl<'a> S3Backend<'a> {
-    pub(crate) fn new(client: &'a S3Client, bucket: &'a str) -> Self {
+    pub(crate) fn new(client: S3Client, bucket: &'a str) -> Self {
         Self { client, bucket }
     }
 
@@ -103,7 +106,7 @@ mod tests {
         use rusoto_s3::GetObjectError;
 
         let s3 = env.s3().not_found(path);
-        let backend = S3Backend::new(&s3.client, s3.bucket);
+        let backend = S3Backend::new(s3.client, s3.bucket);
         let err = backend.get(path).unwrap_err();
         let status = match err
             .downcast_ref::<RusotoError<GetObjectError>>()
@@ -148,7 +151,7 @@ mod tests {
             // Add a test file to the database
             let s3 = env.s3().upload(blob.clone());
 
-            let backend = S3Backend::new(&s3.client, &s3.bucket);
+            let backend = S3Backend::new(s3.client, &s3.bucket);
 
             // Test that the proper file was returned
             assert_eq!(blob, backend.get("dir/foo.txt")?);
@@ -160,4 +163,83 @@ mod tests {
             Ok(())
         });
     }
+}
+
+pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
+
+pub(crate) fn s3_client() -> Option<S3Client> {
+    // If AWS keys aren't configured, then presume we should use the DB exclusively
+    // for file storage.
+    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
+        return None;
+    }
+    let creds = match DefaultCredentialsProvider::new() {
+        Ok(creds) => creds,
+        Err(err) => {
+            warn!("failed to retrieve AWS credentials: {}", err);
+            return None;
+        }
+    };
+    Some(S3Client::new_with(
+        rusoto_core::request::HttpClient::new().unwrap(),
+        creds,
+        std::env::var("S3_ENDPOINT")
+            .ok()
+            .map(|e| Region::Custom {
+                name: std::env::var("S3_REGION").unwrap_or_else(|_| "us-west-1".to_owned()),
+                endpoint: e,
+            })
+            .unwrap_or(Region::UsWest1),
+    ))
+}
+
+pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize, Error> {
+    let trans = conn.transaction()?;
+    let client = s3_client().expect("configured s3");
+
+    let rows = trans.query(
+        &format!(
+            "SELECT path, mime, content FROM files WHERE content != E'in-s3' LIMIT {}",
+            n
+        ),
+        &[],
+    )?;
+    let count = rows.len();
+
+    let mut rt = ::tokio::runtime::Runtime::new().unwrap();
+    let mut futures = Vec::new();
+    for row in &rows {
+        let path: String = row.get(0);
+        let mime: String = row.get(1);
+        let content: Vec<u8> = row.get(2);
+        let path_1 = path.clone();
+        futures.push(
+            client
+                .put_object(PutObjectRequest {
+                    bucket: S3_BUCKET_NAME.into(),
+                    key: path.clone(),
+                    body: Some(content.into()),
+                    content_type: Some(mime),
+                    ..Default::default()
+                })
+                .map(move |_| path_1)
+                .map_err(move |e| panic!("failed to upload to {}: {:?}", path, e)),
+        );
+    }
+
+    match rt.block_on(::futures::future::join_all(futures)) {
+        Ok(paths) => {
+            let statement = trans.prepare("DELETE FROM files WHERE path = $1").unwrap();
+            for path in paths {
+                statement.execute(&[&path]).unwrap();
+            }
+        }
+        Err(e) => {
+            panic!("results err: {:?}", e);
+        }
+    }
+
+    trans.commit()?;
+
+    Ok(count)
 }

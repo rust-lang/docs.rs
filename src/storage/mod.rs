@@ -1,11 +1,12 @@
 mod database;
-mod s3;
+pub(crate) mod s3;
 
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
 #[cfg(test)]
 pub(crate) use self::s3::TIME_FMT;
 use failure::Error;
+pub use s3::move_to_s3;
 use time::Timespec;
 
 use failure::err_msg;
@@ -64,7 +65,14 @@ pub(crate) enum Storage<'a> {
     S3(S3Backend<'a>),
 }
 
-impl Storage<'_> {
+impl<'a> Storage<'a> {
+    pub(crate) fn new(conn: &'a Connection) -> Self {
+        if let Some(c) = s3::s3_client() {
+            Storage::from(S3Backend::new(c, s3::S3_BUCKET_NAME))
+        } else {
+            DatabaseBackend::new(conn).into()
+        }
+    }
     pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
         match self {
             Self::Database(db) => db.get(path),
