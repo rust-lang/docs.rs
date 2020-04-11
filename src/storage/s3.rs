@@ -5,6 +5,7 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
+use log::error;
 
 pub(crate) struct S3Backend<'a> {
     client: &'a S3Client,
