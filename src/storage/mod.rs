@@ -15,8 +15,6 @@ use std::fs;
 use std::io::Read;
 use failure::err_msg;
 use std::ffi::OsStr;
-#[cfg(not(windows))]
-use magic::{Cookie, flags};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
@@ -94,8 +92,6 @@ impl Storage<'_> {
         const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
         let trans = conn.transaction()?;
-        #[cfg(not(windows))]
-        let mime_data = load_mime_data()?;
         let mut file_paths_and_mimes = HashMap::new();
 
         get_file_list(root_dir)?.into_iter()
@@ -116,15 +112,12 @@ impl Storage<'_> {
             #[cfg(not(windows))]
             let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
-            #[cfg(windows)]
-            let mime = detect_mime(&content, &file_path)?;
-            #[cfg(not(windows))]
-            let mime = detect_mime(&content, &file_path, &mime_data)?;
+            let mime = detect_mime(&file_path)?;
 
-            file_paths_and_mimes.insert(file_path, mime.clone());
+            file_paths_and_mimes.insert(file_path, mime.to_string());
             Ok(Blob {
                 path: bucket_path,
-                mime,
+                mime: mime.to_string(),
                 content,
                 // this field is ignored by the backend
                 date_updated: Timespec::new(0, 0),
@@ -139,26 +132,11 @@ impl Storage<'_> {
     }
 }
 
-#[cfg(not(windows))]
-fn load_mime_data() -> Result<Cookie, Error> {
-    let cookie = Cookie::open(flags::MIME_TYPE)?;
-    cookie.load::<&str>(&[])?;
-    Ok(cookie)
-}
-
-#[cfg(not(windows))]
-fn detect_mime(content: &Vec<u8>, file_path: &Path, cookie: &Cookie) -> Result<String, Error> {
-    let mime = cookie.buffer(&content)?;
-    correct_mime(&mime, &file_path)
-}
-
-#[cfg(windows)]
-fn detect_mime(_content: &Vec<u8>, file_path: &Path) -> Result<String, Error> {
-    let mime = mime_guess::from_path(file_path).first_raw().map(|m| m).unwrap_or("text/plain");
-    correct_mime(&mime, &file_path)
-}
-
-fn correct_mime(mime: &str, file_path: &Path) -> Result<String, Error> {
+fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
+    let mime = mime_guess::from_path(file_path)
+        .first_raw()
+        .map(|m| m)
+        .unwrap_or("text/plain");
     Ok(match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.extension().and_then(OsStr::to_str) {
@@ -169,12 +147,12 @@ fn correct_mime(mime: &str, file_path: &Path) -> Result<String, Error> {
                 Some("toml") => "text/toml",
                 Some("js") => "application/javascript",
                 Some("json") => "application/json",
-                _ => mime
+                _ => mime,
             }
-        },
+        }
         "image/svg" => "image/svg+xml",
-        _ => mime
-    }.to_owned())
+        _ => mime,
+    })
 }
 
 impl<'a> From<DatabaseBackend<'a>> for Storage<'a> {
@@ -247,26 +225,21 @@ mod test {
     }
     #[test]
     fn test_mime_types() {
-        check_mime("/ignored", ".gitignore", "text/plain");
-        check_mime("[package]", "hello.toml","text/toml");
-        check_mime(".ok { color:red; }", "hello.css","text/css");
-        check_mime("var x = 1", "hello.js","application/javascript");
-        check_mime("<html>", "hello.html","text/html");
-        check_mime("## HELLO", "hello.hello.md","text/markdown");
-        check_mime("## WORLD", "hello.markdown","text/markdown");
-        check_mime("{}", "hello.json","application/json");
-        check_mime("hello world", "hello.txt","text/plain");
-        check_mime("//! Simple module to ...", "file.rs", "text/rust");
-        check_mime("<svg></svg>", "important.svg", "image/svg+xml");
+        check_mime(".gitignore", "text/plain");
+        check_mime("hello.toml", "text/toml");
+        check_mime("hello.css", "text/css");
+        check_mime("hello.js", "application/javascript");
+        check_mime("hello.html", "text/html");
+        check_mime("hello.hello.md", "text/markdown");
+        check_mime("hello.markdown", "text/markdown");
+        check_mime("hello.json", "application/json");
+        check_mime("hello.txt", "text/plain");
+        check_mime("file.rs", "text/rust");
+        check_mime("important.svg", "image/svg+xml");
     }
 
-    fn check_mime(content: &str, path: &str, expected_mime: &str) {
-        #[cfg(not(windows))]
-        let mime_data = load_mime_data().unwrap();
-        #[cfg(windows)]
-        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path));
-        #[cfg(not(windows))]
-        let detected_mime = detect_mime(&content.as_bytes().to_vec(), Path::new(&path), &mime_data);
+    fn check_mime(path: &str, expected_mime: &str) {
+        let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
     }

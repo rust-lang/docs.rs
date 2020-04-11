@@ -4,18 +4,14 @@
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 
+use std::path::{Path, PathBuf};
 use crate::error::Result;
-use failure::err_msg;
-use log::{error, warn};
+use log::warn;
 use postgres::Connection;
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{PutObjectRequest, S3Client, S3};
 use rustc_serialize::json::{Json, ToJson};
-use error::Result;
-use rusoto_s3::{S3, PutObjectRequest, S3Client};
-use rusoto_core::region::Region;
-use rusoto_credential::DefaultCredentialsProvider;
 
 pub(crate) use crate::storage::Blob;
 
