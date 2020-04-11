@@ -8,13 +8,13 @@ pub(crate) use self::s3::TIME_FMT;
 use failure::Error;
 use time::Timespec;
 
+use failure::err_msg;
+use postgres::{transaction::Transaction, Connection};
 use std::collections::HashMap;
-use std::path::{PathBuf, Path};
-use postgres::{Connection, transaction::Transaction};
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
-use failure::err_msg;
-use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
@@ -24,9 +24,7 @@ pub(crate) struct Blob {
     pub(crate) content: Vec<u8>,
 }
 
-fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
-                                          files: &mut Vec<PathBuf>)
-                                          -> Result<(), Error> {
+fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> Result<(), Error> {
     let path = path.as_ref();
 
     for file in path.read_dir()? {
@@ -41,7 +39,6 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P,
 
     Ok(())
 }
-
 
 pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     let path = path.as_ref();
@@ -88,44 +85,52 @@ impl Storage<'_> {
     // otherwise, this will store files in the database.
     //
     // This returns a HashMap<filename, mime type>.
-    pub(crate) fn store_all(&self, conn: &Connection, prefix: &str, root_dir: &Path) -> Result<HashMap<PathBuf, String>, Error> {
+    pub(crate) fn store_all(
+        &self,
+        conn: &Connection,
+        prefix: &str,
+        root_dir: &Path,
+    ) -> Result<HashMap<PathBuf, String>, Error> {
         const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
         let trans = conn.transaction()?;
         let mut file_paths_and_mimes = HashMap::new();
 
-        get_file_list(root_dir)?.into_iter()
-        .filter_map(|file_path| {
-            // Some files have insufficient permissions
-            // (like .lock file created by cargo in documentation directory).
-            // Skip these files.
-            fs::File::open(root_dir.join(&file_path))
-                .ok().map(|file| (file_path, file))
-        }).map(|(file_path, mut file)| {
-            let mut content: Vec<u8> = Vec::new();
-            file.read_to_end(&mut content)?;
-
-            let bucket_path = Path::new(prefix).join(&file_path);
-
-            #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
-            let bucket_path = path_slash::PathBufExt::to_slash(&bucket_path).unwrap();
-            #[cfg(not(windows))]
-            let bucket_path = bucket_path.into_os_string().into_string().unwrap();
-
-            let mime = detect_mime(&file_path)?;
-
-            file_paths_and_mimes.insert(file_path, mime.to_string());
-            Ok(Blob {
-                path: bucket_path,
-                mime: mime.to_string(),
-                content,
-                // this field is ignored by the backend
-                date_updated: Timespec::new(0, 0),
+        get_file_list(root_dir)?
+            .into_iter()
+            .filter_map(|file_path| {
+                // Some files have insufficient permissions
+                // (like .lock file created by cargo in documentation directory).
+                // Skip these files.
+                fs::File::open(root_dir.join(&file_path))
+                    .ok()
+                    .map(|file| (file_path, file))
             })
-        })
-        .collect::<Result<Vec<_>, Error>>()?
-        .chunks(MAX_CONCURRENT_UPLOADS)
-        .try_for_each(|batch| self.store_batch(batch, &trans))?;
+            .map(|(file_path, mut file)| {
+                let mut content: Vec<u8> = Vec::new();
+                file.read_to_end(&mut content)?;
+
+                let bucket_path = Path::new(prefix).join(&file_path);
+
+                #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
+                let bucket_path = path_slash::PathBufExt::to_slash(&bucket_path).unwrap();
+                #[cfg(not(windows))]
+                let bucket_path = bucket_path.into_os_string().into_string().unwrap();
+
+                let mime = detect_mime(&file_path)?;
+
+                file_paths_and_mimes.insert(file_path, mime.to_string());
+                Ok(Blob {
+                    path: bucket_path,
+                    mime: mime.to_string(),
+                    content,
+                    // this field is ignored by the backend
+                    date_updated: Timespec::new(0, 0),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?
+            .chunks(MAX_CONCURRENT_UPLOADS)
+            .try_for_each(|batch| self.store_batch(batch, &trans))?;
 
         trans.commit()?;
         Ok(file_paths_and_mimes)
@@ -170,9 +175,9 @@ impl<'a> From<S3Backend<'a>> for Storage<'a> {
 #[cfg(test)]
 mod test {
     extern crate env_logger;
-    use std::env;
-    use crate::test::wrapper;
     use super::*;
+    use crate::test::wrapper;
+    use std::env;
 
     #[test]
     fn test_uploads() {
@@ -196,8 +201,14 @@ mod test {
                 let name = Path::new(name);
                 assert!(stored_files.contains_key(name));
             }
-            assert_eq!(stored_files.get(Path::new("Cargo.toml")).unwrap(), "text/toml");
-            assert_eq!(stored_files.get(Path::new("src/main.rs")).unwrap(), "text/rust");
+            assert_eq!(
+                stored_files.get(Path::new("Cargo.toml")).unwrap(),
+                "text/toml"
+            );
+            assert_eq!(
+                stored_files.get(Path::new("src/main.rs")).unwrap(),
+                "text/rust"
+            );
 
             let file = backend.get("rustdoc/Cargo.toml").unwrap();
             assert_eq!(file.content, b"data");
