@@ -4,7 +4,7 @@ pub(crate) use self::add_package::add_build_into_database;
 pub(crate) use self::add_package::add_package_into_database;
 pub(crate) use self::add_package::CratesIoData;
 pub use self::delete_crate::delete_crate;
-pub use self::file::{add_path_into_database, move_to_s3};
+pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
 
 use failure::Fail;
