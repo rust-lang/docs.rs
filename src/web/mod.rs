@@ -195,7 +195,7 @@ struct MatchVersion {
     /// Represents the crate name that was found when attempting to load a crate release.
     ///
     /// `match_version` will attempt to match a provided crate name against similar crate names with
-    /// dashes (`-`) replaced with underscores (`_`) and vice versa. If
+    /// dashes (`-`) replaced with underscores (`_`) and vice versa.
     pub corrected_name: Option<String>,
     pub version: MatchSemver,
 }
@@ -260,37 +260,22 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         })
         .unwrap_or_else(|| "*".into());
 
-    let (versions, corrected_name): (Vec<(String, i32)>, Option<String>) = {
-        let query = "SELECT version, releases.id
+    let mut corrected_name = None;
+    let versions: Vec<(String, i32)> = {
+        let query = "SELECT name, version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE name = $1 AND yanked = false";
-        let mut rows = conn.query(query, &[&name]).unwrap();
-        let name_replace = if rows.len() == 0 {
-            // try looking up again with dashes and underscores replaced
-            if name.contains('-') {
-                Some(name.replace('-', "_"))
-            } else if name.contains('_') {
-                Some(name.replace('_', "-"))
-            } else {
-                return None;
+            WHERE normalize_crate_name(name) = normalize_crate_name($1) AND yanked = false";
+        let rows = conn.query(query, &[&name]).unwrap();
+        let mut rows = rows.iter().peekable();
+
+        if let Some(row) = rows.peek() {
+            let db_name = row.get(0);
+            if db_name != name {
+                corrected_name = Some(db_name);
             }
-        } else {
-            // if we returned rows, then we don't need to check a replaced name
-            None
         };
 
-        if let Some(new_name) = &name_replace {
-            rows = conn.query(query, &[&new_name]).unwrap();
-
-            if rows.len() == 0 {
-                // even with the new name, there was nothing, so bail
-                return None;
-            }
-        }
-        (
-            rows.iter().map(|row| (row.get(0), row.get(1))).collect(),
-            name_replace,
-        )
+        rows.map(|row| (row.get(1), row.get(2))).collect()
     };
 
     // first check for exact match
@@ -305,10 +290,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     }
 
     // Now try to match with semver
-    let req_sem_ver = match VersionReq::parse(&req_version) {
-        Ok(v) => v,
-        Err(_) => return None,
-    };
+    let req_sem_ver = VersionReq::parse(&req_version).ok()?;
 
     // we need to sort versions first
     let versions_sem = {
@@ -317,11 +299,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         for version in &versions {
             // in theory a crate must always have a semver compatible version
             // but check result just in case
-            let version = match Version::parse(&version.0) {
-                Ok(v) => (v, version.1),
-                Err(_) => return None,
-            };
-            versions_sem.push(version);
+            versions_sem.push((Version::parse(&version.0).ok()?, version.1));
         }
 
         versions_sem.sort();

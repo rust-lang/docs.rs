@@ -711,6 +711,8 @@ mod test {
                 ("dummy-dash", "0.2.0"),
                 ("dummy_underscore", "0.1.0"),
                 ("dummy_underscore", "0.2.0"),
+                ("dummy_mixed-separators", "0.1.0"),
+                ("dummy_mixed-separators", "0.2.0"),
             ];
 
             for (name, version) in &rels {
@@ -741,6 +743,21 @@ mod test {
                 "/dummy_underscore/0.1.0/dummy_underscore/",
                 web,
             )?;
+            assert_redirect(
+                "/dummy-mixed_separators",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy_mixed_separators/*",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-mixed-separators/0.1.0",
+                "/dummy_mixed-separators/0.1.0/dummy_mixed_separators/",
+                web,
+            )?;
 
             Ok(())
         })
@@ -757,12 +774,38 @@ mod test {
                 .rustdoc_file("dummy_dash/index.html", b"")
                 .create()?;
 
+            db.fake_release()
+                .name("dummy_mixed-separators")
+                .version("0.1.0")
+                .rustdoc_file("dummy_mixed_separators/index.html", b"")
+                .create()?;
+
             let web = env.frontend();
+
+            assert_success("/dummy-dash/0.1.0/dummy_dash/index.html", web)?;
+            assert_success("/crate/dummy_mixed-separators", web)?;
 
             assert_eq!(
                 web.get("/dummy_dash/0.1.0/dummy_dash/index.html")
                     .send()?
                     .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            assert_eq!(
+                web.get("/crate/dummy_mixed_separators").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn nonexistent_crate_404s() {
+        wrapper(|env| {
+            assert_eq!(
+                env.frontend().get("/dummy").send()?.status(),
                 StatusCode::NOT_FOUND
             );
 

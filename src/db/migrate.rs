@@ -272,6 +272,29 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // downgrade query
             "ALTER TABLE sandbox_overrides DROP COLUMN max_targets;"
         ),
+        migration!(
+            context,
+            // version
+            10,
+            // description
+            "Add function to normalize underscores in crate names",
+            // upgrade query
+            "
+                CREATE FUNCTION normalize_crate_name(VARCHAR)
+                RETURNS VARCHAR
+                AS $$
+                    SELECT LOWER(REPLACE($1, '_', '-'));
+                $$ LANGUAGE SQL;
+
+                CREATE UNIQUE INDEX crates_normalized_name_idx
+                    ON crates (normalize_crate_name(name));
+            ",
+            // downgrade query
+            "
+                DROP INDEX crates_normalized_name_idx;
+                DROP FUNCTION normalize_crate_name;
+            "
+        ),
     ];
 
     for migration in migrations {
