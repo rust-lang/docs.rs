@@ -2,6 +2,7 @@ mod fakes;
 
 use crate::web::Server;
 use failure::Error;
+use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
@@ -114,18 +115,28 @@ impl TestEnvironment {
 
 pub(crate) struct TestDatabase {
     conn: Arc<Mutex<Connection>>,
+    schema: String,
 }
 
 impl TestDatabase {
     fn new() -> Result<Self, Error> {
-        // The temporary migration uses CREATE TEMPORARY TABLE instead of CREATE TABLE, creating
-        // fresh temporary copies of the database on top of the real one. The temporary tables are
-        // only visible to this connection, and will be deleted when it exits.
+        // A random schema name is generated and used for the current connection. This allows each
+        // test to create a fresh instance of the database to run within.
+        let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
+
         let conn = crate::db::connect_db()?;
-        crate::db::migrate_temporary(None, &conn)?;
+        conn.batch_execute(&format!(
+            "
+                CREATE SCHEMA {0};
+                SET search_path TO {0};
+            ",
+            schema
+        ))?;
+        crate::db::migrate(None, &conn)?;
 
         Ok(TestDatabase {
             conn: Arc::new(Mutex::new(conn)),
+            schema,
         })
     }
 
@@ -135,6 +146,17 @@ impl TestDatabase {
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
         fakes::FakeRelease::new(self)
+    }
+}
+
+impl Drop for TestDatabase {
+    fn drop(&mut self) {
+        if let Err(e) = self
+            .conn()
+            .execute(&format!("DROP SCHEMA {} CASCADE;", self.schema), &[])
+        {
+            error!("failed to drop test schema {}: {}", self.schema, e);
+        }
     }
 }
 
