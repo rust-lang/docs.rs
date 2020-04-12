@@ -6,8 +6,6 @@ pub(crate) use self::add_package::CratesIoData;
 pub use self::delete_crate::delete_crate;
 pub use self::file::{add_path_into_database, move_to_s3};
 pub use self::migrate::migrate;
-#[cfg(test)]
-pub(crate) use self::migrate::migrate_temporary;
 
 use postgres::error::Error;
 use postgres::{Connection, TlsMode};
