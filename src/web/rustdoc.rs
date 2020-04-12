@@ -458,6 +458,8 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use reqwest::StatusCode;
+
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
@@ -697,5 +699,74 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn base_redirect_handles_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let rels = [
+                ("dummy-dash", "0.1.0"),
+                ("dummy-dash", "0.2.0"),
+                ("dummy_underscore", "0.1.0"),
+                ("dummy_underscore", "0.2.0"),
+            ];
+
+            for (name, version) in &rels {
+                db.fake_release()
+                    .name(name)
+                    .version(version)
+                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"), b"")
+                    .create()?;
+            }
+
+            let web = env.frontend();
+
+            assert_redirect("/dummy_dash", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
+            assert_redirect(
+                "/dummy-underscore",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/*",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/0.1.0",
+                "/dummy_underscore/0.1.0/dummy_underscore/",
+                web,
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn specific_pages_do_not_handle_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("dummy-dash")
+                .version("0.1.0")
+                .rustdoc_file("dummy_dash/index.html", b"")
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_eq!(
+                web.get("/dummy_dash/0.1.0/dummy_dash/index.html")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
     }
 }
