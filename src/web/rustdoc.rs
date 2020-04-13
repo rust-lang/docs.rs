@@ -19,7 +19,7 @@ use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
 use time;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct RustdocPage {
     head: String,
     body: String,
@@ -29,21 +29,7 @@ struct RustdocPage {
     version: String,
     description: Option<String>,
     crate_details: Option<CrateDetails>,
-}
-
-impl Default for RustdocPage {
-    fn default() -> RustdocPage {
-        RustdocPage {
-            head: String::new(),
-            body: String::new(),
-            body_class: String::new(),
-            name: String::new(),
-            full: String::new(),
-            version: String::new(),
-            description: None,
-            crate_details: None,
-        }
-    }
+    platforms: BTreeMap<String, String>,
 }
 
 impl ToJson for RustdocPage {
@@ -58,6 +44,7 @@ impl ToJson for RustdocPage {
         m.insert("version".to_string(), self.version.to_json());
         m.insert("description".to_string(), self.description.to_json());
         m.insert("crate_details".to_string(), self.crate_details.to_json());
+        m.insert("platforms".to_string(), self.platforms.to_json());
         m.to_json()
     }
 }
@@ -243,9 +230,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     req_path.insert(1, &name);
     req_path.insert(2, &version);
 
+    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     if req_path[3] == crate_details.metadata.default_target {
         let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
         let canonical = Url::parse(&path).expect("got an invalid URL to start");
@@ -275,6 +263,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         }
     };
 
+    let req_path = req_path;
+
     // serve file directly if it's not html
     if !path.ends_with(".html") {
         return Ok(file.serve());
@@ -301,11 +291,52 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let latest_version = crate_details.latest_version().to_owned();
     let is_latest_version = latest_version == version;
 
-    let path = if !is_latest_version {
-        req_path[2] = &latest_version;
-        path_for_version(&req_path, &crate_details.target_name, &conn)
+    let path_in_latest = if !is_latest_version {
+        let mut latest_path = req_path.clone();
+        latest_path[2] = &latest_version;
+        path_for_version(&latest_path, &crate_details.target_name, &conn)
     } else {
         Default::default()
+    };
+
+    // for each target the documentation is built for, check if the requested file also exists in
+    // that target and generate a list of targets + paths to render.
+    if let Some(Json::Array(doc_targets)) = &crate_details.doc_targets {
+        content.platforms = doc_targets
+            .iter()
+            .filter_map(|target| {
+                if let Json::String(target) = target {
+                    // rustdoc/:crate/:version[/:current_target]/:path*
+                    let mut platform_path = req_path.clone();
+                    // rustdoc/:crate/:version/:target/:path*
+                    //  `target_name` is the name of the crate, not the name of the platform.
+                    if platform_path[3] == crate_details.target_name {
+                        platform_path.insert(3, target);
+                    } else {
+                        platform_path[3] = target;
+                    }
+                    if target == &crate_details.metadata.default_target {
+                        // rustdoc/:crate/:version/:path*
+                        platform_path.remove(3);
+                    }
+                    // if the current page is not present on the other platform, link to the index page for the crate instead
+                    if File::from_path(&conn, &platform_path.join("/")).is_none() {
+                        if platform_path.len() > 3 {
+                            platform_path.drain(4..);
+                            if target == &crate_details.metadata.default_target {
+                                platform_path.pop();
+                            }
+                        }
+                        platform_path.push(&crate_details.target_name);
+                        platform_path.push("index.html");
+                    };
+                    platform_path[0] = "";
+                    Some((target.clone(), platform_path.join("/")))
+                } else {
+                    None
+                }
+            })
+            .collect();
     };
 
     content.crate_details = Some(crate_details);
@@ -315,7 +346,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
         .set_bool("is_latest_version", is_latest_version)
-        .set("path_in_latest", &path)
+        .set("path_in_latest", &path_in_latest)
         .set("latest_version", &latest_version)
         .to_resp("rustdoc")
 }
@@ -467,13 +498,14 @@ mod test {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         let dom = kuchiki::parse_html().one(data);
-        for elems in dom.select("form ul li a.warn") {
-            for elem in elems {
-                let warning = elem.as_node().as_element().unwrap();
-                let link = warning.attributes.borrow().get("href").unwrap().to_string();
-                assert_success(&link, web)?;
-                return Ok(link);
-            }
+        if let Some(elem) = dom
+            .select("form ul li a.warn")
+            .expect("invalid selector")
+            .next()
+        {
+            let link = elem.attributes.borrow().get("href").unwrap().to_string();
+            assert_success(&link, web)?;
+            return Ok(link);
         }
         panic!("no redirect found for {}", path);
     }
@@ -813,5 +845,278 @@ mod test {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn platform_links_go_to_current_path() {
+        fn get_platform_links(
+            path: &str,
+            web: &TestFrontend,
+        ) -> Result<Vec<(String, String)>, failure::Error> {
+            use html5ever::tendril::TendrilSink;
+            assert_success(path, web)?;
+            let data = web.get(path).send()?.text()?;
+            let dom = kuchiki::parse_html().one(data);
+            Ok(dom
+                .select(r#"a[aria-label="Platform"] + ul li a"#)
+                .expect("invalid selector")
+                .map(|el| {
+                    let url = el
+                        .attributes
+                        .borrow()
+                        .get("href")
+                        .expect("href")
+                        .to_string();
+                    let name = el.text_contents();
+                    (name, url)
+                })
+                .collect())
+        }
+
+        wrapper(|env| {
+            let (db, web) = (env.db(), env.frontend());
+
+            // no explicit default-target
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .add_target("x86_64-unknown-linux-gnu")
+                .create()?;
+
+            assert_eq!(
+                get_platform_links("/dummy/0.1.0/dummy/", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.1.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.1.0/dummy/index.html", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.1.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.1.0/dummy/struct.Dummy.html", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.1.0/dummy/struct.Dummy.html".into()
+                ),],
+            );
+
+            // set an explicit target that requires cross-compile
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .default_target("x86_64-pc-windows-msvc")
+                .create()?;
+
+            assert_eq!(
+                get_platform_links("/dummy/0.2.0/dummy/", web)?,
+                vec![(
+                    "x86_64-pc-windows-msvc".into(),
+                    "/dummy/0.2.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.2.0/dummy/index.html", web)?,
+                vec![(
+                    "x86_64-pc-windows-msvc".into(),
+                    "/dummy/0.2.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.2.0/dummy/struct.Dummy.html", web)?,
+                vec![(
+                    "x86_64-pc-windows-msvc".into(),
+                    "/dummy/0.2.0/dummy/struct.Dummy.html".into()
+                ),],
+            );
+
+            // set an explicit target without cross-compile
+            db.fake_release()
+                .name("dummy")
+                .version("0.3.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .default_target("x86_64-unknown-linux-gnu")
+                .create()?;
+
+            assert_eq!(
+                get_platform_links("/dummy/0.3.0/dummy/", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.3.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.3.0/dummy/index.html", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.3.0/dummy/index.html".into()
+                ),],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.3.0/dummy/struct.Dummy.html", web)?,
+                vec![(
+                    "x86_64-unknown-linux-gnu".into(),
+                    "/dummy/0.3.0/dummy/struct.Dummy.html".into()
+                ),],
+            );
+
+            // multiple targets
+            db.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .rustdoc_file("settings.html", b"top-level items")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .rustdoc_file("dummy/struct.DefaultOnly.html", b"some otter content")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html", b"some content")
+                .rustdoc_file(
+                    "x86_64-pc-windows-msvc/dummy/struct.Dummy.html",
+                    b"some other content",
+                )
+                .rustdoc_file(
+                    "x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html",
+                    b"some otter content",
+                )
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("x86_64-pc-windows-msvc")
+                .create()?;
+
+            // For top-level items we redirect to the target-specific doc root as the top-level
+            // items can't know which target they're for
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/settings.html", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/index.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/dummy/", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/index.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/index.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/dummy/index.html", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/index.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/dummy/struct.DefaultOnly.html", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/struct.DefaultOnly.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links("/dummy/0.4.0/dummy/struct.Dummy.html", web)?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.Dummy.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/struct.Dummy.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links(
+                    "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.Dummy.html",
+                    web
+                )?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.Dummy.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/struct.Dummy.html".into()
+                    ),
+                ],
+            );
+
+            assert_eq!(
+                get_platform_links(
+                    "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html",
+                    web
+                )?,
+                vec![
+                    (
+                        "x86_64-pc-windows-msvc".into(),
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html".into()
+                    ),
+                    (
+                        "x86_64-unknown-linux-gnu".into(),
+                        "/dummy/0.4.0/dummy/index.html".into()
+                    ),
+                ],
+            );
+
+            Ok(())
+        });
     }
 }

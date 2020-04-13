@@ -97,7 +97,13 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn default_target(mut self, target: &'a str) -> Self {
+        self = self.add_target(target);
         self.default_target = Some(target);
+        self
+    }
+
+    pub(crate) fn add_target(mut self, target: &str) -> Self {
+        self.doc_targets.push(target.into());
         self
     }
 
