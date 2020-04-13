@@ -53,7 +53,7 @@ impl<'a> S3Backend<'a> {
         let mut attempts = 0;
 
         loop {
-            let mut futures = Vec::new();
+            let mut futures = Vec::with_capacity(batch.len());
             for blob in batch {
                 futures.push(
                     self.client
@@ -205,7 +205,7 @@ pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize, Error> {
     let count = rows.len();
 
     let mut rt = ::tokio::runtime::Runtime::new().unwrap();
-    let mut futures = Vec::new();
+    let mut futures = Vec::with_capacity(rows.len());
     for row in &rows {
         let path: String = row.get(0);
         let mime: String = row.get(1);

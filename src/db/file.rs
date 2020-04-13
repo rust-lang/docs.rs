@@ -40,7 +40,7 @@ fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Json> {
     let mut file_list_json: Vec<Json> = Vec::new();
 
     for file in file_list {
-        let mut v: Vec<String> = Vec::new();
+        let mut v: Vec<String> = Vec::with_capacity(2);
         v.push(file.1);
         v.push(file.0.into_os_string().into_string().unwrap());
         file_list_json.push(v.to_json());
