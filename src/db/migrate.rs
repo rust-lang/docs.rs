@@ -296,6 +296,20 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 DROP FUNCTION normalize_crate_name;
             "
         ),
+        migration!(
+            context,
+            // version
+            11,
+            // description
+            "Allow crates to be given a different default priority",
+            // upgrade query
+            "CREATE TABLE crate_priorities (
+                pattern VARCHAR NOT NULL PRIMARY KEY,
+                priority INTEGER NOT NULL
+            );",
+            // downgrade query
+            "DROP TABLE crate_priorities;",
+        ),
     ];
 
     for migration in migrations {
