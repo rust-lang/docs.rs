@@ -303,7 +303,7 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             "Allow crates to be given a different default priority",
             // upgrade query
             "CREATE TABLE crate_priorities (
-                pattern VARCHAR NOT NULL PRIMARY KEY,
+                pattern VARCHAR NOT NULL UNIQUE,
                 priority INTEGER NOT NULL
             );",
             // downgrade query
