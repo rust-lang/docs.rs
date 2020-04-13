@@ -3,7 +3,6 @@
 use crate::error::Result;
 use postgres::Connection;
 
-/// The default queue priority
 const DEFAULT_PRIORITY: i32 = 0;
 
 /// Get the build queue priority for a crate
