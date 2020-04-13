@@ -4,7 +4,7 @@ set -euv
 
 export CRATESFYI_PREFIX=/opt/docsrs/prefix
 export DOCS_RS_DOCKER=true
-export RUST_LOG=cratesfyi,rustwide=info
+export RUST_LOG=${RUST_LOG-cratesfyi,rustwide=info}
 export PATH="$PATH:/build/target/release"
 
 # Try migrating the database multiple times if it fails
