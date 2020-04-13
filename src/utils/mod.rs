@@ -5,7 +5,7 @@ pub(crate) use self::copy::copy_doc_dir;
 pub use self::daemon::start_daemon;
 pub use self::github_updater::github_updater;
 pub use self::html::extract_head_and_body;
-pub use self::queue::add_crate_to_queue;
+pub use self::queue::{add_crate_to_queue, get_crate_priority};
 pub use self::release_activity_updater::update_release_activity;
 pub(crate) use self::rustc_version::parse_rustc_version;
 

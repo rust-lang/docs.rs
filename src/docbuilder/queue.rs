@@ -3,7 +3,7 @@
 use super::{DocBuilder, RustwideBuilder};
 use crate::db::connect_db;
 use crate::error::Result;
-use crate::utils::add_crate_to_queue;
+use crate::utils::{add_crate_to_queue, get_crate_priority};
 use crates_index_diff::{ChangeKind, Index};
 
 impl DocBuilder {
@@ -19,7 +19,9 @@ impl DocBuilder {
         changes.reverse();
 
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
-            add_crate_to_queue(&conn, &krate.name, &krate.version, 0).ok();
+            let priority = get_crate_priority(&conn, &krate.name)?;
+            add_crate_to_queue(&conn, &krate.name, &krate.version, priority).ok();
+
             debug!("{}-{} added into build queue", krate.name, krate.version);
             add_count += 1;
         }
