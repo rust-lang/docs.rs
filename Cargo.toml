@@ -40,6 +40,7 @@ lazy_static = "1.0.0"
 rustwide = "0.6.0"
 tempdir = "0.3"
 mime_guess = "2"
+dotenv = "0.15"
 
 # iron dependencies
 iron = "0.5"
