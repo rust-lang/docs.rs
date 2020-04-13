@@ -45,7 +45,6 @@ pub fn remove_crate_priority(conn: &Connection, pattern: &str) -> Result<Option<
 
     Ok(query.iter().next().map(|row| row.get(0)))
 }
-
 /// Adds a crate to the build queue to be built by rustdoc. `priority` should be gotten from `get_crate_priority`
 pub fn add_crate_to_queue(
     conn: &Connection,
