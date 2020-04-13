@@ -104,8 +104,8 @@
             <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
               <a href="#" class="pure-menu-link" aria-label="Platform"><i class="fa fa-fw fa-gears"></i><span class="title"> Platform</span></a>
               <ul class="pure-menu-children">
-                {{#each doc_targets}}
-                <li class="pure-menu-item"><a href="/{{../../content.crate_details.name}}/{{../../content.crate_details.version}}/{{this}}/{{../../content.crate_details.target_name}}/" class="pure-menu-link">{{this}}</a></li>
+                {{#each ../content.platforms as |platform path|}}
+                  <li class="pure-menu-item"><a href="{{path}}" class="pure-menu-link">{{platform}}</a></li>
                 {{/each}}
               </ul>
             </li>
