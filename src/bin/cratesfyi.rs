@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{App, AppSettings, Arg, SubCommand};
 use cratesfyi::db::{add_path_into_database, connect_db};
-use cratesfyi::utils::add_crate_to_queue;
+use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
 use cratesfyi::Server;
 use cratesfyi::{db, DocBuilder, DocBuilderOptions, RustwideBuilder};
 
@@ -139,7 +139,26 @@ pub fn main() {
                     .short("p")
                     .long("priority")
                     .help("Priority of build (default: 5) (new crate builds get priority 0)")
-                    .takes_value(true))))
+                    .takes_value(true)))
+            .subcommand(SubCommand::with_name("priority")
+                .about("Interactions with build queue priorities")
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .subcommand(SubCommand::with_name("set")
+                    .about("Set all crates matching the given pattern to a priority level")
+                    .arg(Arg::with_name("PATTERN")
+                        .index(1)
+                        .required(true)
+                        .help("See https://www.postgresql.org/docs/current/functions-matching.html"))
+                    .arg(Arg::with_name("PRIORITY")
+                        .index(2)
+                        .required(true)
+                        .help("The priority to give crates matching PATTERN"))
+                .subcommand(SubCommand::with_name("remove")
+                    .about("Remove the prioritization of crates by the given pattern")
+                    .arg(Arg::with_name("PATTERN")
+                        .index(1)
+                        .required(true)
+                        .help("See https://www.postgresql.org/docs/current/functions-matching.html"))))))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("build") {
@@ -298,6 +317,29 @@ pub fn main() {
                 priority,
             )
             .expect("Could not add crate to queue");
+        } else if let Some(matches) = matches.subcommand_matches("set") {
+            let pattern = matches
+                .value_of("PATTERN")
+                .expect("You must give a pattern to match with");
+            let priority = clap::value_t!(matches.value_of("PRIORITY"), i32)
+                .expect("You must give a priority for a crate");
+            let conn = connect_db().expect("Could not connect to the database");
+
+            set_crate_priority(&conn, pattern, priority).expect("Could not set pattern's priority");
+        } else if let Some(matches) = matches.subcommand_matches("remove") {
+            let pattern = matches
+                .value_of("PATTERN")
+                .expect("You must give a pattern to remove");
+            let conn = connect_db().expect("Could not connect to the database");
+
+            if remove_crate_priority(&conn, pattern)
+                .expect("Could not remove pattern's priority")
+                .is_some()
+            {
+                println!("Removed pattern");
+            } else {
+                println!("Pattern did not exist and so was not removed");
+            }
         }
     }
 }

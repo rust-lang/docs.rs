@@ -21,6 +21,31 @@ pub fn get_crate_priority(conn: &Connection, name: &str) -> Result<i32> {
     }
 }
 
+/// Set all crates that match [`pattern`] to have a certain priority
+///
+/// Note: `pattern` is used in a `LIKE` statement, so it must follow the postgres like syntax
+///
+/// [`pattern`]: https://www.postgresql.org/docs/8.3/functions-matching.html
+pub fn set_crate_priority(conn: &Connection, pattern: &str, priority: i32) -> Result<()> {
+    conn.query(
+        "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
+        &[&pattern, &priority],
+    )?;
+
+    Ok(())
+}
+
+/// Remove a pattern from the priority table, returning the priority that it was associated with or `None`
+/// if nothing was removed
+pub fn remove_crate_priority(conn: &Connection, pattern: &str) -> Result<Option<i32>> {
+    let query = conn.query(
+        "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
+        &[&pattern],
+    )?;
+
+    Ok(query.iter().next().map(|row| row.get(0)))
+}
+
 /// Adds a crate to the build queue to be built by rustdoc. `priority` should be gotten from `get_crate_priority`
 pub fn add_crate_to_queue(
     conn: &Connection,
@@ -40,31 +65,6 @@ pub fn add_crate_to_queue(
 mod tests {
     use super::*;
     use crate::test::wrapper;
-
-    /// Set all crates that match [`pattern`] to have a certain priority
-    ///
-    /// Note: `pattern` is used in a `LIKE` statement, so it must follow the postgres like syntax
-    ///
-    /// [`pattern`]: https://www.postgresql.org/docs/8.3/functions-matching.html
-    pub fn set_crate_priority(conn: &Connection, pattern: &str, priority: i32) -> Result<()> {
-        conn.query(
-            "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
-            &[&pattern, &priority],
-        )?;
-
-        Ok(())
-    }
-
-    /// Remove a pattern from the priority table, returning the priority that it was associated with or `None`
-    /// if nothing was removed
-    pub fn remove_crate_priority(conn: &Connection, pattern: &str) -> Result<Option<i32>> {
-        let query = conn.query(
-            "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
-            &[&pattern],
-        )?;
-
-        Ok(query.iter().next().map(|row| row.get(0)))
-    }
 
     #[test]
     fn set_priority() {
