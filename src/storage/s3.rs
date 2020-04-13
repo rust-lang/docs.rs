@@ -87,9 +87,7 @@ impl<'a> S3Backend<'a> {
     }
 }
 
-#[cfg(not(test))]
-const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
-#[cfg(test)]
+// public for testing
 pub(crate) const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
 
 fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
