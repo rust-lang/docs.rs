@@ -1,4 +1,3 @@
-// REFACTOR: These imports make me cry
 use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
