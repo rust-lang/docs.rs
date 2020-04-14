@@ -7,7 +7,7 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
-use log::LevelFilter;
+use log::{debug, info, warn, LevelFilter};
 use postgres::Connection;
 use rustc_serialize::json::ToJson;
 use rustwide::cmd::{Command, SandboxBuilder};

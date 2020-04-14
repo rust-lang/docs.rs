@@ -9,13 +9,13 @@ use std::path::Path;
 
 use crate::error::Result;
 use failure::err_msg;
+use log::debug;
 use postgres::Connection;
 use reqwest::header::ACCEPT;
 use reqwest::Client;
 use rustc_serialize::json::{Json, ToJson};
 use semver::Version;
 use slug::slugify;
-use time;
 use time::Timespec;
 
 /// Adds a package into database.

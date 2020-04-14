@@ -8,6 +8,7 @@ use crate::{
     utils::{github_updater, pubsubhubbub, update_release_activity},
     DocBuilder, DocBuilderOptions,
 };
+use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::time::Duration;

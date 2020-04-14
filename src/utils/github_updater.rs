@@ -1,7 +1,7 @@
 use crate::{db::connect_db, error::Result};
 use failure::err_msg;
+use log::debug;
 use regex::Regex;
-use time;
 
 /// Fields we need use in cratesfyi
 #[derive(Debug)]

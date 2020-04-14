@@ -5,6 +5,7 @@ use crate::db::connect_db;
 use crate::error::Result;
 use crate::utils::add_crate_to_queue;
 use crates_index_diff::{ChangeKind, Index};
+use log::{debug, error};
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
@@ -91,6 +92,7 @@ impl DocBuilder {
 #[cfg(test)]
 mod test {
     use crate::{DocBuilder, DocBuilderOptions};
+    use log::error;
     use std::path::PathBuf;
 
     #[test]

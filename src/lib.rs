@@ -2,9 +2,6 @@
 //! documentation of crates for the Rust Programming Language.
 #![allow(clippy::cognitive_complexity)]
 
-#[macro_use]
-extern crate log;
-
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::RustwideBuilder;
