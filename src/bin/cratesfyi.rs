@@ -159,7 +159,7 @@ pub fn main() {
                     .arg(Arg::with_name("PATTERN")
                         .index(1)
                         .required(true)
-                        .help("See https://www.postgresql.org/docs/current/functions-matching.html"))))))
+                        .help("See https://www.postgresql.org/docs/current/functions-matching.html")))))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("build") {
