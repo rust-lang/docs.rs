@@ -134,7 +134,7 @@ pub(super) fn s3_client() -> Option<S3Client> {
             return None;
         }
     };
-    
+
     Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         creds,
