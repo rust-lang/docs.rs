@@ -1,10 +1,10 @@
 //! Generic page struct
 
-use std::collections::BTreeMap;
-use rustc_serialize::json::{Json, ToJson};
-use iron::{IronResult, Set, status};
-use iron::response::Response;
 use handlebars_iron::Template;
+use iron::response::Response;
+use iron::{status, IronResult, Set};
+use rustc_serialize::json::{Json, ToJson};
+use std::collections::BTreeMap;
 
 lazy_static::lazy_static! {
     static ref RUSTC_RESOURCE_SUFFIX: String = load_rustc_resource_suffix()
@@ -14,7 +14,10 @@ lazy_static::lazy_static! {
 fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
     let conn = crate::db::connect_db()?;
 
-    let res = conn.query("SELECT value FROM config WHERE name = 'rustc_version';", &[])?;
+    let res = conn.query(
+        "SELECT value FROM config WHERE name = 'rustc_version';",
+        &[],
+    )?;
     if res.is_empty() {
         failure::bail!("missing rustc version");
     }
@@ -46,7 +49,6 @@ impl ToJson for GlobalAlert {
     }
 }
 
-
 pub struct Page<T: ToJson> {
     title: Option<String>,
     content: T,
@@ -57,12 +59,11 @@ pub struct Page<T: ToJson> {
     rustc_resource_suffix: &'static str,
 }
 
-
 impl<T: ToJson> Page<T> {
     pub fn new(content: T) -> Page<T> {
         Page {
             title: None,
-            content: content,
+            content,
             status: status::Ok,
             varss: BTreeMap::new(),
             varsb: BTreeMap::new(),
@@ -73,31 +74,27 @@ impl<T: ToJson> Page<T> {
 
     /// Sets a string variable
     pub fn set(mut self, var: &str, val: &str) -> Page<T> {
-        &self.varss.insert(var.to_owned(), val.to_owned());
+        self.varss.insert(var.to_owned(), val.to_owned());
         self
     }
-
 
     /// Sets a boolean variable
     pub fn set_bool(mut self, var: &str, val: bool) -> Page<T> {
-        &self.varsb.insert(var.to_owned(), val);
+        self.varsb.insert(var.to_owned(), val);
         self
     }
-
 
     /// Sets a boolean variable to true
     pub fn set_true(mut self, var: &str) -> Page<T> {
-        &self.varsb.insert(var.to_owned(), true);
+        self.varsb.insert(var.to_owned(), true);
         self
     }
-
 
     /// Sets an integer variable
     pub fn set_int(mut self, var: &str, val: i64) -> Page<T> {
-        &self.varsi.insert(var.to_owned(), val);
+        self.varsi.insert(var.to_owned(), val);
         self
     }
-
 
     /// Sets title of page
     pub fn title(mut self, title: &str) -> Page<T> {
@@ -105,14 +102,13 @@ impl<T: ToJson> Page<T> {
         self
     }
 
-
     /// Sets status code for response
     pub fn set_status(mut self, s: status::Status) -> Page<T> {
         self.status = s;
         self
     }
 
-
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_resp(self, template: &str) -> IronResult<Response> {
         let mut resp = Response::new();
         let status = self.status;
@@ -122,7 +118,6 @@ impl<T: ToJson> Page<T> {
     }
 }
 
-
 impl<T: ToJson> ToJson for Page<T> {
     fn to_json(&self) -> Json {
         let mut tree = BTreeMap::new();
@@ -131,16 +126,31 @@ impl<T: ToJson> ToJson for Page<T> {
             tree.insert("title".to_owned(), title.to_json());
         }
 
-        tree.insert("has_global_alert".to_owned(), crate::GLOBAL_ALERT.is_some().to_json());
+        tree.insert(
+            "has_global_alert".to_owned(),
+            crate::GLOBAL_ALERT.is_some().to_json(),
+        );
         if let Some(ref global_alert) = crate::GLOBAL_ALERT {
             tree.insert("global_alert".to_owned(), global_alert.to_json());
         }
 
         tree.insert("content".to_owned(), self.content.to_json());
-        tree.insert("rustc_resource_suffix".to_owned(), self.rustc_resource_suffix.to_json());
-        tree.insert("cratesfyi_version".to_owned(), crate::BUILD_VERSION.to_json());
-        tree.insert("cratesfyi_version_safe".to_owned(),
-                    crate::BUILD_VERSION.replace(" ", "-").replace("(", "").replace(")", "").to_json());
+        tree.insert(
+            "rustc_resource_suffix".to_owned(),
+            self.rustc_resource_suffix.to_json(),
+        );
+        tree.insert(
+            "cratesfyi_version".to_owned(),
+            crate::BUILD_VERSION.to_json(),
+        );
+        tree.insert(
+            "cratesfyi_version_safe".to_owned(),
+            crate::BUILD_VERSION
+                .replace(" ", "-")
+                .replace("(", "")
+                .replace(")", "")
+                .to_json(),
+        );
         tree.insert("varss".to_owned(), self.varss.to_json());
         tree.insert("varsb".to_owned(), self.varsb.to_json());
         tree.insert("varsi".to_owned(), self.varsi.to_json());

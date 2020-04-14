@@ -1,9 +1,9 @@
 use crate::error::Result;
 use failure::err_msg;
 
-use html5ever::serialize::{serialize, SerializeOpts};
-use html5ever::rcdom::{RcDom, NodeData, Handle};
 use html5ever::driver::{parse_document, ParseOpts};
+use html5ever::rcdom::{Handle, NodeData, RcDom};
+use html5ever::serialize::{serialize, SerializeOpts};
 use html5ever::tendril::TendrilSink;
 
 /// Extracts the contents of the `<head>` and `<body>` tags from an HTML document, as well as the
@@ -23,8 +23,8 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
     let (mut head, mut body) = (None, None);
 
     while let Some(handle) = worklist.pop() {
-        match handle.data {
-            NodeData::Element { ref name, .. } => match name.local.as_ref() {
+        if let NodeData::Element { ref name, .. } = handle.data {
+            match name.local.as_ref() {
                 "head" => {
                     if head.is_some() {
                         return Err(err_msg("duplicate <head> tag"));
@@ -39,9 +39,8 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
                         body = Some(handle.clone());
                     }
                 }
-                _ => {}  // do nothing
+                _ => {} // do nothing
             }
-            _ => {}  // do nothing
         }
 
         worklist.extend(handle.children.borrow().iter().cloned());
@@ -54,8 +53,7 @@ fn extract_from_rcdom(dom: &RcDom) -> Result<(Handle, Handle)> {
 
 fn stringify(node: Handle) -> String {
     let mut vec = Vec::new();
-    serialize(&mut vec, &node, SerializeOpts::default())
-        .expect("serializing into buffer failed");
+    serialize(&mut vec, &node, SerializeOpts::default()).expect("serializing into buffer failed");
 
     String::from_utf8(vec).expect("html5ever returned non-utf8 data")
 }
@@ -65,11 +63,12 @@ fn extract_class(node: &Handle) -> String {
         NodeData::Element { ref attrs, .. } => {
             let attrs = attrs.borrow();
 
-            attrs.iter()
-                 .find(|a| &a.name.local == "class")
-                 .map_or(String::new(), |a| a.value.to_string())
+            attrs
+                .iter()
+                .find(|a| &a.name.local == "class")
+                .map_or(String::new(), |a| a.value.to_string())
         }
-        _ => String::new()
+        _ => String::new(),
     }
 }
 
