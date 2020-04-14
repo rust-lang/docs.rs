@@ -1,337 +1,17 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use clap::{App, AppSettings, Arg, SubCommand};
-use cratesfyi::db::{add_path_into_database, connect_db};
-use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
+use cratesfyi::db::{self, add_path_into_database, connect_db};
+use cratesfyi::utils::add_crate_to_queue;
 use cratesfyi::Server;
-use cratesfyi::{db, DocBuilder, DocBuilderOptions, RustwideBuilder};
+use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
+use structopt::StructOpt;
 
-#[allow(clippy::cognitive_complexity)]
 pub fn main() {
     let _ = dotenv::dotenv();
     logger_init();
 
-    let matches = App::new("cratesfyi")
-        .version(cratesfyi::BUILD_VERSION)
-        .about(env!("CARGO_PKG_DESCRIPTION"))
-        .setting(AppSettings::ArgRequiredElseHelp)
-        .subcommand(SubCommand::with_name("build")
-            .about("Builds documentation in a chroot environment")
-            .setting(AppSettings::ArgRequiredElseHelp)
-            .arg(Arg::with_name("PREFIX")
-                .short("P")
-                .long("prefix")
-                .takes_value(true))
-            .arg(Arg::with_name("CRATES_IO_INDEX_PATH")
-                .long("crates-io-index-path")
-                .help("Sets crates.io-index path")
-                .takes_value(true))
-            .arg(Arg::with_name("SKIP_IF_EXISTS")
-                .short("s")
-                .long("skip")
-                .help("Skips building documentation if documentation exists"))
-            .arg(Arg::with_name("SKIP_IF_LOG_EXISTS")
-                .long("skip-if-log-exists")
-                .help("Skips building documentation if build log exists"))
-            .arg(Arg::with_name("KEEP_BUILD_DIRECTORY")
-                .short("-k")
-                .long("keep-build-directory")
-                .help("Keeps build directory after build."))
-            .subcommand(SubCommand::with_name("world")
-                .about("Builds documentation of every crate"))
-            .subcommand(SubCommand::with_name("crate")
-                .about("Builds documentation for a crate")
-                .arg(Arg::with_name("CRATE_NAME")
-                    .index(1)
-                    .required_unless("LOCAL")
-                    .requires("CRATE_VERSION")
-                    .help("Crate name"))
-                .arg(Arg::with_name("CRATE_VERSION")
-                    .index(2)
-                    .help("Version of crate"))
-                .arg(Arg::with_name("LOCAL")
-                    .short("-l")
-                    .long("--local")
-                    .takes_value(true)
-                    .conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"])
-                    .help("Build a crate at a specific path")))
-            .subcommand(SubCommand::with_name("update-toolchain")
-                .about("update the curretntly installed rustup toolchain")
-                .arg(Arg::with_name("ONLY_FIRST_TIME")
-                     .long("only-first-time")
-                     .help("update toolchain only if no toolchain is currently installed")))
-            .subcommand(SubCommand::with_name("add-essential-files")
-                .about("Adds essential files for the installed version of rustc"))
-            .subcommand(SubCommand::with_name("lock")
-                .about("Locks cratesfyi daemon to stop building new crates"))
-            .subcommand(SubCommand::with_name("unlock")
-                .about("Unlocks cratesfyi daemon to continue building new crates"))
-            .subcommand(SubCommand::with_name("print-options")))
-        .subcommand(SubCommand::with_name("start-web-server")
-            .about("Starts web server")
-            .arg(Arg::with_name("SOCKET_ADDR")
-                .index(1)
-                .required(false)
-                .help("Socket address to listen to")))
-        .subcommand(SubCommand::with_name("daemon")
-            .about("Starts cratesfyi daemon")
-            .arg(Arg::with_name("FOREGROUND")
-                .short("-f")
-                .long("foreground")
-                .help("run the server in the foreground instead of detaching a child")))
-        .subcommand(SubCommand::with_name("database")
-            .about("Database operations")
-            .setting(AppSettings::ArgRequiredElseHelp)
-            .subcommand(SubCommand::with_name("migrate")
-                .about("Run database migrations")
-                .arg(Arg::with_name("VERSION")))
-            .subcommand(SubCommand::with_name("update-github-fields")
-                .about("Updates github stats for crates."))
-            .subcommand(SubCommand::with_name("add-directory")
-                .about("Adds a directory into database")
-                .arg(Arg::with_name("DIRECTORY")
-                    .index(1)
-                    .required(true)
-                    .help("Path of file or directory"))
-                .arg(Arg::with_name("PREFIX")
-                    .index(2)
-                    .help("Prefix of files in database")))
-            .subcommand(SubCommand::with_name("update-release-activity")
-                .about("Updates monthly release activity chart"))
-            .subcommand(SubCommand::with_name("update-search-index")
-                .about("Updates search index"))
-            .subcommand(SubCommand::with_name("delete-crate")
-                .about("Removes a whole crate from the database")
-                .arg(Arg::with_name("CRATE_NAME")
-                    .takes_value(true)
-                    .required(true)
-                    .help("Name of the crate to delete")))
-            .subcommand(SubCommand::with_name("blacklist")
-                .about("Blacklist operations")
-                .setting(AppSettings::ArgRequiredElseHelp)
-                .subcommand(SubCommand::with_name("list")
-                    .about("List all crates on the blacklist"))
-                .subcommand(SubCommand::with_name("add")
-                    .about("Add a crate to the blacklist")
-                    .arg(Arg::with_name("CRATE_NAME")
-                        .required(true)
-                        .help("Crate name")))
-                .subcommand(SubCommand::with_name("remove")
-                    .about("Remove a crate from the blacklist")
-                    .arg(Arg::with_name("CRATE_NAME")
-                        .required(true)
-                        .help("Crate name")))))
-        .subcommand(SubCommand::with_name("queue")
-            .about("Interactions with the build queue")
-            .setting(AppSettings::ArgRequiredElseHelp)
-            .subcommand(SubCommand::with_name("add")
-                .about("Add a crate to the build queue")
-                .arg(Arg::with_name("CRATE_NAME")
-                    .index(1)
-                    .required(true)
-                    .help("Name of crate to build"))
-                .arg(Arg::with_name("CRATE_VERSION")
-                    .index(2)
-                    .required(true)
-                    .help("Version of crate to build"))
-                .arg(Arg::with_name("BUILD_PRIORITY")
-                    .short("p")
-                    .long("priority")
-                    .help("Priority of build (default: 5) (new crate builds get priority 0)")
-                    .takes_value(true)))
-            .subcommand(SubCommand::with_name("default-priority")
-                .about("Interactions with build queue priorities")
-                .setting(AppSettings::ArgRequiredElseHelp)
-                .subcommand(SubCommand::with_name("set")
-                    .about("Set all crates matching the given pattern to a priority level")
-                    .arg(Arg::with_name("PATTERN")
-                        .index(1)
-                        .required(true)
-                        .help("See https://www.postgresql.org/docs/current/functions-matching.html"))
-                    .arg(Arg::with_name("PRIORITY")
-                        .index(2)
-                        .required(true)
-                        .help("The priority to give crates matching PATTERN")))
-                .subcommand(SubCommand::with_name("remove")
-                    .about("Remove the prioritization of crates by the given pattern")
-                    .arg(Arg::with_name("PATTERN")
-                        .index(1)
-                        .required(true)
-                        .help("See https://www.postgresql.org/docs/current/functions-matching.html")))))
-        .get_matches();
-
-    if let Some(matches) = matches.subcommand_matches("build") {
-        let docbuilder_opts = {
-            let mut docbuilder_opts = if let Some(prefix) = matches.value_of("PREFIX") {
-                DocBuilderOptions::from_prefix(PathBuf::from(prefix))
-            } else if let Ok(prefix) = env::var("CRATESFYI_PREFIX") {
-                DocBuilderOptions::from_prefix(PathBuf::from(prefix))
-            } else {
-                DocBuilderOptions::default()
-            };
-
-            if let Some(crates_io_index_path) = matches.value_of("CRATES_IO_INDEX_PATH") {
-                docbuilder_opts.crates_io_index_path = PathBuf::from(crates_io_index_path);
-            }
-
-            docbuilder_opts.skip_if_exists = matches.is_present("SKIP_IF_EXISTS");
-            docbuilder_opts.skip_if_log_exists = matches.is_present("SKIP_IF_LOG_EXISTS");
-            docbuilder_opts.keep_build_directory = matches.is_present("KEEP_BUILD_DIRECTORY");
-
-            docbuilder_opts.check_paths().unwrap();
-
-            docbuilder_opts
-        };
-
-        let mut docbuilder = DocBuilder::new(docbuilder_opts);
-
-        if matches.subcommand_matches("world").is_some() {
-            docbuilder.load_cache().expect("Failed to load cache");
-            let mut builder = RustwideBuilder::init().unwrap();
-            builder
-                .build_world(&mut docbuilder)
-                .expect("Failed to build world");
-            docbuilder.save_cache().expect("Failed to save cache");
-        } else if let Some(matches) = matches.subcommand_matches("crate") {
-            docbuilder.load_cache().expect("Failed to load cache");
-            let mut builder = RustwideBuilder::init().expect("failed to initialize rustwide");
-            match matches.value_of("LOCAL") {
-                Some(path) => builder.build_local_package(&mut docbuilder, Path::new(path)),
-                None => builder.build_package(
-                    &mut docbuilder,
-                    matches.value_of("CRATE_NAME").unwrap(),
-                    matches.value_of("CRATE_VERSION").unwrap(),
-                    None,
-                ),
-            }
-            .expect("Building documentation failed");
-            docbuilder.save_cache().expect("Failed to save cache");
-        } else if let Some(m) = matches.subcommand_matches("update-toolchain") {
-            if m.is_present("ONLY_FIRST_TIME") {
-                let conn = db::connect_db().unwrap();
-                let res = conn
-                    .query("SELECT * FROM config WHERE name = 'rustc_version';", &[])
-                    .unwrap();
-                if !res.is_empty() {
-                    println!("update-toolchain was already called in the past, exiting");
-                    return;
-                }
-            }
-            let mut builder = RustwideBuilder::init().unwrap();
-            builder
-                .update_toolchain()
-                .expect("failed to update toolchain");
-        } else if matches.subcommand_matches("add-essential-files").is_some() {
-            let mut builder = RustwideBuilder::init().unwrap();
-            builder
-                .add_essential_files()
-                .expect("failed to add essential files");
-        } else if matches.subcommand_matches("lock").is_some() {
-            docbuilder.lock().expect("Failed to lock");
-        } else if matches.subcommand_matches("unlock").is_some() {
-            docbuilder.unlock().expect("Failed to unlock");
-        } else if matches.subcommand_matches("print-options").is_some() {
-            println!("{:?}", docbuilder.options());
-        }
-    } else if let Some(matches) = matches.subcommand_matches("database") {
-        if let Some(matches) = matches.subcommand_matches("migrate") {
-            let version = matches
-                .value_of("VERSION")
-                .map(|v| v.parse::<i64>().expect("Version should be an integer"));
-            db::migrate(
-                version,
-                &connect_db().expect("failed to connect to the database"),
-            )
-            .expect("Failed to run database migrations");
-        } else if matches.subcommand_matches("update-github-fields").is_some() {
-            cratesfyi::utils::github_updater().expect("Failed to update github fields");
-        } else if let Some(matches) = matches.subcommand_matches("add-directory") {
-            add_path_into_database(
-                &db::connect_db().unwrap(),
-                matches.value_of("PREFIX").unwrap_or(""),
-                matches.value_of("DIRECTORY").unwrap(),
-            )
-            .expect("Failed to add directory into database");
-        } else if matches
-            .subcommand_matches("update-release-activity")
-            .is_some()
-        {
-            // FIXME: This is actually util command not database
-            cratesfyi::utils::update_release_activity().expect("Failed to update release activity");
-        } else if matches.subcommand_matches("update-search-index").is_some() {
-            let conn = db::connect_db().unwrap();
-            db::update_search_index(&conn).expect("Failed to update search index");
-        } else if let Some(matches) = matches.subcommand_matches("delete-crate") {
-            let name = matches.value_of("CRATE_NAME").expect("missing crate name");
-            let conn = db::connect_db().expect("failed to connect to the database");
-            db::delete_crate(&conn, &name).expect("failed to delete the crate");
-        } else if let Some(matches) = matches.subcommand_matches("blacklist") {
-            let conn = db::connect_db().expect("failed to connect to the database");
-
-            if matches.subcommand_matches("list").is_some() {
-                let crates =
-                    db::blacklist::list_crates(&conn).expect("failed to list crates on blacklist");
-                println!("{}", crates.join("\n"));
-            } else if let Some(matches) = matches.subcommand_matches("add") {
-                let crate_name = matches.value_of("CRATE_NAME").expect("verified by clap");
-                db::blacklist::add_crate(&conn, crate_name)
-                    .expect("failed to add crate to blacklist");
-            } else if let Some(matches) = matches.subcommand_matches("remove") {
-                let crate_name = matches.value_of("CRATE_NAME").expect("verified by clap");
-                db::blacklist::remove_crate(&conn, crate_name)
-                    .expect("failed to remove crate from blacklist");
-            }
-        }
-    } else if let Some(matches) = matches.subcommand_matches("start-web-server") {
-        Server::start(Some(
-            matches.value_of("SOCKET_ADDR").unwrap_or("0.0.0.0:3000"),
-        ));
-    } else if matches.subcommand_matches("daemon").is_some() {
-        let foreground = matches
-            .subcommand_matches("daemon")
-            .map_or(false, |opts| opts.is_present("FOREGROUND"));
-        cratesfyi::utils::start_daemon(!foreground);
-    } else if let Some(matches) = matches.subcommand_matches("queue") {
-        if let Some(matches) = matches.subcommand_matches("add") {
-            let priority = matches.value_of("BUILD_PRIORITY").unwrap_or("5");
-            let priority: i32 = priority.parse().expect("--priority was not a number");
-            let conn = connect_db().expect("Could not connect to database");
-
-            add_crate_to_queue(
-                &conn,
-                matches.value_of("CRATE_NAME").unwrap(),
-                matches.value_of("CRATE_VERSION").unwrap(),
-                priority,
-            )
-            .expect("Could not add crate to queue");
-        } else if let Some(matches) = matches.subcommand_matches("default-priority") {
-            if let Some(matches) = matches.subcommand_matches("set") {
-                let pattern = matches
-                    .value_of("PATTERN")
-                    .expect("You must give a pattern to match with");
-                let priority = clap::value_t!(matches.value_of("PRIORITY"), i32)
-                    .expect("You must give a priority for a crate");
-                let conn = connect_db().expect("Could not connect to the database");
-
-                set_crate_priority(&conn, pattern, priority)
-                    .expect("Could not set pattern's priority");
-            } else if let Some(matches) = matches.subcommand_matches("remove") {
-                let pattern = matches
-                    .value_of("PATTERN")
-                    .expect("You must give a pattern to remove");
-                let conn = connect_db().expect("Could not connect to the database");
-
-                if let Some(priority) = remove_crate_priority(&conn, pattern)
-                    .expect("Could not remove pattern's priority")
-                {
-                    println!("Removed pattern with priority {}", priority);
-                } else {
-                    println!("Pattern did not exist and so was not removed");
-                }
-            }
-        }
-    }
+    CommandLine::from_args().handle_args();
 }
 
 fn logger_init() {
@@ -356,4 +36,403 @@ fn logger_init() {
     );
 
     rustwide::logging::init_with(builder.build());
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[structopt(
+    name = "cratesfyi",
+    about = env!("CARGO_PKG_DESCRIPTION"),
+    version = cratesfyi::BUILD_VERSION,
+    rename_all = "kebab-case",
+)]
+enum CommandLine {
+    Build(Build),
+
+    /// Starts web server
+    StartWebServer {
+        // TODO: Could do stuff like port and host to better conform to what most clis do
+        #[structopt(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
+        socket_addr: String,
+    },
+
+    /// Starts cratesfyi daemon
+    Daemon {
+        /// Run the server in the foreground instead of detaching a child
+        // TODO: Could be optional env var as well
+        #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
+        foreground: bool,
+    },
+
+    /// Database operations
+    Database {
+        #[structopt(subcommand)]
+        subcommand: DatabaseSubcommand,
+    },
+
+    /// Interactions with the build queue
+    Queue {
+        #[structopt(subcommand)]
+        subcommand: QueueSubcommand,
+    },
+}
+
+impl CommandLine {
+    pub fn handle_args(self) {
+        match self {
+            Self::Build(build) => build.handle_args(),
+            Self::StartWebServer { socket_addr } => {
+                Server::start(Some(&socket_addr));
+            }
+            Self::Daemon { foreground } => cratesfyi::utils::start_daemon(!foreground),
+            Self::Database { subcommand } => subcommand.handle_args(),
+            Self::Queue { subcommand } => subcommand.handle_args(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum QueueSubcommand {
+    /// Add a crate to the build queue
+    Add {
+        /// Name of crate to build
+        #[structopt(name = "CRATE_NAME")]
+        crate_name: String,
+        /// Version of crate to build
+        #[structopt(name = "CRATE_VERSION")]
+        crate_version: String,
+        /// Priority of build (new crate builds get priority 0)
+        #[structopt(
+            name = "BUILD_PRIORITY",
+            short = "p",
+            long = "priority",
+            default_value = "5"
+        )]
+        build_priority: i32,
+    },
+}
+
+impl QueueSubcommand {
+    pub fn handle_args(self) {
+        match self {
+            Self::Add {
+                crate_name,
+                crate_version,
+                build_priority,
+            } => {
+                let conn = connect_db().expect("Could not connect to database");
+                add_crate_to_queue(&conn, &crate_name, &crate_version, build_priority)
+                    .expect("Could not add crate to queue");
+            }
+        }
+    }
+}
+
+/// Builds documentation in a chroot environment
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[structopt(rename_all = "kebab-case")]
+struct Build {
+    #[structopt(
+        name = "PREFIX",
+        short = "P",
+        long = "prefix",
+        env = "CRATESFYI_PREFIX"
+    )]
+    prefix: PathBuf,
+
+    /// Sets crates.io-index path
+    // TODO: Could be an optional env variable as well
+    #[structopt(name = "CRATES_IO_INDEX_PATH", long = "crates-io-index-path")]
+    crates_io_index_path: Option<PathBuf>,
+
+    /// Skips building documentation if documentation exists
+    #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
+    skip_if_exists: bool,
+
+    /// Skips building documentation if build log exists
+    #[structopt(name = "SKIP_IF_LOG_EXISTS", long = "skip-if-log-exists")]
+    skip_if_log_exists: bool,
+
+    /// Keeps build directory after build.
+    #[structopt(
+        name = "KEEP_BUILD_DIRECTORY",
+        short = "k",
+        long = "keep-build-directory"
+    )]
+    keep_build_directory: bool,
+
+    #[structopt(subcommand)]
+    subcommand: BuildSubcommand,
+}
+
+impl Build {
+    pub fn handle_args(self) {
+        let docbuilder = {
+            let mut doc_options = DocBuilderOptions::from_prefix(self.prefix);
+
+            if let Some(crates_io_index_path) = self.crates_io_index_path {
+                doc_options.crates_io_index_path = crates_io_index_path;
+            }
+
+            doc_options.skip_if_exists = self.skip_if_exists;
+            doc_options.skip_if_log_exists = self.skip_if_log_exists;
+            doc_options.keep_build_directory = self.keep_build_directory;
+
+            doc_options
+                .check_paths()
+                .expect("The given paths were invalid");
+
+            DocBuilder::new(doc_options)
+        };
+
+        self.subcommand.handle_args(docbuilder);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum BuildSubcommand {
+    /// Builds documentation of every crate
+    World,
+
+    /// Builds documentation for a crate
+    Crate {
+        /// Crate name
+        #[structopt(
+            name = "CRATE_NAME",
+            required_unless("LOCAL"),
+            requires("CRATE_VERSION")
+        )]
+        crate_name: String,
+
+        /// Version of crate
+        #[structopt(name = "CRATE_VERSION")]
+        crate_version: String,
+
+        /// Build a crate at a specific path
+        #[structopt(short = "l", long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
+        local: Option<PathBuf>,
+    },
+
+    /// update the currently installed rustup toolchain
+    UpdateToolchain {
+        /// Update the toolchain only if no toolchain is currently installed
+        #[structopt(name = "ONLY_FIRST_TIME", long = "only-first-time")]
+        only_first_time: bool,
+    },
+
+    /// Adds essential files for the installed version of rustc
+    AddEssentialFiles,
+
+    /// Locks cratesfyi daemon to stop building new crates
+    Lock,
+
+    /// Unlocks cratesfyi daemon to continue building new crates
+    Unlock,
+
+    PrintOptions,
+}
+
+impl BuildSubcommand {
+    pub fn handle_args(self, mut docbuilder: DocBuilder) {
+        match self {
+            Self::World => {
+                docbuilder.load_cache().expect("Failed to load cache");
+
+                let mut builder = RustwideBuilder::init().unwrap();
+                builder
+                    .build_world(&mut docbuilder)
+                    .expect("Failed to build world");
+
+                docbuilder.save_cache().expect("Failed to save cache");
+            }
+
+            Self::Crate {
+                crate_name,
+                crate_version,
+                local,
+            } => {
+                docbuilder.load_cache().expect("Failed to load cache");
+                let mut builder = RustwideBuilder::init().expect("failed to initialize rustwide");
+
+                if let Some(path) = local {
+                    builder
+                        .build_local_package(&mut docbuilder, &path)
+                        .expect("Building documentation failed");
+                } else {
+                    builder
+                        .build_package(&mut docbuilder, &crate_name, &crate_version, None)
+                        .expect("Building documentation failed");
+                }
+
+                docbuilder.save_cache().expect("Failed to save cache");
+            }
+
+            Self::UpdateToolchain { only_first_time } => {
+                if only_first_time {
+                    let conn = db::connect_db().unwrap();
+                    let res = conn
+                        .query("SELECT * FROM config WHERE name = 'rustc_version';", &[])
+                        .unwrap();
+
+                    if !res.is_empty() {
+                        println!("update-toolchain was already called in the past, exiting");
+                        return;
+                    }
+                }
+
+                let mut builder = RustwideBuilder::init().unwrap();
+                builder
+                    .update_toolchain()
+                    .expect("failed to update toolchain");
+            }
+
+            Self::AddEssentialFiles => {
+                let mut builder = RustwideBuilder::init().unwrap();
+                builder
+                    .add_essential_files()
+                    .expect("failed to add essential files");
+            }
+
+            Self::Lock => docbuilder.lock().expect("Failed to lock"),
+            Self::Unlock => docbuilder.unlock().expect("Failed to unlock"),
+            Self::PrintOptions => println!("{:?}", docbuilder.options()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum DatabaseSubcommand {
+    #[structopt(name = "move-to-s3")]
+    MoveToS3,
+
+    /// Run database migrations
+    Migrate {
+        /// The database version to migrate to
+        #[structopt(name = "VERSION")]
+        version: i64,
+    },
+
+    /// Updates github stats for crates.
+    UpdateGithubFields,
+
+    AddDirectory {
+        /// Path of file or directory
+        #[structopt(name = "DIRECTORY")]
+        directory: PathBuf,
+        /// Prefix of files in database
+        #[structopt(name = "PREFIX", env = "CRATESFYI_PREFIX")]
+        prefix: String,
+    },
+
+    /// Updates monthly release activity chart
+    UpdateReleaseActivity,
+
+    /// Updates search index
+    UpdateSearchIndex,
+
+    /// Removes a whole crate from the database
+    DeleteCrate {
+        /// Name of the crate to delete
+        #[structopt(name = "CRATE_NAME")]
+        crate_name: String,
+    },
+
+    /// Blacklist operations
+    Blacklist {
+        #[structopt(subcommand)]
+        command: BlacklistSubcommand,
+    },
+}
+
+impl DatabaseSubcommand {
+    pub fn handle_args(self) {
+        match self {
+            Self::MoveToS3 => {
+                let conn = db::connect_db().expect("failed to connect to the database");
+
+                let (mut count, mut total) = (1, 0);
+                while count != 0 {
+                    count = db::move_to_s3(&conn, 5_000).expect("Failed to upload batch to S3");
+                    total += count;
+
+                    eprintln!(
+                        "moved {} rows to s3 in this batch, total moved so far: {}",
+                        count, total
+                    );
+                }
+            }
+
+            Self::Migrate { version } => {
+                let conn = connect_db().expect("failed to connect to the database");
+                db::migrate(Some(version), &conn).expect("Failed to run database migrations");
+            }
+
+            Self::UpdateGithubFields => {
+                cratesfyi::utils::github_updater().expect("Failed to update github fields");
+            }
+
+            Self::AddDirectory { directory, prefix } => {
+                let conn = db::connect_db().expect("failed to connect to the database");
+                add_path_into_database(&conn, &prefix, directory)
+                    .expect("Failed to add directory into database");
+            }
+
+            // FIXME: This is actually util command not database
+            // TODO: Would fix, but I don't know if it's critical or will break prod stuff right now
+            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity()
+                .expect("Failed to update release activity"),
+
+            Self::UpdateSearchIndex => {
+                let conn = db::connect_db().expect("failed to connect to the database");
+                db::update_search_index(&conn).expect("Failed to update search index");
+            }
+
+            Self::DeleteCrate { crate_name } => {
+                let conn = db::connect_db().expect("failed to connect to the database");
+                db::delete_crate(&conn, &crate_name).expect("failed to delete the crate");
+            }
+
+            Self::Blacklist { command } => command.handle_args(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum BlacklistSubcommand {
+    /// List all crates on the blacklist
+    List,
+
+    /// Add a crate to the blacklist
+    Add {
+        /// Crate name
+        #[structopt(name = "CRATE_NAME")]
+        crate_name: String,
+    },
+
+    /// Remove a crate from the blacklist
+    Remove {
+        /// Crate name
+        #[structopt(name = "CRATE_NAME")]
+        crate_name: String,
+    },
+}
+
+impl BlacklistSubcommand {
+    fn handle_args(self) {
+        let conn = db::connect_db().expect("failed to connect to the database");
+
+        match self {
+            Self::List => {
+                let crates =
+                    db::blacklist::list_crates(&conn).expect("failed to list crates on blacklist");
+
+                println!("{}", crates.join("\n"));
+            }
+
+            Self::Add { crate_name } => db::blacklist::add_crate(&conn, &crate_name)
+                .expect("failed to add crate to blacklist"),
+
+            Self::Remove { crate_name } => db::blacklist::remove_crate(&conn, &crate_name)
+                .expect("failed to remove crate from blacklist"),
+        }
+    }
 }
