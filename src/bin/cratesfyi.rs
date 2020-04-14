@@ -9,6 +9,7 @@ use cratesfyi::{db, DocBuilder, DocBuilderOptions, RustwideBuilder};
 
 #[allow(clippy::cognitive_complexity)]
 pub fn main() {
+    let _ = dotenv::dotenv();
     logger_init();
 
     let matches = App::new("cratesfyi")
