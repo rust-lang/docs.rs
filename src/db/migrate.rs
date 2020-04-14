@@ -4,31 +4,6 @@ use crate::error::Result as CratesfyiResult;
 use postgres::{transaction::Transaction, Connection, Error as PostgresError};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
-use std::borrow::Cow;
-
-#[derive(Copy, Clone)]
-enum ApplyMode {
-    Permanent,
-    #[cfg(test)]
-    Temporary,
-}
-
-#[derive(Copy, Clone)]
-struct MigrationContext {
-    apply_mode: ApplyMode,
-}
-
-impl MigrationContext {
-    fn format_query<'a>(&self, query: &'a str) -> Cow<'a, str> {
-        match self.apply_mode {
-            ApplyMode::Permanent => Cow::Borrowed(query),
-            #[cfg(test)]
-            ApplyMode::Temporary => {
-                Cow::Owned(query.replace("CREATE TABLE", "CREATE TEMPORARY TABLE"))
-            }
-        }
-    }
-}
 
 /// Creates a new PostgresMigration from upgrade and downgrade queries.
 /// Downgrade query should return database to previous state.
@@ -43,9 +18,7 @@ impl MigrationContext {
 /// ```
 macro_rules! migration {
     ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
-        struct Amigration {
-            ctx: MigrationContext,
-        };
+        struct Amigration;
         impl Migration for Amigration {
             fn version(&self) -> Version {
                 $version
@@ -61,9 +34,7 @@ macro_rules! migration {
                     self.version(),
                     self.description()
                 );
-                transaction
-                    .batch_execute(&self.ctx.format_query($up))
-                    .map(|_| ())
+                transaction.batch_execute($up).map(|_| ())
             }
             fn down(&self, transaction: &Transaction) -> Result<(), PostgresError> {
                 info!(
@@ -71,35 +42,16 @@ macro_rules! migration {
                     self.version(),
                     self.description()
                 );
-                transaction
-                    .batch_execute(&self.ctx.format_query($down))
-                    .map(|_| ())
+                transaction.batch_execute($down).map(|_| ())
             }
         }
-        Box::new(Amigration { ctx: $context })
+        Box::new(Amigration)
     }};
 }
 
 pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
-    migrate_inner(version, conn, ApplyMode::Permanent)
-}
-
-#[cfg(test)]
-pub fn migrate_temporary(version: Option<Version>, conn: &Connection) -> CratesfyiResult<()> {
-    migrate_inner(version, conn, ApplyMode::Temporary)
-}
-
-fn migrate_inner(
-    version: Option<Version>,
-    conn: &Connection,
-    apply_mode: ApplyMode,
-) -> CratesfyiResult<()> {
-    let context = MigrationContext { apply_mode };
-
     conn.execute(
-        &context.format_query(
-            "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
-        ),
+        "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
         &[],
     )?;
     let adapter = PostgresAdapter::with_metadata_table(conn, "database_versions");
@@ -319,6 +271,29 @@ fn migrate_inner(
             "ALTER TABLE sandbox_overrides ADD COLUMN max_targets INT;",
             // downgrade query
             "ALTER TABLE sandbox_overrides DROP COLUMN max_targets;"
+        ),
+        migration!(
+            context,
+            // version
+            10,
+            // description
+            "Add function to normalize underscores in crate names",
+            // upgrade query
+            "
+                CREATE FUNCTION normalize_crate_name(VARCHAR)
+                RETURNS VARCHAR
+                AS $$
+                    SELECT LOWER(REPLACE($1, '_', '-'));
+                $$ LANGUAGE SQL;
+
+                CREATE UNIQUE INDEX crates_normalized_name_idx
+                    ON crates (normalize_crate_name(name));
+            ",
+            // downgrade query
+            "
+                DROP INDEX crates_normalized_name_idx;
+                DROP FUNCTION normalize_crate_name;
+            "
         ),
     ];
 
