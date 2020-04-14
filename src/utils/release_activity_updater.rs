@@ -43,7 +43,6 @@ pub fn update_release_activity() -> Result<()> {
 
         // unwrap is fine here, as our date format is always valid
         dates.push(format!("{}", date.strftime("%d %b").unwrap()));
-
         crate_counts.push(release_count);
         failure_counts.push(failure_count);
     }
