@@ -411,7 +411,7 @@ fn duration_to_str(ts: time::Timespec) -> String {
         (days, _, _, _) if days == 1 => "one day ago".to_string(),
 
         (_, hours, _, _) if hours > 1 => format!("{} hours ago", hours),
-        (_, hours, _, _) if hours == 1 => "an hour ago".to_string(),
+        (_, 1, _, _) => "an hour ago".to_string(),
 
         (_, _, minutes, _) if minutes > 1 => format!("{} minutes ago", minutes),
         (_, _, 1, _) => "one minute ago".to_string(),
