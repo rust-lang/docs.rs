@@ -82,13 +82,13 @@ jobs:
           fetch-depth: 2
 
       - name: Build the Docker image
-        run: docker build -t docsrs .
+        run: docker build -t docs-rs .
 
       - name: Upload the Docker image to ECR
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
         with:
-          image: docsrs
-          repository: docsrs
+          image: docs-rs
+          repository: staging-docs-rs
           region: us-west-1
           aws_access_key_id: "${{ secrets.aws_access_key_id }}"
           aws_secret_access_key: "${{ secrets.aws_secret_access_key }}"
