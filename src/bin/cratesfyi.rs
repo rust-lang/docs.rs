@@ -50,7 +50,6 @@ enum CommandLine {
 
     /// Starts web server
     StartWebServer {
-        // TODO: Could do stuff like port and host to better conform to what most clis do
         #[structopt(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
         socket_addr: String,
     },
@@ -58,7 +57,6 @@ enum CommandLine {
     /// Starts cratesfyi daemon
     Daemon {
         /// Run the server in the foreground instead of detaching a child
-        // TODO: Could be optional env var as well
         #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
         foreground: bool,
     },
@@ -140,7 +138,6 @@ struct Build {
     prefix: PathBuf,
 
     /// Sets crates.io-index path
-    // TODO: Could be an optional env variable as well
     #[structopt(name = "CRATES_IO_INDEX_PATH", long = "crates-io-index-path")]
     crates_io_index_path: Option<PathBuf>,
 
@@ -308,7 +305,7 @@ enum DatabaseSubcommand {
     Migrate {
         /// The database version to migrate to
         #[structopt(name = "VERSION")]
-        version: i64,
+        version: Option<i64>,
     },
 
     /// Updates github stats for crates.
@@ -363,7 +360,7 @@ impl DatabaseSubcommand {
 
             Self::Migrate { version } => {
                 let conn = connect_db().expect("failed to connect to the database");
-                db::migrate(Some(version), &conn).expect("Failed to run database migrations");
+                db::migrate(version, &conn).expect("Failed to run database migrations");
             }
 
             Self::UpdateGithubFields => {
@@ -377,7 +374,6 @@ impl DatabaseSubcommand {
             }
 
             // FIXME: This is actually util command not database
-            // TODO: Would fix, but I don't know if it's critical or will break prod stuff right now
             Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity()
                 .expect("Failed to update release activity"),
 
