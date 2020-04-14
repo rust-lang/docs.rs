@@ -15,8 +15,8 @@ pub(crate) struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            memory: 3 * 1024 * 1024 * 1024,  // 3 GB
-            timeout: Duration::from_secs(15 * 60),  // 15 minutes
+            memory: 3 * 1024 * 1024 * 1024,        // 3 GB
+            timeout: Duration::from_secs(15 * 60), // 15 minutes
             targets: 10,
             networking: false,
             max_log_size: 100 * 1024, // 100 KB
@@ -69,20 +69,25 @@ impl Limits {
     }
 
     pub(crate) fn for_website(&self) -> BTreeMap<String, String> {
-
         let mut res = BTreeMap::new();
         res.insert("Available RAM".into(), SIZE_SCALE(self.memory));
         res.insert(
             "Maximum rustdoc execution time".into(),
             TIME_SCALE(self.timeout.as_secs() as usize),
         );
-        res.insert("Maximum size of a build log".into(), SIZE_SCALE(self.max_log_size));
+        res.insert(
+            "Maximum size of a build log".into(),
+            SIZE_SCALE(self.max_log_size),
+        );
         if self.networking {
             res.insert("Network access".into(), "allowed".into());
         } else {
             res.insert("Network access".into(), "blocked".into());
         }
-        res.insert("Maximum number of build targets".into(), self.targets.to_string());
+        res.insert(
+            "Maximum number of build targets".into(),
+            self.targets.to_string(),
+        );
         res
     }
 }
@@ -96,7 +101,7 @@ fn scale(value: usize, interval: usize, labels: &[&str]) -> String {
     for label in &labels[1..] {
         if value / interval >= 1.0 {
             chosen_label = label;
-            value = value / interval;
+            value /= interval;
         } else {
             break;
         }
@@ -124,10 +129,19 @@ mod test {
             let hexponent = Limits::for_crate(&db.conn(), krate)?;
             assert_eq!(hexponent, Limits::default());
 
-            db.conn().query("INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)", &[&krate])?;
+            db.conn().query(
+                "INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)",
+                &[&krate],
+            )?;
             // limits work if crate has limits set
             let hexponent = Limits::for_crate(&db.conn(), krate)?;
-            assert_eq!(hexponent, Limits { targets: 15, ..Limits::default() });
+            assert_eq!(
+                hexponent,
+                Limits {
+                    targets: 15,
+                    ..Limits::default()
+                }
+            );
 
             // all limits work
             let krate = "regex";
@@ -153,10 +167,22 @@ mod test {
             ..Limits::default()
         };
         let display = limits.for_website();
-        assert_eq!(display.get("Network access".into()), Some(&"blocked".into()));
-        assert_eq!(display.get("Maximum size of a build log".into()), Some(&"100 KB".into()));
-        assert_eq!(display.get("Maximum number of build targets".into()), Some(&limits.targets.to_string()));
-        assert_eq!(display.get("Maximum rustdoc execution time".into()), Some(&"5 minutes".into()));
+        assert_eq!(
+            display.get("Network access".into()),
+            Some(&"blocked".into())
+        );
+        assert_eq!(
+            display.get("Maximum size of a build log".into()),
+            Some(&"100 KB".into())
+        );
+        assert_eq!(
+            display.get("Maximum number of build targets".into()),
+            Some(&limits.targets.to_string())
+        );
+        assert_eq!(
+            display.get("Maximum rustdoc execution time".into()),
+            Some(&"5 minutes".into())
+        );
         assert_eq!(display.get("Available RAM".into()), Some(&"100 KB".into()));
     }
     #[test]

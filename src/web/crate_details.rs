@@ -1,22 +1,19 @@
-
-
-
-use super::pool::Pool;
-use super::{MetaData, duration_to_str, match_version, render_markdown, MatchVersion, redirect_base};
 use super::error::Nope;
 use super::page::Page;
+use super::pool::Pool;
+use super::{
+    duration_to_str, match_version, redirect_base, render_markdown, MatchSemver, MetaData,
+};
 use iron::prelude::*;
-use iron::{Url, status};
+use iron::{status, Url};
+use postgres::Connection;
+use router::Router;
+use rustc_serialize::json::{Json, ToJson};
+use semver;
 use std::collections::BTreeMap;
 use time;
-use rustc_serialize::json::{Json, ToJson};
-use router::Router;
-use postgres::Connection;
-use semver;
-
 
 // TODO: Add target name and versions
-
 
 #[derive(Debug)]
 pub struct CrateDetails {
@@ -50,7 +47,6 @@ pub struct CrateDetails {
     documentation_url: Option<String>,
 }
 
-
 impl ToJson for CrateDetails {
     fn to_json(&self) -> Json {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
@@ -67,10 +63,15 @@ impl ToJson for CrateDetails {
         if let Some(ref rustdoc) = self.rustdoc {
             m.insert("rustdoc".to_string(), render_markdown(&rustdoc).to_json());
         }
-        m.insert("release_time".to_string(),
-                 duration_to_str(self.release_time).to_json());
+        m.insert(
+            "release_time".to_string(),
+            duration_to_str(self.release_time).to_json(),
+        );
         m.insert("build_status".to_string(), self.build_status.to_json());
-        m.insert("last_successful_build".to_string(), self.last_successful_build.to_json());
+        m.insert(
+            "last_successful_build".to_string(),
+            self.last_successful_build.to_json(),
+        );
         m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
         m.insert("repository_url".to_string(), self.repository_url.to_json());
         m.insert("homepage_url".to_string(), self.homepage_url.to_json());
@@ -86,11 +87,13 @@ impl ToJson for CrateDetails {
         m.insert("is_library".to_string(), self.is_library.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
-        m.insert("documentation_url".to_string(), self.documentation_url.to_json());
+        m.insert(
+            "documentation_url".to_string(),
+            self.documentation_url.to_json(),
+        );
         m.to_json()
     }
 }
-
 
 #[derive(Debug, Eq, PartialEq)]
 struct Release {
@@ -98,7 +101,6 @@ struct Release {
     build_status: bool,
     yanked: bool,
 }
-
 
 impl ToJson for Release {
     fn to_json(&self) -> Json {
@@ -109,10 +111,8 @@ impl ToJson for Release {
     }
 }
 
-
 impl CrateDetails {
     pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
-
         // get all stuff, I love you rustfmt
         let query = "SELECT crates.id,
                             releases.id,
@@ -146,7 +146,7 @@ impl CrateDetails {
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             return None;
         }
 
@@ -158,19 +158,22 @@ impl CrateDetails {
             let mut versions: Vec<semver::Version> = Vec::new();
             let versions_from_db: Json = rows.get(0).get(17);
 
-            versions_from_db.as_array().map(|vers| {
+            if let Some(vers) = versions_from_db.as_array() {
                 for version in vers {
-                    version.as_string().map(|version| {
+                    if let Some(version) = version.as_string() {
                         if let Ok(sem_ver) = semver::Version::parse(&version) {
                             versions.push(sem_ver);
                         };
-                    });
+                    };
                 }
-            });
+            };
 
             versions.sort();
             versions.reverse();
-            versions.iter().map(|version| map_to_release(&conn, crate_id, version.to_string())).collect()
+            versions
+                .iter()
+                .map(|version| map_to_release(&conn, crate_id, version.to_string()))
+                .collect()
         };
 
         let metadata = MetaData {
@@ -206,7 +209,7 @@ impl CrateDetails {
             github_stars: rows.get(0).get(18),
             github_forks: rows.get(0).get(19),
             github_issues: rows.get(0).get(20),
-            metadata: metadata,
+            metadata,
             is_library: rows.get(0).get(21),
             doc_targets: rows.get(0).get(22),
             license: rows.get(0).get(23),
@@ -214,32 +217,42 @@ impl CrateDetails {
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
-            crate_details.github = repository_url.starts_with("http://github.com") ||
-                                   repository_url.starts_with("https://github.com");
+            crate_details.github = repository_url.starts_with("http://github.com")
+                || repository_url.starts_with("https://github.com");
         }
 
         // get authors
-        for row in &conn.query("SELECT name, slug
+        for row in &conn
+            .query(
+                "SELECT name, slug
                                 FROM authors
                                 INNER JOIN author_rels ON author_rels.aid = authors.id
                                 WHERE rid = $1",
-                   &[&release_id])
-            .unwrap() {
+                &[&release_id],
+            )
+            .unwrap()
+        {
             crate_details.authors.push((row.get(0), row.get(1)));
         }
 
         // get owners
-        for row in &conn.query("SELECT login, avatar
+        for row in &conn
+            .query(
+                "SELECT login, avatar
                                 FROM owners
                                 INNER JOIN owner_rels ON owner_rels.oid = owners.id
                                 WHERE cid = $1",
-                   &[&crate_id])
-            .unwrap() {
+                &[&crate_id],
+            )
+            .unwrap()
+        {
             crate_details.owners.push((row.get(0), row.get(1)));
         }
 
         if !crate_details.build_status {
-            crate_details.last_successful_build = crate_details.releases.iter()
+            crate_details.last_successful_build = crate_details
+                .releases
+                .iter()
                 .filter(|release| release.build_status && !release.yanked)
                 .map(|release| release.version.to_owned())
                 .next();
@@ -256,12 +269,14 @@ impl CrateDetails {
 }
 
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
-    let rows = conn.query(
-        "SELECT build_status, yanked
+    let rows = conn
+        .query(
+            "SELECT build_status, yanked
          FROM releases
          WHERE releases.crate_id = $1 and releases.version = $2;",
-        &[&crate_id, &version],
-    ).unwrap();
+            &[&crate_id, &version],
+        )
+        .unwrap();
 
     let (build_status, yanked) = if !rows.is_empty() {
         (rows.get(0).get(0), rows.get(0).get(1))
@@ -269,10 +284,12 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
         Default::default()
     };
 
-    Release { version, build_status, yanked }
+    Release {
+        version,
+        build_status,
+        yanked,
+    }
 }
-
-
 
 pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
@@ -282,8 +299,8 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool).get();
 
-    match match_version(&conn, &name, req_version) {
-        MatchVersion::Exact((version, _)) => {
+    match match_version(&conn, &name, req_version).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact((version, _))) => {
             let details = CrateDetails::new(&conn, &name, &version);
 
             Page::new(details)
@@ -292,21 +309,16 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .set_true("package_navigation_crate_tab")
                 .to_resp("crate_details")
         }
-        MatchVersion::Semver((version, _)) => {
-            let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
-                                                redirect_base(req),
-                                                name,
-                                                version)[..]));
+        Some(MatchSemver::Semver((version, _))) => {
+            let url = ctry!(Url::parse(
+                &format!("{}/crate/{}/{}", redirect_base(req), name, version)[..]
+            ));
 
             Ok(super::redirect(url))
         }
-        MatchVersion::None => {
-            Err(IronError::new(Nope::CrateNotFound, status::NotFound))
-        }
+        None => Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -320,7 +332,6 @@ mod tests {
         version: &str,
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
-
         let details = CrateDetails::new(&db.conn(), package, version)
             .ok_or(failure::err_msg("could not fetch crate details"))?;
 
@@ -338,9 +349,22 @@ mod tests {
 
             db.fake_release().name("foo").version("0.0.1").create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
-            db.fake_release().name("foo").version("0.0.3").build_result_successful(false).create()?;
-            db.fake_release().name("foo").version("0.0.4").cratesio_data_yanked(true).create()?;
-            db.fake_release().name("foo").version("0.0.5").build_result_successful(false).cratesio_data_yanked(true).create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .build_result_successful(false)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.4")
+                .cratesio_data_yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.5")
+                .build_result_successful(false)
+                .cratesio_data_yanked(true)
+                .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
@@ -356,9 +380,21 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.1").build_result_successful(false).create()?;
-            db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
-            db.fake_release().name("foo").version("0.0.3").cratesio_data_yanked(true).create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .build_result_successful(false)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .build_result_successful(false)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .cratesio_data_yanked(true)
+                .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
@@ -373,8 +409,16 @@ mod tests {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
-            db.fake_release().name("foo").version("0.0.2").build_result_successful(false).create()?;
-            db.fake_release().name("foo").version("0.0.3").cratesio_data_yanked(true).create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .build_result_successful(false)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .cratesio_data_yanked(true)
+                .create()?;
             db.fake_release().name("foo").version("0.0.4").create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
@@ -393,22 +437,64 @@ mod tests {
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
             db.fake_release().name("foo").version("0.1.0").create()?;
             db.fake_release().name("foo").version("0.1.1").create()?;
-            db.fake_release().name("foo").version("0.3.0").build_result_successful(false).create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.3.0")
+                .build_result_successful(false)
+                .create()?;
             db.fake_release().name("foo").version("1.0.0").create()?;
             db.fake_release().name("foo").version("0.12.0").create()?;
-            db.fake_release().name("foo").version("0.2.0").cratesio_data_yanked(true).create()?;
-            db.fake_release().name("foo").version("0.2.0-alpha").create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.2.0")
+                .cratesio_data_yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.2.0-alpha")
+                .create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
-            assert_eq!(details.releases, vec![
-                Release { version: "1.0.0".to_string(), build_status: true, yanked: false },
-                Release { version: "0.12.0".to_string(), build_status: true, yanked: false },
-                Release { version: "0.3.0".to_string(), build_status: false, yanked: false },
-                Release { version: "0.2.0".to_string(), build_status: true, yanked: true },
-                Release { version: "0.2.0-alpha".to_string(), build_status: true, yanked: false },
-                Release { version: "0.1.1".to_string(), build_status: true, yanked: false },
-                Release { version: "0.1.0".to_string(), build_status: true, yanked: false },
-            ]);
+            assert_eq!(
+                details.releases,
+                vec![
+                    Release {
+                        version: "1.0.0".to_string(),
+                        build_status: true,
+                        yanked: false
+                    },
+                    Release {
+                        version: "0.12.0".to_string(),
+                        build_status: true,
+                        yanked: false
+                    },
+                    Release {
+                        version: "0.3.0".to_string(),
+                        build_status: false,
+                        yanked: false
+                    },
+                    Release {
+                        version: "0.2.0".to_string(),
+                        build_status: true,
+                        yanked: true
+                    },
+                    Release {
+                        version: "0.2.0-alpha".to_string(),
+                        build_status: true,
+                        yanked: false
+                    },
+                    Release {
+                        version: "0.1.1".to_string(),
+                        build_status: true,
+                        yanked: false
+                    },
+                    Release {
+                        version: "0.1.0".to_string(),
+                        build_status: true,
+                        yanked: false
+                    },
+                ]
+            );
 
             Ok(())
         });

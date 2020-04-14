@@ -1,7 +1,6 @@
-
-use std::path::Path;
-use std::fs;
 use crate::error::Result;
+use std::fs;
+use std::path::Path;
 
 use regex::Regex;
 
@@ -24,7 +23,6 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -
         .unwrap();
 
     for file in source.as_ref().read_dir()? {
-
         let file = file?;
         let destination_full_path = destination.join(file.file_name());
 
@@ -38,17 +36,14 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -
         } else {
             fs::copy(&file.path(), &destination_full_path)?;
         }
-
     }
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use std::fs;
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_copy_doc_dir() {
@@ -70,6 +65,10 @@ mod test {
         assert!(!destination.path().join("index.txt").exists());
         assert!(destination.path().join("inner").join("index.html").exists());
         assert!(!destination.path().join("inner").join("index.txt").exists());
-        assert!(!destination.path().join("inner").join("important.svg").exists());
+        assert!(!destination
+            .path()
+            .join("inner")
+            .join("important.svg")
+            .exists());
     }
 }

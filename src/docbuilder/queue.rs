@@ -3,10 +3,9 @@
 use super::{DocBuilder, RustwideBuilder};
 use crate::db::connect_db;
 use crate::error::Result;
-use crates_index_diff::{ChangeKind, Index};
 use crate::utils::add_crate_to_queue;
+use crates_index_diff::{ChangeKind, Index};
 use log::{debug, error};
-
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
@@ -32,11 +31,10 @@ impl DocBuilder {
     pub fn get_queue_count(&self) -> Result<i64> {
         let conn = connect_db()?;
 
-        Ok(
-            conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])?
-                .get(0)
-                .get(0)
-        )
+        Ok(conn
+            .query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])?
+            .get(0)
+            .get(0))
     }
 
     /// Builds the top package from the queue. Returns whether the queue was empty.
@@ -46,12 +44,14 @@ impl DocBuilder {
     ) -> Result<bool> {
         let conn = connect_db()?;
 
-        let query = conn.query("SELECT id, name, version
+        let query = conn.query(
+            "SELECT id, name, version
                                      FROM queue
                                      WHERE attempt < 5
                                      ORDER BY priority ASC, attempt ASC, id ASC
                                      LIMIT 1",
-                                    &[])?;
+            &[],
+        )?;
 
         if query.is_empty() {
             // nothing in the queue; bail
@@ -78,10 +78,10 @@ impl DocBuilder {
                     crate::web::metrics::FAILED_BUILDS.inc();
                     crate::web::metrics::TOTAL_BUILDS.inc();
                 }
-                error!("Failed to build package {}-{} from queue: {}",
-                       name,
-                       version,
-                       e)
+                error!(
+                    "Failed to build package {}-{} from queue: {}",
+                    name, version, e
+                )
             }
         }
 
@@ -91,9 +91,9 @@ impl DocBuilder {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
-    use log::error;
     use crate::{DocBuilder, DocBuilderOptions};
+    use log::error;
+    use std::path::PathBuf;
 
     #[test]
     #[ignore]

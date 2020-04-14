@@ -1,25 +1,23 @@
 //! rustdoc handler
 
-
-use super::pool::Pool;
-use super::file::File;
-use super::redirect_base;
 use super::crate_details::CrateDetails;
-use iron::prelude::*;
-use iron::{status, Url};
-use iron::modifiers::Redirect;
-use router::Router;
-use super::{match_version, MatchVersion};
 use super::error::Nope;
+use super::file::File;
 use super::page::Page;
+use super::pool::Pool;
+use super::redirect_base;
+use super::{match_version, MatchSemver};
+use crate::utils;
+use iron::headers::{CacheControl, CacheDirective, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::Handler;
+use iron::{status, Url};
+use postgres::Connection;
+use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective};
-use postgres::Connection;
 use time;
-use iron::Handler;
-use crate::utils;
-
 
 #[derive(Debug)]
 struct RustdocPage {
@@ -32,7 +30,6 @@ struct RustdocPage {
     description: Option<String>,
     crate_details: Option<CrateDetails>,
 }
-
 
 impl Default for RustdocPage {
     fn default() -> RustdocPage {
@@ -48,7 +45,6 @@ impl Default for RustdocPage {
         }
     }
 }
-
 
 impl ToJson for RustdocPage {
     fn to_json(&self) -> Json {
@@ -77,8 +73,7 @@ impl RustLangRedirector {
             .expect("failed to parse rust-lang.org base URL")
             .join(target)
             .expect("failed to append crate name to rust-lang.org base URL");
-        let url = Url::from_generic_url(url)
-            .expect("failed to convert url::Url to iron::Url");
+        let url = Url::from_generic_url(url).expect("failed to convert url::Url to iron::Url");
         Self { url }
     }
 }
@@ -92,19 +87,15 @@ impl iron::Handler for RustLangRedirector {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
+    use url::percent_encoding::percent_decode;
 
-    fn redirect_to_doc(req: &Request,
-                       name: &str,
-                       vers: &str,
-                       target_name: &str)
-                       -> IronResult<Response> {
-        let mut url_str = format!(
-            "{}/{}/{}/{}/",
-            redirect_base(req),
-            name,
-            vers,
-            target_name,
-        );
+    fn redirect_to_doc(
+        req: &Request,
+        name: &str,
+        vers: &str,
+        target_name: &str,
+    ) -> IronResult<Response> {
+        let mut url_str = format!("{}/{}/{}/{}/", redirect_base(req), name, vers, target_name,);
         if let Some(query) = req.url.query() {
             url_str.push('?');
             url_str.push_str(query);
@@ -116,14 +107,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     }
 
-    fn redirect_to_crate(req: &Request,
-                         name: &str,
-                         vers: &str)
-                         -> IronResult<Response> {
-        let url = ctry!(Url::parse(&format!("{}/crate/{}/{}",
-                                            redirect_base(req),
-                                            name,
-                                            vers)[..]));
+    fn redirect_to_crate(req: &Request, name: &str, vers: &str) -> IronResult<Response> {
+        let url = ctry!(Url::parse(
+            &format!("{}/crate/{}/{}", redirect_base(req), name, vers)[..]
+        ));
 
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
@@ -134,7 +121,14 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // this unwrap is safe because iron urls are always able to use `path_segments`
     // i'm using this instead of `req.url.path()` to avoid allocating the Vec, and also to avoid
     // keeping the borrow alive into the return statement
-    if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".js")) {
+    if req
+        .url
+        .as_ref()
+        .path_segments()
+        .unwrap()
+        .last()
+        .map_or(false, |s| s.ends_with(".js"))
+    {
         // javascript files should be handled by the file server instead of erroneously
         // redirecting to the crate root page
         if req.url.as_ref().path_segments().unwrap().count() > 2 {
@@ -149,7 +143,14 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
                 None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
             }
         }
-    } else if req.url.as_ref().path_segments().unwrap().last().map_or(false, |s| s.ends_with(".ico")) {
+    } else if req
+        .url
+        .as_ref()
+        .path_segments()
+        .unwrap()
+        .last()
+        .map_or(false, |s| s.ends_with(".ico"))
+    {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
         return super::ico_handler(req);
@@ -158,24 +159,39 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
+    let mut crate_name = percent_decode(crate_name.as_bytes())
+        .decode_utf8()
+        .unwrap_or_else(|_| crate_name.into())
+        .into_owned();
     let req_version = router.find("version");
 
     let conn = extension!(req, Pool).get();
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let (version, id) = match match_version(&conn, &crate_name, req_version).into_option() {
-        Some(v) => v,
-        None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
+    let (version, id) = match match_version(&conn, &crate_name, req_version) {
+        Some(v) => {
+            if let Some(new_name) = v.corrected_name {
+                // `match_version` checked against -/_ typos, so if we have a name here we should
+                // use that instead
+                crate_name = new_name;
+            }
+            v.version.into_parts()
+        }
+        None => {
+            return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
+        }
     };
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(conn.query("SELECT target_name, rustdoc_status
+        let rows = ctry!(conn.query(
+            "SELECT target_name, rustdoc_status
                                      FROM releases
                                      WHERE releases.id = $1",
-                                    &[&id]));
+            &[&id]
+        ));
 
         (rows.get(0).get(0), rows.get(0).get(1))
     };
@@ -187,13 +203,11 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
 }
 
-
 /// Serves documentation generated by rustdoc.
 ///
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
-
     let router = extension!(req, Router);
     let name = router.find("crate").unwrap_or("").to_string();
     let url_version = router.find("version");
@@ -208,20 +222,18 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.remove(0);
     }
 
-    version = match match_version(&conn, &name, url_version) {
-        MatchVersion::Exact((v, _)) => v,
-        MatchVersion::Semver((v, _)) => {
+    version = match match_version(&conn, &name, url_version).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact((v, _))) => v,
+        Some(MatchSemver::Semver((v, _))) => {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            let url = ctry!(Url::parse(&format!("{}/{}/{}/{}",
-                                                base,
-                                                name,
-                                                v,
-                                                req_path.join("/"))[..]));
+            let url = ctry!(Url::parse(
+                &format!("{}/{}/{}/{}", base, name, v, req_path.join("/"))[..]
+            ));
             return Ok(super::redirect(url));
         }
-        MatchVersion::None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        _ => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
 
     // docs have "rustdoc" prefix in database
@@ -235,11 +247,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
     if req_path[3] == crate_details.metadata.default_target {
-        let path = [
-            base,
-            req_path[1..3].join("/"),
-            req_path[4..].join("/")
-        ].join("/");
+        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
         let canonical = Url::parse(&path).expect("got an invalid URL to start");
         return Ok(super::redirect(canonical));
     }
@@ -264,7 +272,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 Some(f) => f,
                 None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
             }
-        },
+        }
     };
 
     // serve file directly if it's not html
@@ -334,7 +342,11 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
         req_path[req_path.len() - 2]
     } else {
         // this is an item
-        req_path.last().unwrap().split('.').nth(1)
+        req_path
+            .last()
+            .unwrap()
+            .split('.')
+            .nth(1)
             .expect("paths should be of the form <kind>.<name>.html")
     };
     // check if req_path[3] is the platform choice or the name of the crate
@@ -353,9 +365,9 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
+    use badge::{Badge, BadgeOptions};
     use iron::headers::ContentType;
     use params::{Params, Value};
-    use badge::{Badge, BadgeOptions};
 
     let version = {
         let params = ctry!(req.get_ref::<Params>());
@@ -368,13 +380,15 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(extension!(req, Router).find("crate"));
     let conn = extension!(req, Pool).get();
 
-    let options = match match_version(&conn, &name, Some(&version)) {
-        MatchVersion::Exact((version, id)) => {
-            let rows = ctry!(conn.query("SELECT rustdoc_status
-                                         FROM releases
-                                         WHERE releases.id = $1",
-                                        &[&id]));
-            if rows.len() > 0 && rows.get(0).get(0) {
+    let options = match match_version(&conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact((version, id))) => {
+            let rows = ctry!(conn.query(
+                "SELECT rustdoc_status
+                 FROM releases
+                 WHERE releases.id = $1",
+                &[&id]
+            ));
+            if !rows.is_empty() && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
                     status: version,
@@ -388,29 +402,31 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
-        MatchVersion::Semver((version, _)) => {
-            let url = ctry!(Url::parse(&format!("{}/{}/badge.svg?version={}",
-                                                redirect_base(req),
-                                                name,
-                                                version)[..]));
-
-            return Ok(super::redirect(url));
+        Some(MatchSemver::Semver((version, _))) => {
+            let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
+            let url = ctry!(url::Url::parse_with_params(
+                &base_url,
+                &[("version", version)]
+            ));
+            let iron_url = ctry!(Url::from_generic_url(url));
+            return Ok(super::redirect(iron_url));
         }
-        MatchVersion::None => {
-            BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "no builds".to_owned(),
-                color: "#e05d44".to_owned(),
-            }
-        }
+        None => BadgeOptions {
+            subject: "docs".to_owned(),
+            status: "no builds".to_owned(),
+            color: "#e05d44".to_owned(),
+        },
     };
 
     let mut resp = Response::with((status::Ok, ctry!(Badge::new(options)).to_svg()));
-    resp.headers.set(ContentType("image/svg+xml".parse().unwrap()));
+    resp.headers
+        .set(ContentType("image/svg+xml".parse().unwrap()));
     resp.headers.set(Expires(HttpDate(time::now())));
-    resp.headers.set(CacheControl(vec![CacheDirective::NoCache,
-                                       CacheDirective::NoStore,
-                                       CacheDirective::MustRevalidate]));
+    resp.headers.set(CacheControl(vec![
+        CacheDirective::NoCache,
+        CacheDirective::NoStore,
+        CacheDirective::MustRevalidate,
+    ]));
     Ok(resp)
 }
 
@@ -424,8 +440,8 @@ pub struct SharedResourceHandler;
 impl Handler for SharedResourceHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path();
-        let filename = path.last().unwrap();  // unwrap is fine: vector is non-empty
-        let suffix = filename.split('.').last().unwrap();  // unwrap is fine: split always works
+        let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
+        let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
             let conn = extension!(req, Pool).get();
 
@@ -442,6 +458,8 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use reqwest::StatusCode;
+
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
@@ -464,19 +482,21 @@ mod test {
             let db = env.db();
             // first release works, second fails
             db.fake_release()
-              .name("buggy").version("0.1.0")
-              .build_result_successful(true)
-              .rustdoc_file("settings.html", b"some data")
-              .rustdoc_file("directory_1/index.html", b"some data 1")
-              .rustdoc_file("directory_2.html/index.html", b"some data 1")
-              .rustdoc_file("all.html", b"some data 2")
-              .rustdoc_file("directory_3/.gitignore", b"*.ext")
-              .rustdoc_file("directory_4/empty_file_no_ext", b"")
-              .create()?;
+                .name("buggy")
+                .version("0.1.0")
+                .build_result_successful(true)
+                .rustdoc_file("settings.html", b"some data")
+                .rustdoc_file("directory_1/index.html", b"some data 1")
+                .rustdoc_file("directory_2.html/index.html", b"some data 1")
+                .rustdoc_file("all.html", b"some data 2")
+                .rustdoc_file("directory_3/.gitignore", b"*.ext")
+                .rustdoc_file("directory_4/empty_file_no_ext", b"")
+                .create()?;
             db.fake_release()
-              .name("buggy").version("0.2.0")
-              .build_result_successful(false)
-              .create()?;
+                .name("buggy")
+                .version("0.2.0")
+                .build_result_successful(false)
+                .create()?;
             let web = env.frontend();
             assert_success("/", web)?;
             assert_success("/crate/buggy/0.1.0/", web)?;
@@ -494,9 +514,10 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             db.fake_release()
-              .name("dummy").version("0.1.0")
-              .rustdoc_file("dummy/index.html", b"some content")
-              .create()?;
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .create()?;
 
             let web = env.frontend();
             // no explicit default-target
@@ -506,9 +527,12 @@ mod test {
 
             // set an explicit target that requires cross-compile
             let target = "x86_64-pc-windows-msvc";
-            db.fake_release().name("dummy").version("0.2.0")
-              .rustdoc_file("dummy/index.html", b"some content")
-              .default_target(target).create()?;
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .default_target(target)
+                .create()?;
             let base = "/dummy/0.2.0/dummy/";
             assert_success(base, web)?;
             assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base, web)?;
@@ -516,16 +540,23 @@ mod test {
             // set an explicit target without cross-compile
             // also check that /:crate/:version/:platform/all.html doesn't panic
             let target = "x86_64-unknown-linux-gnu";
-            db.fake_release().name("dummy").version("0.3.0")
-              .rustdoc_file("dummy/index.html", b"some content")
-              .rustdoc_file("all.html", b"html")
-              .default_target(target).create()?;
+            db.fake_release()
+                .name("dummy")
+                .version("0.3.0")
+                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("all.html", b"html")
+                .default_target(target)
+                .create()?;
             let base = "/dummy/0.3.0/dummy/";
             assert_success(base, web)?;
             assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
-            assert_redirect("/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html", "/dummy/0.3.0/all.html", web)?;
+            assert_redirect(
+                "/dummy/0.3.0/x86_64-unknown-linux-gnu/all.html",
+                "/dummy/0.3.0/all.html",
+                web,
+            )?;
             assert_redirect("/dummy/0.3.0/", base, web)?;
-            assert_redirect("/dummy/0.3.0/index.html",base, web)?;
+            assert_redirect("/dummy/0.3.0/index.html", base, web)?;
             Ok(())
         });
     }
@@ -533,15 +564,19 @@ mod test {
     fn go_to_latest_version() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("dummy").version("0.1.0")
-              .rustdoc_file("dummy/blah/index.html", b"lah")
-              .rustdoc_file("dummy/blah/blah.html", b"lah")
-              .rustdoc_file("dummy/struct.will-be-deleted.html", b"lah")
-              .create()?;
-            db.fake_release().name("dummy").version("0.2.0")
-              .rustdoc_file("dummy/blah/index.html", b"lah")
-              .rustdoc_file("dummy/blah/blah.html", b"lah")
-              .create()?;
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/blah/index.html", b"lah")
+                .rustdoc_file("dummy/blah/blah.html", b"lah")
+                .rustdoc_file("dummy/struct.will-be-deleted.html", b"lah")
+                .create()?;
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/blah/index.html", b"lah")
+                .rustdoc_file("dummy/blah/blah.html", b"lah")
+                .create()?;
 
             let web = env.frontend();
 
@@ -556,9 +591,15 @@ mod test {
             assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/blah.html");
 
             // check it searches for removed pages
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
+            let redirect =
+                latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy?search=will-be-deleted");
-            assert_redirect("/dummy/0.2.0/dummy?search=will-be-deleted", "/dummy/0.2.0/dummy/?search=will-be-deleted", &web).unwrap();
+            assert_redirect(
+                "/dummy/0.2.0/dummy?search=will-be-deleted",
+                "/dummy/0.2.0/dummy/?search=will-be-deleted",
+                &web,
+            )
+            .unwrap();
 
             Ok(())
         })
@@ -568,20 +609,34 @@ mod test {
     fn go_to_latest_version_keeps_platform() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("dummy").version("0.1.0")
-              .add_platform("x86_64-pc-windows-msvc")
-              .create().unwrap();
-            db.fake_release().name("dummy").version("0.2.0")
-              .add_platform("x86_64-pc-windows-msvc")
-              .create().unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .add_platform("x86_64-pc-windows-msvc")
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .add_platform("x86_64-pc-windows-msvc")
+                .create()
+                .unwrap();
 
             let web = env.frontend();
 
-            let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
+            let redirect =
+                latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
+            assert_eq!(
+                redirect,
+                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html"
+            );
 
-            let redirect = latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html");
+            let redirect =
+                latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
+            assert_eq!(
+                redirect,
+                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html"
+            );
 
             Ok(())
         })
@@ -590,15 +645,169 @@ mod test {
     fn redirect_latest_goes_to_crate_if_build_failed() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("dummy").version("0.1.0")
-              .rustdoc_file("dummy/index.html", b"lah")
-              .create().unwrap();
-            db.fake_release().name("dummy").version("0.2.0")
-              .build_result_successful(false).create().unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .build_result_successful(false)
+                .create()
+                .unwrap();
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(redirect, "/crate/dummy/0.2.0");
+
+            Ok(())
+        })
+    }
+    #[test]
+    fn badges_are_urlencoded() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("zstd")
+                .version("0.5.1+zstd.1.4.4")
+                .create()?;
+
+            let frontend = env.frontend();
+            assert_redirect(
+                "/zstd/badge.svg",
+                "/zstd/badge.svg?version=0.5.1%2Bzstd.1.4.4",
+                &frontend,
+            )?;
+            Ok(())
+        })
+    }
+    #[test]
+    fn crate_name_percent_decoded_redirect() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("fake-crate")
+                .version("0.0.1")
+                .rustdoc_file("fake_crate/index.html", b"some content")
+                .create()
+                .unwrap();
+
+            let web = env.frontend();
+            assert_redirect("/fake%2Dcrate", "/fake-crate/0.0.1/fake_crate/", web)?;
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn base_redirect_handles_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let rels = [
+                ("dummy-dash", "0.1.0"),
+                ("dummy-dash", "0.2.0"),
+                ("dummy_underscore", "0.1.0"),
+                ("dummy_underscore", "0.2.0"),
+                ("dummy_mixed-separators", "0.1.0"),
+                ("dummy_mixed-separators", "0.2.0"),
+            ];
+
+            for (name, version) in &rels {
+                db.fake_release()
+                    .name(name)
+                    .version(version)
+                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"), b"")
+                    .create()?;
+            }
+
+            let web = env.frontend();
+
+            assert_redirect("/dummy_dash", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
+            assert_redirect(
+                "/dummy-underscore",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/*",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/0.1.0",
+                "/dummy_underscore/0.1.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-mixed_separators",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy_mixed_separators/*",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-mixed-separators/0.1.0",
+                "/dummy_mixed-separators/0.1.0/dummy_mixed_separators/",
+                web,
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn specific_pages_do_not_handle_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("dummy-dash")
+                .version("0.1.0")
+                .rustdoc_file("dummy_dash/index.html", b"")
+                .create()?;
+
+            db.fake_release()
+                .name("dummy_mixed-separators")
+                .version("0.1.0")
+                .rustdoc_file("dummy_mixed_separators/index.html", b"")
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_success("/dummy-dash/0.1.0/dummy_dash/index.html", web)?;
+            assert_success("/crate/dummy_mixed-separators", web)?;
+
+            assert_eq!(
+                web.get("/dummy_dash/0.1.0/dummy_dash/index.html")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            assert_eq!(
+                web.get("/crate/dummy_mixed_separators").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn nonexistent_crate_404s() {
+        wrapper(|env| {
+            assert_eq!(
+                env.frontend().get("/dummy").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
 
             Ok(())
         })

@@ -1,26 +1,23 @@
 //! Database operations
 
-pub(crate) use self::add_package::add_package_into_database;
 pub(crate) use self::add_package::add_build_into_database;
+pub(crate) use self::add_package::add_package_into_database;
 pub(crate) use self::add_package::CratesIoData;
+pub use self::delete_crate::delete_crate;
 pub use self::file::{add_path_into_database, move_to_s3};
 pub use self::migrate::migrate;
-#[cfg(test)]
-pub(crate) use self::migrate::migrate_temporary;
-pub use self::delete_crate::delete_crate;
 
-use postgres::{Connection, TlsMode};
 use postgres::error::Error;
-use std::env;
+use postgres::{Connection, TlsMode};
 use r2d2;
 use r2d2_postgres;
+use std::env;
 
 mod add_package;
+pub mod blacklist;
+mod delete_crate;
 pub(crate) mod file;
 mod migrate;
-mod delete_crate;
-pub mod blacklist;
-
 
 /// Connects to database
 pub fn connect_db() -> Result<Connection, Error> {
@@ -30,16 +27,16 @@ pub fn connect_db() -> Result<Connection, Error> {
     Connection::connect(&db_url[..], TlsMode::None)
 }
 
-
 pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
     let db_url = env::var("CRATESFYI_DATABASE_URL")
         .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
-    let manager = r2d2_postgres::PostgresConnectionManager::new(&db_url[..],
-                                                                r2d2_postgres::TlsMode::None)
-        .expect("Failed to create PostgresConnectionManager");
-    r2d2::Pool::builder().build(manager).expect("Failed to create r2d2 pool")
+    let manager =
+        r2d2_postgres::PostgresConnectionManager::new(&db_url[..], r2d2_postgres::TlsMode::None)
+            .expect("Failed to create PostgresConnectionManager");
+    r2d2::Pool::builder()
+        .build(manager)
+        .expect("Failed to create r2d2 pool")
 }
-
 
 /// Updates content column in crates table.
 ///
@@ -51,7 +48,8 @@ pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManag
 ///   * latest release readme (rank C-weight)
 ///   * latest release root rustdoc (rank C-weight)
 pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
-    conn.execute("
+    conn.execute(
+        "
         WITH doc as (
             SELECT DISTINCT ON(releases.crate_id)
                    releases.id,
@@ -72,11 +70,9 @@ pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
         FROM doc
         WHERE crates.id = doc.crate_id AND
             (crates.latest_version_id = 0 OR crates.latest_version_id != doc.id);",
-                 &[])
+        &[],
+    )
 }
-
-
-
 
 #[cfg(test)]
 mod test {
