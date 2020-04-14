@@ -153,7 +153,7 @@ pub fn main() {
                     .arg(Arg::with_name("PRIORITY")
                         .index(2)
                         .required(true)
-                        .help("The priority to give crates matching PATTERN"))
+                        .help("The priority to give crates matching PATTERN")))
                 .subcommand(SubCommand::with_name("remove")
                     .about("Remove the prioritization of crates by the given pattern")
                     .arg(Arg::with_name("PATTERN")
