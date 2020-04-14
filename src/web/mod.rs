@@ -408,7 +408,7 @@ fn duration_to_str(ts: time::Timespec) -> String {
     match delta {
         (days, _, _, _) if days > 5 => format!("{}", tm.strftime("%b %d, %Y").unwrap()),
         (days, _, _, _) if days > 1 => format!("{} days ago", days),
-        (days, _, _, _) if days == 1 => "one day ago".to_string(),
+        (1, _, _, _) => "one day ago".to_string(),
 
         (_, hours, _, _) if hours > 1 => format!("{} hours ago", hours),
         (_, 1, _, _) => "an hour ago".to_string(),
