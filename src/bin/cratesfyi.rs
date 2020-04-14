@@ -141,7 +141,7 @@ pub fn main() {
                     .long("priority")
                     .help("Priority of build (default: 5) (new crate builds get priority 0)")
                     .takes_value(true)))
-            .subcommand(SubCommand::with_name("priority")
+            .subcommand(SubCommand::with_name("default-priority")
                 .about("Interactions with build queue priorities")
                 .setting(AppSettings::ArgRequiredElseHelp)
                 .subcommand(SubCommand::with_name("set")
