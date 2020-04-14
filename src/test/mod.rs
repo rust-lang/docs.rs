@@ -2,11 +2,12 @@ mod fakes;
 
 use crate::web::Server;
 use failure::Error;
+use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Connection;
 use reqwest::{Client, Method, RequestBuilder};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::panic;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let env = TestEnvironment::new();
@@ -38,7 +39,11 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
 }
 
 /// Make sure that a URL redirects to a specific page
-pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<(), Error> {
+pub(crate) fn assert_redirect(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<(), Error> {
     // Reqwest follows redirects automatically
     let response = web.get(path).send()?;
     let status = response.status();
@@ -58,14 +63,24 @@ pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFront
     if redirect_target != expected_target {
         // wrong place
         if redirect_target != path {
-            panic!("{}: expected redirect to {}, got redirect to {}",
-                   path, expected_target, redirect_target);
+            panic!(
+                "{}: expected redirect to {}, got redirect to {}",
+                path, expected_target, redirect_target
+            );
         } else {
             // no redirect
-            panic!("{}: expected redirect to {}, got {}", path, expected_target, status);
+            panic!(
+                "{}: expected redirect to {}, got {}",
+                path, expected_target, status
+            );
         }
     }
-    assert!(status.is_success(), "failed to GET {}: {}", expected_target, status);
+    assert!(
+        status.is_success(),
+        "failed to GET {}: {}",
+        expected_target,
+        status
+    );
     Ok(())
 }
 
@@ -100,18 +115,28 @@ impl TestEnvironment {
 
 pub(crate) struct TestDatabase {
     conn: Arc<Mutex<Connection>>,
+    schema: String,
 }
 
 impl TestDatabase {
     fn new() -> Result<Self, Error> {
-        // The temporary migration uses CREATE TEMPORARY TABLE instead of CREATE TABLE, creating
-        // fresh temporary copies of the database on top of the real one. The temporary tables are
-        // only visible to this connection, and will be deleted when it exits.
+        // A random schema name is generated and used for the current connection. This allows each
+        // test to create a fresh instance of the database to run within.
+        let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
+
         let conn = crate::db::connect_db()?;
-        crate::db::migrate_temporary(None, &conn)?;
+        conn.batch_execute(&format!(
+            "
+                CREATE SCHEMA {0};
+                SET search_path TO {0};
+            ",
+            schema
+        ))?;
+        crate::db::migrate(None, &conn)?;
 
         Ok(TestDatabase {
             conn: Arc::new(Mutex::new(conn)),
+            schema,
         })
     }
 
@@ -121,6 +146,17 @@ impl TestDatabase {
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
         fakes::FakeRelease::new(self)
+    }
+}
+
+impl Drop for TestDatabase {
+    fn drop(&mut self) {
+        if let Err(e) = self
+            .conn()
+            .execute(&format!("DROP SCHEMA {} CASCADE;", self.schema), &[])
+        {
+            error!("failed to drop test schema {}: {}", self.schema, e);
+        }
     }
 }
 

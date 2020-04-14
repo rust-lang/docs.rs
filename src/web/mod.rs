@@ -5,77 +5,81 @@ pub(crate) mod page;
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
 macro_rules! ctry {
-    ($result:expr) => (match $result {
-        Ok(v) => v,
-        Err(e) => {
-            return $crate::web::page::Page::new(format!("{:?}", e))
-                .title("An error has occured")
-                .set_status(::iron::status::BadRequest)
-                .to_resp("resp");
+    ($result:expr) => {
+        match $result {
+            Ok(v) => v,
+            Err(e) => {
+                return $crate::web::page::Page::new(format!("{:?}", e))
+                    .title("An error has occured")
+                    .set_status(::iron::status::BadRequest)
+                    .to_resp("resp");
+            }
         }
-    });
+    };
 }
 
 /// cexpect will check an option and if it's not Some
 /// it will return an error page response
 macro_rules! cexpect {
-    ($option:expr) => (match $option {
-        Some(v) => v,
-        None => {
-            return $crate::web::page::Page::new("Resource not found".to_owned())
-                .title("An error has occured")
-                .set_status(::iron::status::BadRequest)
-                .to_resp("resp");
+    ($option:expr) => {
+        match $option {
+            Some(v) => v,
+            None => {
+                return $crate::web::page::Page::new("Resource not found".to_owned())
+                    .title("An error has occured")
+                    .set_status(::iron::status::BadRequest)
+                    .to_resp("resp");
+            }
         }
-    });
+    };
 }
 
 /// Gets an extension from Request
 macro_rules! extension {
-    ($req:expr, $ext:ty) => (
+    ($req:expr, $ext:ty) => {
         cexpect!($req.extensions.get::<$ext>())
-    );
+    };
 }
 
-mod rustdoc;
-mod releases;
-mod crate_details;
-mod source;
-mod pool;
-mod file;
 mod builds;
+mod crate_details;
 mod error;
-mod sitemap;
-mod routes;
+mod file;
 pub(crate) mod metrics;
+mod pool;
+mod releases;
+mod routes;
+mod rustdoc;
+mod sitemap;
+mod source;
 
-use std::{env, fmt};
-use std::time::Duration;
-use std::path::PathBuf;
-use std::net::SocketAddr;
-use iron::prelude::*;
-use iron::{self, Listening, Handler, Url, status};
-use iron::headers::{Expires, HttpDate, CacheControl, CacheDirective, ContentType};
-use iron::modifiers::Redirect;
-use router::NoRoute;
-use staticfile::Static;
-use handlebars_iron::{HandlebarsEngine, DirectorySource};
-use time;
-use postgres::Connection;
-use semver::{Version, VersionReq};
-use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
 use self::pool::Pool;
+use handlebars_iron::{DirectorySource, HandlebarsEngine};
+use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::{self, status, Handler, Listening, Url};
+use postgres::Connection;
+use router::NoRoute;
+use rustc_serialize::json::{Json, ToJson};
+use semver::{Version, VersionReq};
+use staticfile::Static;
+use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{env, fmt};
+use time;
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
-const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12;   // 12 months
+const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
 const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const OPENSEARCH_XML: & [u8] = include_bytes!("opensearch.xml");
+const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
@@ -118,8 +122,8 @@ impl CratesfyiHandler {
                 .expect("the CRATESFYI_PREFIX environment variable is not set"),
         )
         .join("public_html");
-        let static_handler = Static::new(prefix)
-            .cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
+        let static_handler =
+            Static::new(prefix).cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
         CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
@@ -134,16 +138,13 @@ impl CratesfyiHandler {
     }
 }
 
-
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
         self.shared_resource_handler
             .handle(req)
-            .or_else(|e| {
-                self.router_handler.handle(req).or(Err(e))
-            })
+            .or_else(|e| self.router_handler.handle(req).or(Err(e)))
             .or_else(|e| {
                 // if router fails try to serve files from database first
                 self.database_file_handler.handle(req).or(Err(e))
@@ -185,38 +186,51 @@ impl Handler for CratesfyiHandler {
                     debug!("Path not found: {}", DebugPath(&req.url));
                 }
 
-
                 Self::chain(&self.pool_factory, err).handle(req)
             })
+    }
+}
+
+struct MatchVersion {
+    /// Represents the crate name that was found when attempting to load a crate release.
+    ///
+    /// `match_version` will attempt to match a provided crate name against similar crate names with
+    /// dashes (`-`) replaced with underscores (`_`) and vice versa.
+    pub corrected_name: Option<String>,
+    pub version: MatchSemver,
+}
+
+impl MatchVersion {
+    /// If the matched version was an exact match to the requested crate name, returns the
+    /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
+    /// `None`.
+    fn assume_exact(self) -> Option<MatchSemver> {
+        if self.corrected_name.is_none() {
+            Some(self.version)
+        } else {
+            None
+        }
     }
 }
 
 /// Represents the possible results of attempting to load a version requirement.
 /// The id (i32) of the release is stored to simplify successive queries.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum MatchVersion {
+enum MatchSemver {
     /// `match_version` was given an exact version, which matched a saved crate version.
     Exact((String, i32)),
     /// `match_version` was given a semver version requirement, which matched the given saved crate
     /// version.
     Semver((String, i32)),
-    /// `match_version` was given a version requirement which did not match any saved crate
-    /// versions.
-    None,
 }
 
-impl MatchVersion {
-    /// Convert this `MatchVersion` into an `Option`, discarding whether the matched version came
-    /// from an exact version number or a semver requirement.
-    fn into_option(self) -> Option<(String, i32)> {
+impl MatchSemver {
+    /// Discard information about whether the loaded version was an exact match, and return the
+    /// matched version string and id.
+    pub fn into_parts(self) -> (String, i32) {
         match self {
-            MatchVersion::Exact(v) | MatchVersion::Semver(v) => Some(v),
-            MatchVersion::None => None,
+            MatchSemver::Exact((v, i)) | MatchSemver::Semver((v, i)) => (v, i),
         }
-    }
-
-    fn strip_id(self) -> Option<String> {
-        self.into_option().map(|(version, _id)| version)
     }
 }
 
@@ -224,63 +238,63 @@ impl MatchVersion {
 ///
 /// `version` may be an exact version number or loose semver version requirement. The return value
 /// will indicate whether the given version exactly matched a version number from the database.
-fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchVersion {
-    use std::borrow::Cow;
-
-    // version is an Option<&str> from router::Router::get
-    // need to decode first
+///
+/// This function will also check for crates where dashes in the name (`-`) have been replaced with
+/// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
+/// been matched exactly, or if there has been a "correction" in the name that matched instead.
+fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
+    // version is an Option<&str> from router::Router::get, need to decode first
     use url::percent_encoding::percent_decode;
+
     let req_version = version
-        .and_then(|v| {
-            percent_decode(v.as_bytes())
-                .decode_utf8()
-                .ok()
-                .map(Cow::into_owned)
+        .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
+        .map(|v| {
+            if v == "newest" || v == "latest" {
+                "*".into()
+            } else {
+                v
+            }
         })
-        .map(|v| if v == "newest" || v == "latest" { "*".to_owned() } else { v })
-        .unwrap_or_else(|| "*".to_string());
+        .unwrap_or_else(|| "*".into());
 
+    let mut corrected_name = None;
     let versions: Vec<(String, i32)> = {
-        let query = "SELECT version, releases.id
+        let query = "SELECT name, version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE name = $1 AND yanked = false";
-        let rows = conn.query(query, &[&name]).unwrap();
-        
-        if rows.is_empty()  {
-            return MatchVersion::None;
-        }
+            WHERE normalize_crate_name(name) = normalize_crate_name($1) AND yanked = false";
 
-        rows.iter().map(|row| (row.get(0), row.get(1))).collect()
+        let rows = conn.query(query, &[&name]).unwrap();
+        let mut rows = rows.iter().peekable();
+
+        if let Some(row) = rows.peek() {
+            let db_name = row.get(0);
+
+            if db_name != name {
+                corrected_name = Some(db_name);
+            }
+        };
+
+        rows.map(|row| (row.get(1), row.get(2))).collect()
     };
 
-    // first check for exact match
-    // we can't expect users to use semver in query
-    if let Some(exact) = versions.iter().find(|(vers, _)| vers == &req_version) {
-        // REFACTOR: Get around the .clone()
-        return MatchVersion::Exact(exact.clone());
+    // first check for exact match, we can't expect users to use semver in query
+    if let Some((version, id)) = versions.iter().find(|(vers, _)| vers == &req_version) {
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Exact((version.to_owned(), *id)),
+        });
     }
 
     // Now try to match with semver
-    let req_sem_ver = if let Ok(version) = VersionReq::parse(&req_version) {
-        version
-    } else {
-        return MatchVersion::None;
-    };
+    let req_sem_ver = VersionReq::parse(&req_version).ok()?;
 
     // we need to sort versions first
     let versions_sem = {
         let mut versions_sem: Vec<(Version, i32)> = Vec::with_capacity(versions.len());
 
-        for (vers, id) in &versions {
-            // in theory a crate must always have a semver compatible version
-            // but check result just in case
-            let version = if let Ok(v) = Version::parse(&vers) {
-                (v, *id)
-            } else {
-                return MatchVersion::None;
-            };
-
-            versions_sem.push(version);
+        for version in &versions {
+            // in theory a crate must always have a semver compatible version, but check result just in case
+            versions_sem.push((Version::parse(&version.0).ok()?, version.1));
         }
 
         versions_sem.sort();
@@ -288,17 +302,26 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> MatchV
         versions_sem
     };
 
-    if let Some((version, id)) = versions_sem.iter().find(|(vers, _)| req_sem_ver.matches(vers)) {
-        return MatchVersion::Semver((version.to_string(), *id));
+    if let Some((version, id)) = versions_sem
+        .iter()
+        .find(|(vers, _)| req_sem_ver.matches(vers))
+    {
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Semver((version.to_string(), *id)),
+        });
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first version if requested version is '*'
     if req_version == "*" && !versions_sem.is_empty() {
-        return MatchVersion::Semver((versions_sem[0].0.to_string(), versions_sem[0].1));
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Semver((versions_sem[0].0.to_string(), versions_sem[0].1)),
+        });
     }
 
-    MatchVersion::None
+    None
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
@@ -332,7 +355,10 @@ impl Server {
 
     #[cfg(test)]
     pub(crate) fn start_test(conn: Arc<Mutex<Connection>>) -> Self {
-        Self::start_inner("127.0.0.1:0", Box::new(move || Pool::new_simple(conn.clone())))
+        Self::start_inner(
+            "127.0.0.1:0",
+            Box::new(move || Pool::new_simple(conn.clone())),
+        )
     }
 
     fn start_inner(addr: &str, pool_factory: PoolFactory) -> Self {
@@ -344,7 +370,8 @@ impl Server {
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
 
         let cratesfyi = CratesfyiHandler::new(pool_factory);
-        let inner = Iron::new(cratesfyi).http(addr)
+        let inner = Iron::new(cratesfyi)
+            .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
 
         Server { inner }
@@ -405,7 +432,8 @@ fn redirect(url: Url) -> Response {
 
 fn redirect_base(req: &Request) -> String {
     // Try to get the scheme from CloudFront first, and then from iron
-    let scheme = req.headers
+    let scheme = req
+        .headers
         .get_raw("cloudfront-forwarded-proto")
         .and_then(|values| values.get(0))
         .and_then(|value| std::str::from_utf8(value).ok())
@@ -428,7 +456,9 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
         CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
     ];
 
-    response.headers.set(ContentType("text/css".parse().unwrap()));
+    response
+        .headers
+        .set(ContentType("text/css".parse().unwrap()));
     response.headers.set(CacheControl(cache));
 
     Ok(response)
@@ -440,8 +470,9 @@ fn load_js(file_path_str: &'static str) -> IronResult<Response> {
         CacheDirective::Public,
         CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
     ];
-
-    response.headers.set(ContentType("application/javascript".parse().unwrap()));
+    response
+        .headers
+        .set(ContentType("application/javascript".parse().unwrap()));
     response.headers.set(CacheControl(cache));
 
     Ok(response)
@@ -451,10 +482,12 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
     let cache = vec![
         CacheDirective::Public,
-        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)
+        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
     ];
+    response.headers.set(ContentType(
+        "application/opensearchdescription+xml".parse().unwrap(),
+    ));
 
-    response.headers.set(ContentType("application/opensearchdescription+xml".parse().unwrap()));
     response.headers.set(CacheControl(cache));
 
     Ok(response)
@@ -464,11 +497,16 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
     if let Some(&"favicon.ico") = req.url.path().last() {
         // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
         // from `public_html`, so return a 404 here to make the main handler carry on
-        Err(IronError::new(error::Nope::ResourceNotFound, status::NotFound))
+        Err(IronError::new(
+            error::Nope::ResourceNotFound,
+            status::NotFound,
+        ))
     } else {
         // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
         // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(Url::parse(&format!("{}/favicon.ico", redirect_base(req))[..]));
+        let url = ctry!(Url::parse(
+            &format!("{}/favicon.ico", redirect_base(req))[..]
+        ));
 
         Ok(redirect(url))
     }
@@ -487,8 +525,9 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
-        let rows = conn.query(
-        "SELECT crates.name,
+        let rows = conn
+            .query(
+                "SELECT crates.name,
                        releases.version,
                        releases.description,
                        releases.target_name,
@@ -497,8 +536,9 @@ impl MetaData {
                 FROM releases
                 INNER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
-            &[&name, &version]
-        ).unwrap();
+                &[&name, &version],
+            )
+            .unwrap();
 
         let row = rows.iter().next()?;
 
@@ -527,29 +567,31 @@ impl ToJson for MetaData {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use crate::web::match_version;
     use html5ever::tendril::TendrilSink;
-    use crate::web::{match_version, MatchVersion};
-
-    const DEFAULT_ID: i32 = 0;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
-        db.fake_release().name("foo").version(version).create().unwrap()
+        db.fake_release()
+            .name("foo")
+            .version(version)
+            .create()
+            .unwrap()
     }
 
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        match_version(&db.conn(), "foo", v).strip_id()
+        match_version(&db.conn(), "foo", v)
+            .and_then(|version| version.assume_exact().map(|semver| semver.into_parts().0))
     }
 
     fn semver(version: &'static str) -> Option<String> {
-        MatchVersion::Semver((version.into(), DEFAULT_ID)).strip_id()
+        Some(version.into())
     }
 
     fn exact(version: &'static str) -> Option<String> {
-        MatchVersion::Exact((version.into(), DEFAULT_ID)).strip_id()
+        Some(version.into())
     }
 
     fn clipboard_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
@@ -631,9 +673,12 @@ mod test {
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("bat").version("0.2.0").binary(true)
-              .create().unwrap();
-
+            db.fake_release()
+                .name("bat")
+                .version("0.2.0")
+                .binary(true)
+                .create()
+                .unwrap();
             let web = env.frontend();
             assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu", "/crate/bat/0.2.0", web)?;
@@ -649,9 +694,12 @@ mod test {
     fn can_view_source() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("regex").version("0.3.0")
-              .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-              .create().unwrap();
+            db.fake_release()
+                .name("regex")
+                .version("0.3.0")
+                .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
+                .create()
+                .unwrap();
 
             let web = env.frontend();
             assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
@@ -721,7 +769,10 @@ mod test {
             release("0.5.1+zstd.1.4.4", db);
             assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
             assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
-            assert_eq!(version(Some("0.5.1+zstd.1.4.4"), db), exact("0.5.1+zstd.1.4.4"));
+            assert_eq!(
+                version(Some("0.5.1+zstd.1.4.4"), db),
+                exact("0.5.1+zstd.1.4.4")
+            );
 
             Ok(())
         });

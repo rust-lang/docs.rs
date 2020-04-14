@@ -1,9 +1,11 @@
 use super::DocBuilder;
+use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
+use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::LevelFilter;
 use postgres::Connection;
@@ -15,16 +17,13 @@ use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
-use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use super::Metadata;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 
 // It is crucial that this be the same as the host that `docs.rs` is being run on.
 // Other values may cause strange and hard-to-debug errors.
-// TODO: use `TARGET` instead? I think `TARGET` is only set for build scripts, though.
-pub(super) const HOST_TARGET: &str = "x86_64-unknown-linux-gnu";
+pub(super) const HOST_TARGET: &str = env!("CRATESFYI_HOST_TARGET"); // Set in build.rs
 pub(super) const TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
@@ -67,6 +66,7 @@ pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
     rustc_version: String,
+    cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
@@ -90,8 +90,14 @@ impl RustwideBuilder {
         workspace.purge_all_build_dirs()?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
-            .map(|t| Cow::Owned(t))
+            .map(Cow::Owned)
             .unwrap_or_else(|_| Cow::Borrowed("nightly"));
+
+        let cpu_limit = std::env::var("DOCS_RS_BUILD_CPU_LIMIT").ok().map(|limit| {
+            limit
+                .parse::<u32>()
+                .expect("invalid DOCS_RS_BUILD_CPU_LIMIT")
+        });
 
         let toolchain = Toolchain::dist(&toolchain_name);
 
@@ -99,7 +105,15 @@ impl RustwideBuilder {
             workspace,
             toolchain,
             rustc_version: String::new(),
+            cpu_limit,
         })
+    }
+
+    fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
+        SandboxBuilder::new()
+            .cpu_limit(self.cpu_limit.map(|limit| limit as f32))
+            .memory_limit(Some(limits.memory()))
+            .enable_networking(limits.networking())
     }
 
     pub fn update_toolchain(&mut self) -> Result<()> {
@@ -108,7 +122,7 @@ impl RustwideBuilder {
 
         let mut targets_to_install = TARGETS
             .iter()
-            .map(|t| t.to_string())
+            .map(|&t| t.to_string())
             .collect::<HashSet<_>>();
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
             Ok(targets) => targets,
@@ -146,7 +160,7 @@ impl RustwideBuilder {
         }
 
         self.rustc_version = self.detect_rustc_version()?;
-        if old_version.as_ref().map(|s| s.as_str()) != Some(&self.rustc_version) {
+        if old_version.as_deref() != Some(&self.rustc_version) {
             self.add_essential_files()?;
         }
 
@@ -188,12 +202,8 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
-
         build_dir
-            .build(&self.toolchain, &krate, sandbox)
+            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
@@ -210,7 +220,7 @@ impl RustwideBuilder {
                     .iter()
                     .map(|f| (f, true))
                     .chain(ESSENTIAL_FILES_UNVERSIONED.iter().map(|f| (f, false)));
-                for (file, versioned) in files {
+                for (&file, versioned) in files {
                     let segments = file.rsplitn(2, '.').collect::<Vec<_>>();
                     let file_name = if versioned {
                         format!("{}-{}.{}", segments[1], rustc_version, segments[0])
@@ -268,8 +278,10 @@ impl RustwideBuilder {
         path: &Path,
     ) -> Result<bool> {
         self.update_toolchain()?;
-        let metadata = CargoMetadata::load(&self.workspace, &self.toolchain, path)
-            .map_err(|err| err.context(format!("failed to load local package {}", path.display())))?;
+        let metadata =
+            CargoMetadata::load(&self.workspace, &self.toolchain, path).map_err(|err| {
+                err.context(format!("failed to load local package {}", path.display()))
+            })?;
         let package = metadata.root();
         self.build_package(doc_builder, &package.name, &package.version, Some(path))
     }
@@ -308,14 +320,10 @@ impl RustwideBuilder {
         };
         krate.fetch(&self.workspace)?;
 
-        let sandbox = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
-
         let local_storage = ::tempdir::TempDir::new("docsrs-docs")?;
 
         let res = build_dir
-            .build(&self.toolchain, &krate, sandbox)
+            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 use crate::docbuilder::metadata::BuildTargets;
 
@@ -323,7 +331,10 @@ impl RustwideBuilder {
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
-                let BuildTargets { default_target, other_targets } = metadata.targets();
+                let BuildTargets {
+                    default_target,
+                    other_targets,
+                } = metadata.targets();
 
                 // Do an initial build and then copy the sources in the database
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
@@ -344,12 +355,7 @@ impl RustwideBuilder {
 
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
-                        local_storage.path(),
-                        "",
-                        true,
-                    )?;
+                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
                     successful_targets.push(res.target.clone());
 
@@ -389,7 +395,7 @@ impl RustwideBuilder {
                     has_docs,
                     has_examples,
                 )?;
-                add_build_into_database(&conn, &release_id, &res.result)?;
+                add_build_into_database(&conn, release_id, &res.result)?;
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
@@ -457,7 +463,7 @@ impl RustwideBuilder {
         if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
             rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps", "-j2"];
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
         if target != HOST_TARGET {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
@@ -467,6 +473,12 @@ impl RustwideBuilder {
             cargo_args.push("--target");
             cargo_args.push(target);
         };
+
+        let tmp_jobs;
+        if let Some(cpu_limit) = self.cpu_limit {
+            tmp_jobs = format!("-j{}", cpu_limit);
+            cargo_args.push(&tmp_jobs);
+        }
 
         let tmp;
         if let Some(features) = &metadata.features {
