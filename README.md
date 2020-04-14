@@ -86,24 +86,27 @@ cargo test
 ```
 
 Some tests require access to the database. To run them, set the
-`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. You don't have to
-run the migrations on it or ensure it's empty, as all the tests use temporary
-tables to prevent conflicts with each other or existing data. See the [wiki
-page on developing outside docker-compose][wiki-no-compose] for more
-information on how to setup this environment.
+`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. If you are using
+the `docker-compose` environment to run tests against, see the
+[Docker-Compose][docker-compose-section] section for the default PostgreSQL URL.
+You don't have to run the migrations on it or ensure it's empty, as all the
+tests use temporary tables to prevent conflicts with each other or existing
+data. See the [wiki page on developing outside docker-compose][wiki-no-compose]
+for more information on how to setup this environment.
 
 [wiki-no-compose]: https://github.com/rust-lang/docs.rs/wiki/Developing-without-docker-compose
+[docker-compose-section]: #Docker-Compose
 
 ### Docker-Compose
 
 The services started by Docker-Compose are defined in [docker-compose.yml].
 Three services are defined:
 
-| name | access                | credentials                | description                            |
-|------|-----------------------|----------------------------|----------------------------------------|
-| web  | http://localhost:3000 | N/A                        | A container running the docs.rs binary |
-| db   | /                     | N/A                        | Postgres database used by web          |
-| s3   | http://localhost:9000 | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
+| name | access                                          | credentials                | description                            |
+|------|-------------------------------------------------|----------------------------|----------------------------------------|
+| web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
+| db   | postgresql://cratesfyi:password@localhost:5432/ | -                          | Postgres database used by web          |
+| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
 
 [docker-compose.yml]: ./docker-compose.yml
 

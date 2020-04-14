@@ -22,7 +22,6 @@ pub fn update_release_activity() -> Result<()> {
             ),
             &[],
         )?;
-
         let failures_count_rows = conn.query(
             &format!(
                 "SELECT COUNT(*)

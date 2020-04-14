@@ -6,7 +6,7 @@ use super::file::File;
 use super::page::Page;
 use super::pool::Pool;
 use super::redirect_base;
-use super::{match_version, MatchVersion};
+use super::{match_version, MatchSemver};
 use crate::utils;
 use iron::headers::{CacheControl, CacheDirective, Expires, HttpDate};
 use iron::modifiers::Redirect;
@@ -87,6 +87,8 @@ impl iron::Handler for RustLangRedirector {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
+    use url::percent_encoding::percent_decode;
+
     fn redirect_to_doc(
         req: &Request,
         name: &str,
@@ -157,15 +159,28 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
+    let mut crate_name = percent_decode(crate_name.as_bytes())
+        .decode_utf8()
+        .unwrap_or_else(|_| crate_name.into())
+        .into_owned();
     let req_version = router.find("version");
 
     let conn = extension!(req, Pool).get();
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let (version, id) = match match_version(&conn, &crate_name, req_version).into_option() {
-        Some(v) => v,
-        None => return Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
+    let (version, id) = match match_version(&conn, &crate_name, req_version) {
+        Some(v) => {
+            if let Some(new_name) = v.corrected_name {
+                // `match_version` checked against -/_ typos, so if we have a name here we should
+                // use that instead
+                crate_name = new_name;
+            }
+            v.version.into_parts()
+        }
+        None => {
+            return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
+        }
     };
 
     // get target name and whether it has docs
@@ -207,9 +222,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.remove(0);
     }
 
-    version = match match_version(&conn, &name, url_version) {
-        MatchVersion::Exact((v, _)) => v,
-        MatchVersion::Semver((v, _)) => {
+    version = match match_version(&conn, &name, url_version).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact((v, _))) => v,
+        Some(MatchSemver::Semver((v, _))) => {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
@@ -218,7 +233,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             ));
             return Ok(super::redirect(url));
         }
-        MatchVersion::None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        _ => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
 
     // docs have "rustdoc" prefix in database
@@ -365,12 +380,12 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(extension!(req, Router).find("crate"));
     let conn = extension!(req, Pool).get();
 
-    let options = match match_version(&conn, &name, Some(&version)) {
-        MatchVersion::Exact((version, id)) => {
+    let options = match match_version(&conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        Some(MatchSemver::Exact((version, id))) => {
             let rows = ctry!(conn.query(
                 "SELECT rustdoc_status
-                FROM releases
-                WHERE releases.id = $1",
+                 FROM releases
+                 WHERE releases.id = $1",
                 &[&id]
             ));
             if !rows.is_empty() && rows.get(0).get(0) {
@@ -387,19 +402,18 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
-        MatchVersion::Semver((version, _)) => {
-            let url = ctry!(Url::parse(
-                &format!(
-                    "{}/{}/badge.svg?version={}",
-                    redirect_base(req),
-                    name,
-                    version
-                )[..]
-            ));
 
-            return Ok(super::redirect(url));
+        Some(MatchSemver::Semver((version, _))) => {
+            let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
+            let url = ctry!(url::Url::parse_with_params(
+                &base_url,
+                &[("version", version)]
+            ));
+            let iron_url = ctry!(Url::from_generic_url(url));
+            return Ok(super::redirect(iron_url));
         }
-        MatchVersion::None => BadgeOptions {
+
+        None => BadgeOptions {
             subject: "docs".to_owned(),
             status: "no builds".to_owned(),
             color: "#e05d44".to_owned(),
@@ -446,6 +460,8 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use reqwest::StatusCode;
+
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
@@ -647,6 +663,153 @@ mod test {
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(redirect, "/crate/dummy/0.2.0");
+
+            Ok(())
+        })
+    }
+    #[test]
+    fn badges_are_urlencoded() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("zstd")
+                .version("0.5.1+zstd.1.4.4")
+                .create()?;
+
+            let frontend = env.frontend();
+            assert_redirect(
+                "/zstd/badge.svg",
+                "/zstd/badge.svg?version=0.5.1%2Bzstd.1.4.4",
+                &frontend,
+            )?;
+            Ok(())
+        })
+    }
+    #[test]
+    fn crate_name_percent_decoded_redirect() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("fake-crate")
+                .version("0.0.1")
+                .rustdoc_file("fake_crate/index.html", b"some content")
+                .create()
+                .unwrap();
+
+            let web = env.frontend();
+            assert_redirect("/fake%2Dcrate", "/fake-crate/0.0.1/fake_crate/", web)?;
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn base_redirect_handles_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let rels = [
+                ("dummy-dash", "0.1.0"),
+                ("dummy-dash", "0.2.0"),
+                ("dummy_underscore", "0.1.0"),
+                ("dummy_underscore", "0.2.0"),
+                ("dummy_mixed-separators", "0.1.0"),
+                ("dummy_mixed-separators", "0.2.0"),
+            ];
+
+            for (name, version) in &rels {
+                db.fake_release()
+                    .name(name)
+                    .version(version)
+                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"), b"")
+                    .create()?;
+            }
+
+            let web = env.frontend();
+
+            assert_redirect("/dummy_dash", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
+            assert_redirect(
+                "/dummy-underscore",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/*",
+                "/dummy_underscore/0.2.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-underscore/0.1.0",
+                "/dummy_underscore/0.1.0/dummy_underscore/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-mixed_separators",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy_mixed_separators/*",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                web,
+            )?;
+            assert_redirect(
+                "/dummy-mixed-separators/0.1.0",
+                "/dummy_mixed-separators/0.1.0/dummy_mixed_separators/",
+                web,
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn specific_pages_do_not_handle_mismatched_separators() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("dummy-dash")
+                .version("0.1.0")
+                .rustdoc_file("dummy_dash/index.html", b"")
+                .create()?;
+
+            db.fake_release()
+                .name("dummy_mixed-separators")
+                .version("0.1.0")
+                .rustdoc_file("dummy_mixed_separators/index.html", b"")
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_success("/dummy-dash/0.1.0/dummy_dash/index.html", web)?;
+            assert_success("/crate/dummy_mixed-separators", web)?;
+
+            assert_eq!(
+                web.get("/dummy_dash/0.1.0/dummy_dash/index.html")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            assert_eq!(
+                web.get("/crate/dummy_mixed_separators").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn nonexistent_crate_404s() {
+        wrapper(|env| {
+            assert_eq!(
+                env.frontend().get("/dummy").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
 
             Ok(())
         })

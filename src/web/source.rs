@@ -1,15 +1,15 @@
 //! Source code browser
 
-use std::collections::BTreeMap;
-use std::cmp::Ordering;
-use super::MetaData;
+use super::file::File as DbFile;
 use super::page::Page;
 use super::pool::Pool;
-use super::file::File as DbFile;
+use super::MetaData;
 use iron::prelude::*;
+use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
-use postgres::Connection;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 #[derive(PartialEq, PartialOrd)]
 enum FileType {
@@ -50,7 +50,6 @@ impl ToJson for FileList {
             };
 
             file_m.insert(file_type.to_string(), true.to_json());
-
             file_vec.push(file_m.to_json());
         }
 
@@ -77,13 +76,10 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
-    fn from_path(
-        conn: &Connection,
-        name: &str,
-        version: &str,
-        req_path: &str
-    ) -> Option<FileList> {
-        let rows = conn.query("SELECT crates.name,
+    fn from_path(conn: &Connection, name: &str, version: &str, req_path: &str) -> Option<FileList> {
+        let rows = conn
+            .query(
+                "SELECT crates.name,
                                       releases.version,
                                       releases.description,
                                       releases.target_name,
@@ -93,7 +89,8 @@ impl FileList {
                                FROM releases
                                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                                WHERE crates.name = $1 AND releases.version = $2",
-                   &[&name, &version])
+                &[&name, &version],
+            )
             .unwrap();
 
         if rows.is_empty() {
@@ -124,8 +121,7 @@ impl FileList {
                         // if path have '/' it is a directory
                         let ftype = if path_splited.len() > 1 {
                             FileType::Dir
-                        } else if mime.starts_with("text") &&
-                                              path_splited[0].ends_with(".rs") {
+                        } else if mime.starts_with("text") && path_splited[0].ends_with(".rs") {
                             FileType::RustSource
                         } else if mime.starts_with("text") {
                             FileType::Text
@@ -176,7 +172,6 @@ impl FileList {
     }
 }
 
-
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(router.find("name"));
@@ -200,7 +195,9 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         }
 
         // remove crate name and version from req_path
-        let path = req_path.join("/").replace(&format!("{}/{}/", name, version), "");
+        let path = req_path
+            .join("/")
+            .replace(&format!("{}/{}/", name, version), "");
 
         (path, file_path)
     };
@@ -220,7 +217,10 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         if !file.0.mime.starts_with("text") && !file.is_empty() {
             return Ok(file.serve());
         } else if file.0.mime.starts_with("text") && !file.is_empty() {
-            (String::from_utf8(file.0.content).ok(), file.0.path.ends_with(".rs"))
+            (
+                String::from_utf8(file.0.content).ok(),
+                file.0.path.ends_with(".rs"),
+            )
         } else {
             (None, false)
         }
@@ -230,8 +230,8 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     let list = FileList::from_path(&conn, &name, &version, &req_path);
     if list.is_none() {
-        use iron::status;
         use super::error::Nope;
+        use iron::status;
         return Err(IronError::new(Nope::NoResults, status::NotFound));
     }
 

@@ -19,6 +19,33 @@ jobs:
       - name: Install stable Rust
         run: rustup update stable && rustup default stable
 
+      - name: Set rustc version
+        run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
+
+      # Caching
+      - name: Cache Cargo Registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo Bin
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo Git
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo Build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-key: |
+            ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
+
       - name: Install PostgreSQL
         run: |
           sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postgresql
@@ -29,6 +56,12 @@ jobs:
 
       - name: Build docs.rs
         run: cargo build --locked
+
+      - name: Run rustfmt
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
 
       - name: Prepare the test environment
         run: |
@@ -49,13 +82,13 @@ jobs:
           fetch-depth: 2
 
       - name: Build the Docker image
-        run: docker build -t docsrs .
+        run: docker build -t docs-rs .
 
       - name: Upload the Docker image to ECR
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
         with:
-          image: docsrs
-          repository: docsrs
+          image: docs-rs
+          repository: staging-docs-rs
           region: us-west-1
           aws_access_key_id: "${{ secrets.aws_access_key_id }}"
           aws_secret_access_key: "${{ secrets.aws_secret_access_key }}"
