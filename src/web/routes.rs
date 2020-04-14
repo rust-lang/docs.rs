@@ -87,6 +87,10 @@ pub(super) fn build_routes() -> Routes {
         "/crate/:name/:version/source/*",
         super::source::source_browser_handler,
     );
+    routes.internal_page(
+        "/crate/:name/:version/target-redirect/*",
+        super::rustdoc::target_redirect_handler,
+    );
 
     routes.rustdoc_page("/:crate", super::rustdoc::rustdoc_redirector_handler);
     routes.rustdoc_page("/:crate/", super::rustdoc::rustdoc_redirector_handler);
