@@ -333,11 +333,10 @@ pub fn main() {
                 .expect("You must give a pattern to remove");
             let conn = connect_db().expect("Could not connect to the database");
 
-            if remove_crate_priority(&conn, pattern)
+            if let Some(priority) = remove_crate_priority(&conn, pattern)
                 .expect("Could not remove pattern's priority")
-                .is_some()
             {
-                println!("Removed pattern");
+                println!("Removed pattern with priority {}", priority);
             } else {
                 println!("Pattern did not exist and so was not removed");
             }
