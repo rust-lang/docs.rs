@@ -867,6 +867,29 @@ mod test {
     }
 
     #[test]
+    fn no_target_target_redirect_404s() {
+        wrapper(|env| {
+            assert_eq!(
+                env.frontend()
+                    .get("/crate/dummy/0.1.0/target-redirect")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            assert_eq!(
+                env.frontend()
+                    .get("/crate/dummy/0.1.0/target-redirect/")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn platform_links_go_to_current_path() {
         fn get_platform_links(
             path: &str,
