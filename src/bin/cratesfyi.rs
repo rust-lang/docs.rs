@@ -83,7 +83,6 @@ pub fn main() {
         .subcommand(SubCommand::with_name("database")
             .about("Database operations")
             .setting(AppSettings::ArgRequiredElseHelp)
-            .subcommand(SubCommand::with_name("move-to-s3"))
             .subcommand(SubCommand::with_name("migrate")
                 .about("Run database migrations")
                 .arg(Arg::with_name("VERSION")))
@@ -263,19 +262,6 @@ pub fn main() {
         } else if matches.subcommand_matches("update-search-index").is_some() {
             let conn = db::connect_db().unwrap();
             db::update_search_index(&conn).expect("Failed to update search index");
-        } else if matches.subcommand_matches("move-to-s3").is_some() {
-            let conn = db::connect_db().unwrap();
-            let mut count = 1;
-            let mut total = 0;
-            while count != 0 {
-                count = cratesfyi::storage::move_to_s3(&conn, 5_000)
-                    .expect("Failed to upload batch to S3");
-                total += count;
-                eprintln!(
-                    "moved {} rows to s3 in this batch, total moved so far: {}",
-                    count, total
-                );
-            }
         } else if let Some(matches) = matches.subcommand_matches("delete-crate") {
             let name = matches.value_of("CRATE_NAME").expect("missing crate name");
             let conn = db::connect_db().expect("failed to connect to the database");

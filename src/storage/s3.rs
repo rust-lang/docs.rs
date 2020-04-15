@@ -1,7 +1,6 @@
 use super::Blob;
 use failure::Error;
 use futures::Future;
-use postgres::Connection;
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
@@ -189,55 +188,4 @@ pub(crate) fn s3_client() -> Option<S3Client> {
             })
             .unwrap_or(Region::UsWest1),
     ))
-}
-
-pub fn move_to_s3(conn: &Connection, n: usize) -> Result<usize, Error> {
-    let trans = conn.transaction()?;
-    let client = s3_client().expect("configured s3");
-
-    let rows = trans.query(
-        &format!(
-            "SELECT path, mime, content FROM files WHERE content != E'in-s3' LIMIT {}",
-            n
-        ),
-        &[],
-    )?;
-    let count = rows.len();
-
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    let mut futures = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let path: String = row.get(0);
-        let mime: String = row.get(1);
-        let content: Vec<u8> = row.get(2);
-        let path_1 = path.clone();
-        futures.push(
-            client
-                .put_object(PutObjectRequest {
-                    bucket: S3_BUCKET_NAME.into(),
-                    key: path.clone(),
-                    body: Some(content.into()),
-                    content_type: Some(mime),
-                    ..Default::default()
-                })
-                .map(move |_| path_1)
-                .map_err(move |e| panic!("failed to upload to {}: {:?}", path, e)),
-        );
-    }
-
-    match rt.block_on(::futures::future::join_all(futures)) {
-        Ok(paths) => {
-            let statement = trans.prepare("DELETE FROM files WHERE path = $1").unwrap();
-            for path in paths {
-                statement.execute(&[&path]).unwrap();
-            }
-        }
-        Err(e) => {
-            panic!("results err: {:?}", e);
-        }
-    }
-
-    trans.commit()?;
-
-    Ok(count)
 }
