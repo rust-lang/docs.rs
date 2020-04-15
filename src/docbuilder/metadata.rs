@@ -2,7 +2,7 @@ use crate::error::Result;
 use failure::err_msg;
 use std::collections::HashSet;
 use std::path::Path;
-use toml::Value;
+use toml::{map::Map, Value};
 
 /// Metadata for custom builds
 ///
@@ -83,21 +83,25 @@ impl Metadata {
                 return Ok(Metadata::from_manifest(manifest_path));
             }
         }
+
         Err(err_msg("Manifest not found"))
     }
 
     fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
-        use std::fs::File;
-        use std::io::Read;
-        let mut f = match File::open(path) {
-            Ok(f) => f,
-            Err(_) => return Metadata::default(),
+        use std::{fs::File, io::Read};
+
+        let mut file = if let Ok(file) = File::open(path) {
+            file
+        } else {
+            return Metadata::default();
         };
-        let mut s = String::new();
-        if f.read_to_string(&mut s).is_err() {
+
+        let mut meta = String::new();
+        if file.read_to_string(&mut meta).is_err() {
             return Metadata::default();
         }
-        Metadata::from_str(&s)
+
+        Metadata::from_str(&meta)
     }
 
     // This is similar to Default trait but it's private
@@ -116,53 +120,67 @@ impl Metadata {
     fn from_str(manifest: &str) -> Metadata {
         let mut metadata = Metadata::default();
 
-        let manifest = match manifest.parse::<Value>() {
-            Ok(m) => m,
-            Err(_) => return metadata,
+        let manifest = if let Ok(manifest) = manifest.parse::<Value>() {
+            manifest
+        } else {
+            return metadata;
         };
 
-        if let Some(table) = manifest
-            .get("package")
-            .and_then(|p| p.as_table())
-            .and_then(|p| p.get("metadata"))
-            .and_then(|p| p.as_table())
-            .and_then(|p| p.get("docs"))
-            .and_then(|p| p.as_table())
-            .and_then(|p| p.get("rs"))
-            .and_then(|p| p.as_table())
-        {
+        fn fetch_manifest_tables<'a>(manifest: &'a Value) -> Option<&'a Map<String, Value>> {
+            manifest
+                .get("package")?
+                .as_table()?
+                .get("metadata")?
+                .as_table()?
+                .get("docs")?
+                .as_table()?
+                .get("rs")?
+                .as_table()
+        }
+
+        if let Some(table) = fetch_manifest_tables(&manifest) {
+            let collect_into_array =
+                |f: &Vec<Value>| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
+
             metadata.features = table
                 .get("features")
                 .and_then(|f| f.as_array())
-                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+                .and_then(collect_into_array);
+
             metadata.no_default_features = table
                 .get("no-default-features")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(metadata.no_default_features);
+
             metadata.all_features = table
                 .get("all-features")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(metadata.all_features);
+
             metadata.default_target = table
                 .get("default-target")
                 .and_then(|v| v.as_str())
                 .map(|v| v.to_owned());
+
             metadata.targets = table
                 .get("targets")
                 .and_then(|f| f.as_array())
-                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+                .and_then(collect_into_array);
+
             metadata.rustc_args = table
                 .get("rustc-args")
                 .and_then(|f| f.as_array())
-                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+                .and_then(collect_into_array);
+
             metadata.rustdoc_args = table
                 .get("rustdoc-args")
                 .and_then(|f| f.as_array())
-                .and_then(|f| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect());
+                .and_then(collect_into_array);
         }
 
         metadata
     }
+
     pub(super) fn targets(&self) -> BuildTargets<'_> {
         use super::rustwide_builder::{HOST_TARGET, TARGETS};
 
@@ -282,16 +300,19 @@ mod test {
         use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
         let mut metadata = Metadata::default();
+
         // unchanged default_target, targets not specified
         let BuildTargets {
             default_target: default,
             other_targets: tier_one,
         } = metadata.targets();
         assert_eq!(default, HOST_TARGET);
+
         // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
             assert!(TARGETS.contains(actual));
         }
+
         for expected in TARGETS {
             if *expected == HOST_TARGET {
                 assert!(!tier_one.contains(&HOST_TARGET));
@@ -302,10 +323,12 @@ mod test {
 
         // unchanged default_target, targets specified to be empty
         metadata.targets = Some(Vec::new());
+
         let BuildTargets {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
@@ -314,10 +337,12 @@ mod test {
             "i686-pc-windows-msvc".into(),
             "i686-apple-darwin".into(),
         ]);
+
         let BuildTargets {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, "i686-pc-windows-msvc");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-apple-darwin"));
@@ -328,6 +353,7 @@ mod test {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, HOST_TARGET);
         assert!(others.is_empty());
 
@@ -336,10 +362,12 @@ mod test {
             "i686-pc-windows-msvc".into(),
             "i686-pc-windows-msvc".into(),
         ]);
+
         let BuildTargets {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, "i686-pc-windows-msvc");
         assert!(others.is_empty());
 
@@ -349,6 +377,7 @@ mod test {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, "i686-apple-darwin");
         assert_eq!(others.len(), 1);
         assert!(others.contains(&"i686-pc-windows-msvc"));
@@ -359,6 +388,7 @@ mod test {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, "i686-apple-darwin");
         assert!(others.is_empty());
 
@@ -368,12 +398,14 @@ mod test {
             default_target: default,
             other_targets: others,
         } = metadata.targets();
+
         assert_eq!(default, "i686-apple-darwin");
         let tier_one_targets_no_default = TARGETS
             .iter()
             .filter(|&&t| t != "i686-apple-darwin")
             .copied()
             .collect();
+
         assert_eq!(others, tier_one_targets_no_default);
     }
 }
