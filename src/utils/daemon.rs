@@ -26,7 +26,9 @@ pub fn start_daemon(background: bool) {
 
     // first check required environment variables
     for v in CRATE_VARIABLES.iter() {
-        env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not found", v));
+        if env::var(v).is_err() {
+            panic!("Environment variable {} not found", v)
+        }
     }
 
     let dbopts = opts();
