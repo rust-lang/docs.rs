@@ -245,14 +245,11 @@ impl MatchSemver {
 /// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
 fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
-    // version is an Option<&str> from router::Router::get
-    // need to decode first
+    // version is an Option<&str> from router::Router::get, need to decode first
     use url::percent_encoding::percent_decode;
+
     let req_version = version
-        .and_then(|v| match percent_decode(v.as_bytes()).decode_utf8() {
-            Ok(p) => Some(p),
-            Err(_) => None,
-        })
+        .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
         .map(|v| {
             if v == "newest" || v == "latest" {
                 "*".into()
@@ -267,11 +264,13 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         let query = "SELECT name, version, releases.id
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
             WHERE normalize_crate_name(name) = normalize_crate_name($1) AND yanked = false";
+
         let rows = conn.query(query, &[&name]).unwrap();
         let mut rows = rows.iter().peekable();
 
         if let Some(row) = rows.peek() {
             let db_name = row.get(0);
+
             if db_name != name {
                 corrected_name = Some(db_name);
             }
@@ -280,15 +279,12 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         rows.map(|row| (row.get(1), row.get(2))).collect()
     };
 
-    // first check for exact match
-    // we can't expect users to use semver in query
-    for version in &versions {
-        if version.0 == req_version {
-            return Some(MatchVersion {
-                corrected_name,
-                version: MatchSemver::Exact(version.clone()),
-            });
-        }
+    // first check for exact match, we can't expect users to use semver in query
+    if let Some((version, id)) = versions.iter().find(|(vers, _)| vers == &req_version) {
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Exact((version.to_owned(), *id)),
+        });
     }
 
     // Now try to match with semver
@@ -299,8 +295,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         let mut versions_sem: Vec<(Version, i32)> = Vec::new();
 
         for version in &versions {
-            // in theory a crate must always have a semver compatible version
-            // but check result just in case
+            // in theory a crate must always have a semver compatible version, but check result just in case
             versions_sem.push((Version::parse(&version.0).ok()?, version.1));
         }
 
@@ -309,13 +304,14 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         versions_sem
     };
 
-    for version in &versions_sem {
-        if req_sem_ver.matches(&version.0) {
-            return Some(MatchVersion {
-                corrected_name,
-                version: MatchSemver::Semver((version.0.to_string(), version.1)),
-            });
-        }
+    if let Some((version, id)) = versions_sem
+        .iter()
+        .find(|(vers, _)| req_sem_ver.matches(vers))
+    {
+        return Some(MatchVersion {
+            corrected_name,
+            version: MatchSemver::Semver((version.to_string(), *id)),
+        });
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
@@ -404,25 +400,26 @@ impl Server {
 fn duration_to_str(ts: time::Timespec) -> String {
     let tm = time::at(ts);
     let delta = time::now() - tm;
+    let delta = (
+        delta.num_days(),
+        delta.num_hours(),
+        delta.num_minutes(),
+        delta.num_seconds(),
+    );
 
-    if delta.num_days() > 5 {
-        format!("{}", tm.strftime("%b %d, %Y").unwrap())
-    } else if delta.num_days() > 1 {
-        format!("{} days ago", delta.num_days())
-    } else if delta.num_days() == 1 {
-        "one day ago".to_string()
-    } else if delta.num_hours() > 1 {
-        format!("{} hours ago", delta.num_hours())
-    } else if delta.num_hours() == 1 {
-        "an hour ago".to_string()
-    } else if delta.num_minutes() > 1 {
-        format!("{} minutes ago", delta.num_minutes())
-    } else if delta.num_minutes() == 1 {
-        "one minute ago".to_string()
-    } else if delta.num_seconds() > 0 {
-        format!("{} seconds ago", delta.num_seconds())
-    } else {
-        "just now".to_string()
+    match delta {
+        (days, ..) if days > 5 => format!("{}", tm.strftime("%b %d, %Y").unwrap()),
+        (days @ 2..=5, ..) => format!("{} days ago", days),
+        (1, ..) => "one day ago".to_string(),
+
+        (_, hours, ..) if hours > 1 => format!("{} hours ago", hours),
+        (_, 1, ..) => "an hour ago".to_string(),
+
+        (_, _, minutes, _) if minutes > 1 => format!("{} minutes ago", minutes),
+        (_, _, 1, _) => "one minute ago".to_string(),
+
+        (_, _, _, seconds) if seconds > 0 => format!("{} seconds ago", seconds),
+        _ => "just now".to_string(),
     }
 }
 
@@ -460,10 +457,12 @@ fn style_css_handler(_: &mut Request) -> IronResult<Response> {
         CacheDirective::Public,
         CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
     ];
+
     response
         .headers
         .set(ContentType("text/css".parse().unwrap()));
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
@@ -477,6 +476,7 @@ fn load_js(file_path_str: &'static str) -> IronResult<Response> {
         .headers
         .set(ContentType("application/javascript".parse().unwrap()));
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
@@ -489,7 +489,9 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     response.headers.set(ContentType(
         "application/opensearchdescription+xml".parse().unwrap(),
     ));
+
     response.headers.set(CacheControl(cache));
+
     Ok(response)
 }
 
@@ -525,34 +527,31 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
-        if let Some(row) = &conn
+        let rows = conn
             .query(
                 "SELECT crates.name,
-                                       releases.version,
-                                       releases.description,
-                                       releases.target_name,
-                                       releases.rustdoc_status,
-                                       releases.default_target
-                                FROM releases
-                                INNER JOIN crates ON crates.id = releases.crate_id
-                                WHERE crates.name = $1 AND releases.version = $2",
+                       releases.version,
+                       releases.description,
+                       releases.target_name,
+                       releases.rustdoc_status,
+                       releases.default_target
+                FROM releases
+                INNER JOIN crates ON crates.id = releases.crate_id
+                WHERE crates.name = $1 AND releases.version = $2",
                 &[&name, &version],
             )
-            .unwrap()
-            .iter()
-            .next()
-        {
-            return Some(MetaData {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                rustdoc_status: row.get(4),
-                default_target: row.get(5),
-            });
-        }
+            .unwrap();
 
-        None
+        let row = rows.iter().next()?;
+
+        Some(MetaData {
+            name: row.get(0),
+            version: row.get(1),
+            description: row.get(2),
+            target_name: row.get(3),
+            rustdoc_status: row.get(4),
+            default_target: row.get(5),
+        })
     }
 }
 
@@ -565,6 +564,7 @@ impl ToJson for MetaData {
         m.insert("target_name".to_owned(), self.target_name.to_json());
         m.insert("rustdoc_status".to_owned(), self.rustdoc_status.to_json());
         m.insert("default_target".to_owned(), self.default_target.to_json());
+
         m.to_json()
     }
 }
@@ -662,6 +662,7 @@ mod test {
             let web = env.frontend();
             for krate in &["std", "alloc", "core", "proc_macro", "test"] {
                 let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
+
                 // with or without slash
                 assert_redirect(&format!("/{}", krate), &target, web)?;
                 assert_redirect(&format!("/{}/", krate), &target, web)?;
@@ -701,6 +702,7 @@ mod test {
                 .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
                 .create()
                 .unwrap();
+
             let web = env.frontend();
             assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
             assert_success("/crate/regex/0.3.0/source", web)?;
@@ -744,6 +746,7 @@ mod test {
 
             let release_id = release("0.3.0", db);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+
             db.conn().query(query, &[&release_id]).unwrap();
             assert_eq!(version(None, db), None);
             assert_eq!(version(Some("0.3"), db), None);
@@ -765,7 +768,6 @@ mod test {
             release("0.1.0+4.1", db);
             release("0.1.1", db);
             assert_eq!(version(None, db), semver("0.1.1"));
-
             release("0.5.1+zstd.1.4.4", db);
             assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
             assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
