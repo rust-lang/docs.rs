@@ -292,7 +292,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let path_in_latest = if !is_latest_version {
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
-        path_for_version(&latest_path, &crate_details.target_name, &conn)
+        path_for_version(&latest_path, &crate_details.doc_targets, &conn)
     } else {
         Default::default()
     };
@@ -302,7 +302,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         let mut inner_path = req_path.clone();
         // Drop the `rustdoc/:crate/:version[/:platform]` prefix
         inner_path.drain(..3);
-        if inner_path[0] != crate_details.target_name {
+        if inner_path.len() > 1 && crate_details.doc_targets.iter().any(|s| s == inner_path[0]) {
             inner_path.remove(0);
         }
         inner_path.join("/")
@@ -331,7 +331,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
-fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> String {
+fn path_for_version(req_path: &[&str], known_platforms: &[String], conn: &Connection) -> String {
     // Simple case: page exists in the latest version, so just change the version number
     if File::from_path(&conn, &req_path.join("/")).is_some() {
         // NOTE: this adds 'index.html' if it wasn't there before
@@ -351,12 +351,8 @@ fn path_for_version(req_path: &[&str], target_name: &str, conn: &Connection) -> 
             .expect("paths should be of the form <kind>.<name>.html")
     };
     // check if req_path[3] is the platform choice or the name of the crate
-    // rustdoc generates a ../settings.html page, so if req_path[3] is not
-    // the target, that doesn't necessarily mean it's a platform.
-    // we also can't check if it's in TARGETS, since some targets have been
-    // removed (looking at you, i686-apple-darwin)
     let concat_path;
-    let crate_root = if req_path[3] != target_name && req_path.len() >= 5 {
+    let crate_root = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 5 {
         concat_path = format!("{}/{}", req_path[3], req_path[4]);
         &concat_path
     } else {
@@ -375,51 +371,38 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
-    // /crate/:name/:version/target-redirect/:target/*path
-    let (target, path) = {
-        let mut path = req.url.path();
-        path.drain(..4);
-        let target = path[0];
-        if target == crate_details.metadata.default_target {
-            path.remove(0);
+    //   [crate, :name, :version, target-redirect, :target, *path]
+    // is transformed to
+    //   [rustdoc, :name, :version, :target?, *path]
+    // path might be empty, but target is guaranteed to be there because of the route used
+    let file_path = {
+        let mut file_path = req.url.path();
+        file_path[0] = "rustdoc";
+        file_path.remove(3);
+        if file_path[3] == crate_details.metadata.default_target {
+            file_path.remove(3);
+        } else if file_path[4] != crate_details.target_name {
+            // For non-default targets we only redirect to paths within the current crate
+            file_path.drain(4..);
+            file_path.push(&crate_details.target_name);
+            file_path.push("index.html");
         }
-        (target, path.join("/"))
+        if let Some(last) = file_path.last_mut() {
+            if *last == "" {
+                *last = "index.html";
+            }
+        }
+        file_path
     };
 
-    let file_path = format!(
-        "rustdoc/{name}/{version}/{path}",
+    let path = path_for_version(&file_path, &crate_details.doc_targets, &conn);
+    let url = format!(
+        "{base}/{name}/{version}/{path}",
+        base = base,
         name = name,
         version = version,
         path = path
     );
-
-    // if the current page is not present on the other platform, link to the index page for the crate instead
-    let url = if File::from_path(&conn, &file_path).is_some() {
-        format!(
-            "{base}/{name}/{version}/{path}",
-            base = base,
-            name = name,
-            version = version,
-            path = path
-        )
-    } else if target == crate_details.metadata.default_target {
-        format!(
-            "{base}/{name}/{version}/{target_name}/index.html",
-            base = base,
-            name = name,
-            version = version,
-            target_name = crate_details.target_name
-        )
-    } else {
-        format!(
-            "{base}/{name}/{version}/{target}/{target_name}/index.html",
-            base = base,
-            name = name,
-            version = version,
-            target = target,
-            target_name = crate_details.target_name
-        )
-    };
 
     let url = ctry!(Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
@@ -661,6 +644,8 @@ mod test {
             // check it searches for removed pages
             let redirect =
                 latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
+            // This must be a double redirect to deal with crates that failed to build in the
+            // latest version
             assert_eq!(redirect, "/dummy/0.2.0/dummy?search=will-be-deleted");
             assert_redirect(
                 "/dummy/0.2.0/dummy?search=will-be-deleted",
@@ -1037,8 +1022,8 @@ mod test {
                 .add_target("x86_64-pc-windows-msvc")
                 .create()?;
 
-            // For top-level items we redirect to the target-specific doc root as the top-level
-            // items can't know which target they're for
+            // For top-level items on non-default platforms we redirect to the target-specific doc
+            // root as the top-level items can't know which target they're for
             assert_platform_links(
                 web,
                 "/dummy/0.4.0/settings.html",
@@ -1047,7 +1032,7 @@ mod test {
                         "x86_64-pc-windows-msvc",
                         "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html",
                     ),
-                    ("x86_64-unknown-linux-gnu", "/dummy/0.4.0/dummy/index.html"),
+                    ("x86_64-unknown-linux-gnu", "/dummy/0.4.0/settings.html"),
                 ],
             )?;
 
@@ -1093,7 +1078,7 @@ mod test {
                 &[
                     (
                         "x86_64-pc-windows-msvc",
-                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html",
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy?search=DefaultOnly",
                     ),
                     (
                         "x86_64-unknown-linux-gnu",
@@ -1140,7 +1125,10 @@ mod test {
                         "x86_64-pc-windows-msvc",
                         "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html",
                     ),
-                    ("x86_64-unknown-linux-gnu", "/dummy/0.4.0/dummy/index.html"),
+                    (
+                        "x86_64-unknown-linux-gnu",
+                        "/dummy/0.4.0/dummy/?search=WindowsOnly",
+                    ),
                 ],
             )?;
 
