@@ -126,6 +126,18 @@ impl Metadata {
             return metadata;
         };
 
+        fn fetch_manifest_tables<'a>(manifest: &'a Value) -> Option<&'a Map<String, Value>> {
+            manifest
+                .get("package")?
+                .as_table()?
+                .get("metadata")?
+                .as_table()?
+                .get("docs")?
+                .as_table()?
+                .get("rs")?
+                .as_table()
+        }
+
         if let Some(table) = fetch_manifest_tables(&manifest) {
             let collect_into_array =
                 |f: &Vec<Value>| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
@@ -196,18 +208,6 @@ impl Metadata {
             other_targets: targets,
         }
     }
-}
-
-fn fetch_manifest_tables<'a>(manifest: &'a Value) -> Option<&'a Map<String, Value>> {
-    manifest
-        .get("package")?
-        .as_table()?
-        .get("metadata")?
-        .as_table()?
-        .get("docs")?
-        .as_table()?
-        .get("rs")?
-        .as_table()
 }
 
 #[cfg(test)]
