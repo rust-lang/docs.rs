@@ -42,7 +42,7 @@ pub struct CrateDetails {
     github_issues: Option<i32>,
     pub(crate) metadata: MetaData,
     is_library: bool,
-    doc_targets: Option<Json>,
+    pub(crate) doc_targets: Vec<String>,
     license: Option<String>,
     documentation_url: Option<String>,
 }
@@ -185,6 +185,18 @@ impl CrateDetails {
             default_target: rows.get(0).get(25),
         };
 
+        let doc_targets = {
+            let data: Json = rows.get(0).get(22);
+            data.as_array()
+                .map(|array| {
+                    array
+                        .iter()
+                        .filter_map(|item| item.as_string().map(|s| s.to_owned()))
+                        .collect()
+                })
+                .unwrap_or_else(Vec::new)
+        };
+
         let mut crate_details = CrateDetails {
             name: rows.get(0).get(2),
             version: rows.get(0).get(3),
@@ -211,7 +223,7 @@ impl CrateDetails {
             github_issues: rows.get(0).get(20),
             metadata,
             is_library: rows.get(0).get(21),
-            doc_targets: rows.get(0).get(22),
+            doc_targets,
             license: rows.get(0).get(23),
             documentation_url: rows.get(0).get(24),
         };
