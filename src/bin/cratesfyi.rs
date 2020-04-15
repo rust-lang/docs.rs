@@ -317,27 +317,30 @@ pub fn main() {
                 priority,
             )
             .expect("Could not add crate to queue");
-        } else if let Some(matches) = matches.subcommand_matches("set") {
-            let pattern = matches
-                .value_of("PATTERN")
-                .expect("You must give a pattern to match with");
-            let priority = clap::value_t!(matches.value_of("PRIORITY"), i32)
-                .expect("You must give a priority for a crate");
-            let conn = connect_db().expect("Could not connect to the database");
+        } else if let Some(matches) = matches.subcommand_matches("default-priority") {
+            if let Some(matches) = matches.subcommand_matches("set") {
+                let pattern = matches
+                    .value_of("PATTERN")
+                    .expect("You must give a pattern to match with");
+                let priority = clap::value_t!(matches.value_of("PRIORITY"), i32)
+                    .expect("You must give a priority for a crate");
+                let conn = connect_db().expect("Could not connect to the database");
 
-            set_crate_priority(&conn, pattern, priority).expect("Could not set pattern's priority");
-        } else if let Some(matches) = matches.subcommand_matches("remove") {
-            let pattern = matches
-                .value_of("PATTERN")
-                .expect("You must give a pattern to remove");
-            let conn = connect_db().expect("Could not connect to the database");
+                set_crate_priority(&conn, pattern, priority)
+                    .expect("Could not set pattern's priority");
+            } else if let Some(matches) = matches.subcommand_matches("remove") {
+                let pattern = matches
+                    .value_of("PATTERN")
+                    .expect("You must give a pattern to remove");
+                let conn = connect_db().expect("Could not connect to the database");
 
-            if let Some(priority) =
-                remove_crate_priority(&conn, pattern).expect("Could not remove pattern's priority")
-            {
-                println!("Removed pattern with priority {}", priority);
-            } else {
-                println!("Pattern did not exist and so was not removed");
+                if let Some(priority) = remove_crate_priority(&conn, pattern)
+                    .expect("Could not remove pattern's priority")
+                {
+                    println!("Removed pattern with priority {}", priority);
+                } else {
+                    println!("Pattern did not exist and so was not removed");
+                }
             }
         }
     }
