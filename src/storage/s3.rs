@@ -1,13 +1,13 @@
 use super::Blob;
 use failure::Error;
 use futures::Future;
+use log::{error, warn};
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
-use log::{error, warn};
 
 pub(crate) struct S3Backend<'a> {
     client: S3Client,
