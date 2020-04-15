@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] = &["alloc", "core", "proc_macro", "std", "test"];
 
+// REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
 

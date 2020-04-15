@@ -410,6 +410,7 @@ fn add_keywords_into_database(
                 .get(0)
             }
         };
+
         // add releationship
         let _ = conn.query(
             "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",

@@ -42,16 +42,14 @@ impl ToJson for FileList {
             let mut file_m: BTreeMap<String, Json> = BTreeMap::new();
             file_m.insert("name".to_string(), file.name.to_json());
 
-            file_m.insert(
-                match file.file_type {
-                    FileType::Dir => "file_type_dir".to_string(),
-                    FileType::Text => "file_type_text".to_string(),
-                    FileType::Binary => "file_type_binary".to_string(),
-                    FileType::RustSource => "file_type_rust_source".to_string(),
-                },
-                true.to_json(),
-            );
+            let file_type = match file.file_type {
+                FileType::Dir => "file_type_dir",
+                FileType::Text => "file_type_text",
+                FileType::Binary => "file_type_binary",
+                FileType::RustSource => "file_type_rust_source",
+            };
 
+            file_m.insert(file_type.to_string(), true.to_json());
             file_vec.push(file_m.to_json());
         }
 
@@ -141,9 +139,9 @@ impl FileList {
                             file_list.push(file);
                         }
                     }
-                };
+                }
             }
-        };
+        }
 
         if file_list.is_empty() {
             return None;

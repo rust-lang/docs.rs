@@ -163,10 +163,10 @@ impl CrateDetails {
                     if let Some(version) = version.as_string() {
                         if let Ok(sem_ver) = semver::Version::parse(&version) {
                             versions.push(sem_ver);
-                        };
-                    };
+                        }
+                    }
                 }
-            };
+            }
 
             versions.sort();
             versions.reverse();

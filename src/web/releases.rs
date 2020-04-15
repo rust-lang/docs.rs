@@ -447,6 +447,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     let (author_name, packages) = if author.starts_with('@') {
         let mut author = author.split('@');
+
         get_releases_by_owner(
             &conn,
             page_number,
@@ -572,7 +573,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         let search_query = query.replace(" ", " & ");
         #[allow(clippy::or_fun_call)]
         get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
-            .ok_or(IronError::new(Nope::NoResults, status::NotFound))
+            .ok_or_else(|| IronError::new(Nope::NoResults, status::NotFound))
             .and_then(|(_, results)| {
                 // FIXME: There is no pagination
                 Page::new(results)

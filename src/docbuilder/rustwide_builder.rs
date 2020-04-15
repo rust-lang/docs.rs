@@ -122,8 +122,9 @@ impl RustwideBuilder {
 
         let mut targets_to_install = TARGETS
             .iter()
-            .map(|&t| t.to_string())
+            .map(|&t| t.to_string()) // &str has a specialized ToString impl, while &&str goes through Display
             .collect::<HashSet<_>>();
+
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
             Ok(targets) => targets,
             Err(err) => {

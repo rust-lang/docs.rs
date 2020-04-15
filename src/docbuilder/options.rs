@@ -55,6 +55,7 @@ impl DocBuilderOptions {
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
         let (prefix, crates_io_index_path) = generate_paths(prefix);
+
         DocBuilderOptions {
             prefix,
             crates_io_index_path,
@@ -69,6 +70,7 @@ impl DocBuilderOptions {
                 self.crates_io_index_path.display()
             );
         }
+
         Ok(())
     }
 }

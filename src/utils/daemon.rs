@@ -19,16 +19,16 @@ use time;
 use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};
 
 pub fn start_daemon(background: bool) {
-    // first check required environment variables
-    for v in [
+    const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
         "CRATESFYI_GITHUB_ACCESSTOKEN",
-    ]
-    .iter()
-    {
+    ];
+
+    // first check required environment variables
+    for v in CRATE_VARIABLES.iter() {
         if env::var(v).is_err() {
-            panic!("Environment variable {} not found", v);
+            panic!("Environment variable {} not found", v)
         }
     }
 
@@ -42,6 +42,7 @@ pub fn start_daemon(background: bool) {
         {
             panic!("running in background not supported on windows");
         }
+
         #[cfg(not(target_os = "windows"))]
         {
             // fork the process
@@ -87,6 +88,7 @@ pub fn start_daemon(background: bool) {
         .unwrap();
 
     // build new crates every minute
+    // REFACTOR: Break this into smaller functions
     thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
         let opts = opts();
         let mut doc_builder = DocBuilder::new(opts);
@@ -146,6 +148,7 @@ pub fn start_daemon(background: bool) {
                     error!("Failed to read the number of crates in the queue: {}", e);
                     continue;
                 }
+
                 Ok(0) => {
                     if status.count() > 0 {
                         // ping the hubs before continuing
@@ -162,6 +165,7 @@ pub fn start_daemon(background: bool) {
                     status = BuilderState::EmptyQueue;
                     continue;
                 }
+
                 Ok(queue_count) => {
                     info!("Starting build with {} crates in queue (currently on a {} crate streak)",
                           queue_count, status.count());
@@ -185,7 +189,6 @@ pub fn start_daemon(background: bool) {
                     Ok(crate_built) => if crate_built {
                         status.increment();
                     }
-
                 }
             }));
 
@@ -257,6 +260,7 @@ pub fn start_daemon(background: bool) {
 
     // at least start web server
     info!("Starting web server");
+
     crate::Server::start(None);
 }
 

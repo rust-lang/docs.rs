@@ -136,16 +136,16 @@ fn get_github_path(url: &str) -> Option<String> {
         Some(cap) => {
             let username = cap.get(1).unwrap().as_str();
             let reponame = cap.get(2).unwrap().as_str();
-            Some(format!(
-                "{}/{}",
-                username,
-                if reponame.ends_with(".git") {
-                    reponame.split(".git").next().unwrap()
-                } else {
-                    reponame
-                }
-            ))
+
+            let reponame = if reponame.ends_with(".git") {
+                reponame.split(".git").next().unwrap()
+            } else {
+                reponame
+            };
+
+            Some(format!("{}/{}", username, reponame))
         }
+
         None => None,
     }
 }

@@ -18,13 +18,16 @@ where
     for line in reader.lines() {
         // some crates have invalid UTF-8 (nanny-sys-0.0.7)
         // skip them
-        let line = match line {
-            Ok(l) => l,
-            Err(_) => continue,
+        let line = if let Ok(line) = line {
+            line
+        } else {
+            continue;
         };
-        let data = match Json::from_str(line.trim()) {
-            Ok(d) => d,
-            Err(_) => continue,
+
+        let data = if let Ok(data) = Json::from_str(line.trim()) {
+            data
+        } else {
+            continue;
         };
 
         let obj = data

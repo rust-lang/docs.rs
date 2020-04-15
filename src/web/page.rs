@@ -114,6 +114,7 @@ impl<T: ToJson> Page<T> {
         let status = self.status;
         let temp = Template::new(template, self);
         resp.set_mut(temp).set_mut(status);
+
         Ok(resp)
     }
 }

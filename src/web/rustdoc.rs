@@ -402,6 +402,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
         }
+
         Some(MatchSemver::Semver((version, _))) => {
             let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
             let url = ctry!(url::Url::parse_with_params(
@@ -411,6 +412,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
             let iron_url = ctry!(Url::from_generic_url(url));
             return Ok(super::redirect(iron_url));
         }
+
         None => BadgeOptions {
             subject: "docs".to_owned(),
             status: "no builds".to_owned(),
