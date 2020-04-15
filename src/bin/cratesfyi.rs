@@ -2,13 +2,12 @@ use std::env;
 use std::path::PathBuf;
 
 use cratesfyi::db::{self, add_path_into_database, connect_db};
-use cratesfyi::utils::add_crate_to_queue;
+use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
 use cratesfyi::Server;
 use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
 use structopt::StructOpt;
 
 pub fn main() {
-    let _ = dotenv::dotenv();
     logger_init();
 
     CommandLine::from_args().handle_args();
@@ -107,6 +106,12 @@ enum QueueSubcommand {
         )]
         build_priority: i32,
     },
+
+    /// Interactions with build queue priorities
+    DefaultPriority {
+        #[structopt(subcommand)]
+        subcommand: PrioritySubcommand,
+    },
 }
 
 impl QueueSubcommand {
@@ -120,6 +125,52 @@ impl QueueSubcommand {
                 let conn = connect_db().expect("Could not connect to database");
                 add_crate_to_queue(&conn, &crate_name, &crate_version, build_priority)
                     .expect("Could not add crate to queue");
+            }
+
+            Self::DefaultPriority { subcommand } => subcommand.handle_args(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum PrioritySubcommand {
+    /// Set all crates matching a pattern to a priority level
+    Set {
+        /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
+        #[structopt(name = "PATTERN")]
+        pattern: String,
+        /// The priority to give crates matching the given `PATTERN`
+        priority: i32,
+    },
+
+    /// Remove the prioritization of crates for a pattern
+    Remove {
+        /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
+        #[structopt(name = "PATTERN")]
+        pattern: String,
+    },
+}
+
+impl PrioritySubcommand {
+    pub fn handle_args(self) {
+        match self {
+            Self::Set { pattern, priority } => {
+                let conn = connect_db().expect("Could not connect to the database");
+
+                set_crate_priority(&conn, &pattern, priority)
+                    .expect("Could not set pattern's priority");
+            }
+
+            Self::Remove { pattern } => {
+                let conn = connect_db().expect("Could not connect to the database");
+
+                if let Some(priority) = remove_crate_priority(&conn, &pattern)
+                    .expect("Could not remove pattern's priority")
+                {
+                    println!("Removed pattern with priority {}", priority);
+                } else {
+                    println!("Pattern did not exist and so was not removed");
+                }
             }
         }
     }
