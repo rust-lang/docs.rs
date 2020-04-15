@@ -122,7 +122,7 @@ impl RustwideBuilder {
 
         let mut targets_to_install = TARGETS
             .iter()
-            .map(|t| (*t).to_string()) // &str has a specialized ToString impl, while &&str goes through Display
+            .map(|&t| t.to_string()) // &str has a specialized ToString impl, while &&str goes through Display
             .collect::<HashSet<_>>();
 
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
@@ -226,7 +226,7 @@ impl RustwideBuilder {
                     let file_name = if versioned {
                         format!("{}-{}.{}", segments[1], rustc_version, segments[0])
                     } else {
-                        (*file).to_string() // &str has a specialized ToString impl, while &&str goes through Display
+                        file.to_string()
                     };
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
