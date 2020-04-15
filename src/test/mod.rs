@@ -93,6 +93,8 @@ pub(crate) struct TestEnvironment {
 
 impl TestEnvironment {
     fn new() -> Self {
+        // If this fails it's probably already initialized
+        let _ = env_logger::try_init();
         Self {
             db: OnceCell::new(),
             frontend: OnceCell::new(),

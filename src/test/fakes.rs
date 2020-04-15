@@ -118,9 +118,11 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn add_platform<S: Into<String>>(mut self, platform: S) -> Self {
+        let platform = platform.into();
         let name = self.package.targets[0].name.clone();
-        let target = Target::dummy_lib(name, Some(platform.into()));
+        let target = Target::dummy_lib(name, Some(platform.clone()));
         self.package.targets.push(target);
+        self.doc_targets.push(platform);
         self
     }
 

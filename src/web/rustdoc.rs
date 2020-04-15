@@ -675,6 +675,7 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .add_platform("x86_64-pc-windows-msvc")
+                .rustdoc_file("dummy/struct.Blah.html", b"lah")
                 .create()
                 .unwrap();
             db.fake_release()
@@ -700,9 +701,22 @@ mod test {
                 "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
+            // With deleted file platform specific redirect also handles search
+            let redirect = latest_version_redirect(
+                "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/struct.Blah.html",
+                web,
+            )?;
+            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc?search=Blah");
+            assert_redirect(
+                &redirect,
+                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/?search=Blah",
+                web,
+            )?;
+
             Ok(())
         })
     }
+
     #[test]
     fn redirect_latest_goes_to_crate_if_build_failed() {
         wrapper(|env| {
