@@ -78,9 +78,21 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         req: &Request,
         name: &str,
         vers: &str,
+        target: Option<&str>,
         target_name: &str,
     ) -> IronResult<Response> {
-        let mut url_str = format!("{}/{}/{}/{}/", redirect_base(req), name, vers, target_name,);
+        let mut url_str = if let Some(target) = target {
+            format!(
+                "{}/{}/{}/{}/{}/",
+                redirect_base(req),
+                name,
+                vers,
+                target,
+                target_name
+            )
+        } else {
+            format!("{}/{}/{}/{}/", redirect_base(req), name, vers, target_name)
+        };
         if let Some(query) = req.url.query() {
             url_str.push('?');
             url_str.push_str(query);
@@ -149,6 +161,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or_else(|_| crate_name.into())
         .into_owned();
     let req_version = router.find("version");
+    let mut target = router.find("target");
 
     let conn = extension!(req, Pool).get();
 
@@ -173,16 +186,20 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let (target_name, has_docs): (String, bool) = {
         let rows = ctry!(conn.query(
             "SELECT target_name, rustdoc_status
-                                     FROM releases
-                                     WHERE releases.id = $1",
+             FROM releases
+             WHERE releases.id = $1",
             &[&id]
         ));
 
         (rows.get(0).get(0), rows.get(0).get(1))
     };
 
+    if target == Some("index.html") || target == Some(&target_name) {
+        target = None;
+    }
+
     if has_docs {
-        redirect_to_doc(req, &crate_name, &version, &target_name)
+        redirect_to_doc(req, &crate_name, &version, target, &target_name)
     } else {
         redirect_to_crate(req, &crate_name, &version)
     }
@@ -351,14 +368,12 @@ fn path_for_version(req_path: &[&str], known_platforms: &[String], conn: &Connec
             .expect("paths should be of the form <kind>.<name>.html")
     };
     // check if req_path[3] is the platform choice or the name of the crate
-    let concat_path;
-    let crate_root = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 5 {
-        concat_path = format!("{}/{}", req_path[3], req_path[4]);
-        &concat_path
-    } else {
+    let platform = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 5 {
         req_path[3]
+    } else {
+        ""
     };
-    format!("{}?search={}", crate_root, search_item)
+    format!("{}?search={}", platform, search_item)
 }
 
 pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
@@ -641,13 +656,12 @@ mod test {
                 latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
             // This must be a double redirect to deal with crates that failed to build in the
             // latest version
-            assert_eq!(redirect, "/dummy/0.2.0/dummy?search=will-be-deleted");
+            assert_eq!(redirect, "/dummy/0.2.0/?search=will-be-deleted");
             assert_redirect(
-                "/dummy/0.2.0/dummy?search=will-be-deleted",
+                &redirect,
                 "/dummy/0.2.0/dummy/?search=will-be-deleted",
                 &web,
-            )
-            .unwrap();
+            )?;
 
             Ok(())
         })
@@ -1041,8 +1055,6 @@ mod test {
                 .add_target("x86_64-pc-windows-msvc")
                 .create()?;
 
-            // For top-level items on non-default platforms we redirect to the target-specific doc
-            // root as the top-level items can't know which target they're for
             assert_platform_links(
                 web,
                 "/dummy/0.4.0/settings.html",
@@ -1097,7 +1109,7 @@ mod test {
                 &[
                     (
                         "x86_64-pc-windows-msvc",
-                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy?search=DefaultOnly",
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/?search=DefaultOnly",
                     ),
                     (
                         "x86_64-unknown-linux-gnu",
