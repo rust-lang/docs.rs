@@ -6,7 +6,6 @@ pub(crate) use self::s3::S3Backend;
 #[cfg(test)]
 pub(crate) use self::s3::TIME_FMT;
 use failure::Error;
-pub use s3::move_to_s3;
 use time::Timespec;
 
 use failure::err_msg;
