@@ -381,11 +381,6 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         file_path.remove(3);
         if file_path[3] == crate_details.metadata.default_target {
             file_path.remove(3);
-        } else if file_path[4] != crate_details.target_name {
-            // For non-default targets we only redirect to paths within the current crate
-            file_path.drain(4..);
-            file_path.push(&crate_details.target_name);
-            file_path.push("index.html");
         }
         if let Some(last) = file_path.last_mut() {
             if *last == "" {
@@ -1032,6 +1027,7 @@ mod test {
                 .rustdoc_file("dummy/index.html", b"some content")
                 .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
                 .rustdoc_file("dummy/struct.DefaultOnly.html", b"some otter content")
+                .rustdoc_file("x86_64-pc-windows-msvc/settings.html", b"top-level items")
                 .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html", b"some content")
                 .rustdoc_file(
                     "x86_64-pc-windows-msvc/dummy/struct.Dummy.html",
@@ -1053,7 +1049,7 @@ mod test {
                 &[
                     (
                         "x86_64-pc-windows-msvc",
-                        "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/index.html",
+                        "/dummy/0.4.0/x86_64-pc-windows-msvc/settings.html",
                     ),
                     ("x86_64-unknown-linux-gnu", "/dummy/0.4.0/settings.html"),
                 ],
