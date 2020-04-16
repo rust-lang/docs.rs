@@ -310,6 +310,21 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // downgrade query
             "DROP TABLE crate_priorities;",
         ),
+        migration!(
+            context,
+            // version
+            12,
+            // description
+            "Mark doc_targets non-nullable (it has a default of empty array anyway)",
+            // upgrade query
+            "
+                ALTER TABLE releases ALTER COLUMN doc_targets SET NOT NULL;
+            ",
+            // downgrade query
+            "
+                ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
+            "
+        ),
     ];
 
     for migration in migrations {
