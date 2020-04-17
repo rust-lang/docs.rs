@@ -251,18 +251,17 @@ fn get_releases_by_owner(
     (author_name, packages)
 }
 
-/// Get the search results for a search query
+/// Get the search results for a crate search query
 ///
 /// Retrieves crates which names have a levenshtein distance of less than or equal to 3,
-/// crates who fit into or otherwise are made up of the query or crates who's descriptions
+/// crates who fit into or otherwise are made up of the query or crates whose descriptions
 /// match the search query.
 ///
 /// * `query`: The query string, unfiltered
 /// * `page`: The page of results to show (1-indexed)
 /// * `limit`: The number of results to return
 ///
-/// Returns `None` if no results are found and `Some` with the total number of results and the
-/// currently requested results
+/// Returns 0 and an empty Vec when no results are found or if a database error occurs
 ///
 fn get_search_results(
     conn: &Connection,
@@ -270,50 +269,32 @@ fn get_search_results(
     page: i64,
     limit: i64,
 ) -> (i64, Vec<Release>) {
-    let query = query.trim().to_lowercase();
+    query = query.trim();
     let offset = (page - 1) * limit;
 
-    let statement = "SELECT
-                crates.name,
-                latest_release.version AS version,
-                latest_release.description AS description,
-                latest_release.target_name AS target_name,
-                latest_release.release_time AS release_time,
-                latest_release.rustdoc_status AS rustdoc_status,
+    let statement =
+            "SELECT crates.name,
+                -- NOTE: this selects the latest alphanumeric version, which may not be the latest semver
+                MAX(releases.version) AS version,
+                MAX(releases.description) AS description,
+                MAX(releases.target_name) AS target_name,
+                MAX(releases.release_time) AS release_time,
+                -- Cast the boolean into an integer and then cast it into a boolean.
+                -- Posgres moves in mysterious ways, don't question it
+                CAST(MAX(releases.rustdoc_status::integer) AS boolean) as rustdoc_status,
                 crates.github_stars,
-                SUM(releases.downloads) AS downloads,
-                -- Get the total number of results, disregarding the limit
-                COUNT(*) OVER() as total,
+                crates.downloads_total as downloads,
 
                 -- The levenshtein distance between the search query and the crate's name
-                levenshtein_less_equal(CAST($1 AS TEXT), CAST(crates.name AS TEXT), 3) as distance,
+                levenshtein_less_equal($1, crates.name, 3) as distance,
                 -- The similarity of the tokens of the search vs the tokens of `crates.content`.
                 -- The `32` normalizes the number by using `rank / (rank + 1)`
-                ts_rank_cd(crates.content, plainto_tsquery($1), 32)  as content_rank
-            FROM
-                crates
-                INNER JOIN releases ON releases.crate_id = crates.id
-                INNER JOIN (
-                    SELECT DISTINCT ON (crate_id)
-                        crate_id,
-                        version,
-                        description,
-                        target_name,
-                        release_time,
-                        rustdoc_status,
-                        yanked
-                    FROM
-                        releases
-                    ORDER BY
-                        crate_id,
-                        release_time DESC
-                ) AS latest_release ON latest_release.crate_id = crates.id
+                ts_rank_cd(crates.content, to_tsquery($2), 32)  as content_rank
+            FROM releases INNER JOIN crates on releases.crate_id = crates.id
 
-            -- Filter crates that haven't been built and crates that have been yanked and
-            -- crates that don't match the query closely enough
-            WHERE
-                latest_release.rustdoc_status
-                AND NOT latest_release.yanked
+            -- Filter crates that haven't been built and crates that have been yanked
+            WHERE releases.rustdoc_status = true
+                AND releases.yanked = false
                 AND (
                     -- Crates names that match the query sandwiched between wildcards will pass
                     crates.name ILIKE CONCAT('%', $1, '%')
@@ -326,25 +307,22 @@ fn get_search_results(
             GROUP BY crates.id, releases.id
             
             -- Ordering is prioritized by how closely the query matches the name, how closely the
-            -- query matches the description finally how many downloads the crate has
-            ORDER BY
-                distance ASC,
+            -- query matches the description, and finally how many downloads the crate has
+            -- NOTE: this means that exact matches will be shown first
+            ORDER BY distance DESC,
                 content_rank DESC,
                 downloads_total DESC
             
             -- Allows pagination
             LIMIT $2 OFFSET $3";
 
-    let rows = if let Ok(rows) = conn
-        .query(statement, &[&query, &limit, &offset])
-        .map_err(|err| dbg!(err))
-    {
+    let rows = if let Ok(rows) = conn.query(statement, &[&query, &limit, &offset]) {
         rows
     } else {
         return (0, Vec::new());
     };
 
-    let total_results: i64 = rows.iter().next().map(|row| row.get(8)).unwrap_or_default();
+    let total_results = rows.iter().map(|row| row.get::<_, i64>(8)).sum();
     let packages: Vec<Release> = rows
         .into_iter()
         .map(|row| Release {
@@ -736,7 +714,7 @@ mod tests {
             for expected in expected.iter() {
                 assert_eq!(expected, &results.next().unwrap().name);
             }
-            assert!(results.collect::<Vec<_>>().is_empty());
+            assert_eq!(results.count(), 0);
 
             Ok(())
         })
@@ -763,7 +741,7 @@ mod tests {
 
     #[test]
     fn exacts_dont_care() {
-        let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
+        let near_matches = ["regex", "Regex", "rEgex", "reGex", "regEx", "regeX"];
 
         for name in near_matches.iter() {
             wrapper(|env| {
@@ -772,7 +750,7 @@ mod tests {
 
                 non_exact(&db)?;
 
-                let (num_results, results) = get_search_results(&db.conn(), "foo", 1, 100);
+                let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
                 let mut results = results.into_iter();
 
                 assert_eq!(num_results, 4);
