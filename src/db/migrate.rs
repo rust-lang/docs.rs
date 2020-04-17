@@ -330,19 +330,11 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // version
             13,
             // description
-            "Add string searching",
+            "Add fuzzy string searching",
             // upgrade query
-            "DO $$ BEGIN
-                IF (SELECT COUNT(*) FROM pg_extension WHERE extname = 'fuzzystrmatch') = 0 THEN
-                    CREATE EXTENSION fuzzystrmatch;
-                END IF;
-            END $$;",
+            "CREATE EXTENSION IF NOT EXISTS fuzzystrmatch",
             // downgrade query
-            "DO $$ BEGIN
-                IF (SELECT COUNT(*) FROM pg_extension WHERE extname = 'fuzzystrmatch') > 0 THEN
-                    DROP EXTENSION fuzzystrmatch;
-                END IF;
-            END $$;",
+            "DROP EXTENSION IF EXISTS fuzzystrmatch;",
         ),
     ];
 
