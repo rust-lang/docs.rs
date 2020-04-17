@@ -244,57 +244,94 @@ fn get_releases_by_owner(
     (author_name, packages)
 }
 
+/// Get the search results for a search query
+///
+/// Retrieves crates which names have a levenshtein distance of less than or equal to 3,
+/// crates who fit into or otherwise are made up of the query or crates who's descriptions
+/// match the search query.
+///
+/// * `query`: The query string, unfiltered
+/// * `page`: The page of results to show (1-indexed)
+/// * `limit`: The number of results to return
+///
+/// Returns `None` if no results are found and `Some` with the total number of results and the
+/// currently requested results
+///
 fn get_search_results(
     conn: &Connection,
-    query: &str,
+    mut query: &str,
     page: i64,
     limit: i64,
 ) -> Option<(i64, Vec<Release>)> {
+    query = query.trim();
+    let split_query = query.replace(' ', " & ");
     let offset = (page - 1) * limit;
-    let mut packages = Vec::new();
 
-    let rows = match conn.query(
-        "SELECT crates.name,
-                                    releases.version,
-                                    releases.description,
-                                    releases.target_name,
-                                    releases.release_time,
-                                    releases.rustdoc_status,
-                                    ts_rank_cd(crates.content, to_tsquery($1)) AS rank
-                                 FROM crates
-                                 INNER JOIN releases ON crates.latest_version_id = releases.id
-                                 WHERE crates.name LIKE concat('%', $1, '%')
-                                    OR crates.content @@ to_tsquery($1)
-                                 ORDER BY crates.name = $1 DESC,
-                                    crates.name LIKE concat('%', $1, '%') DESC,
-                                    rank DESC
-                                 LIMIT $2 OFFSET $3",
-        &[&query, &limit, &offset],
-    ) {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
+    let rows = conn
+        .query(
+            "SELECT crates.name,
+                MAX(releases.version) AS version,
+                MAX(releases.description) AS description,
+                MAX(releases.target_name) AS target_name,
+                MAX(releases.release_time) AS release_time,
+                -- Cast the boolean into an integer and then cast it into a boolean.
+                -- Posgres moves in mysterious ways, don't question it
+                CAST(MAX(releases.rustdoc_status::integer) AS boolean) as rustdoc_status,
+                crates.github_stars,
+                SUM(releases.downloads) AS downloads,
 
-    for row in &rows {
-        let package = Release {
+                -- The levenshtein distance between the search query and the crate's name
+                levenshtein_less_equal($1, crates.name, 3) as distance,
+                -- The similarity of the tokens of the search vs the tokens of `crates.content`.
+                -- The `32` normalizes the number by using `rank / (rank + 1)`
+                ts_rank_cd(crates.content, to_tsquery($2), 32)  as content_rank
+            FROM releases INNER JOIN crates on releases.crate_id = crates.id
+
+            -- Filter crates that haven't been built and crates that have been yanked
+            WHERE releases.rustdoc_status = true
+                AND releases.yanked = false
+                AND (
+                    -- Crates names that match the query sandwiched between wildcards will pass
+                    crates.name ILIKE CONCAT('%', $1, '%')
+                    -- Crate names with which the levenshtein distance is closer or equal to 3 will pass
+                    OR levenshtein_less_equal($1, crates.name, 3) <= 3
+                    -- Crates where their content matches the query will pass
+                    OR to_tsquery($2) @@ crates.content
+                )
+            GROUP BY crates.id
+            -- Ordering is prioritized by how closely the query matches the name, how closely the
+            -- query matches the description finally how many downloads the crate has
+            ORDER BY distance DESC,
+                content_rank DESC,
+                SUM(downloads) DESC
+            -- Allows pagination
+            LIMIT $3 OFFSET $4",
+            &[&query, &split_query, &limit, &offset],
+        )
+        .ok()?;
+
+    let packages: Vec<Release> = rows
+        .into_iter()
+        .map(|row| Release {
             name: row.get(0),
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
             release_time: row.get(4),
             rustdoc_status: row.get(5),
-            ..Release::default()
-        };
-
-        packages.push(package);
-    }
+            stars: row.get(6),
+        })
+        .collect();
 
     if !packages.is_empty() {
-        // get count of total results
+        // Get the total number of results that the query matches
         let rows = conn
             .query(
-                "SELECT COUNT(*) FROM crates WHERE content @@ to_tsquery($1)",
-                &[&query],
+                "SELECT COUNT(*) FROM crates
+                WHERE crates.name ILIKE CONCAT('%', CAST($1 AS TEXT), '%')
+                    OR levenshtein_less_equal(CAST($1 AS TEXT), crates.name, 3) <= 3
+                    OR crates.content @@ to_tsquery(CAST($2 AS TEXT))",
+                &[&(query as &str), &(&split_query as &str)],
             )
             .unwrap();
 
@@ -570,17 +607,20 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
 
-        let search_query = query.replace(" ", " & ");
-        #[allow(clippy::or_fun_call)]
-        get_search_results(&conn, &search_query, 1, RELEASES_IN_RELEASES)
-            .ok_or_else(|| IronError::new(Nope::NoResults, status::NotFound))
-            .and_then(|(_, results)| {
-                // FIXME: There is no pagination
-                Page::new(results)
-                    .set("search_query", &query)
-                    .title(&format!("Search results for '{}'", query))
-                    .to_resp("releases")
-            })
+        if let Some((_, results)) = get_search_results(&conn, &query, 1, RELEASES_IN_RELEASES) {
+            // FIXME: There is no pagination
+            Page::new(results)
+                .set("search_query", &query)
+                .title(&format!("Search results for '{}'", query))
+                .to_resp("releases")
+        } else {
+            // Return an empty page with an error message and an intact query so that
+            // the user can edit it
+            Page::new("".to_string())
+                .set("search_query", &query)
+                .title(&format!("No results found for '{}'", query))
+                .to_resp("releases")
+        }
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))
     }

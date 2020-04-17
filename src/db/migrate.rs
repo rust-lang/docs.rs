@@ -325,6 +325,25 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
             "
         ),
+        migration!(
+            context,
+            // version
+            13,
+            // description
+            "Add string searching",
+            // upgrade query
+            "DO $$ BEGIN
+                IF (SELECT COUNT(*) FROM pg_extension WHERE extname = 'fuzzystrmatch') = 0 THEN
+                    CREATE EXTENSION fuzzystrmatch;
+                END IF;
+            END $$;",
+            // downgrade query
+            "DO $$ BEGIN
+                IF (SELECT COUNT(*) FROM pg_extension WHERE extname = 'fuzzystrmatch') > 0 THEN
+                    DROP EXTENSION fuzzystrmatch;
+                END IF;
+            END $$;",
+        ),
     ];
 
     for migration in migrations {
