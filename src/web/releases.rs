@@ -18,7 +18,7 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
     name: String,
     version: String,
@@ -64,11 +64,18 @@ impl ToJson for Release {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Order {
     ReleaseTime, // this is default order
     GithubStars,
     RecentFailures,
     FailuresByGithubStars,
+}
+
+impl Default for Order {
+    fn default() -> Self {
+        Self::ReleaseTime
+    }
 }
 
 fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
@@ -259,57 +266,85 @@ fn get_releases_by_owner(
 ///
 fn get_search_results(
     conn: &Connection,
-    mut query: &str,
+    query: &str,
     page: i64,
     limit: i64,
-) -> Option<(i64, Vec<Release>)> {
-    query = query.trim();
-    let split_query = query.replace(' ', " & ");
+) -> (i64, Vec<Release>) {
+    let query = query.trim().to_lowercase();
     let offset = (page - 1) * limit;
 
-    let rows = conn
-        .query(
-            "SELECT crates.name,
-                MAX(releases.version) AS version,
-                MAX(releases.description) AS description,
-                MAX(releases.target_name) AS target_name,
-                MAX(releases.release_time) AS release_time,
-                -- Cast the boolean into an integer and then cast it into a boolean.
-                -- Posgres moves in mysterious ways, don't question it
-                CAST(MAX(releases.rustdoc_status::integer) AS boolean) as rustdoc_status,
+    let statement = "SELECT
+                crates.name,
+                latest_release.version AS version,
+                latest_release.description AS description,
+                latest_release.target_name AS target_name,
+                latest_release.release_time AS release_time,
+                latest_release.rustdoc_status AS rustdoc_status,
                 crates.github_stars,
                 SUM(releases.downloads) AS downloads,
+                -- Get the total number of results, disregarding the limit
+                COUNT(*) OVER() as total,
 
                 -- The levenshtein distance between the search query and the crate's name
-                levenshtein_less_equal($1, crates.name, 3) as distance,
+                levenshtein_less_equal(CAST($1 AS TEXT), CAST(crates.name AS TEXT), 3) as distance,
                 -- The similarity of the tokens of the search vs the tokens of `crates.content`.
                 -- The `32` normalizes the number by using `rank / (rank + 1)`
-                ts_rank_cd(crates.content, to_tsquery($2), 32)  as content_rank
-            FROM releases INNER JOIN crates on releases.crate_id = crates.id
+                ts_rank_cd(crates.content, plainto_tsquery($1), 32)  as content_rank
+            FROM
+                crates
+                INNER JOIN releases ON releases.crate_id = crates.id
+                INNER JOIN (
+                    SELECT DISTINCT ON (crate_id)
+                        crate_id,
+                        version,
+                        description,
+                        target_name,
+                        release_time,
+                        rustdoc_status,
+                        yanked
+                    FROM
+                        releases
+                    ORDER BY
+                        crate_id,
+                        release_time DESC
+                ) AS latest_release ON latest_release.crate_id = crates.id
 
-            -- Filter crates that haven't been built and crates that have been yanked
-            WHERE releases.rustdoc_status = true
-                AND releases.yanked = false
+            -- Filter crates that haven't been built and crates that have been yanked and
+            -- crates that don't match the query closely enough
+            WHERE
+                latest_release.rustdoc_status
+                AND NOT latest_release.yanked
                 AND (
                     -- Crates names that match the query sandwiched between wildcards will pass
                     crates.name ILIKE CONCAT('%', $1, '%')
                     -- Crate names with which the levenshtein distance is closer or equal to 3 will pass
                     OR levenshtein_less_equal($1, crates.name, 3) <= 3
                     -- Crates where their content matches the query will pass
-                    OR to_tsquery($2) @@ crates.content
+                    OR plainto_tsquery($1) @@ crates.content
                 )
-            GROUP BY crates.id
+            
+            GROUP BY crates.id, releases.id
+            
             -- Ordering is prioritized by how closely the query matches the name, how closely the
             -- query matches the description finally how many downloads the crate has
-            ORDER BY distance DESC,
+            ORDER BY
+                distance ASC,
                 content_rank DESC,
-                SUM(downloads) DESC
+                downloads_total DESC
+            
             -- Allows pagination
-            LIMIT $3 OFFSET $4",
-            &[&query, &split_query, &limit, &offset],
-        )
-        .ok()?;
+            LIMIT $2 OFFSET $3";
 
+    let rows = if let Ok(rows) = conn
+        .query(statement, &[&query, &limit, &offset])
+        .map_err(|err| dbg!(err))
+    {
+        rows
+    } else {
+        return (0, Vec::new());
+    };
+
+    let total_results: i64 = rows.iter().next().map(|row| row.get(8)).unwrap_or_default();
     let packages: Vec<Release> = rows
         .into_iter()
         .map(|row| Release {
@@ -323,22 +358,7 @@ fn get_search_results(
         })
         .collect();
 
-    if !packages.is_empty() {
-        // Get the total number of results that the query matches
-        let rows = conn
-            .query(
-                "SELECT COUNT(*) FROM crates
-                WHERE crates.name ILIKE CONCAT('%', CAST($1 AS TEXT), '%')
-                    OR levenshtein_less_equal(CAST($1 AS TEXT), crates.name, 3) <= 3
-                    OR crates.content @@ to_tsquery(CAST($2 AS TEXT))",
-                &[&(query as &str), &(&split_query as &str)],
-            )
-            .unwrap();
-
-        Some((rows.get(0).get(0), packages))
-    } else {
-        None
-    }
+    (total_results, packages)
 }
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
@@ -607,20 +627,18 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
 
-        if let Some((_, results)) = get_search_results(&conn, &query, 1, RELEASES_IN_RELEASES) {
-            // FIXME: There is no pagination
-            Page::new(results)
-                .set("search_query", &query)
-                .title(&format!("Search results for '{}'", query))
-                .to_resp("releases")
+        let (_, results) = get_search_results(&conn, &query, 1, RELEASES_IN_RELEASES);
+        let title = if results.is_empty() {
+            format!("No results found for '{}'", query)
         } else {
-            // Return an empty page with an error message and an intact query so that
-            // the user can edit it
-            Page::new("".to_string())
-                .set("search_query", &query)
-                .title(&format!("No results found for '{}'", query))
-                .to_resp("releases")
-        }
+            format!("Search results for '{}'", query)
+        };
+
+        // FIXME: There is no pagination
+        Page::new(results)
+            .set("search_query", &query)
+            .title(&title)
+            .to_resp("releases")
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))
     }
@@ -673,4 +691,97 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_releases_navigation")
         .set_true("releases_queue_tab")
         .to_resp("releases_queue")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::{wrapper, TestDatabase};
+
+    #[test]
+    fn database_search() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release().name("foo").version("0.0.0").create()?;
+            db.fake_release()
+                .name("bar-foo")
+                .version("0.0.0")
+                .create()?;
+            db.fake_release()
+                .name("foo-bar")
+                .version("0.0.1")
+                .create()?;
+            db.fake_release().name("fo0").version("0.0.0").create()?;
+            db.fake_release()
+                .name("fool")
+                .version("0.0.0")
+                .build_result_successful(false)
+                .create()?;
+            db.fake_release()
+                .name("freakin")
+                .version("0.0.0")
+                .create()?;
+            db.fake_release()
+                .name("something unreleated")
+                .version("0.0.0")
+                .create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "foo", 1, 100);
+            let mut results = results.into_iter();
+
+            assert_eq!(num_results, 4);
+
+            let expected = ["foo", "fo0", "bar-foo", "foo-bar"];
+            for expected in expected.iter() {
+                assert_eq!(expected, &results.next().unwrap().name);
+            }
+            assert!(results.collect::<Vec<_>>().is_empty());
+
+            Ok(())
+        })
+    }
+
+    fn non_exact(db: &TestDatabase) -> Result<(), crate::error::Error> {
+        db.fake_release().name("reg3x").version("0.0.0").create()?;
+        db.fake_release().name("regex-").version("0.0.0").create()?;
+        db.fake_release()
+            .name("regex-syntax")
+            .version("0.0.0")
+            .create()?;
+
+        Ok(())
+    }
+
+    fn rest_non_exact(mut rest: Vec<Release>) {
+        for name in ["reg3x", "regex-", "regex-syntax"].iter() {
+            assert_eq!(rest.remove(0).name, *name);
+        }
+
+        assert!(rest.is_empty());
+    }
+
+    #[test]
+    fn exacts_dont_care() {
+        let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
+
+        for name in near_matches.iter() {
+            wrapper(|env| {
+                let db = env.db();
+                db.fake_release().name(name).version("0.0.0").create()?;
+
+                non_exact(&db)?;
+
+                let (num_results, results) = get_search_results(&db.conn(), "foo", 1, 100);
+                let mut results = results.into_iter();
+
+                assert_eq!(num_results, 4);
+
+                assert_eq!(&results.next().unwrap().name, "regex");
+                rest_non_exact(results.collect());
+
+                Ok(())
+            })
+        }
+    }
 }
