@@ -10,8 +10,11 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    steps:
 
+    strategy:
+      fail-fast: false
+
+    steps:
       - uses: actions/checkout@master
         with:
           fetch-depth: 2
