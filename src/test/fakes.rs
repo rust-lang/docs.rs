@@ -82,6 +82,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn build_result_successful(mut self, new: bool) -> Self {
+        self.has_docs = new;
         self.build_result.successful = new;
         self
     }

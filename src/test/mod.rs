@@ -139,7 +139,7 @@ impl TestDatabase {
         conn.batch_execute(&format!(
             "
                 CREATE SCHEMA {0};
-                SET search_path TO {0};
+                SET search_path TO {0}, public;
             ",
             schema
         ))?;
