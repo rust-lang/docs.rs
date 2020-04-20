@@ -79,7 +79,7 @@ impl<'a> Storage<'a> {
         }
     }
 
-    fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+    fn store_batch(&mut self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
         match self {
             Self::Database(db) => db.store_batch(batch, trans),
             Self::S3(s3) => s3.store_batch(batch),
@@ -93,7 +93,7 @@ impl<'a> Storage<'a> {
     //
     // This returns a HashMap<filename, mime type>.
     pub(crate) fn store_all(
-        &self,
+        &mut self,
         conn: &Connection,
         prefix: &str,
         root_dir: &Path,

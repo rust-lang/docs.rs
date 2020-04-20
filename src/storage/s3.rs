@@ -8,15 +8,17 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
+use tokio::runtime::Runtime;
 
 pub(crate) struct S3Backend<'a> {
     client: S3Client,
     bucket: &'a str,
+    runtime: Runtime,
 }
 
 impl<'a> S3Backend<'a> {
     pub(crate) fn new(client: S3Client, bucket: &'a str) -> Self {
-        Self { client, bucket }
+        Self { client, bucket, runtime: Runtime::new().unwrap() }
     }
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
@@ -47,8 +49,7 @@ impl<'a> S3Backend<'a> {
         })
     }
 
-    pub(super) fn store_batch(&self, batch: &[Blob]) -> Result<(), Error> {
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
+    pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
         let mut attempts = 0;
 
         loop {
@@ -70,7 +71,7 @@ impl<'a> S3Backend<'a> {
             }
             attempts += 1;
 
-            match rt.block_on(::futures::future::join_all(futures)) {
+            match self.runtime.block_on(::futures::future::join_all(futures)) {
                 // this batch was successful, start another batch if there are still more files
                 Ok(_) => break,
                 Err(err) => {
