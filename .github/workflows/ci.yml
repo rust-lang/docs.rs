@@ -40,8 +40,8 @@ jobs:
         
       - name: Setup Postgres
         run: |
-          createuser postgres -w
-          createdb postgres -O postgres
+          sudo -u postgres psql -c "CREATE USER cratesfyi WITH PASSWORD 'password';"
+          sudo -u postgres psql -c "CREATE DATABASE cratesfyi OWNER cratesfyi;"
           echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/postgres"
 
       - name: Build docs.rs
