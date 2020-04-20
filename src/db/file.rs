@@ -31,7 +31,7 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     prefix: &str,
     path: P,
 ) -> Result<Json> {
-    let backend = Storage::new(conn);
+    let mut backend = Storage::new(conn);
     let file_list = backend.store_all(conn, prefix, path.as_ref())?;
     file_list_to_json(file_list.into_iter().collect())
 }
