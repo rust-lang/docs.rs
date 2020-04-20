@@ -9,10 +9,13 @@ env:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}-latest
 
     strategy:
       fail-fast: false
+      matrix:
+        os: [ubuntu, macos, windows]
+        channel: [stable, beta, nightly]
 
     steps:
       - uses: actions/checkout@master
@@ -20,7 +23,7 @@ jobs:
           fetch-depth: 2
 
       - name: Install stable Rust
-        run: rustup update stable && rustup default stable
+        run: rustup update ${{ matrix.channel }} && rustup default ${{ matrix.channel }}
 
       - name: Set rustc version
         run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
@@ -49,10 +52,11 @@ jobs:
           restore-key: |
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
-      - name: Install PostgreSQL
+      - name: Install PostgreSQL (Windows)
+        if: contains(matrix.os, 'windows')
+        run: choco install postgresql
+      - name: Setup PostgreSQL
         run: |
-          sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postgresql
-          sudo systemctl start postgresql
           sudo -u postgres createuser $(whoami) -w
           sudo -u postgres createdb $(whoami) -O $(whoami)
           echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
