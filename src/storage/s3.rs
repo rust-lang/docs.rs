@@ -77,7 +77,7 @@ impl<'a> S3Backend<'a> {
             }
             attempts += 1;
 
-            match self.runtime.block_on(futures.collect()) {
+            match self.runtime.block_on(futures.map(drop).collect()) {
                 // this batch was successful, start another batch if there are still more files
                 Ok(_) => break,
                 Err(err) => {
