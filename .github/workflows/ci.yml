@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Install stable Rust
+      - name: Install Rust
         run: rustup update ${{ matrix.channel }} && rustup default ${{ matrix.channel }}
 
       - name: Set rustc version
