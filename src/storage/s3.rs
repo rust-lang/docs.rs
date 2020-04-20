@@ -50,10 +50,12 @@ impl<'a> S3Backend<'a> {
     }
 
     pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
+        use futures::stream::FuturesUnordered;
+        use futures::stream::Stream;
         let mut attempts = 0;
 
         loop {
-            let mut futures = Vec::with_capacity(batch.len());
+            let mut futures = FuturesUnordered::new();
             for blob in batch {
                 futures.push(
                     self.client
@@ -71,7 +73,7 @@ impl<'a> S3Backend<'a> {
             }
             attempts += 1;
 
-            match self.runtime.block_on(::futures::future::join_all(futures)) {
+            match self.runtime.block_on(futures.collect()) {
                 // this batch was successful, start another batch if there are still more files
                 Ok(_) => break,
                 Err(err) => {
