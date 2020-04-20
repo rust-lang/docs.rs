@@ -57,8 +57,8 @@ jobs:
         run: choco install postgresql
       - name: Setup PostgreSQL
         run: |
-          sudo -u postgres createuser $(whoami) -w
-          sudo -u postgres createdb $(whoami) -O $(whoami)
+          sudo createuser $(whoami) -w -U postgres
+          sudo createdb $(whoami) -O $(whoami) -U postgres
           echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
 
       - name: Build docs.rs
