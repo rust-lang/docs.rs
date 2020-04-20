@@ -201,7 +201,7 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
-            let backend = Storage::Database(DatabaseBackend::new(&conn));
+            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
             let stored_files = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
