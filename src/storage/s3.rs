@@ -18,7 +18,11 @@ pub(crate) struct S3Backend<'a> {
 
 impl<'a> S3Backend<'a> {
     pub(crate) fn new(client: S3Client, bucket: &'a str) -> Self {
-        Self { client, bucket, runtime: Runtime::new().unwrap() }
+        Self {
+            client,
+            bucket,
+            runtime: Runtime::new().unwrap(),
+        }
     }
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
