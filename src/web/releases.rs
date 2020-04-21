@@ -272,49 +272,48 @@ fn get_search_results(
     query = query.trim();
     let offset = (page - 1) * limit;
 
-    let statement =
-            "SELECT crates.name,
-                -- NOTE: this selects the latest alphanumeric version, which may not be the latest semver
-                MAX(releases.version) AS version,
-                MAX(releases.description) AS description,
-                MAX(releases.target_name) AS target_name,
-                MAX(releases.release_time) AS release_time,
-                -- Cast the boolean into an integer and then cast it into a boolean.
-                -- Posgres moves in mysterious ways, don't question it
-                CAST(MAX(releases.rustdoc_status::integer) AS boolean) as rustdoc_status,
-                crates.github_stars,
-                crates.downloads_total as downloads,
-
-                -- The levenshtein distance between the search query and the crate's name
-                levenshtein_less_equal($1, crates.name, 3) as distance,
-                -- The similarity of the tokens of the search vs the tokens of `crates.content`.
-                -- The `32` normalizes the number by using `rank / (rank + 1)`
-                ts_rank_cd(crates.content, to_tsquery($2), 32)  as content_rank
-            FROM releases INNER JOIN crates on releases.crate_id = crates.id
-
-            -- Filter crates that haven't been built and crates that have been yanked
-            WHERE releases.rustdoc_status = true
-                AND releases.yanked = false
-                AND (
-                    -- Crates names that match the query sandwiched between wildcards will pass
-                    crates.name ILIKE CONCAT('%', $1, '%')
-                    -- Crate names with which the levenshtein distance is closer or equal to 3 will pass
-                    OR levenshtein_less_equal($1, crates.name, 3) <= 3
-                    -- Crates where their content matches the query will pass
-                    OR plainto_tsquery($1) @@ crates.content
-                )
-            
-            GROUP BY crates.id, releases.id
-            
-            -- Ordering is prioritized by how closely the query matches the name, how closely the
-            -- query matches the description, and finally how many downloads the crate has
-            -- NOTE: this means that exact matches will be shown first
-            ORDER BY distance DESC,
-                content_rank DESC,
-                downloads_total DESC
-            
-            -- Allows pagination
-            LIMIT $2 OFFSET $3";
+    let statement = "
+        SELECT
+            crates.name,
+            releases.version,
+            releases.description,
+            releases.target_name,
+            releases.release_time,
+            releases.rustdoc_status,
+            SUM(crates.github_stars),
+            COUNT(*) OVER() as total
+        FROM releases
+        INNER JOIN crates on releases.crate_id = crates.id
+        WHERE
+            -- Only select the newest release by release time
+            releases.id = (
+                SELECT releases.id
+                FROM releases
+                -- Filter unbuilt/failing builds and yanked releases
+                WHERE
+                    releases.crate_id = crates.id
+                    AND releases.rustdoc_status
+                    AND NOT releases.yanked
+                ORDER BY releases.release_time DESC
+                LIMIT 1
+            )
+            -- Only select releases/crates that pass our criteria:
+            --      - Levenshtein distance if the name and query is greater than three
+            --      - The query sandwiched between wildcards matches the crate's name
+            --      - The query matches the release's description
+            AND (
+                levenshtein_less_equal($1, crates.name, 3) <= 3
+                OR crates.name ILIKE CONCAT('%', $1, '%')
+                OR plainto_tsquery($1) @@ to_tsvector(releases.description)
+            )
+        GROUP BY crates.id, releases.id
+        -- Order by the levenshtein distance of the name, the text search ranking of the description
+        -- and finally the number of downloads
+        ORDER BY
+            levenshtein_less_equal($1, crates.name, 3) ASC,
+            ts_rank_cd(to_tsvector(releases.description), plainto_tsquery($1), 32) DESC,
+            releases.downloads DESC
+        LIMIT $2 OFFSET $3";
 
     let rows = if let Ok(rows) = conn.query(statement, &[&query, &limit, &offset]) {
         rows
@@ -322,7 +321,12 @@ fn get_search_results(
         return (0, Vec::new());
     };
 
-    let total_results = rows.iter().map(|row| row.get::<_, i64>(8)).sum();
+    // Each row contains the total number of possible/valid results, just get it once
+    let total_results = rows
+        .iter()
+        .next()
+        .map(|row| row.get::<_, i64>(7))
+        .unwrap_or_default();
     let packages: Vec<Release> = rows
         .into_iter()
         .map(|row| Release {
@@ -332,7 +336,7 @@ fn get_search_results(
             target_name: row.get(3),
             release_time: row.get(4),
             rustdoc_status: row.get(5),
-            stars: row.get(6),
+            stars: row.get::<_, i64>(6) as i32,
         })
         .collect();
 
@@ -706,9 +710,9 @@ mod tests {
                 .create()?;
 
             let (num_results, results) = get_search_results(&db.conn(), "foo", 1, 100);
-            let mut results = results.into_iter();
-
             assert_eq!(num_results, 4);
+
+            let mut results = results.into_iter();
 
             let expected = ["foo", "fo0", "bar-foo", "foo-bar"];
             for expected in expected.iter() {
@@ -751,15 +755,145 @@ mod tests {
                 non_exact(&db)?;
 
                 let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
-                let mut results = results.into_iter();
-
                 assert_eq!(num_results, 4);
 
-                assert_eq!(&results.next().unwrap().name, "regex");
+                let mut results = results.into_iter();
+                assert_eq!(results.next().unwrap().name, *name);
                 rest_non_exact(results.collect());
 
                 Ok(())
             })
         }
+    }
+
+    #[test]
+    fn unsuccessful_not_shown() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("regex")
+                .version("0.0.0")
+                .build_result_successful(false)
+                .create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
+            assert_eq!(num_results, 0);
+
+            let results = results.into_iter();
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn yanked_not_shown() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("regex")
+                .version("0.0.0")
+                .cratesio_data_yanked(true)
+                .create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
+            assert_eq!(num_results, 0);
+
+            let results = results.into_iter();
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn fuzzily_match() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("regex").version("0.0.0").create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "redex", 1, 100);
+            assert_eq!(num_results, 1);
+
+            let mut results = results.into_iter();
+            assert_eq!(results.next().unwrap().name, "regex");
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_descriptions() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("something_completely_unrelated")
+                .description("Supercalifragilisticexpialidocious")
+                .create()?;
+
+            let (num_results, results) =
+                get_search_results(&db.conn(), "supercalifragilisticexpialidocious", 1, 100);
+            assert_eq!(num_results, 1);
+
+            let mut results = results.into_iter();
+            assert_eq!(
+                results.next().unwrap().name,
+                "something_completely_unrelated"
+            );
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_limits() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release().name("something_magical").create()?;
+            db.fake_release().name("something_sinister").create()?;
+            db.fake_release().name("something_fantastical").create()?;
+            db.fake_release()
+                .name("something_completely_unrelated")
+                .create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "something", 1, 2);
+            assert_eq!(num_results, 4);
+
+            let mut results = results.into_iter();
+            assert_eq!(results.next().unwrap().name, "something_magical");
+            assert_eq!(results.next().unwrap().name, "something_sinister");
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_offsets() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("something_magical").create()?;
+            db.fake_release().name("something_sinister").create()?;
+            db.fake_release().name("something_fantastical").create()?;
+            db.fake_release()
+                .name("something_completely_unrelated")
+                .create()?;
+
+            let (num_results, results) = get_search_results(&db.conn(), "something", 2, 2);
+            assert_eq!(num_results, 4);
+
+            let mut results = results.into_iter();
+            assert_eq!(results.next().unwrap().name, "something_fantastical");
+            assert_eq!(
+                results.next().unwrap().name,
+                "something_completely_unrelated"
+            );
+            assert_eq!(results.count(), 0);
+
+            Ok(())
+        })
     }
 }

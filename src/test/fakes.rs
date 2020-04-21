@@ -64,6 +64,11 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
+    pub(crate) fn description(mut self, new: impl Into<String>) -> Self {
+        self.package.description = Some(new.into());
+        self
+    }
+
     pub(crate) fn name(mut self, new: &str) -> Self {
         self.package.name = new.into();
         self.package.id = format!("{}-id", new);
