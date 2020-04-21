@@ -325,17 +325,6 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
             "
         ),
-        migration!(
-            context,
-            // version
-            13,
-            // description
-            "Add fuzzy string searching",
-            // upgrade query
-            "CREATE EXTENSION IF NOT EXISTS fuzzystrmatch",
-            // downgrade query
-            "DROP EXTENSION IF EXISTS fuzzystrmatch;",
-        ),
     ];
 
     for migration in migrations {

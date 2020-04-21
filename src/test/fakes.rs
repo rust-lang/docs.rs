@@ -64,8 +64,18 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
+    pub(crate) fn downloads(mut self, downloads: i32) -> Self {
+        self.cratesio_data.downloads = downloads;
+        self
+    }
+
     pub(crate) fn description(mut self, new: impl Into<String>) -> Self {
         self.package.description = Some(new.into());
+        self
+    }
+
+    pub(crate) fn release_time(mut self, new: time::Timespec) -> Self {
+        self.cratesio_data.release_time = new;
         self
     }
 
