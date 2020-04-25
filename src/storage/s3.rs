@@ -101,25 +101,101 @@ fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::test::TestEnvironment;
 
-    fn assert_s3_404(env: &TestEnvironment, path: &'static str) {
-        use rusoto_core::RusotoError;
-        use rusoto_s3::GetObjectError;
+    pub(crate) struct TestS3(S3Backend<'static>);
 
-        let s3 = env.s3().not_found(path);
-        let backend = S3Backend::new(s3.client, s3.bucket);
-        let err = backend.get(path).unwrap_err();
-        let status = match err
-            .downcast_ref::<RusotoError<GetObjectError>>()
-            .expect("wanted GetObject")
-        {
-            RusotoError::Unknown(http) => http.status,
-            _ => panic!("wrong error"),
-        };
-        assert_eq!(status, 404);
+    use crate::storage::s3::S3Backend;
+    use rusoto_core::RusotoResult;
+    use rusoto_s3::{
+        CreateBucketRequest, DeleteBucketRequest, DeleteObjectRequest, ListObjectsRequest,
+        PutObjectError, PutObjectOutput, PutObjectRequest, S3,
+    };
+
+    impl TestS3 {
+        pub(crate) fn new() -> Self {
+            // A random bucket name is generated and used for the current connection.
+            // This allows each test to create a fresh bucket to test with.
+            let bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
+            let client = crate::storage::s3::s3_client().unwrap();
+            client
+                .create_bucket(CreateBucketRequest {
+                    bucket: bucket.clone(),
+                    ..Default::default()
+                })
+                .sync()
+                .expect("failed to create test bucket");
+            let bucket = Box::leak(bucket.into_boxed_str());
+            TestS3(S3Backend::new(client, bucket))
+        }
+        pub(crate) fn upload(&self, blob: Blob) -> RusotoResult<PutObjectOutput, PutObjectError> {
+            self.0
+                .client
+                .put_object(PutObjectRequest {
+                    bucket: self.0.bucket.to_owned(),
+                    body: Some(blob.content.into()),
+                    content_type: Some(blob.mime),
+                    key: blob.path,
+                    ..PutObjectRequest::default()
+                })
+                .sync()
+        }
+        fn assert_404(&self, path: &'static str) {
+            use rusoto_core::RusotoError;
+            use rusoto_s3::GetObjectError;
+
+            let err = self.0.get(path).unwrap_err();
+            match err
+                .downcast_ref::<RusotoError<GetObjectError>>()
+                .expect("wanted GetObject")
+            {
+                RusotoError::Unknown(http) => assert_eq!(http.status, 404),
+                RusotoError::Service(GetObjectError::NoSuchKey(_)) => {}
+                x => panic!("wrong error: {:?}", x),
+            };
+        }
+        fn assert_blob(&self, blob: &Blob, path: &str) {
+            let actual = self.0.get(path).unwrap();
+            assert_eq!(blob.path, actual.path);
+            assert_eq!(blob.content, actual.content);
+            assert_eq!(blob.mime, actual.mime);
+            // NOTE: this does _not_ compare the upload time since min.io doesn't allow this to be configured
+        }
+    }
+
+    impl Drop for TestS3 {
+        fn drop(&mut self) {
+            let objects = self
+                .0
+                .client
+                .list_objects(ListObjectsRequest {
+                    bucket: self.0.bucket.to_owned(),
+                    ..Default::default()
+                })
+                .sync()
+                .unwrap();
+            assert!(!objects.is_truncated.unwrap_or(false));
+            for path in objects.contents.unwrap() {
+                self.0
+                    .client
+                    .delete_object(DeleteObjectRequest {
+                        bucket: self.0.bucket.to_owned(),
+                        key: path.key.unwrap(),
+                        ..Default::default()
+                    })
+                    .sync()
+                    .unwrap();
+            }
+            let delete_req = DeleteBucketRequest {
+                bucket: self.0.bucket.to_owned(),
+            };
+            self.0
+                .client
+                .delete_bucket(delete_req)
+                .sync()
+                .expect("failed to delete test bucket");
+        }
     }
 
     #[test]
@@ -153,16 +229,15 @@ mod tests {
             };
 
             // Add a test file to the database
-            let s3 = env.s3().upload(blob.clone());
-
-            let backend = S3Backend::new(s3.client, &s3.bucket);
+            let s3 = env.s3();
+            s3.upload(blob.clone()).unwrap();
 
             // Test that the proper file was returned
-            assert_eq!(blob, backend.get("dir/foo.txt")?);
+            s3.assert_blob(&blob, "dir/foo.txt");
 
             // Test that other files are not returned
-            assert_s3_404(&env, "dir/bar.txt");
-            assert_s3_404(&env, "foo.txt");
+            s3.assert_404("dir/bar.txt");
+            s3.assert_404("foo.txt");
 
             Ok(())
         });

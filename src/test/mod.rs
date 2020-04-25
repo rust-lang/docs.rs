@@ -1,6 +1,6 @@
 mod fakes;
 
-use crate::storage::Blob;
+use crate::storage::s3::tests::TestS3;
 use crate::web::Server;
 use failure::Error;
 use log::error;
@@ -120,9 +120,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn s3(&self) -> &TestS3 {
-        self.s3.get_or_init(|| TestS3 {
-            bucket: "<test-bucket>",
-        })
+        self.s3.get_or_init(TestS3::new)
     }
 }
 
@@ -193,18 +191,5 @@ impl TestFrontend {
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         self.build_request(Method::GET, url)
-    }
-}
-
-pub(crate) struct TestS3 {
-    bucket: &'static str,
-}
-
-impl TestS3 {
-    pub(crate) fn upload(&self, blob: Blob) -> fakes::FakeUpload {
-        fakes::FakeUpload::new(blob, self.bucket)
-    }
-    pub(crate) fn not_found(&self, path: &'static str) -> fakes::FakeUpload {
-        fakes::FakeUpload::not_found(path, &self.bucket)
     }
 }

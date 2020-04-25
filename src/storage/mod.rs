@@ -3,8 +3,6 @@ pub(crate) mod s3;
 
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
-#[cfg(test)]
-pub(crate) use self::s3::TIME_FMT;
 use failure::Error;
 use time::Timespec;
 
