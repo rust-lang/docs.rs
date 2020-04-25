@@ -7,6 +7,7 @@ pub use self::delete_crate::delete_crate;
 pub use self::file::{add_path_into_database, move_to_s3};
 pub use self::migrate::migrate;
 
+use failure::Fail;
 use postgres::error::Error;
 use postgres::{Connection, TlsMode};
 use std::env;
@@ -19,8 +20,8 @@ mod migrate;
 
 /// Connects to database
 pub fn connect_db() -> Result<Connection, failure::Error> {
-    // FIXME: unwrap might not be the best here
-    let db_url = env::var("CRATESFYI_DATABASE_URL")?;
+    let err = "CRATESFYI_DATABASE_URL environment variable is not set";
+    let db_url = env::var("CRATESFYI_DATABASE_URL").map_err(|e| e.context(err))?;
     Connection::connect(&db_url[..], TlsMode::None).map_err(Into::into)
 }
 
