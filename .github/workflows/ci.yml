@@ -49,12 +49,12 @@ jobs:
           restore-key: |
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
-      - name: Launch the postgres image
+      - name: Launch the postgres and min.io images
         run: |
           cp .env.sample .env
           . .env
           mkdir -p ${CRATESFYI_PREFIX}/public-html
-          docker-compose up -d db
+          docker-compose up -d db s3
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
