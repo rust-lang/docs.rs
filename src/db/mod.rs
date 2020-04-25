@@ -18,11 +18,10 @@ pub(crate) mod file;
 mod migrate;
 
 /// Connects to database
-pub fn connect_db() -> Result<Connection, Error> {
+pub fn connect_db() -> Result<Connection, failure::Error> {
     // FIXME: unwrap might not be the best here
-    let db_url = env::var("CRATESFYI_DATABASE_URL")
-        .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
-    Connection::connect(&db_url[..], TlsMode::None)
+    let db_url = env::var("CRATESFYI_DATABASE_URL")?;
+    Connection::connect(&db_url[..], TlsMode::None).map_err(Into::into)
 }
 
 pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManager> {
