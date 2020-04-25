@@ -71,7 +71,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::{env, fmt};
-use time;
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex};

@@ -13,7 +13,6 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::time::Duration;
 use std::{env, thread};
-use time;
 
 #[cfg(not(target_os = "windows"))]
 use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};

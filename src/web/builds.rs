@@ -7,7 +7,6 @@ use iron::prelude::*;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use time;
 
 #[derive(Clone)]
 struct Build {

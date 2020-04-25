@@ -1,8 +1,6 @@
 use crate::db::create_pool;
 use iron::{typemap, BeforeMiddleware, IronResult, Request};
 use postgres::Connection;
-use r2d2;
-use r2d2_postgres;
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex, MutexGuard};

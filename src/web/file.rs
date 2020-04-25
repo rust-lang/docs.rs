@@ -5,7 +5,6 @@ use crate::db;
 use iron::status;
 use iron::{Handler, IronError, IronResult, Request, Response};
 use postgres::Connection;
-use time;
 
 pub struct File(pub db::file::Blob);
 
