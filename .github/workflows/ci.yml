@@ -49,31 +49,38 @@ jobs:
           restore-key: |
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
-      - name: Install PostgreSQL
-        run: |
-          sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postgresql
-          sudo systemctl start postgresql
-          sudo -u postgres createuser $(whoami) -w
-          sudo -u postgres createdb $(whoami) -O $(whoami)
-          echo "::set-env name=CRATESFYI_DATABASE_URL::postgresql://$(whoami)@%2Fvar%2Frun%2Fpostgresql/$(whoami)"
-
-      - name: Build docs.rs
-        run: cargo build --locked
-
-      - name: Run rustfmt
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
-
       - name: Prepare the test environment
         run: |
           prefix=$(pwd)/ignored/prefix
           mkdir -p ${prefix}/public-html
           echo "::set-env name=CRATESFYI_PREFIX::${prefix}"
 
+      - name: Launch the postgres image
+        run: |
+          touch .env
+          docker-compose up -d db
+          # TODO: try to avoid hard-coding this username/password
+          export CRATESFYI_DATABASE_URL="postgresql://cratesfyi:password@localhost:5432/"
+          # Make sure the database is actually working
+          # Give the database enough time to start up
+          sleep 5
+          psql "$CRATESFYI_DATABASE_URL"
+          echo "::set-env name=CRATESFYI_DATABASE_URL::${CRATESFYI_DATABASE_URL}"
+
+      - name: Run rustfmt
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Build docs.rs
+        run: cargo build --locked
+
       - name: Test docs.rs
         run: cargo test --locked -- --test-threads=1
+
+      - name: Clean up the database
+        run: docker-compose down --volumes
 
   docker:
     name: Docker
