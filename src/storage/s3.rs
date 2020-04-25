@@ -103,8 +103,7 @@ fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-
-    pub(crate) struct TestS3(S3Backend<'static>);
+    use crate::test::*;
 
     use crate::storage::s3::S3Backend;
     use rusoto_core::RusotoResult;
@@ -113,12 +112,16 @@ pub(crate) mod tests {
         PutObjectError, PutObjectOutput, PutObjectRequest, S3,
     };
 
+    use std::cell::RefCell;
+
+    pub(crate) struct TestS3(RefCell<S3Backend<'static>>);
+
     impl TestS3 {
         pub(crate) fn new() -> Self {
             // A random bucket name is generated and used for the current connection.
             // This allows each test to create a fresh bucket to test with.
             let bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
-            let client = crate::storage::s3::s3_client().unwrap();
+            let client = s3_client().unwrap();
             client
                 .create_bucket(CreateBucketRequest {
                     bucket: bucket.clone(),
@@ -129,6 +132,8 @@ pub(crate) mod tests {
             let bucket = Box::leak(bucket.into_boxed_str());
             TestS3(S3Backend::new(client, bucket))
         }
+        /// NOTE: this mocks the upload instead of using store_one
+        /// TODO: I think `store_one` would be better
         pub(crate) fn upload(&self, blob: Blob) -> RusotoResult<PutObjectOutput, PutObjectError> {
             self.0
                 .client
@@ -166,26 +171,19 @@ pub(crate) mod tests {
 
     impl Drop for TestS3 {
         fn drop(&mut self) {
-            let objects = self
-                .0
-                .client
-                .list_objects(ListObjectsRequest {
-                    bucket: self.0.bucket.to_owned(),
-                    ..Default::default()
-                })
-                .sync()
-                .unwrap();
+            let list_req = ListObjectsRequest {
+                bucket: self.0.bucket.to_owned(),
+                ..Default::default()
+            };
+            let objects = self.0.client.list_objects(list_req).sync().unwrap();
             assert!(!objects.is_truncated.unwrap_or(false));
             for path in objects.contents.unwrap() {
-                self.0
-                    .client
-                    .delete_object(DeleteObjectRequest {
-                        bucket: self.0.bucket.to_owned(),
-                        key: path.key.unwrap(),
-                        ..Default::default()
-                    })
-                    .sync()
-                    .unwrap();
+                let delete_req = DeleteObjectRequest {
+                    bucket: self.0.bucket.to_owned(),
+                    key: path.key.unwrap(),
+                    ..Default::default()
+                };
+                self.0.client.delete_object(delete_req).sync().unwrap();
             }
             let delete_req = DeleteBucketRequest {
                 bucket: self.0.bucket.to_owned(),
@@ -200,27 +198,23 @@ pub(crate) mod tests {
 
     #[test]
     fn test_parse_timespec() {
-        crate::test::wrapper(|_| {
-            // Test valid conversions
-            assert_eq!(
-                parse_timespec("Thu, 1 Jan 1970 00:00:00 GMT")?,
-                Timespec::new(0, 0)
-            );
-            assert_eq!(
-                parse_timespec("Mon, 16 Apr 2018 04:33:50 GMT")?,
-                Timespec::new(1523853230, 0)
-            );
+        // Test valid conversions
+        assert_eq!(
+            parse_timespec("Thu, 1 Jan 1970 00:00:00 GMT").unwrap(),
+            Timespec::new(0, 0)
+        );
+        assert_eq!(
+            parse_timespec("Mon, 16 Apr 2018 04:33:50 GMT").unwrap(),
+            Timespec::new(1523853230, 0)
+        );
 
-            // Test invalid conversion
-            assert!(parse_timespec("foo").is_err());
-
-            Ok(())
-        })
+        // Test invalid conversion
+        assert!(parse_timespec("foo").is_err());
     }
 
     #[test]
     fn test_path_get() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let blob = Blob {
                 path: "dir/foo.txt".into(),
                 mime: "text/plain".into(),
@@ -241,6 +235,32 @@ pub(crate) mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_store() {
+        wrapper(|env| {
+            let s3 = env.s3();
+            let names = [
+                "a",
+                "b",
+                "a_very_long_file_name_that_has_an.extension",
+                "parent/child",
+                "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
+                "trailing/slash/",
+            ];
+            let blobs: Vec<_> = names.iter().map(|&path| Blob {
+                path: path.into(),
+                mime: "text/plain".into(),
+                date_updated: Timespec::new(42, 0),
+                content: "Hello world!".into(),
+            }).collect();
+            s3.0.store_batch(&blobs).unwrap();
+            for blob in &blobs {
+                s3.assert_blob(blob, &blob.path);
+            }
+            Ok(())
+        })
     }
 }
 
