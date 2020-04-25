@@ -9,8 +9,6 @@ pub use self::migrate::migrate;
 
 use postgres::error::Error;
 use postgres::{Connection, TlsMode};
-use r2d2;
-use r2d2_postgres;
 use std::env;
 
 mod add_package;

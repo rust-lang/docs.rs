@@ -17,7 +17,6 @@ use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use time;
 
 #[derive(Debug, Default)]
 struct RustdocPage {

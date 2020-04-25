@@ -4,7 +4,6 @@ use iron::headers::ContentType;
 use iron::prelude::*;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use time;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get();

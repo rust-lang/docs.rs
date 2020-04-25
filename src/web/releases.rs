@@ -10,7 +10,6 @@ use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::collections::BTreeMap;
-use time;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;

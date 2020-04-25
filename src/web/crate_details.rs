@@ -9,9 +9,7 @@ use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
-use semver;
 use std::collections::BTreeMap;
-use time;
 
 // TODO: Add target name and versions
 
