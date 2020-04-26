@@ -86,16 +86,22 @@ cargo test
 ```
 
 Some tests require access to the database. To run them, set the
-`CRATESFYI_DATABASE_URL` to the url of a PostgreSQL database. If you are using
-the `docker-compose` environment to run tests against, see the
-[Docker-Compose][docker-compose-section] section for the default PostgreSQL URL.
-You don't have to run the migrations on it or ensure it's empty, as all the
-tests use temporary tables to prevent conflicts with each other or existing
-data. See the [wiki page on developing outside docker-compose][wiki-no-compose]
+`CRATESFYI_DATABASE_URL` in `.env` to the url of a PostgreSQL database,
+and set the `AWS_ACCESS_KEY_ID`, `S3_ENDPOINT`, and `AWS_SECRET_ACCESS_KEY` variables.
+We have some reasonable default parameters in `.env.sample`.
+
+For example, if you are using the `docker-compose` environment to run tests against, you can launch only the database and s3 server like so:
+
+```console
+docker-compose up -d db s3
+```
+
+If you don't want to use docker-compose, see the
+[wiki page on developing outside docker-compose][wiki-no-compose]
 for more information on how to setup this environment.
+Note that either way, you will need docker installed for sandboxing with Rustwide.
 
 [wiki-no-compose]: https://github.com/rust-lang/docs.rs/wiki/Developing-without-docker-compose
-[docker-compose-section]: #Docker-Compose
 
 ### Docker-Compose
 
