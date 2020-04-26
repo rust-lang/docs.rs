@@ -179,7 +179,8 @@ pub(crate) mod tests {
             let delete_req = DeleteBucketRequest {
                 bucket: inner.bucket.to_owned(),
             };
-            inner.client
+            inner
+                .client
                 .delete_bucket(delete_req)
                 .sync()
                 .expect("failed to delete test bucket");
@@ -238,12 +239,15 @@ pub(crate) mod tests {
                 "parent/child",
                 "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
             ];
-            let blobs: Vec<_> = names.iter().map(|&path| Blob {
-                path: path.into(),
-                mime: "text/plain".into(),
-                date_updated: Timespec::new(42, 0),
-                content: "Hello world!".into(),
-            }).collect();
+            let blobs: Vec<_> = names
+                .iter()
+                .map(|&path| Blob {
+                    path: path.into(),
+                    mime: "text/plain".into(),
+                    date_updated: Timespec::new(42, 0),
+                    content: "Hello world!".into(),
+                })
+                .collect();
             s3.upload(&blobs).unwrap();
             for blob in &blobs {
                 s3.assert_blob(blob, &blob.path);
