@@ -106,10 +106,8 @@ pub(crate) mod tests {
     use crate::test::*;
 
     use crate::storage::s3::S3Backend;
-    use rusoto_core::RusotoResult;
     use rusoto_s3::{
-        CreateBucketRequest, DeleteBucketRequest, DeleteObjectRequest, ListObjectsRequest,
-        PutObjectError, PutObjectOutput, PutObjectRequest, S3,
+        CreateBucketRequest, DeleteBucketRequest, DeleteObjectRequest, ListObjectsRequest, S3,
     };
 
     use std::cell::RefCell;
@@ -161,6 +159,8 @@ pub(crate) mod tests {
 
     impl Drop for TestS3 {
         fn drop(&mut self) {
+            // delete the bucket when the test ends
+            // this has to delete all the objects in the bucket first or min.io will give an error
             let inner = self.0.borrow();
             let list_req = ListObjectsRequest {
                 bucket: inner.bucket.to_owned(),
