@@ -113,6 +113,7 @@ pub(crate) mod tests {
     };
 
     use std::cell::RefCell;
+    use std::slice;
 
     pub(crate) struct TestS3(RefCell<S3Backend<'static>>);
 
@@ -130,27 +131,16 @@ pub(crate) mod tests {
                 .sync()
                 .expect("failed to create test bucket");
             let bucket = Box::leak(bucket.into_boxed_str());
-            TestS3(S3Backend::new(client, bucket))
+            TestS3(RefCell::new(S3Backend::new(client, bucket)))
         }
-        /// NOTE: this mocks the upload instead of using store_one
-        /// TODO: I think `store_one` would be better
-        pub(crate) fn upload(&self, blob: Blob) -> RusotoResult<PutObjectOutput, PutObjectError> {
-            self.0
-                .client
-                .put_object(PutObjectRequest {
-                    bucket: self.0.bucket.to_owned(),
-                    body: Some(blob.content.into()),
-                    content_type: Some(blob.mime),
-                    key: blob.path,
-                    ..PutObjectRequest::default()
-                })
-                .sync()
+        pub(crate) fn upload(&self, blobs: &[Blob]) -> Result<(), Error> {
+            self.0.borrow_mut().store_batch(blobs)
         }
         fn assert_404(&self, path: &'static str) {
             use rusoto_core::RusotoError;
             use rusoto_s3::GetObjectError;
 
-            let err = self.0.get(path).unwrap_err();
+            let err = self.0.borrow().get(path).unwrap_err();
             match err
                 .downcast_ref::<RusotoError<GetObjectError>>()
                 .expect("wanted GetObject")
@@ -161,7 +151,7 @@ pub(crate) mod tests {
             };
         }
         fn assert_blob(&self, blob: &Blob, path: &str) {
-            let actual = self.0.get(path).unwrap();
+            let actual = self.0.borrow().get(path).unwrap();
             assert_eq!(blob.path, actual.path);
             assert_eq!(blob.content, actual.content);
             assert_eq!(blob.mime, actual.mime);
@@ -171,25 +161,25 @@ pub(crate) mod tests {
 
     impl Drop for TestS3 {
         fn drop(&mut self) {
+            let inner = self.0.borrow();
             let list_req = ListObjectsRequest {
-                bucket: self.0.bucket.to_owned(),
+                bucket: inner.bucket.to_owned(),
                 ..Default::default()
             };
-            let objects = self.0.client.list_objects(list_req).sync().unwrap();
+            let objects = inner.client.list_objects(list_req).sync().unwrap();
             assert!(!objects.is_truncated.unwrap_or(false));
             for path in objects.contents.unwrap() {
                 let delete_req = DeleteObjectRequest {
-                    bucket: self.0.bucket.to_owned(),
+                    bucket: inner.bucket.to_owned(),
                     key: path.key.unwrap(),
                     ..Default::default()
                 };
-                self.0.client.delete_object(delete_req).sync().unwrap();
+                inner.client.delete_object(delete_req).sync().unwrap();
             }
             let delete_req = DeleteBucketRequest {
-                bucket: self.0.bucket.to_owned(),
+                bucket: inner.bucket.to_owned(),
             };
-            self.0
-                .client
+            inner.client
                 .delete_bucket(delete_req)
                 .sync()
                 .expect("failed to delete test bucket");
@@ -213,7 +203,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_path_get() {
+    fn test_get() {
         wrapper(|env| {
             let blob = Blob {
                 path: "dir/foo.txt".into(),
@@ -224,7 +214,7 @@ pub(crate) mod tests {
 
             // Add a test file to the database
             let s3 = env.s3();
-            s3.upload(blob.clone()).unwrap();
+            s3.upload(slice::from_ref(&blob)).unwrap();
 
             // Test that the proper file was returned
             s3.assert_blob(&blob, "dir/foo.txt");
@@ -247,7 +237,6 @@ pub(crate) mod tests {
                 "a_very_long_file_name_that_has_an.extension",
                 "parent/child",
                 "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
-                "trailing/slash/",
             ];
             let blobs: Vec<_> = names.iter().map(|&path| Blob {
                 path: path.into(),
@@ -255,13 +244,16 @@ pub(crate) mod tests {
                 date_updated: Timespec::new(42, 0),
                 content: "Hello world!".into(),
             }).collect();
-            s3.0.store_batch(&blobs).unwrap();
+            s3.upload(&blobs).unwrap();
             for blob in &blobs {
                 s3.assert_blob(blob, &blob.path);
             }
             Ok(())
         })
     }
+    // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
+    // NOTE: On s3, it will succeed and create a file called `/`.
+    // NOTE: On min.io, it will fail with 'Object name contains unsupported characters.'
 }
 
 pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
