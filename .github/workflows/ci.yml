@@ -49,23 +49,16 @@ jobs:
           restore-key: |
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
-      - name: Prepare the test environment
-        run: |
-          prefix=$(pwd)/ignored/prefix
-          mkdir -p ${prefix}/public-html
-          echo "::set-env name=CRATESFYI_PREFIX::${prefix}"
-
       - name: Launch the postgres image
         run: |
-          touch .env
+          cp .env.sample .env
+          . .env
+          mkdir -p ${CRATESFYI_PREFIX}/public-html
           docker-compose up -d db
-          # TODO: try to avoid hard-coding this username/password
-          export CRATESFYI_DATABASE_URL="postgresql://cratesfyi:password@localhost:5432/"
-          # Make sure the database is actually working
           # Give the database enough time to start up
           sleep 5
-          psql "$CRATESFYI_DATABASE_URL"
-          echo "::set-env name=CRATESFYI_DATABASE_URL::${CRATESFYI_DATABASE_URL}"
+          # Make sure the database is actually working
+          psql "${CRATESFYI_DATABASE_URL}"
 
       - name: Run rustfmt
         run: cargo fmt -- --check
