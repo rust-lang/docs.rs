@@ -53,6 +53,7 @@ jobs:
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
       - name: Launch the postgres image
+        if: contains(matrix.channel, 'stable')
         run: |
           cp .env.sample .env
           . .env
@@ -64,19 +65,29 @@ jobs:
           psql "${CRATESFYI_DATABASE_URL}"
 
       - name: Run rustfmt
+        if: contains(matrix.channel, 'stable')
         run: cargo fmt -- --check
 
       - name: Run clippy
+        if: contains(matrix.channel, 'stable')
         run: cargo clippy --locked -- -D warnings
 
       - name: Build docs.rs
+        if: contains(matrix.channel, 'stable')
         run: cargo build --locked
 
       - name: Test docs.rs
+        if: contains(matrix.channel, 'stable')
         run: cargo test --locked -- --test-threads=1
 
       - name: Clean up the database
+        if: contains(matrix.channel, 'stable')
         run: docker-compose down --volumes
+
+      # we aren't actually testing anything, just that it continues to compile
+      - name: Check docs.rs
+        if: "!contains(matrix.channel, 'stable')"
+        run: cargo check --locked
 
   docker:
     name: Docker
