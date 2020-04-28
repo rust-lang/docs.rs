@@ -117,7 +117,7 @@ pub(super) fn build_routes() -> Routes {
     );
     routes.rustdoc_page(
         "/:crate/:version/:target/",
-        super::rustdoc::rustdoc_html_server_handler,
+        super::rustdoc::rustdoc_redirector_handler,
     );
     routes.rustdoc_page(
         "/:crate/:version/:target/*.html",

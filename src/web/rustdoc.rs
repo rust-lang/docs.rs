@@ -210,7 +210,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let name = router.find("crate").unwrap_or("").to_string();
+    let mut name = router.find("crate").unwrap_or("").to_string();
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool).get();
@@ -223,18 +223,28 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.remove(0);
     }
 
-    version = match match_version(&conn, &name, url_version).and_then(|m| m.assume_exact()) {
-        Some(MatchSemver::Exact((v, _))) => v,
-        Some(MatchSemver::Semver((v, _))) => {
-            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-            // versions, redirect the browser to the returned version instead of loading it
-            // immediately
-            let url = ctry!(Url::parse(
-                &format!("{}/{}/{}/{}", base, name, v, req_path.join("/"))[..]
-            ));
-            return Ok(super::redirect(url));
+    version = match match_version(&conn, &name, url_version) {
+        Some(mv) => {
+            if let Some(new_name) = mv.corrected_name {
+                // `match_version` checked against -/_ typos, so if we have a name here we should
+                // use that instead
+                name = new_name;
+            }
+
+            match mv.version {
+                MatchSemver::Exact((v, _)) => v,
+                MatchSemver::Semver((v, _)) => {
+                    // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+                    // versions, redirect the browser to the returned version instead of loading it
+                    // immediately
+                    let url = ctry!(Url::parse(
+                        &format!("{}/{}/{}/{}", base, name, v, req_path.join("/"))[..]
+                    ));
+                    return Ok(super::redirect(url));
+                }
+            }
         }
-        _ => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
     };
 
     // docs have "rustdoc" prefix in database
@@ -535,6 +545,7 @@ mod test {
         }
         panic!("no redirect found for {}", path);
     }
+
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
     fn settings_html() {
@@ -569,6 +580,7 @@ mod test {
             Ok(())
         });
     }
+
     #[test]
     fn default_target_redirects_to_base() {
         wrapper(|env| {
@@ -620,6 +632,7 @@ mod test {
             Ok(())
         });
     }
+
     #[test]
     fn go_to_latest_version() {
         wrapper(|env| {
@@ -740,6 +753,7 @@ mod test {
             Ok(())
         })
     }
+
     #[test]
     fn badges_are_urlencoded() {
         wrapper(|env| {
@@ -758,6 +772,7 @@ mod test {
             Ok(())
         })
     }
+
     #[test]
     fn crate_name_percent_decoded_redirect() {
         wrapper(|env| {
