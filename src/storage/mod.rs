@@ -101,7 +101,7 @@ impl<'a> Storage<'a> {
         let trans = conn.transaction()?;
         let mut file_paths_and_mimes = HashMap::new();
 
-        get_file_list(root_dir)?
+        let mut blobs = get_file_list(root_dir)?
             .into_iter()
             .filter_map(|file_path| {
                 // Some files have insufficient permissions
@@ -111,7 +111,7 @@ impl<'a> Storage<'a> {
                     .ok()
                     .map(|file| (file_path, file))
             })
-            .map(|(file_path, mut file)| {
+            .map(|(file_path, mut file)| -> Result<_, Error> {
                 let mut content: Vec<u8> = Vec::new();
                 file.read_to_end(&mut content)?;
 
@@ -132,10 +132,17 @@ impl<'a> Storage<'a> {
                     // this field is ignored by the backend
                     date_updated: Timespec::new(0, 0),
                 })
-            })
-            .collect::<Result<Vec<_>, Error>>()?
-            .chunks(MAX_CONCURRENT_UPLOADS)
-            .try_for_each(|batch| self.store_batch(batch, &trans))?;
+            });
+        loop {
+            let batch: Vec<_> = blobs
+                .by_ref()
+                .take(MAX_CONCURRENT_UPLOADS)
+                .collect::<Result<_, Error>>()?;
+            if batch.is_empty() {
+                break;
+            }
+            self.store_batch(&batch, &trans)?;
+        }
 
         trans.commit()?;
         Ok(file_paths_and_mimes)
