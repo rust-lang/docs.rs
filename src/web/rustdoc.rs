@@ -875,17 +875,16 @@ mod test {
             assert_success("/dummy-dash/0.1.0/dummy_dash/index.html", web)?;
             assert_success("/crate/dummy_mixed-separators", web)?;
 
-            assert_eq!(
-                web.get("/dummy_dash/0.1.0/dummy_dash/index.html")
-                    .send()?
-                    .status(),
-                StatusCode::NOT_FOUND
-            );
-
-            assert_eq!(
-                web.get("/crate/dummy_mixed_separators").send()?.status(),
-                StatusCode::NOT_FOUND
-            );
+            assert_redirect(
+                "/dummy_dash/0.1.0/dummy_dash/index.html",
+                "/dummy-dash/0.1.0/dummy_dash/index.html",
+                web,
+            )?;
+            assert_redirect(
+                "/crate/dummy_mixed_separators",
+                "/crate/dummy_mixed-separators",
+                web,
+            )?;
 
             Ok(())
         })
