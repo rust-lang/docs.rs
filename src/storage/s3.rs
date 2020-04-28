@@ -10,6 +10,8 @@ use std::io::Read;
 use time::Timespec;
 use tokio::runtime::Runtime;
 
+pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
+
 pub(crate) struct S3Backend<'a> {
     client: S3Client,
     bucket: &'a str,
@@ -98,6 +100,32 @@ pub(crate) const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
 
 fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
     Ok(time::strptime(raw, TIME_FMT)?.to_timespec())
+}
+
+pub(crate) fn s3_client() -> Option<S3Client> {
+    // If AWS keys aren't configured, then presume we should use the DB exclusively
+    // for file storage.
+    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
+        return None;
+    }
+    let creds = match DefaultCredentialsProvider::new() {
+        Ok(creds) => creds,
+        Err(err) => {
+            warn!("failed to retrieve AWS credentials: {}", err);
+            return None;
+        }
+    };
+    Some(S3Client::new_with(
+        rusoto_core::request::HttpClient::new().unwrap(),
+        creds,
+        std::env::var("S3_ENDPOINT")
+            .ok()
+            .map(|e| Region::Custom {
+                name: std::env::var("S3_REGION").unwrap_or_else(|_| "us-west-1".to_owned()),
+                endpoint: e,
+            })
+            .unwrap_or(Region::UsWest1),
+    ))
 }
 
 #[cfg(test)]
@@ -258,32 +286,4 @@ pub(crate) mod tests {
     // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
     // NOTE: On s3, it will succeed and create a file called `/`.
     // NOTE: On min.io, it will fail with 'Object name contains unsupported characters.'
-}
-
-pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
-
-pub(crate) fn s3_client() -> Option<S3Client> {
-    // If AWS keys aren't configured, then presume we should use the DB exclusively
-    // for file storage.
-    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
-        return None;
-    }
-    let creds = match DefaultCredentialsProvider::new() {
-        Ok(creds) => creds,
-        Err(err) => {
-            warn!("failed to retrieve AWS credentials: {}", err);
-            return None;
-        }
-    };
-    Some(S3Client::new_with(
-        rusoto_core::request::HttpClient::new().unwrap(),
-        creds,
-        std::env::var("S3_ENDPOINT")
-            .ok()
-            .map(|e| Region::Custom {
-                name: std::env::var("S3_REGION").unwrap_or_else(|_| "us-west-1".to_owned()),
-                endpoint: e,
-            })
-            .unwrap_or(Region::UsWest1),
-    ))
 }
