@@ -14,6 +14,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+const MAX_CONCURRENT_UPLOADS: usize = 1000;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
     pub(crate) path: String,
@@ -96,8 +98,6 @@ impl<'a> Storage<'a> {
         prefix: &str,
         root_dir: &Path,
     ) -> Result<HashMap<PathBuf, String>, Error> {
-        const MAX_CONCURRENT_UPLOADS: usize = 1000;
-
         let trans = conn.transaction()?;
         let mut file_paths_and_mimes = HashMap::new();
 
@@ -191,6 +191,40 @@ mod test {
     use crate::test::wrapper;
     use std::env;
 
+    pub(crate) fn assert_blob_eq(blob: &Blob, actual: &Blob) {
+        assert_eq!(blob.path, actual.path);
+        assert_eq!(blob.content, actual.content);
+        assert_eq!(blob.mime, actual.mime);
+        // NOTE: this does _not_ compare the upload time since min.io doesn't allow this to be configured
+    }
+
+    pub(crate) fn test_roundtrip(blobs: &[Blob]) {
+        let dir = tempdir::TempDir::new("docs.rs-upload-test").unwrap();
+        for blob in blobs {
+            let path = dir.path().join(&blob.path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(path, &blob.content).expect("failed to write to file");
+        }
+        wrapper(|env| {
+            let db = env.db();
+            let conn = db.conn();
+            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
+            let stored_files = backend.store_all(&conn, "", dir.path()).unwrap();
+            assert_eq!(stored_files.len(), blobs.len());
+            for blob in blobs {
+                let name = Path::new(&blob.path);
+                assert!(stored_files.contains_key(name));
+
+                let actual = backend.get(&blob.path).unwrap();
+                assert_blob_eq(blob, &actual);
+            }
+
+            Ok(())
+        });
+    }
+
     #[test]
     fn test_uploads() {
         use std::fs;
@@ -233,6 +267,19 @@ mod test {
             assert_eq!(file.path, "rustdoc/src/main.rs");
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_batched_uploads() {
+        let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
+            .map(|i| Blob {
+                mime: "text/rust".into(),
+                content: "fn main() {}".into(),
+                path: format!("{}.rs", i),
+                date_updated: Timespec::new(42, 0),
+            })
+            .collect();
+        test_roundtrip(&uploads);
     }
 
     #[test]

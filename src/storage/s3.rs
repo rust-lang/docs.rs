@@ -131,6 +131,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::storage::test::*;
     use crate::test::*;
 
     use crate::storage::s3::S3Backend;
@@ -176,12 +177,9 @@ pub(crate) mod tests {
                 x => panic!("wrong error: {:?}", x),
             };
         }
-        fn assert_blob(&self, blob: &Blob, path: &str) {
+        pub(crate) fn assert_blob(&self, blob: &Blob, path: &str) {
             let actual = self.0.borrow().get(path).unwrap();
-            assert_eq!(blob.path, actual.path);
-            assert_eq!(blob.content, actual.content);
-            assert_eq!(blob.mime, actual.mime);
-            // NOTE: this does _not_ compare the upload time since min.io doesn't allow this to be configured
+            assert_blob_eq(blob, &actual);
         }
     }
 
