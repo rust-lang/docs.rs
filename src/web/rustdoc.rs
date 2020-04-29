@@ -226,7 +226,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         let url = ctry!(Url::parse(
             &format!("{}/{}/{}/{}", redirect_base(req), name, vers, path)[..]
         ));
-        return Ok(super::redirect(url));
+        Ok(super::redirect(url))
     };
 
     let corrected_name;
