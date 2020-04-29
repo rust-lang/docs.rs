@@ -246,8 +246,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     if let Some(name) = corrected_name {
         let url = ctry!(Url::parse(
-                        &format!("{}/{}/{}/{}", base, name, version, req_path.join("/"))[..]
-                    ));
+            &format!("{}/{}/{}/{}", base, name, version, req_path.join("/"))[..]
+        ));
         return Ok(super::redirect(url));
     }
 
@@ -889,7 +889,7 @@ mod test {
                 web.get("/crate/dummy_mixed_separators").send()?.status(),
                 StatusCode::NOT_FOUND
             );
-            
+
             Ok(())
         })
     }
