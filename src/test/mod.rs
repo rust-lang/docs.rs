@@ -1,6 +1,6 @@
 mod fakes;
 
-use crate::storage::s3::tests::TestS3;
+use crate::storage::s3::TestS3;
 use crate::web::Server;
 use failure::Error;
 use log::error;
