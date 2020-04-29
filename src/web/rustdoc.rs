@@ -885,6 +885,11 @@ mod test {
                 web,
             )?;
 
+            assert_eq!(
+                web.get("/crate/dummy_mixed_separators").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+            
             Ok(())
         })
     }
