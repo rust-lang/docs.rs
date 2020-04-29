@@ -222,9 +222,15 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.remove(0);
     }
 
-    let redirect = |name: &str, vers: &str, path: &str| -> IronResult<Response> {
+    let redirect = |name: &str, vers: &str, path: &[&str]| -> IronResult<Response> {
         let url = ctry!(Url::parse(
-            &format!("{}/{}/{}/{}", redirect_base(req), name, vers, path)[..]
+            &format!(
+                "{}/{}/{}/{}",
+                redirect_base(req),
+                name,
+                vers,
+                path.join("/")
+            )[..]
         ));
         Ok(super::redirect(url))
     };
@@ -240,7 +246,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                     // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
                     // versions, redirect the browser to the returned version instead of loading it
                     // immediately
-                    return redirect(&name, &v, &req_path.join("/"));
+                    return redirect(&name, &v, &req_path);
                 }
             }
         }
@@ -248,7 +254,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     if let Some(name) = corrected_name {
-        return redirect(&name, &version, &req_path.join("/"));
+        return redirect(&name, &version, &req_path);
     }
 
     // docs have "rustdoc" prefix in database
@@ -263,7 +269,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
     if req_path[3] == crate_details.metadata.default_target {
-        return redirect(&name, &version, &req_path[4..].join("/"));
+        return redirect(&name, &version, &req_path[4..]);
     }
 
     let mut path = {
