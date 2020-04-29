@@ -214,7 +214,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
     let conn = extension!(req, Pool).get();
-    let base = redirect_base(req);
 
     let mut req_path = req.url.path();
 
@@ -222,6 +221,13 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     for _ in 0..2 {
         req_path.remove(0);
     }
+
+    let redirect = |name: &str, vers: &str, path: &str| -> IronResult<Response> {
+        let url = ctry!(Url::parse(
+            &format!("{}/{}/{}/{}", redirect_base(req), name, vers, path)[..]
+        ));
+        return Ok(super::redirect(url));
+    };
 
     let corrected_name;
     version = match match_version(&conn, &name, url_version) {
@@ -234,10 +240,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                     // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
                     // versions, redirect the browser to the returned version instead of loading it
                     // immediately
-                    let url = ctry!(Url::parse(
-                        &format!("{}/{}/{}/{}", base, name, v, req_path.join("/"))[..]
-                    ));
-                    return Ok(super::redirect(url));
+                    return redirect(&name, &v, &req_path.join("/"));
                 }
             }
         }
@@ -245,10 +248,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     if let Some(name) = corrected_name {
-        let url = ctry!(Url::parse(
-            &format!("{}/{}/{}/{}", base, name, version, req_path.join("/"))[..]
-        ));
-        return Ok(super::redirect(url));
+        return redirect(&name, &version, &req_path.join("/"));
     }
 
     // docs have "rustdoc" prefix in database
@@ -263,9 +263,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
     if req_path[3] == crate_details.metadata.default_target {
-        let path = [base, req_path[1..3].join("/"), req_path[4..].join("/")].join("/");
-        let canonical = Url::parse(&path).expect("got an invalid URL to start");
-        return Ok(super::redirect(canonical));
+        return redirect(&name, &version, &req_path[4..].join("/"));
     }
 
     let mut path = {
