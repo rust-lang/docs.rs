@@ -141,18 +141,35 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let mut response_time = metrics::ResponseTimer::new();
+        let mut response_route = metrics::ResponseRouter::new();
+
         // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
         self.shared_resource_handler
             .handle(req)
-            .or_else(|e| self.router_handler.handle(req).or(Err(e)))
+            .or_else(|e| {
+                let router = self.router_handler.handle(req).or(Err(e));
+
+                response_time.route("router");
+                response_route.route("router");
+                router
+            })
             .or_else(|e| {
                 // if router fails try to serve files from database first
-                self.database_file_handler.handle(req).or(Err(e))
+                let rustdoc = self.database_file_handler.handle(req).or(Err(e));
+
+                response_time.route("docs");
+                response_route.route("docs");
+                rustdoc
             })
             .or_else(|e| {
                 // and then try static handler. if all of them fails, return 404
-                self.static_handler.handle(req).or(Err(e))
+                let static_file = self.static_handler.handle(req).or(Err(e));
+
+                response_time.route("statics");
+                response_route.route("statics");
+                static_file
             })
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
@@ -187,7 +204,11 @@ impl Handler for CratesfyiHandler {
                     debug!("Path not found: {}", DebugPath(&req.url));
                 }
 
-                Self::chain(&self.pool_factory, err).handle(req)
+                let chained = Self::chain(&self.pool_factory, err).handle(req);
+
+                response_time.route("not_found");
+                response_route.route("not_found");
+                chained
             })
     }
 }
