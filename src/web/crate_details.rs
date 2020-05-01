@@ -527,14 +527,10 @@ mod tests {
             db.fake_release().name("foo").version("0.0.3").create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.3");
+            }
 
             Ok(())
         })
@@ -553,14 +549,10 @@ mod tests {
                 .create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.2");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.2");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.2");
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.2");
+            }
 
             Ok(())
         })
@@ -587,14 +579,10 @@ mod tests {
                 .cratesio_data_yanked(true)
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
-
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_release().version, "0.0.3");
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.3");
+            }
 
             Ok(())
         })
