@@ -266,7 +266,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     let versions: Vec<(String, i32, bool)> = {
         let query = "SELECT name, version, releases.id, releases.yanked
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE normalize_crate_name(name) = normalize_crate_name($1) AND yanked = false";
+            WHERE normalize_crate_name(name) = normalize_crate_name($1)";
 
         let rows = conn.query(query, &[&name]).unwrap();
         let mut rows = rows.iter().peekable();
