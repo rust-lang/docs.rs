@@ -107,6 +107,7 @@ impl ToJson for Release {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("version".to_string(), self.version.to_json());
         m.insert("build_status".to_string(), self.build_status.to_json());
+        m.insert("yanked".to_string(), self.yanked.to_json());
         m.to_json()
     }
 }
