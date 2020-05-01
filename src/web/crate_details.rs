@@ -96,10 +96,10 @@ impl ToJson for CrateDetails {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct Release {
-    version: String,
-    build_status: bool,
-    yanked: bool,
+pub struct Release {
+    pub version: String,
+    pub build_status: bool,
+    pub yanked: bool,
 }
 
 impl ToJson for Release {
@@ -276,15 +276,13 @@ impl CrateDetails {
         Some(crate_details)
     }
 
-    /// Returns the version of the latest non-yanked release of this crate (or latest yanked if
-    /// they are all yanked).
-    pub fn latest_version(&self) -> &str {
-        let release = self
-            .releases
+    /// Returns the latest non-yanked release of this crate (or latest yanked if they are all
+    /// yanked).
+    pub fn latest_release(&self) -> &Release {
+        self.releases
             .iter()
             .find(|release| !release.yanked)
-            .unwrap_or(&self.releases[0]);
-        &release.version
+            .unwrap_or(&self.releases[0])
     }
 }
 
@@ -530,13 +528,13 @@ mod tests {
             db.fake_release().name("foo").version("0.0.2").create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             Ok(())
         })
@@ -556,13 +554,13 @@ mod tests {
             db.fake_release().name("foo").version("0.0.2").create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_version(), "0.0.2");
+            assert_eq!(details.latest_release().version, "0.0.2");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_version(), "0.0.2");
+            assert_eq!(details.latest_release().version, "0.0.2");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_version(), "0.0.2");
+            assert_eq!(details.latest_release().version, "0.0.2");
 
             Ok(())
         })
@@ -590,13 +588,13 @@ mod tests {
                 .create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            assert_eq!(details.latest_release().version, "0.0.3");
 
             Ok(())
         })
