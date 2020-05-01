@@ -714,14 +714,12 @@ mod test {
                 .version("0.1.0")
                 .add_platform("x86_64-pc-windows-msvc")
                 .rustdoc_file("dummy/struct.Blah.html", b"lah")
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .add_platform("x86_64-pc-windows-msvc")
-                .create()
-                .unwrap();
+                .create()?;
 
             let web = env.frontend();
 
@@ -763,14 +761,12 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .build_result_successful(false)
-                .create()
-                .unwrap();
+                .create()?;
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
@@ -788,21 +784,18 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
@@ -824,22 +817,19 @@ mod test {
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
@@ -873,8 +863,7 @@ mod test {
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
 
             assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
 
@@ -883,8 +872,7 @@ mod test {
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .cratesio_data_yanked(true)
-                .create()
-                .unwrap();
+                .create()?;
 
             assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
 
@@ -919,8 +907,7 @@ mod test {
                 .name("fake-crate")
                 .version("0.0.1")
                 .rustdoc_file("fake_crate/index.html", b"some content")
-                .create()
-                .unwrap();
+                .create()?;
 
             let web = env.frontend();
             assert_redirect("/fake%2Dcrate", "/fake-crate/0.0.1/fake_crate/", web)?;
