@@ -537,7 +537,10 @@ mod test {
     use reqwest::StatusCode;
     use std::{collections::BTreeMap, iter::FromIterator};
 
-    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
+    fn try_latest_version_redirect(
+        path: &str,
+        web: &TestFrontend,
+    ) -> Result<Option<String>, failure::Error> {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
@@ -549,9 +552,15 @@ mod test {
         {
             let link = elem.attributes.borrow().get("href").unwrap().to_string();
             assert_success(&link, web)?;
-            return Ok(link);
+            Ok(Some(link))
+        } else {
+            Ok(None)
         }
-        panic!("no redirect found for {}", path);
+    }
+
+    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
+        try_latest_version_redirect(path, web)
+            .and_then(|v| v.ok_or_else(|| failure::format_err!("no redirect found for {}", path)))
     }
 
     #[test]
@@ -758,6 +767,40 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(redirect, "/crate/dummy/0.2.0");
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn redirect_latest_does_not_go_to_yanked_versions() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.1")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+
+            let web = env.frontend();
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+
+            let redirect = try_latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
+            assert!(redirect.is_none());
             Ok(())
         })
     }

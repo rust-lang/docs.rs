@@ -275,10 +275,15 @@ impl CrateDetails {
         Some(crate_details)
     }
 
-    /// Returns the version of the latest release of this crate.
+    /// Returns the version of the latest non-yanked release of this crate (or latest yanked if
+    /// they are all yanked).
     pub fn latest_version(&self) -> &str {
-        // releases will always contain at least one element
-        &self.releases[0].version
+        let release = self
+            .releases
+            .iter()
+            .find(|release| !release.yanked)
+            .unwrap_or(&self.releases[0]);
+        &release.version
     }
 }
 
@@ -522,6 +527,66 @@ mod tests {
             db.fake_release().name("foo").version("0.0.1").create()?;
             db.fake_release().name("foo").version("0.0.3").create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
+            assert_eq!(details.latest_version(), "0.0.3");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_latest_version_ignores_yanked() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release().name("foo").version("0.0.1").create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .cratesio_data_yanked(true)
+                .create()?;
+            db.fake_release().name("foo").version("0.0.2").create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(details.latest_version(), "0.0.2");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
+            assert_eq!(details.latest_version(), "0.0.2");
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
+            assert_eq!(details.latest_version(), "0.0.2");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_latest_version_only_yanked() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .cratesio_data_yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .cratesio_data_yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .cratesio_data_yanked(true)
+                .create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
             assert_eq!(details.latest_version(), "0.0.3");
