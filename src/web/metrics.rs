@@ -100,12 +100,12 @@ fn duration_to_seconds(d: Duration) -> f64 {
 }
 
 #[derive(Debug, Clone)]
-pub struct ResponseTimer {
+pub struct ResponseRecorder {
     start_time: Instant,
-    route: Option<&'static str>,
+    route: Option<String>,
 }
 
-impl ResponseTimer {
+impl ResponseRecorder {
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -115,43 +115,20 @@ impl ResponseTimer {
     }
 
     #[inline]
-    pub fn route(&mut self, route: &'static str) {
-        self.route = Some(route);
+    pub fn route(&mut self, route: impl Into<String>) {
+        self.route = Some(route.into());
     }
 }
 
-impl Drop for ResponseTimer {
+impl Drop for ResponseRecorder {
     fn drop(&mut self) {
-        if let Some(route) = self.route {
+        if let Some(route) = &self.route {
+            ROUTES_VISITED.with_label_values(&[route]).inc();
+
             let response_time = duration_to_seconds(self.start_time.elapsed());
             RESPONSE_TIMES
                 .with_label_values(&[route])
                 .observe(response_time);
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ResponseRouter {
-    route: Option<&'static str>,
-}
-
-impl ResponseRouter {
-    #[inline]
-    pub fn new() -> Self {
-        Self { route: None }
-    }
-
-    #[inline]
-    pub fn route(&mut self, route: &'static str) {
-        self.route = Some(route);
-    }
-}
-
-impl Drop for ResponseRouter {
-    fn drop(&mut self) {
-        if let Some(route) = self.route {
-            ROUTES_VISITED.with_label_values(&[route]).inc();
         }
     }
 }

@@ -4,7 +4,8 @@ use iron::Request;
 use router::Router;
 use std::collections::HashSet;
 
-const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] = &["alloc", "core", "proc_macro", "std", "test"];
+pub(super) const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] =
+    &["alloc", "core", "proc_macro", "std", "test"];
 
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
