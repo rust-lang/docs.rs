@@ -844,6 +844,46 @@ mod test {
     }
 
     #[test]
+    fn yanked_release_shows_warning_in_nav() {
+        fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, failure::Error> {
+            use html5ever::tendril::TendrilSink;
+            assert_success(path, web)?;
+            let data = web.get(path).send()?.text()?;
+            Ok(kuchiki::parse_html()
+                .one(data)
+                .select("form > ul > li > .warn")
+                .expect("invalid selector")
+                .any(|el| el.text_contents().contains("yanked")))
+        }
+
+        wrapper(|env| {
+            let (db, web) = (env.db(), env.frontend());
+
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+
+            assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
+
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+
+            assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn badges_are_urlencoded() {
         wrapper(|env| {
             let db = env.db();

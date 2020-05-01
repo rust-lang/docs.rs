@@ -160,7 +160,7 @@ div.nav-container {
         font-size: 0.8em;
     }
 
-    a {
+    .pure-menu-link {
         font-size: 0.8em;
         font-weight: 400;
     }
@@ -220,11 +220,11 @@ div.nav-container {
     }
 
     // used for latest version warning
-    .warn {
+    .warn, .warn:hover {
         color: $color-type;
     }
 
-    .warn:hover {
+    a.warn:hover {
         color: darken($color-type, 10%);
     }
 
