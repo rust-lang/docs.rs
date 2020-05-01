@@ -799,8 +799,46 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
 
-            let redirect = try_latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
-            assert!(redirect.is_none());
+            let redirect = latest_version_redirect("/dummy/0.2.1/dummy/", web)?;
+            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn redirect_latest_with_all_yanked() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+            db.fake_release()
+                .name("dummy")
+                .version("0.2.1")
+                .rustdoc_file("dummy/index.html", b"lah")
+                .cratesio_data_yanked(true)
+                .create()
+                .unwrap();
+
+            let web = env.frontend();
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");
+
+            let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
+            assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");
+
             Ok(())
         })
     }
