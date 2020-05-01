@@ -320,15 +320,23 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     content.full = file_content;
 
-    let latest_version = crate_details.latest_version().to_owned();
+    let latest_release = crate_details.latest_release();
+    let latest_version = latest_release.version.to_owned();
     let is_latest_version = latest_version == version;
 
-    let path_in_latest = if !is_latest_version {
+    let latest_path = if is_latest_version {
+        format!("/{}/{}", name, latest_version)
+    } else if latest_release.build_status {
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
-        path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+        format!(
+            "/{}/{}/{}",
+            name,
+            latest_version,
+            path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+        )
     } else {
-        Default::default()
+        format!("/crate/{}/{}", name, latest_version)
     };
 
     // The path within this crate version's rustdoc output
@@ -349,7 +357,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
         .set_bool("is_latest_version", is_latest_version)
-        .set("path_in_latest", &path_in_latest)
+        .set("latest_path", &latest_path)
         .set("latest_version", &latest_version)
         .set("inner_path", &inner_path)
         .to_resp("rustdoc")
@@ -544,9 +552,10 @@ mod test {
         use html5ever::tendril::TendrilSink;
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
+        println!("{}", data);
         let dom = kuchiki::parse_html().one(data);
         if let Some(elem) = dom
-            .select("form ul li a.warn")
+            .select("form > ul > li > a.warn")
             .expect("invalid selector")
             .next()
         {

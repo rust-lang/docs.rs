@@ -106,11 +106,11 @@
             {{else}}
               {{#if ../../content.crate_details.yanked}}
               <li class="pure-menu-item">
-                <a href="/{{name}}/{{../../varss.latest_version}}/{{../../varss.path_in_latest}}" class="pure-menu-link warn" title="You are seeing a yanked version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> This release has been yanked, go to latest version</span></a>
+                <a href="{{../../varss.latest_path}}" class="pure-menu-link warn" title="You are seeing a yanked version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> This release has been yanked, go to latest version</span></a>
               </li>
               {{else}}
               <li class="pure-menu-item">
-                <a href="/{{name}}/{{../../varss.latest_version}}/{{../../varss.path_in_latest}}" class="pure-menu-link warn" title="You are seeing an outdated version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> Go to latest version</span></a>
+                <a href="{{../../varss.latest_path}}" class="pure-menu-link warn" title="You are seeing an outdated version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> Go to latest version</span></a>
               </li>
               {{/if}}
             {{/if}}
