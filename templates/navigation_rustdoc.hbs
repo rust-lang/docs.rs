@@ -79,7 +79,11 @@
                             {{#each releases}}
                             <li class="pure-menu-item">
                               {{#if this.yanked}}
-                              <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="{{../name}}-{{this.version}} is yanked"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{#if this.build_status}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="{{../name}}-{{this.version}} is yanked"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{else}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="{{../name}}-{{this.version}} is yanked and docs.rs failed to build it"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{/if}}
                               {{else}}
                                 {{#if this.build_status}}
                                 <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
