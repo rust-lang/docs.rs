@@ -794,7 +794,7 @@ mod test {
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             let web = env.frontend();
@@ -816,19 +816,19 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             let web = env.frontend();
@@ -862,7 +862,7 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
@@ -871,7 +871,7 @@ mod test {
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
