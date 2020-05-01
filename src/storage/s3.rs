@@ -11,9 +11,9 @@ use time::Timespec;
 use tokio::runtime::Runtime;
 
 #[cfg(test)]
-mod test_s3;
+mod test;
 #[cfg(test)]
-pub(crate) use test_s3::TestS3;
+pub(crate) use test::TestS3;
 
 pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
 
@@ -132,7 +132,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 }
 
 #[cfg(test)]
-pub(crate) mod test {
+pub(crate) mod tests {
     use super::*;
     use crate::test::*;
     use std::slice;
