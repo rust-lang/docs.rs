@@ -1318,4 +1318,29 @@ mod test {
             Ok(())
         });
     }
+
+    #[test]
+    fn test_fully_yanked_crate_404s() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("dummy")
+                .version("1.0.0")
+                .yanked(true)
+                .create()?;
+
+            assert_eq!(
+                env.frontend().get("/crate/dummy").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+
+            assert_eq!(
+                env.frontend().get("/dummy").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+
+            Ok(())
+        })
+    }
 }
