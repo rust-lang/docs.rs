@@ -375,13 +375,13 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.4")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
                 .version("0.0.5")
                 .build_result_successful(false)
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
@@ -411,7 +411,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
@@ -435,7 +435,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release().name("foo").version("0.0.4").create()?;
 
@@ -465,7 +465,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.2.0")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
@@ -545,7 +545,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
 
@@ -566,17 +566,17 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.1")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
                 .version("0.0.2")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {

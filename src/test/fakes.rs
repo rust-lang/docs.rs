@@ -86,7 +86,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn cratesio_data_yanked(mut self, new: bool) -> Self {
+    pub(crate) fn yanked(mut self, new: bool) -> Self {
         self.cratesio_data.yanked = new;
         self
     }
