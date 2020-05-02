@@ -143,7 +143,7 @@ mod tests {
         collections::HashMap,
         sync::{
             atomic::{AtomicUsize, Ordering},
-            Mutex, MutexGuard,
+            Mutex,
         },
     };
 
