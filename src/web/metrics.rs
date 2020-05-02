@@ -129,6 +129,196 @@ impl Drop for ResponseRecorder {
             RESPONSE_TIMES
                 .with_label_values(&[route])
                 .observe(response_time);
+
+            #[cfg(test)]
+            tests::record_tests(route);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test::wrapper;
+    use std::{
+        collections::HashMap,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Mutex, MutexGuard,
+        },
+    };
+
+    static ROUTES_VISITED: AtomicUsize = AtomicUsize::new(0);
+    lazy_static::lazy_static! {
+        static ref RESPONSE_TIMES: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
+    }
+
+    pub fn record_tests(route: &str) {
+        ROUTES_VISITED.fetch_add(1, Ordering::SeqCst);
+
+        let mut times = RESPONSE_TIMES.lock().unwrap();
+        if let Some(requests) = times.get_mut(route) {
+            *requests += 1;
+        } else {
+            times.insert(route.to_owned(), 1);
+        }
+    }
+
+    fn reset_records() {
+        ROUTES_VISITED.store(0, Ordering::SeqCst);
+        RESPONSE_TIMES.lock().unwrap().clear();
+    }
+
+    #[test]
+    fn home_page() {
+        wrapper(|env| {
+            let frontend = env.frontend();
+
+            reset_records();
+
+            frontend.get("/").send()?;
+            frontend.get("/").send()?;
+            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("home (found)"), Some(&2));
+
+            reset_records();
+
+            frontend.get("").send()?;
+            frontend.get("").send()?;
+            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("home (found)"), Some(&2));
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn resources() {
+        wrapper(|env| {
+            let frontend = env.frontend();
+
+            let routes = [
+                "/style.css",
+                "/index.js",
+                "/menu.js",
+                "/sitemap.xml",
+                "/opensearch.xml",
+            ];
+
+            for route in routes.iter() {
+                reset_records();
+
+                frontend.get(route).send()?;
+                frontend.get(route).send()?;
+
+                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+                assert_eq!(
+                    RESPONSE_TIMES.lock().unwrap().get("resources (found)"),
+                    Some(&2)
+                );
+            }
+
+            reset_records();
+
+            frontend.get("/robots.txt").send()?;
+            frontend.get("/robots.txt").send()?;
+
+            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("resources"), Some(&2));
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn releases() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("rcc")
+                .version("0.0.0")
+                .repo("https://github.com/jyn514/rcc")
+                .create()?;
+            env.db()
+                .fake_release()
+                .name("rcc")
+                .version("1.0.0")
+                .build_result_successful(false)
+                .create()?;
+
+            let frontend = env.frontend();
+
+            let routes = [
+                ("/releases", "recent releases (found)"),
+                // ("/releases/recent", "recent releases (found)"),
+                ("/releases/recent/1", "recent releases (found)"),
+                ("/releases/feed", "release feed (found)"),
+                ("/releases/queue", "release queue (found)"),
+                // ("/releases/search", "search releases (found)"),
+                // ("/releases/stars", "release stars (found)"),
+                // ("/releases/stars/1", "release stars (found)"),
+                // ("/releases/activity", "release activity (found)"),
+                // ("/releases/failures", "build failures (found)"),
+                // ("/releases/failures/1", "build failures (found)"),
+                ("/releases/recent-failures", "recent failures (found)"),
+                ("/releases/recent-failures/1", "recent failures (found)"),
+            ];
+
+            for (route, correct) in routes.iter() {
+                reset_records();
+
+                frontend.get(route).send()?;
+                frontend.get(route).send()?;
+
+                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+                assert_eq!(RESPONSE_TIMES.lock().unwrap().get(*correct), Some(&2));
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn crates() {
+        wrapper(|env| {
+            env.db()
+                .fake_release()
+                .name("rcc")
+                .version("0.0.0")
+                .create()?;
+            env.db()
+                .fake_release()
+                .name("hexponent")
+                .version("0.2.0")
+                .create()?;
+
+            let frontend = env.frontend();
+
+            let routes = [
+                ("/crate/rcc", "crate details (found)"),
+                ("/crate/rcc/", "crate details (found)"),
+                ("/crate/hexponent", "crate details (found)"),
+                ("/crate/hexponent/", "crate details (found)"),
+                ("/crate/rcc/0.0.0", "crate details (found)"),
+                ("/crate/rcc/0.0.0/", "crate details (found)"),
+                ("/crate/hexponent/0.2.0", "crate details (found)"),
+                ("/crate/hexponent/0.2.0/", "crate details (found)"),
+                ("/crate/i_dont_exist", "crate details (404)"),
+                ("/crate/i_dont_exist/", "crate details (404)"),
+                ("/crate/i_dont_exist/4.0.4", "crate details (404)"),
+                ("/crate/i_dont_exist/4.0.4/", "crate details (404)"),
+            ];
+
+            for (route, correct) in routes.iter() {
+                reset_records();
+
+                frontend.get(route).send()?;
+                frontend.get(route).send()?;
+
+                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
+                assert_eq!(RESPONSE_TIMES.lock().unwrap().get(*correct), Some(&2));
+            }
+
+            Ok(())
+        })
     }
 }

@@ -45,13 +45,15 @@ macro_rules! extension {
 
 /// Formats a route message with the status of the response
 macro_rules! msg {
-    ($resp:expr, $msg:expr) => {
+    ($resp:expr, $msg:expr) => {{
+        use iron::status::Status;
+
         match $resp.map_or_else(|err| err.response.status, |resp| resp.status) {
-            Some(iron::status::Status::Ok) => format!("{} (found)", $msg),
-            Some(iron::status::Status::NotFound) => format!("{} (404)", $msg),
+            Some(Status::Ok) | Some(Status::Found) => format!("{} (found)", $msg),
+            Some(Status::NotFound) => format!("{} (404)", $msg),
             _ => $msg.to_string(),
         }
-    };
+    }};
 }
 
 mod builds;
@@ -71,7 +73,11 @@ use handlebars_iron::{DirectorySource, HandlebarsEngine};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
-use iron::{self, status, Handler, Listening, Url};
+use iron::{
+    self,
+    status::{self, Status},
+    Handler, Listening, Url,
+};
 use postgres::Connection;
 use router::NoRoute;
 use rustc_serialize::json::{Json, ToJson};
@@ -207,6 +213,7 @@ impl Handler for CratesfyiHandler {
         let path: &[&str] = &req.url.path();
         match path {
             [""] => metrics.route(msg!(response.as_ref(), "home")),
+
             ["style.css"]
             | ["index.js"]
             | ["menu.js"]
@@ -217,7 +224,9 @@ impl Handler for CratesfyiHandler {
             ["about"] => metrics.route(msg!(response.as_ref(), "about")),
             ["about", "metrics"] => { /* Metrics route for prometheus */ }
 
-            ["releases"] => metrics.route(msg!(response.as_ref(), "recent releases")),
+            ["releases"] | ["releases", "recent", _] => {
+                metrics.route(msg!(response.as_ref(), "recent releases"));
+            }
             ["releases", "feed"] => metrics.route(msg!(response.as_ref(), "release feed")),
             ["releases", "queue"] => metrics.route(msg!(response.as_ref(), "release queue")),
             ["releases", "search"] => metrics.route(msg!(response.as_ref(), "search releases")),
@@ -230,7 +239,19 @@ impl Handler for CratesfyiHandler {
                 metrics.route(msg!(response.as_ref(), "recent failures"));
             }
 
-            ["crate", _] | ["crate", _, _] => {
+            ["crate", _] | ["crate", _, ""] | ["crate", _, _, ""] => {
+                if let Some(Status::NotFound) = response
+                    .as_ref()
+                    .map_or_else(|err| err.response.status, |resp| resp.status)
+                {
+                    // Crates that don't exist won't be redirected
+                    metrics.route(msg!(response.as_ref(), "crate details"));
+                } else {
+                    // `/crate/:name` and `/crate/:name/` redirect to `/crate/:name/:version`
+                    // `/crate/:name/:version/` redirects to `/crate/:name/:version`
+                }
+            }
+            ["crate", _, _] => {
                 metrics.route(msg!(response.as_ref(), "crate details"));
             }
             ["crate", _, _, _, "builds"]

@@ -76,6 +76,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn repo(mut self, repo: impl Into<String>) -> Self {
+        self.package.repository = Some(repo.into());
+        self
+    }
+
     pub(crate) fn build_result_successful(mut self, new: bool) -> Self {
         self.build_result.successful = new;
         self
