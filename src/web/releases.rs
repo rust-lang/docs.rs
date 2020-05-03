@@ -8,8 +8,8 @@ use iron::prelude::*;
 use iron::status;
 use postgres::Connection;
 use router::Router;
-use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde_json::Value;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -43,24 +43,25 @@ impl Default for Release {
     }
 }
 
-impl ToJson for Release {
-    fn to_json(&self) -> Json {
-        let mut m: BTreeMap<String, Json> = BTreeMap::new();
-        m.insert("name".to_string(), self.name.to_json());
-        m.insert("version".to_string(), self.version.to_json());
-        m.insert("description".to_string(), self.description.to_json());
-        m.insert("target_name".to_string(), self.target_name.to_json());
-        m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
-        m.insert(
-            "release_time".to_string(),
-            duration_to_str(self.release_time).to_json(),
-        );
-        m.insert(
-            "release_time_rfc3339".to_string(),
-            time::at(self.release_time).rfc3339().to_string().to_json(),
-        );
-        m.insert("stars".to_string(), self.stars.to_json());
-        m.to_json()
+impl Serialize for Release {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Release", 8)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("description", &self.description)?;
+        state.serialize_field("target_name", &self.target_name)?;
+        state.serialize_field("rustdoc_status", &self.rustdoc_status)?;
+        state.serialize_field("release_time", &duration_to_str(self.release_time))?;
+        state.serialize_field(
+            "release_time_rfc3339",
+            &time::at(self.release_time).rfc3339().to_string(),
+        )?;
+        state.serialize_field("stars", &self.stars)?;
+
+        state.end()
     }
 }
 
@@ -619,7 +620,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let release_activity_data: Json = ctry!(conn.query(
+    let release_activity_data: Value = ctry!(conn.query(
         "SELECT value FROM config WHERE name = 'release_activity'",
         &[]
     ))
@@ -670,6 +671,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::wrapper;
+    use serde_json::json;
 
     #[test]
     fn database_search() {
@@ -1015,63 +1017,45 @@ mod tests {
             stars: 100,
         };
 
-        let correct_json = Json::from_str(&format!(
-            r#"{{
+        let correct_json = json!({
             "name": "serde",
             "version": "0.0.0",
             "description": "serde makes things other things",
             "target_name": "x86_64-pc-windows-msvc",
             "rustdoc_status": true,
-            "release_time": "{}",
-            "release_time_rfc3339": "{}",
+            "release_time": duration_to_str(time),
+            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
             "stars": 100
-        }}"#,
-            duration_to_str(time),
-            time::at(time).rfc3339().to_string(),
-        ))
-        .unwrap();
+        });
 
-        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
-        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
 
         release.target_name = None;
-        let correct_json = Json::from_str(&format!(
-            r#"{{
+        let correct_json = json!({
             "name": "serde",
             "version": "0.0.0",
             "description": "serde makes things other things",
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": "{}",
-            "release_time_rfc3339": "{}",
+            "release_time": duration_to_str(time),
+            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
             "stars": 100
-        }}"#,
-            duration_to_str(time),
-            time::at(time).rfc3339().to_string(),
-        ))
-        .unwrap();
+        });
 
-        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
-        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
 
         release.description = None;
-        let correct_json = Json::from_str(&format!(
-            r#"{{
+        let correct_json = json!({
             "name": "serde",
             "version": "0.0.0",
             "description": null,
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": "{}",
-            "release_time_rfc3339": "{}",
+            "release_time": duration_to_str(time),
+            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
             "stars": 100
-        }}"#,
-            duration_to_str(time),
-            time::at(time).rfc3339().to_string(),
-        ))
-        .unwrap();
+        });
 
-        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
-        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
     }
 }

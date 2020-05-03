@@ -8,8 +8,8 @@ use iron::prelude::*;
 use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
-use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde_json::Value;
 
 // TODO: Add target name and versions
 
@@ -20,8 +20,8 @@ pub struct CrateDetails {
     description: Option<String>,
     authors: Vec<(String, String)>,
     owners: Vec<(String, String)>,
-    authors_json: Option<Json>,
-    dependencies: Option<Json>,
+    authors_json: Option<Value>,
+    dependencies: Option<Value>,
     readme: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
     release_time: time::Timespec,
@@ -30,7 +30,7 @@ pub struct CrateDetails {
     rustdoc_status: bool,
     repository_url: Option<String>,
     homepage_url: Option<String>,
-    keywords: Option<Json>,
+    keywords: Option<Value>,
     have_examples: bool, // need to check this manually
     pub target_name: String,
     releases: Vec<Release>,
@@ -46,70 +46,59 @@ pub struct CrateDetails {
     documentation_url: Option<String>,
 }
 
-impl ToJson for CrateDetails {
-    fn to_json(&self) -> Json {
-        let mut m: BTreeMap<String, Json> = BTreeMap::new();
-        m.insert("name".to_string(), self.name.to_json());
-        m.insert("version".to_string(), self.version.to_json());
-        m.insert("description".to_string(), self.description.to_json());
-        m.insert("authors".to_string(), self.authors.to_json());
-        m.insert("owners".to_string(), self.owners.to_json());
-        m.insert("authors_json".to_string(), self.authors_json.to_json());
-        m.insert("dependencies".to_string(), self.dependencies.to_json());
+impl Serialize for CrateDetails {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("CrateDetails", 28)?;
+        state.serialize_field("metadata", &self.metadata)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("description", &self.description)?;
+        state.serialize_field("authors", &self.authors)?;
+        state.serialize_field("owners", &self.owners)?;
+        state.serialize_field("authors_json", &self.authors_json)?;
+        state.serialize_field("dependencies", &self.dependencies)?;
+
         if let Some(ref readme) = self.readme {
-            m.insert("readme".to_string(), render_markdown(&readme).to_json());
+            state.serialize_field("readme", &render_markdown(&readme))?;
         }
+
         if let Some(ref rustdoc) = self.rustdoc {
-            m.insert("rustdoc".to_string(), render_markdown(&rustdoc).to_json());
+            state.serialize_field("rustdoc", &render_markdown(&rustdoc))?;
         }
-        m.insert(
-            "release_time".to_string(),
-            duration_to_str(self.release_time).to_json(),
-        );
-        m.insert("build_status".to_string(), self.build_status.to_json());
-        m.insert(
-            "last_successful_build".to_string(),
-            self.last_successful_build.to_json(),
-        );
-        m.insert("rustdoc_status".to_string(), self.rustdoc_status.to_json());
-        m.insert("repository_url".to_string(), self.repository_url.to_json());
-        m.insert("homepage_url".to_string(), self.homepage_url.to_json());
-        m.insert("keywords".to_string(), self.keywords.to_json());
-        m.insert("have_examples".to_string(), self.have_examples.to_json());
-        m.insert("target_name".to_string(), self.target_name.to_json());
-        m.insert("releases".to_string(), self.releases.to_json());
-        m.insert("github".to_string(), self.github.to_json());
-        m.insert("github_stars".to_string(), self.github_stars.to_json());
-        m.insert("github_forks".to_string(), self.github_forks.to_json());
-        m.insert("github_issues".to_string(), self.github_issues.to_json());
-        m.insert("metadata".to_string(), self.metadata.to_json());
-        m.insert("is_library".to_string(), self.is_library.to_json());
-        m.insert("yanked".to_string(), self.yanked.to_json());
-        m.insert("doc_targets".to_string(), self.doc_targets.to_json());
-        m.insert("license".to_string(), self.license.to_json());
-        m.insert(
-            "documentation_url".to_string(),
-            self.documentation_url.to_json(),
-        );
-        m.to_json()
+
+        state.serialize_field("release_time", &duration_to_str(self.release_time))?;
+        state.serialize_field("build_status", &self.build_status)?;
+        state.serialize_field("last_successful_build", &self.last_successful_build)?;
+        state.serialize_field("rustdoc_status", &self.rustdoc_status)?;
+        state.serialize_field("repository_url", &self.repository_url)?;
+        state.serialize_field("homepage_url", &self.homepage_url)?;
+        state.serialize_field("keywords", &self.keywords)?;
+        state.serialize_field("have_examples", &self.have_examples)?;
+        state.serialize_field("target_name", &self.target_name)?;
+        state.serialize_field("releases", &self.releases)?;
+        state.serialize_field("github", &self.github)?;
+        state.serialize_field("github_stars", &self.github_stars)?;
+        state.serialize_field("github_forks", &self.github_forks)?;
+        state.serialize_field("github_issues", &self.github_issues)?;
+        state.serialize_field("metadata", &self.metadata)?;
+        state.serialize_field("is_library", &self.is_library)?;
+        state.serialize_field("doc_targets", &self.doc_targets)?;
+        state.serialize_field("yanked", &self.yanked)?;
+        state.serialize_field("license", &self.license)?;
+        state.serialize_field("documentation_url", &self.documentation_url)?;
+
+        state.end()
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Serialize)]
 pub struct Release {
     pub version: String,
     pub build_status: bool,
     pub yanked: bool,
-}
-
-impl ToJson for Release {
-    fn to_json(&self) -> Json {
-        let mut m: BTreeMap<String, Json> = BTreeMap::new();
-        m.insert("version".to_string(), self.version.to_json());
-        m.insert("build_status".to_string(), self.build_status.to_json());
-        m.insert("yanked".to_string(), self.yanked.to_json());
-        m.to_json()
-    }
 }
 
 impl CrateDetails {
@@ -158,11 +147,11 @@ impl CrateDetails {
         // sort versions with semver
         let releases = {
             let mut versions: Vec<semver::Version> = Vec::new();
-            let versions_from_db: Json = rows.get(0).get(17);
+            let versions_from_db: Value = rows.get(0).get(17);
 
             if let Some(vers) = versions_from_db.as_array() {
                 for version in vers {
-                    if let Some(version) = version.as_string() {
+                    if let Some(version) = version.as_str() {
                         if let Ok(sem_ver) = semver::Version::parse(&version) {
                             versions.push(sem_ver);
                         }
@@ -188,12 +177,12 @@ impl CrateDetails {
         };
 
         let doc_targets = {
-            let data: Json = rows.get(0).get(23);
+            let data: Value = rows.get(0).get(23);
             data.as_array()
                 .map(|array| {
                     array
                         .iter()
-                        .filter_map(|item| item.as_string().map(|s| s.to_owned()))
+                        .filter_map(|item| item.as_str().map(|s| s.to_owned()))
                         .collect()
                 })
                 .unwrap_or_else(Vec::new)
@@ -308,6 +297,7 @@ impl CrateDetails {
             target_name: "x86_64-unknown-linux-gnu".to_string(),
             releases: vec![],
             github: true,
+            yanked: false,
             github_stars: None,
             github_forks: None,
             github_issues: None,
@@ -384,6 +374,7 @@ mod tests {
     use super::*;
     use crate::test::TestDatabase;
     use failure::Error;
+    use serde_json::json;
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -634,96 +625,88 @@ mod tests {
         let time = time::get_time();
         let mut details = CrateDetails::default_tester(time);
 
-        let correct_json = Json::from_str(&format!(
-            r#"{{
-                "name": "rcc",
-                "version": "100.0.0",
-                "description": null,
-                "authors": [],
-                "owners": [],
-                "authors_json": null,
-                "dependencies": null,
-                "release_time": "{}",
-                "build_status": true,
-                "last_successful_build": null,
+        let correct_json = json!({
+            "name": "rcc",
+            "version": "100.0.0",
+            "description": null,
+            "authors": [],
+            "owners": [],
+            "authors_json": null,
+            "dependencies": null,
+            "release_time": super::super::duration_to_str(time),
+            "build_status": true,
+            "last_successful_build": null,
+            "rustdoc_status": true,
+            "repository_url": null,
+            "homepage_url": null,
+            "keywords": null,
+            "have_examples": true,
+            "target_name": "x86_64-unknown-linux-gnu",
+            "releases": [],
+            "github": true,
+            "github_stars": null,
+            "github_forks": null,
+            "github_issues": null,
+            "metadata": {
+                "name": "serde",
+                "version": "1.0.0",
+                "description": "serde does stuff",
+                "target_name": null,
                 "rustdoc_status": true,
-                "repository_url": null,
-                "homepage_url": null,
-                "keywords": null,
-                "have_examples": true,
-                "target_name": "x86_64-unknown-linux-gnu",
-                "releases": [],
-                "github": true,
-                "github_stars": null,
-                "github_forks": null,
-                "github_issues": null,
-                "metadata": {{
-                    "name": "serde",
-                    "version": "1.0.0",
-                    "description": "serde does stuff",
-                    "target_name": null,
-                    "rustdoc_status": true,
-                    "default_target": "x86_64-unknown-linux-gnu"
-                }},
-                "is_library": true,
-                "doc_targets": [],
-                "license": null,
-                "documentation_url": null
-            }}"#,
-            super::super::duration_to_str(time),
-        ))
-        .unwrap();
+                "default_target": "x86_64-unknown-linux-gnu"
+            },
+            "is_library": true,
+            "doc_targets": [],
+            "license": null,
+            "documentation_url": null
+        });
 
-        assert_eq!(correct_json, details.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
 
         details.description = Some("serde does stuff".to_string());
         details.owners = vec![("Owner".to_string(), "owner@ownsstuff.com".to_string())];
 
         let authors = vec![("Somebody".to_string(), "somebody@somebody.com".to_string())];
-        details.authors_json = Some(authors.to_json());
+        details.authors_json = Some(serde_json::to_value(&authors).unwrap());
         details.authors = authors;
 
-        let correct_json = Json::from_str(&format!(
-            r#"{{
-                "name": "rcc",
-                "version": "100.0.0",
+        let correct_json = json!({
+            "name": "rcc",
+            "version": "100.0.0",
+            "description": "serde does stuff",
+            "authors": [["Somebody", "somebody@somebody.com"]],
+            "owners": [["Owner", "owner@ownsstuff.com"]],
+            "authors_json": [["Somebody", "somebody@somebody.com"]],
+            "dependencies": null,
+            "release_time": super::super::duration_to_str(time),
+            "build_status": true,
+            "last_successful_build": null,
+            "rustdoc_status": true,
+            "repository_url": null,
+            "homepage_url": null,
+            "keywords": null,
+            "have_examples": true,
+            "target_name": "x86_64-unknown-linux-gnu",
+            "releases": [],
+            "github": true,
+            "github_stars": null,
+            "github_forks": null,
+            "github_issues": null,
+            "metadata": {
+                "name": "serde",
+                "version": "1.0.0",
                 "description": "serde does stuff",
-                "authors": [["Somebody", "somebody@somebody.com"]],
-                "owners": [["Owner", "owner@ownsstuff.com"]],
-                "authors_json": [["Somebody", "somebody@somebody.com"]],
-                "dependencies": null,
-                "release_time": "{}",
-                "build_status": true,
-                "last_successful_build": null,
+                "target_name": null,
                 "rustdoc_status": true,
-                "repository_url": null,
-                "homepage_url": null,
-                "keywords": null,
-                "have_examples": true,
-                "target_name": "x86_64-unknown-linux-gnu",
-                "releases": [],
-                "github": true,
-                "github_stars": null,
-                "github_forks": null,
-                "github_issues": null,
-                "metadata": {{
-                    "name": "serde",
-                    "version": "1.0.0",
-                    "description": "serde does stuff",
-                    "target_name": null,
-                    "rustdoc_status": true,
-                    "default_target": "x86_64-unknown-linux-gnu"
-                }},
-                "is_library": true,
-                "doc_targets": [],
-                "license": null,
-                "documentation_url": null
-            }}"#,
-            super::super::duration_to_str(time),
-        ))
-        .unwrap();
+                "default_target": "x86_64-unknown-linux-gnu"
+            },
+            "is_library": true,
+            "doc_targets": [],
+            "license": null,
+            "documentation_url": null
+        });
 
-        assert_eq!(correct_json, details.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
     }
 
     #[test]
@@ -734,14 +717,11 @@ mod tests {
             yanked: true,
         };
 
-        let correct_json = Json::from_str(
-            r#"{
-                "version": "idkman",
-                "build_status": true
-            }"#,
-        )
-        .unwrap();
+        let correct_json = json!({
+            "version": "idkman",
+            "build_status": true
+        });
 
-        assert_eq!(correct_json, release.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
     }
 }

@@ -10,11 +10,11 @@ use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Connection;
-use rustc_serialize::json::ToJson;
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
@@ -246,7 +246,7 @@ impl RustwideBuilder {
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
-                    &[&self.rustc_version.to_json()],
+                    &[&Value::String(self.rustc_version.clone())],
                 )?;
 
                 Ok(())

@@ -8,7 +8,7 @@ use crate::error::Result;
 use crate::storage::Storage;
 use postgres::Connection;
 
-use rustc_serialize::json::{Json, ToJson};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 pub(crate) use crate::storage::Blob;
@@ -30,21 +30,24 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     conn: &Connection,
     prefix: &str,
     path: P,
-) -> Result<Json> {
+) -> Result<Value> {
     let mut backend = Storage::new(conn);
     let file_list = backend.store_all(conn, prefix, path.as_ref())?;
     file_list_to_json(file_list.into_iter().collect())
 }
 
-fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Json> {
-    let mut file_list_json: Vec<Json> = Vec::new();
+fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Value> {
+    let mut file_list_json: Vec<Value> = Vec::new();
 
     for file in file_list {
-        let mut v: Vec<String> = Vec::with_capacity(2);
-        v.push(file.1);
-        v.push(file.0.into_os_string().into_string().unwrap());
-        file_list_json.push(v.to_json());
+        let mut v = Vec::with_capacity(2);
+        v.push(Value::String(file.1));
+        v.push(Value::String(
+            file.0.into_os_string().into_string().unwrap(),
+        ));
+
+        file_list_json.push(Value::Array(v));
     }
 
-    Ok(file_list_json.to_json())
+    Ok(Value::Array(file_list_json))
 }

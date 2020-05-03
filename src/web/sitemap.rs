@@ -2,7 +2,7 @@ use super::page::Page;
 use super::pool::Pool;
 use iron::headers::ContentType;
 use iron::prelude::*;
-use rustc_serialize::json::{Json, ToJson};
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
@@ -41,16 +41,16 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
 
     if let Some(row) = res.iter().next() {
-        if let Some(Ok::<Json, _>(res)) = row.get_opt(0) {
-            if let Some(vers) = res.as_string() {
-                content.insert("rustc_version".to_string(), vers.to_json());
+        if let Some(Ok::<Value, _>(res)) = row.get_opt(0) {
+            if let Some(vers) = res.as_str() {
+                content.insert("rustc_version".to_string(), Value::String(vers.to_string()));
             }
         }
     }
 
     content.insert(
         "limits".to_string(),
-        crate::docbuilder::Limits::default().for_website().to_json(),
+        serde_json::to_value(&crate::docbuilder::Limits::default().for_website()).unwrap(),
     );
 
     Page::new(content).title("About Docs.rs").to_resp("about")

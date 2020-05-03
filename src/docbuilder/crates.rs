@@ -1,10 +1,9 @@
 use crate::error::Result;
 use failure::err_msg;
-use rustc_serialize::json::Json;
-use std::fs;
+use serde_json::Value;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf, str::FromStr};
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
 where
@@ -24,7 +23,7 @@ where
             continue;
         };
 
-        let data = if let Ok(data) = Json::from_str(line.trim()) {
+        let data = if let Ok(data) = Value::from_str(line.trim()) {
             data
         } else {
             continue;
@@ -35,19 +34,15 @@ where
             .ok_or_else(|| err_msg("Not a JSON object"))?;
         let crate_name = obj
             .get("name")
-            .and_then(|n| n.as_string())
+            .and_then(|n| n.as_str())
             .ok_or_else(|| err_msg("`name` not found in JSON object"))?;
         let vers = obj
             .get("vers")
-            .and_then(|n| n.as_string())
+            .and_then(|n| n.as_str())
             .ok_or_else(|| err_msg("`vers` not found in JSON object"))?;
 
         // Skip yanked crates
-        if obj
-            .get("yanked")
-            .and_then(|n| n.as_boolean())
-            .unwrap_or(false)
-        {
+        if obj.get("yanked").and_then(|n| n.as_bool()).unwrap_or(false) {
             continue;
         }
 

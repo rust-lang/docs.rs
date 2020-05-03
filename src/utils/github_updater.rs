@@ -2,6 +2,7 @@ use crate::{db::connect_db, error::Result};
 use failure::err_msg;
 use log::debug;
 use regex::Regex;
+use std::str::FromStr;
 
 /// Fields we need use in cratesfyi
 #[derive(Debug)]
@@ -72,7 +73,7 @@ pub fn github_updater() -> Result<()> {
 }
 
 fn get_github_fields(path: &str) -> Result<GitHubFields> {
-    use rustc_serialize::json::Json;
+    use serde_json::Value;
 
     let body = {
         use reqwest::header::USER_AGENT;
@@ -105,13 +106,13 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
         body
     };
 
-    let json = Json::from_str(&body[..])?;
+    let json = Value::from_str(&body[..])?;
     let obj = json.as_object().unwrap();
 
     Ok(GitHubFields {
         description: obj
             .get("description")
-            .and_then(|d| d.as_string())
+            .and_then(|d| d.as_str())
             .unwrap_or("")
             .to_string(),
         stars: obj
@@ -121,9 +122,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
         forks: obj.get("forks_count").and_then(|d| d.as_i64()).unwrap_or(0),
         issues: obj.get("open_issues").and_then(|d| d.as_i64()).unwrap_or(0),
         last_commit: time::strptime(
-            obj.get("pushed_at")
-                .and_then(|d| d.as_string())
-                .unwrap_or(""),
+            obj.get("pushed_at").and_then(|d| d.as_str()).unwrap_or(""),
             "%Y-%m-%dT%H:%M:%S",
         )
         .unwrap_or_else(|_| time::now())

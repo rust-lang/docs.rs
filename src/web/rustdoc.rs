@@ -15,8 +15,7 @@ use iron::Handler;
 use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
-use rustc_serialize::json::{Json, ToJson};
-use std::collections::BTreeMap;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 #[derive(Debug, Default)]
 struct RustdocPage {
@@ -30,19 +29,23 @@ struct RustdocPage {
     crate_details: Option<CrateDetails>,
 }
 
-impl ToJson for RustdocPage {
-    fn to_json(&self) -> Json {
-        let mut m: BTreeMap<String, Json> = BTreeMap::new();
-        m.insert("rustdoc_head".to_string(), self.head.to_json());
-        m.insert("rustdoc_body".to_string(), self.body.to_json());
-        m.insert("rustdoc_body_class".to_string(), self.body_class.to_json());
-        m.insert("rustdoc_full".to_string(), self.full.to_json());
-        m.insert("rustdoc_status".to_string(), true.to_json());
-        m.insert("name".to_string(), self.name.to_json());
-        m.insert("version".to_string(), self.version.to_json());
-        m.insert("description".to_string(), self.description.to_json());
-        m.insert("crate_details".to_string(), self.crate_details.to_json());
-        m.to_json()
+impl Serialize for RustdocPage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("RustdocPage", 9)?;
+        state.serialize_field("rustdoc_head", &self.head)?;
+        state.serialize_field("rustdoc_body", &self.body)?;
+        state.serialize_field("rustdoc_body_class", &self.body_class)?;
+        state.serialize_field("rustdoc_full", &self.full)?;
+        state.serialize_field("rustdoc_status", &true)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("description", &self.description)?;
+        state.serialize_field("crate_details", &self.crate_details)?;
+
+        state.end()
     }
 }
 
@@ -544,6 +547,7 @@ mod test {
     use super::*;
     use crate::test::*;
     use reqwest::StatusCode;
+    use serde_json::json;
     use std::{collections::BTreeMap, iter::FromIterator};
 
     fn try_latest_version_redirect(
@@ -1345,46 +1349,44 @@ mod test {
         })
     }
 
+    #[test]
     fn serialize_rustdoc_page() {
         let time = time::get_time();
-        let details = format!(
-            r#"{{
-                "name": "rcc",
-                "version": "100.0.0",
-                "description": null,
-                "authors": [],
-                "owners": [],
-                "authors_json": null,
-                "dependencies": null,
-                "release_time": "{}",
-                "build_status": true,
-                "last_successful_build": null,
+        let details = json!({
+            "name": "rcc",
+            "version": "100.0.0",
+            "description": null,
+            "authors": [],
+            "owners": [],
+            "authors_json": null,
+            "dependencies": null,
+            "release_time": super::super::duration_to_str(time),
+            "build_status": true,
+            "last_successful_build": null,
+            "rustdoc_status": true,
+            "repository_url": null,
+            "homepage_url": null,
+            "keywords": null,
+            "have_examples": true,
+            "target_name": "x86_64-unknown-linux-gnu",
+            "releases": [],
+            "github": true,
+            "github_stars": null,
+            "github_forks": null,
+            "github_issues": null,
+            "metadata": {
+                "name": "serde",
+                "version": "1.0.0",
+                "description": "serde does stuff",
+                "target_name": null,
                 "rustdoc_status": true,
-                "repository_url": null,
-                "homepage_url": null,
-                "keywords": null,
-                "have_examples": true,
-                "target_name": "x86_64-unknown-linux-gnu",
-                "releases": [],
-                "github": true,
-                "github_stars": null,
-                "github_forks": null,
-                "github_issues": null,
-                "metadata": {{
-                    "name": "serde",
-                    "version": "1.0.0",
-                    "description": "serde does stuff",
-                    "target_name": null,
-                    "rustdoc_status": true,
-                    "default_target": "x86_64-unknown-linux-gnu"
-                }},
-                "is_library": true,
-                "doc_targets": [],
-                "license": null,
-                "documentation_url": null
-            }}"#,
-            super::super::duration_to_str(time),
-        );
+                "default_target": "x86_64-unknown-linux-gnu"
+            },
+            "is_library": true,
+            "doc_targets": [],
+            "license": null,
+            "documentation_url": null
+        });
 
         let mut page = RustdocPage {
             head: "<head><title>Whee</title></head>".to_string(),
@@ -1397,59 +1399,48 @@ mod test {
             crate_details: Some(CrateDetails::default_tester(time)),
         };
 
-        let correct_json = Json::from_str(&format!(
-            r#"{{
-                "rustdoc_head": "<head><title>Whee</title></head>",
-                "rustdoc_body": "<body><h1>idk</h1></body>",
-                "rustdoc_body_class": "docsrs-body",
-                "rustdoc_full": "??",
-                "rustdoc_status": true,
-                "name": "rcc",
-                "version": "100.0.100",
-                "description": "a Rust compiler in C. Wait, maybe the other way around",
-                "crate_details": {}
-            }}"#,
-            details,
-        ))
-        .unwrap();
+        let correct_json = json!({
+            "rustdoc_head": "<head><title>Whee</title></head>",
+            "rustdoc_body": "<body><h1>idk</h1></body>",
+            "rustdoc_body_class": "docsrs-body",
+            "rustdoc_full": "??",
+            "rustdoc_status": true,
+            "name": "rcc",
+            "version": "100.0.100",
+            "description": "a Rust compiler in C. Wait, maybe the other way around",
+            "crate_details": details
+        });
 
-        assert_eq!(correct_json, page.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
 
         page.description = None;
-        let correct_json = Json::from_str(&format!(
-            r#"{{
-                "rustdoc_head": "<head><title>Whee</title></head>",
-                "rustdoc_body": "<body><h1>idk</h1></body>",
-                "rustdoc_body_class": "docsrs-body",
-                "rustdoc_full": "??",
-                "rustdoc_status": true,
-                "name": "rcc",
-                "version": "100.0.100",
-                "description": null,
-                "crate_details": {}
-            }}"#,
-            details,
-        ))
-        .unwrap();
+        let correct_json = json!({
+            "rustdoc_head": "<head><title>Whee</title></head>",
+            "rustdoc_body": "<body><h1>idk</h1></body>",
+            "rustdoc_body_class": "docsrs-body",
+            "rustdoc_full": "??",
+            "rustdoc_status": true,
+            "name": "rcc",
+            "version": "100.0.100",
+            "description": null,
+            "crate_details": details
+        });
 
-        assert_eq!(correct_json, page.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
 
         page.crate_details = None;
-        let correct_json = Json::from_str(
-            r#"{
-                "rustdoc_head": "<head><title>Whee</title></head>",
-                "rustdoc_body": "<body><h1>idk</h1></body>",
-                "rustdoc_body_class": "docsrs-body",
-                "rustdoc_full": "??",
-                "rustdoc_status": true,
-                "name": "rcc",
-                "version": "100.0.100",
-                "description": null,
-                "crate_details": null
-            }"#,
-        )
-        .unwrap();
+        let correct_json = json!({
+            "rustdoc_head": "<head><title>Whee</title></head>",
+            "rustdoc_body": "<body><h1>idk</h1></body>",
+            "rustdoc_body_class": "docsrs-body",
+            "rustdoc_full": "??",
+            "rustdoc_status": true,
+            "name": "rcc",
+            "version": "100.0.100",
+            "description": null,
+            "crate_details": null
+        });
 
-        assert_eq!(correct_json, page.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
     }
 }
