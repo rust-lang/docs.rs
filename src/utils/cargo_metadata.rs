@@ -1,5 +1,6 @@
 use crate::error::Result;
 use rustwide::{cmd::Command, Toolchain, Workspace};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -23,7 +24,7 @@ impl CargoMetadata {
 
         let mut iter = res.stdout_lines().iter();
         let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
-            ::rustc_serialize::json::decode::<DeserializedMetadata>(serialized)?
+            serde_json::from_str::<DeserializedMetadata>(serialized)?
         } else {
             return Err(::failure::err_msg(
                 "invalid output returned by `cargo metadata`",
@@ -61,7 +62,7 @@ impl CargoMetadata {
     }
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct Package {
     pub(crate) id: String,
     pub(crate) name: String,
@@ -104,7 +105,7 @@ impl Package {
     }
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct Target {
     pub(crate) name: String,
     #[cfg(not(test))]
@@ -125,32 +126,32 @@ impl Target {
     }
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,
     pub(crate) kind: Option<String>,
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 struct DeserializedMetadata {
     packages: Vec<Package>,
     resolve: DeserializedResolve,
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 struct DeserializedResolve {
     root: String,
     nodes: Vec<DeserializedResolveNode>,
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 struct DeserializedResolveNode {
     id: String,
     deps: Vec<DeserializedResolveDep>,
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize, Serialize)]
 struct DeserializedResolveDep {
     pkg: String,
 }

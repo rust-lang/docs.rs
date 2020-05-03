@@ -4,7 +4,7 @@ use crate::{error::Result, utils::MetadataPackage};
 
 use failure::err_msg;
 use reqwest::{header::ACCEPT, Client};
-use rustc_serialize::json::Json;
+use serde_json::Value;
 use time::Timespec;
 
 pub(crate) struct RegistryCrateData {
@@ -47,7 +47,7 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Tim
         .send()?;
     let mut body = String::new();
     res.read_to_string(&mut body).unwrap();
-    let json = Json::from_str(&body[..]).unwrap();
+    let json: Value = serde_json::from_str(&body[..])?;
     let versions = json
         .as_object()
         .and_then(|o| o.get("versions"))
@@ -62,13 +62,13 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Tim
             .ok_or_else(|| err_msg("Not a JSON object"))?;
         let version_num = version
             .get("num")
-            .and_then(|v| v.as_string())
+            .and_then(|v| v.as_str())
             .ok_or_else(|| err_msg("Not a JSON object"))?;
 
         if semver::Version::parse(version_num).unwrap().to_string() == pkg.version {
             let release_time_raw = version
                 .get("created_at")
-                .and_then(|c| c.as_string())
+                .and_then(|c| c.as_str())
                 .ok_or_else(|| err_msg("Not a JSON object"))?;
             release_time = Some(
                 time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
@@ -79,7 +79,7 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Tim
             yanked = Some(
                 version
                     .get("yanked")
-                    .and_then(|c| c.as_boolean())
+                    .and_then(|c| c.as_bool())
                     .ok_or_else(|| err_msg("Not a JSON object"))?,
             );
 
@@ -114,7 +114,7 @@ fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
     //        and so many unwraps...
     let mut body = String::new();
     res.read_to_string(&mut body).unwrap();
-    let json = Json::from_str(&body[..])?;
+    let json: Value = serde_json::from_str(&body[..])?;
 
     let mut result = Vec::new();
     if let Some(owners) = json
@@ -127,22 +127,22 @@ fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
             let avatar = owner
                 .as_object()
                 .and_then(|o| o.get("avatar"))
-                .and_then(|o| o.as_string())
+                .and_then(|o| o.as_str())
                 .unwrap_or("");
             let email = owner
                 .as_object()
                 .and_then(|o| o.get("email"))
-                .and_then(|o| o.as_string())
+                .and_then(|o| o.as_str())
                 .unwrap_or("");
             let login = owner
                 .as_object()
                 .and_then(|o| o.get("login"))
-                .and_then(|o| o.as_string())
+                .and_then(|o| o.as_str())
                 .unwrap_or("");
             let name = owner
                 .as_object()
                 .and_then(|o| o.get("name"))
-                .and_then(|o| o.as_string())
+                .and_then(|o| o.as_str())
                 .unwrap_or("");
 
             if login.is_empty() {

@@ -3,7 +3,8 @@
 use handlebars_iron::Template;
 use iron::response::Response;
 use iron::{status, IronResult, Set};
-use rustc_serialize::json::{Json, ToJson};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde_json::Value;
 use std::collections::BTreeMap;
 
 lazy_static::lazy_static! {
@@ -22,8 +23,8 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
         failure::bail!("missing rustc version");
     }
 
-    if let Some(Ok(vers)) = res.get(0).get_opt::<_, Json>("value") {
-        if let Some(vers_str) = vers.as_string() {
+    if let Some(Ok(vers)) = res.get(0).get_opt::<_, Value>("value") {
+        if let Some(vers_str) = vers.as_str() {
             return Ok(crate::utils::parse_rustc_version(vers_str)?);
         }
     }
@@ -31,7 +32,7 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
     failure::bail!("failed to parse the rustc version");
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,
     pub(crate) text: &'static str,
@@ -39,19 +40,8 @@ pub(crate) struct GlobalAlert {
     pub(crate) fa_icon: &'static str,
 }
 
-impl ToJson for GlobalAlert {
-    fn to_json(&self) -> Json {
-        let mut map = BTreeMap::new();
-        map.insert("url".to_string(), self.url.to_json());
-        map.insert("text".to_string(), self.text.to_json());
-        map.insert("css_class".to_string(), self.css_class.to_json());
-        map.insert("fa_icon".to_string(), self.fa_icon.to_json());
-        Json::Object(map)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Page<T: ToJson> {
+pub struct Page<T: Serialize> {
     title: Option<String>,
     content: T,
     status: status::Status,
@@ -61,7 +51,7 @@ pub struct Page<T: ToJson> {
     rustc_resource_suffix: &'static str,
 }
 
-impl<T: ToJson> Page<T> {
+impl<T: Serialize> Page<T> {
     pub fn new(content: T) -> Page<T> {
         Page {
             title: None,
@@ -121,43 +111,37 @@ impl<T: ToJson> Page<T> {
     }
 }
 
-impl<T: ToJson> ToJson for Page<T> {
-    fn to_json(&self) -> Json {
-        let mut tree = BTreeMap::new();
+impl<T: Serialize> Serialize for Page<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Page", 10)?;
 
         if let Some(ref title) = self.title {
-            tree.insert("title".to_owned(), title.to_json());
+            state.serialize_field("title", title)?;
         }
 
-        tree.insert(
-            "has_global_alert".to_owned(),
-            crate::GLOBAL_ALERT.is_some().to_json(),
-        );
+        state.serialize_field("has_global_alert", &crate::GLOBAL_ALERT.is_some())?;
         if let Some(ref global_alert) = crate::GLOBAL_ALERT {
-            tree.insert("global_alert".to_owned(), global_alert.to_json());
+            state.serialize_field("global_alert", global_alert)?;
         }
 
-        tree.insert("content".to_owned(), self.content.to_json());
-        tree.insert(
-            "rustc_resource_suffix".to_owned(),
-            self.rustc_resource_suffix.to_json(),
-        );
-        tree.insert(
-            "cratesfyi_version".to_owned(),
-            crate::BUILD_VERSION.to_json(),
-        );
-        tree.insert(
-            "cratesfyi_version_safe".to_owned(),
-            crate::BUILD_VERSION
+        state.serialize_field("content", &self.content)?;
+        state.serialize_field("rustc_resource_suffix", self.rustc_resource_suffix)?;
+        state.serialize_field("cratesfyi_version", crate::BUILD_VERSION)?;
+        state.serialize_field(
+            "cratesfyi_version_safe",
+            &crate::BUILD_VERSION
                 .replace(" ", "-")
                 .replace("(", "")
-                .replace(")", "")
-                .to_json(),
-        );
-        tree.insert("varss".to_owned(), self.varss.to_json());
-        tree.insert("varsb".to_owned(), self.varsb.to_json());
-        tree.insert("varsi".to_owned(), self.varsi.to_json());
-        Json::Object(tree)
+                .replace(")", ""),
+        )?;
+        state.serialize_field("varss", &self.varss)?;
+        state.serialize_field("varsb", &self.varsb)?;
+        state.serialize_field("varsi", &self.varsi)?;
+
+        state.end()
     }
 }
 
@@ -165,7 +149,7 @@ impl<T: ToJson> ToJson for Page<T> {
 mod tests {
     use super::super::releases::{self, Release};
     use super::*;
-    use rustc_serialize::json::Json;
+    use serde_json::json;
 
     #[test]
     fn serialize_page() {
@@ -193,43 +177,30 @@ mod tests {
             rustc_resource_suffix: &*RUSTC_RESOURCE_SUFFIX,
         };
 
-        let correct_json = format!(
-            r#"{{
-                "content": [{{
-                    "name": "lasso",
-                    "version": "0.1.0",
-                    "description": null,
-                    "target_name": null,
-                    "rustdoc_status": false,
-                    "release_time": "{}",
-                    "release_time_rfc3339": "{}",
-                    "stars": 0
-                }}],
-                "varss": {{ "test": "works" }},
-                "varsb": {{ "test2": true }},
-                "varsi": {{ "test3": 1337 }},
-                "rustc_resource_suffix": "{}",
-                "cratesfyi_version": "{}",
-                "cratesfyi_version_safe": "{}",
-                "has_global_alert": {}
-            }}"#,
-            super::super::duration_to_str(time.clone()),
-            time::at(time).rfc3339().to_string(),
-            &*RUSTC_RESOURCE_SUFFIX,
-            crate::BUILD_VERSION,
-            crate::BUILD_VERSION
+        let correct_json = json!({
+            "content": [{
+                "name": "lasso",
+                "version": "0.1.0",
+                "description": null,
+                "target_name": null,
+                "rustdoc_status": false,
+                "release_time": super::super::duration_to_str(time),
+                "release_time_rfc3339": time::at(time).rfc3339().to_string(),
+                "stars": 0
+            }],
+            "varss": { "test": "works" },
+            "varsb": { "test2": true },
+            "varsi": { "test3": 1337 },
+            "rustc_resource_suffix": &*RUSTC_RESOURCE_SUFFIX,
+            "cratesfyi_version": crate::BUILD_VERSION,
+            "cratesfyi_version_safe": crate::BUILD_VERSION
                 .replace(" ", "-")
                 .replace("(", "")
                 .replace(")", ""),
-            crate::GLOBAL_ALERT.is_some(),
-        );
+            "has_global_alert": crate::GLOBAL_ALERT.is_some()
+        });
 
-        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
-        // u64s for `Json::from_str`, which makes everything in the respective `varsi` unequal
-        assert_eq!(
-            Json::from_str(&correct_json).unwrap().to_string(),
-            page.to_json().to_string()
-        );
+        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
     }
 
     #[test]
@@ -272,16 +243,13 @@ mod tests {
             fa_icon: "https://gph.is/1uOvmqR",
         };
 
-        let correct_json = Json::from_str(
-            r#"{
+        let correct_json = json!({
             "url": "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
             "text": "THE WORLD IS ENDING",
             "css_class": "THE END IS NEAR",
             "fa_icon": "https://gph.is/1uOvmqR"
-        }"#,
-        )
-        .unwrap();
+        });
 
-        assert_eq!(correct_json, alert.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&alert).unwrap());
     }
 }

@@ -10,12 +10,11 @@ use crate::{
     index::api::{CrateOwner, RegistryCrateData},
     utils::MetadataPackage,
 };
-
 use log::debug;
 use postgres::Connection;
 use regex::Regex;
-use rustc_serialize::json::{Json, ToJson};
 use semver::Version;
+use serde_json::Value;
 use slug::slugify;
 
 /// Adds a package into database.
@@ -31,7 +30,7 @@ pub(crate) fn add_package_into_database(
     source_dir: &Path,
     res: &BuildResult,
     default_target: &str,
-    source_files: Option<Json>,
+    source_files: Option<Value>,
     doc_targets: Vec<String>,
     cratesio_data: &RegistryCrateData,
     has_docs: bool,
@@ -88,7 +87,7 @@ pub(crate) fn add_package_into_database(
             &crate_id,
             &metadata_pkg.version,
             &cratesio_data.release_time,
-            &dependencies.to_json(),
+            &serde_json::to_value(&dependencies)?,
             &metadata_pkg.package_name(),
             &cratesio_data.yanked,
             &res.successful,
@@ -100,12 +99,12 @@ pub(crate) fn add_package_into_database(
             &metadata_pkg.description,
             &rustdoc,
             &readme,
-            &metadata_pkg.authors.to_json(),
-            &metadata_pkg.keywords.to_json(),
+            &serde_json::to_value(&metadata_pkg.authors)?,
+            &serde_json::to_value(&metadata_pkg.keywords)?,
             &has_examples,
             &cratesio_data.downloads,
             &source_files,
-            &doc_targets.to_json(),
+            &serde_json::to_value(&doc_targets)?,
             &is_library,
             &res.rustc_version,
             &metadata_pkg.documentation,
@@ -122,20 +121,21 @@ pub(crate) fn add_package_into_database(
     // Update versions
     {
         let metadata_version = Version::parse(&metadata_pkg.version)?;
-        let mut versions: Json = conn
+        let mut versions: Value = conn
             .query("SELECT versions FROM crates WHERE id = $1", &[&crate_id])?
             .get(0)
             .get(0);
         if let Some(versions_array) = versions.as_array_mut() {
             let mut found = false;
             for version in versions_array.clone() {
-                let version = Version::parse(version.as_string().unwrap())?;
+                let version = Version::parse(version.as_str().unwrap())?;
                 if version == metadata_version {
                     found = true;
                 }
             }
+
             if !found {
-                versions_array.push(metadata_pkg.version.to_string().to_json());
+                versions_array.push(Value::String(metadata_pkg.version.clone()));
             }
         }
         let _ = conn.query(

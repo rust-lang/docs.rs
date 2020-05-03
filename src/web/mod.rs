@@ -63,14 +63,10 @@ use iron::prelude::*;
 use iron::{self, status, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
-use rustc_serialize::json::{Json, ToJson};
 use semver::{Version, VersionReq};
 use staticfile::Static;
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::time::Duration;
-use std::{env, fmt};
+use std::{env, fmt, path::PathBuf, time::Duration};
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -514,7 +510,7 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 /// MetaData used in header
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct MetaData {
     pub(crate) name: String,
     pub(crate) version: String,
@@ -554,20 +550,6 @@ impl MetaData {
     }
 }
 
-impl ToJson for MetaData {
-    fn to_json(&self) -> Json {
-        let mut m: BTreeMap<String, Json> = BTreeMap::new();
-        m.insert("name".to_owned(), self.name.to_json());
-        m.insert("version".to_owned(), self.version.to_json());
-        m.insert("description".to_owned(), self.description.to_json());
-        m.insert("target_name".to_owned(), self.target_name.to_json());
-        m.insert("rustdoc_status".to_owned(), self.rustdoc_status.to_json());
-        m.insert("default_target".to_owned(), self.default_target.to_json());
-
-        m.to_json()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -576,7 +558,7 @@ mod test {
         web::{handlebars_engine, match_version},
     };
     use html5ever::tendril::TendrilSink;
-    use rustc_serialize::json::Json;
+    use serde_json::json;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
         db.fake_release()
@@ -788,6 +770,7 @@ mod test {
         handlebars_engine().expect("Failed to load handlebar templates");
     }
 
+    #[test]
     fn serialize_metadata() {
         let mut metadata = MetaData {
             name: "serde".to_string(),
@@ -798,48 +781,39 @@ mod test {
             default_target: "x86_64-unknown-linux-gnu".to_string(),
         };
 
-        let correct_json = Json::from_str(
-            r#"{
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            }"#,
-        )
-        .unwrap();
+        let correct_json = json!({
+            "name": "serde",
+            "version": "1.0.0",
+            "description": "serde does stuff",
+            "target_name": null,
+            "rustdoc_status": true,
+            "default_target": "x86_64-unknown-linux-gnu"
+        });
 
-        assert_eq!(correct_json, metadata.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
 
         metadata.target_name = Some("x86_64-apple-darwin".to_string());
-        let correct_json = Json::from_str(
-            r#"{
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": "x86_64-apple-darwin",
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            }"#,
-        )
-        .unwrap();
+        let correct_json = json!({
+            "name": "serde",
+            "version": "1.0.0",
+            "description": "serde does stuff",
+            "target_name": "x86_64-apple-darwin",
+            "rustdoc_status": true,
+            "default_target": "x86_64-unknown-linux-gnu"
+        });
 
-        assert_eq!(correct_json, metadata.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
 
         metadata.description = None;
-        let correct_json = Json::from_str(
-            r#"{
-                "name": "serde",
-                "version": "1.0.0",
-                "description": null,
-                "target_name": "x86_64-apple-darwin",
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            }"#,
-        )
-        .unwrap();
+        let correct_json = json!({
+            "name": "serde",
+            "version": "1.0.0",
+            "description": null,
+            "target_name": "x86_64-apple-darwin",
+            "rustdoc_status": true,
+            "default_target": "x86_64-unknown-linux-gnu"
+        });
 
-        assert_eq!(correct_json, metadata.to_json());
+        assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
     }
 }

@@ -1,7 +1,6 @@
 use crate::db::connect_db;
 use crate::error::Result;
-use rustc_serialize::json::ToJson;
-use std::collections::BTreeMap;
+use serde_json::{Map, Value};
 use time::{now, Duration};
 
 pub fn update_release_activity() -> Result<()> {
@@ -52,12 +51,12 @@ pub fn update_release_activity() -> Result<()> {
     failure_counts.reverse();
 
     let map = {
-        let mut map = BTreeMap::new();
-        map.insert("dates".to_owned(), dates.to_json());
-        map.insert("counts".to_owned(), crate_counts.to_json());
-        map.insert("failures".to_owned(), failure_counts.to_json());
+        let mut map = Map::new();
+        map.insert("dates".to_owned(), serde_json::to_value(dates)?);
+        map.insert("counts".to_owned(), serde_json::to_value(crate_counts)?);
+        map.insert("failures".to_owned(), serde_json::to_value(failure_counts)?);
 
-        map.to_json()
+        Value::Object(map)
     };
 
     conn.query(

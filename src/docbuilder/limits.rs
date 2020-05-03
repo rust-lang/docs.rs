@@ -3,7 +3,7 @@ use postgres::Connection;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Limits {
     memory: usize,
     targets: usize,
