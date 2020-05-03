@@ -516,12 +516,12 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
 /// MetaData used in header
 #[derive(Debug)]
 pub(crate) struct MetaData {
-    name: String,
-    version: String,
-    description: Option<String>,
-    target_name: Option<String>,
-    rustdoc_status: bool,
-    pub default_target: String,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) description: Option<String>,
+    pub(crate) target_name: Option<String>,
+    pub(crate) rustdoc_status: bool,
+    pub(crate) default_target: String,
 }
 
 impl MetaData {
@@ -570,9 +570,10 @@ impl ToJson for MetaData {
 
 #[cfg(test)]
 mod test {
-    use crate::test::*;
-    use crate::web::match_version;
+    use super::*;
+    use crate::{test::*, web::match_version};
     use html5ever::tendril::TendrilSink;
+    use rustc_serialize::json::Json;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
         db.fake_release()
@@ -777,5 +778,61 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn serialize_metadata() {
+        let mut metadata = MetaData {
+            name: "serde".to_string(),
+            version: "1.0.0".to_string(),
+            description: Some("serde does stuff".to_string()),
+            target_name: None,
+            rustdoc_status: true,
+            default_target: "x86_64-unknown-linux-gnu".to_string(),
+        };
+
+        let correct_json = Json::from_str(
+            r#"{
+                "name": "serde",
+                "version": "1.0.0",
+                "description": "serde does stuff",
+                "target_name": null,
+                "rustdoc_status": true,
+                "default_target": "x86_64-unknown-linux-gnu"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, metadata.to_json());
+
+        metadata.target_name = Some("x86_64-apple-darwin".to_string());
+        let correct_json = Json::from_str(
+            r#"{
+                "name": "serde",
+                "version": "1.0.0",
+                "description": "serde does stuff",
+                "target_name": "x86_64-apple-darwin",
+                "rustdoc_status": true,
+                "default_target": "x86_64-unknown-linux-gnu"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, metadata.to_json());
+
+        metadata.description = None;
+        let correct_json = Json::from_str(
+            r#"{
+                "name": "serde",
+                "version": "1.0.0",
+                "description": null,
+                "target_name": "x86_64-apple-darwin",
+                "rustdoc_status": true,
+                "default_target": "x86_64-unknown-linux-gnu"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, metadata.to_json());
     }
 }

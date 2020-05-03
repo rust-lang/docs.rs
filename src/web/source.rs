@@ -9,8 +9,17 @@ use postgres::Connection;
 use router::Router;
 use rustc_serialize::json::{Json, ToJson};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, iter::FromIterator};
 
+/// A source file's type
+///
+/// When serialized into json it takes this form
+///
+/// * `FileType::Dir`: `{ "file_type_dir": true }`
+/// * `FileType::Text`: `{ "file_type_text": true }`
+/// * `FileType::Binary`: `{ "file_type_binary": true }`
+/// * `FileType::RustSource`: `{ "file_type_rust_source": true }`
+///
 #[derive(PartialEq, PartialOrd)]
 enum FileType {
     Dir,
@@ -19,12 +28,116 @@ enum FileType {
     RustSource,
 }
 
+impl ToJson for FileType {
+    fn to_json(&self) -> Json {
+        let key = match self {
+            Self::Dir => "file_type_dir",
+            Self::Text => "file_type_text",
+            Self::Binary => "file_type_binary",
+            Self::RustSource => "file_type_rust_source",
+        };
+
+        Json::Object(BTreeMap::from_iter(vec![(
+            key.to_string(),
+            Json::Boolean(true),
+        )]))
+    }
+}
+
+/// A source file
+///
+/// Rust:
+///
+/// ```ignore
+/// struct File {
+///     name: "main.rs",
+///     file_type: FileType::RustSource,
+/// }
+/// ```
+///
+/// Json:
+///
+/// ```json
+/// {
+///     "name": "main.rs",
+///     "file_type_rust_source": true,
+/// }
+/// ```
+///
 #[derive(PartialEq, PartialOrd)]
 struct File {
     name: String,
     file_type: FileType,
 }
 
+impl ToJson for File {
+    fn to_json(&self) -> Json {
+        let mut file_m: BTreeMap<String, Json> = BTreeMap::new();
+        file_m.insert("name".to_string(), self.name.to_json());
+
+        let file_type = match self.file_type {
+            FileType::Dir => "file_type_dir",
+            FileType::Text => "file_type_text",
+            FileType::Binary => "file_type_binary",
+            FileType::RustSource => "file_type_rust_source",
+        };
+
+        file_m.insert(file_type.to_string(), true.to_json());
+
+        Json::Object(file_m)
+    }
+}
+
+/// A list of source files
+///
+///
+/// Rust:
+///
+/// ```ignore
+/// FileList {
+///     metadata: MetaData {
+///         name: "rcc",
+///         version: "0.0.0",
+///         description: Some("it compiles an unholy language"),
+///         target_name: None,
+///         rustdoc_status: true,
+///         default_target: "x86_64-unknown-linux-gnu",
+///     },
+///     files: vec![
+///         File {
+///             name: "main.rs",
+///             file_type: FileType::RustSource,
+///         },
+///         File {
+///             name: "lib.rs",
+///             file_type: FileType::RustSource,
+///         },
+///     ],
+/// }
+/// ```
+///
+/// Json:
+///
+/// ```json
+/// {
+///     "metadata": {
+///         "name": "rcc",
+///         "version": "0.0.0",
+///         "description": "it compiles an unholy language",
+///         "target_name": null,
+///         "rustdoc_status": true,
+///         "default_target": "x86_64-unknown-linux-gnu",
+///     },
+///     "files": [{
+///         "name": "main.rs",
+///         "file_type_rust_source": true,
+///     }, {
+///         "name": "lib.rs",
+///         "file_type_rust_source": true,
+///     }],
+/// }
+/// ```
+///
 struct FileList {
     metadata: MetaData,
     files: Vec<File>,
@@ -35,6 +148,8 @@ impl ToJson for FileList {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
 
         m.insert("metadata".to_string(), self.metadata.to_json());
+
+        // TODO: file_vec from iter
 
         let mut file_vec: Vec<Json> = Vec::new();
 
@@ -247,5 +362,95 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
             .to_resp("source")
     } else {
         page.to_resp("source")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_file_types() {
+        assert_eq!(
+            Json::from_str(r#"{ "file_type_dir": true }"#).unwrap(),
+            FileType::Dir.to_json(),
+        );
+        assert_eq!(
+            Json::from_str(r#"{ "file_type_text": true }"#).unwrap(),
+            FileType::Text.to_json(),
+        );
+        assert_eq!(
+            Json::from_str(r#"{ "file_type_binary": true }"#).unwrap(),
+            FileType::Binary.to_json(),
+        );
+        assert_eq!(
+            Json::from_str(r#"{ "file_type_rust_source": true }"#).unwrap(),
+            FileType::RustSource.to_json(),
+        );
+    }
+
+    #[test]
+    fn serialize_file() {
+        assert_eq!(
+            Json::from_str(
+                r#"{
+                    "name": "main.rs",
+                    "file_type_rust_source": true
+                }"#
+            )
+            .unwrap(),
+            File {
+                name: "main.rs".to_string(),
+                file_type: FileType::RustSource
+            }
+            .to_json(),
+        );
+    }
+
+    #[test]
+    fn serialize_file_list() {
+        assert_eq!(
+            Json::from_str(
+                r#"{
+                    "metadata": {
+                        "name": "rcc",
+                        "version": "0.0.0",
+                        "description": "it compiles an unholy language",
+                        "target_name": null,
+                        "rustdoc_status": true,
+                        "default_target": "x86_64-unknown-linux-gnu"
+                    },
+                    "files": [{
+                        "name": "main.rs",
+                        "file_type_rust_source": true
+                    }, {
+                        "name": "lib.rs",
+                        "file_type_rust_source": true
+                    }]
+                }"#
+            )
+            .unwrap(),
+            FileList {
+                metadata: MetaData {
+                    name: "rcc".to_string(),
+                    version: "0.0.0".to_string(),
+                    description: Some("it compiles an unholy language".to_string()),
+                    target_name: None,
+                    rustdoc_status: true,
+                    default_target: "x86_64-unknown-linux-gnu".to_string(),
+                },
+                files: vec![
+                    File {
+                        name: "main.rs".to_string(),
+                        file_type: FileType::RustSource
+                    },
+                    File {
+                        name: "lib.rs".to_string(),
+                        file_type: FileType::RustSource
+                    }
+                ],
+            }
+            .to_json(),
+        );
     }
 }

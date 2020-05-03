@@ -18,13 +18,14 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
-    name: String,
-    version: String,
+    pub(crate) name: String,
+    pub(crate) version: String,
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
-    release_time: time::Timespec,
+    pub(crate) release_time: time::Timespec,
     stars: i32,
 }
 
@@ -56,21 +57,27 @@ impl ToJson for Release {
         );
         m.insert(
             "release_time_rfc3339".to_string(),
-            format!("{}", time::at(self.release_time).rfc3339()).to_json(),
+            time::at(self.release_time).rfc3339().to_string().to_json(),
         );
         m.insert("stars".to_string(), self.stars.to_json());
         m.to_json()
     }
 }
 
-enum Order {
+pub(crate) enum Order {
     ReleaseTime, // this is default order
     GithubStars,
     RecentFailures,
     FailuresByGithubStars,
 }
 
-fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
+impl Default for Order {
+    fn default() -> Self {
+        Self::ReleaseTime
+    }
+}
+
+pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
     // TODO: This function changed so much during development and current version have code
@@ -632,4 +639,82 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("show_releases_navigation")
         .set_true("releases_queue_tab")
         .to_resp("releases_queue")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_releases() {
+        let time = time::get_time();
+        let mut release = Release {
+            name: "serde".to_string(),
+            version: "0.0.0".to_string(),
+            description: Some("serde makes things other things".to_string()),
+            target_name: Some("x86_64-pc-windows-msvc".to_string()),
+            rustdoc_status: true,
+            release_time: time,
+            stars: 100,
+        };
+
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+            "name": "serde",
+            "version": "0.0.0",
+            "description": "serde makes things other things",
+            "target_name": "x86_64-pc-windows-msvc",
+            "rustdoc_status": true,
+            "release_time": "{}",
+            "release_time_rfc3339": "{}",
+            "stars": 100
+        }}"#,
+            duration_to_str(time),
+            time::at(time).rfc3339().to_string(),
+        ))
+        .unwrap();
+
+        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
+        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+
+        release.target_name = None;
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+            "name": "serde",
+            "version": "0.0.0",
+            "description": "serde makes things other things",
+            "target_name": null,
+            "rustdoc_status": true,
+            "release_time": "{}",
+            "release_time_rfc3339": "{}",
+            "stars": 100
+        }}"#,
+            duration_to_str(time),
+            time::at(time).rfc3339().to_string(),
+        ))
+        .unwrap();
+
+        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
+        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+
+        release.description = None;
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+            "name": "serde",
+            "version": "0.0.0",
+            "description": null,
+            "target_name": null,
+            "rustdoc_status": true,
+            "release_time": "{}",
+            "release_time_rfc3339": "{}",
+            "stars": 100
+        }}"#,
+            duration_to_str(time),
+            time::at(time).rfc3339().to_string(),
+        ))
+        .unwrap();
+
+        // Have to call `.to_string()` here because of how `rustc_serialize` handles integers
+        assert_eq!(correct_json.to_string(), release.to_json().to_string());
+    }
 }

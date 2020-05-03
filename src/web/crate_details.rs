@@ -276,6 +276,47 @@ impl CrateDetails {
         // releases will always contain at least one element
         &self.releases[0].version
     }
+
+    #[cfg(test)]
+    pub fn default_tester(release_time: time::Timespec) -> Self {
+        Self {
+            name: "rcc".to_string(),
+            version: "100.0.0".to_string(),
+            description: None,
+            authors: vec![],
+            owners: vec![],
+            authors_json: None,
+            dependencies: None,
+            readme: None,
+            rustdoc: None,
+            release_time,
+            build_status: true,
+            last_successful_build: None,
+            rustdoc_status: true,
+            repository_url: None,
+            homepage_url: None,
+            keywords: None,
+            have_examples: true,
+            target_name: "x86_64-unknown-linux-gnu".to_string(),
+            releases: vec![],
+            github: true,
+            github_stars: None,
+            github_forks: None,
+            github_issues: None,
+            metadata: MetaData {
+                name: "serde".to_string(),
+                version: "1.0.0".to_string(),
+                description: Some("serde does stuff".to_string()),
+                target_name: None,
+                rustdoc_status: true,
+                default_target: "x86_64-unknown-linux-gnu".to_string(),
+            },
+            is_library: true,
+            doc_targets: vec![],
+            license: None,
+            documentation_url: None,
+        }
+    }
 }
 
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
@@ -530,5 +571,121 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn serialize_crate_details() {
+        let time = time::get_time();
+        let mut details = CrateDetails::default_tester(time);
+
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+                "name": "rcc",
+                "version": "100.0.0",
+                "description": null,
+                "authors": [],
+                "owners": [],
+                "authors_json": null,
+                "dependencies": null,
+                "release_time": "{}",
+                "build_status": true,
+                "last_successful_build": null,
+                "rustdoc_status": true,
+                "repository_url": null,
+                "homepage_url": null,
+                "keywords": null,
+                "have_examples": true,
+                "target_name": "x86_64-unknown-linux-gnu",
+                "releases": [],
+                "github": true,
+                "github_stars": null,
+                "github_forks": null,
+                "github_issues": null,
+                "metadata": {{
+                    "name": "serde",
+                    "version": "1.0.0",
+                    "description": "serde does stuff",
+                    "target_name": null,
+                    "rustdoc_status": true,
+                    "default_target": "x86_64-unknown-linux-gnu"
+                }},
+                "is_library": true,
+                "doc_targets": [],
+                "license": null,
+                "documentation_url": null
+            }}"#,
+            super::super::duration_to_str(time),
+        ))
+        .unwrap();
+
+        assert_eq!(correct_json, details.to_json());
+
+        details.description = Some("serde does stuff".to_string());
+        details.owners = vec![("Owner".to_string(), "owner@ownsstuff.com".to_string())];
+
+        let authors = vec![("Somebody".to_string(), "somebody@somebody.com".to_string())];
+        details.authors_json = Some(authors.to_json());
+        details.authors = authors;
+
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+                "name": "rcc",
+                "version": "100.0.0",
+                "description": "serde does stuff",
+                "authors": [["Somebody", "somebody@somebody.com"]],
+                "owners": [["Owner", "owner@ownsstuff.com"]],
+                "authors_json": [["Somebody", "somebody@somebody.com"]],
+                "dependencies": null,
+                "release_time": "{}",
+                "build_status": true,
+                "last_successful_build": null,
+                "rustdoc_status": true,
+                "repository_url": null,
+                "homepage_url": null,
+                "keywords": null,
+                "have_examples": true,
+                "target_name": "x86_64-unknown-linux-gnu",
+                "releases": [],
+                "github": true,
+                "github_stars": null,
+                "github_forks": null,
+                "github_issues": null,
+                "metadata": {{
+                    "name": "serde",
+                    "version": "1.0.0",
+                    "description": "serde does stuff",
+                    "target_name": null,
+                    "rustdoc_status": true,
+                    "default_target": "x86_64-unknown-linux-gnu"
+                }},
+                "is_library": true,
+                "doc_targets": [],
+                "license": null,
+                "documentation_url": null
+            }}"#,
+            super::super::duration_to_str(time),
+        ))
+        .unwrap();
+
+        assert_eq!(correct_json, details.to_json());
+    }
+
+    #[test]
+    fn serialize_releases() {
+        let release = Release {
+            version: "idkman".to_string(),
+            build_status: true,
+            yanked: true,
+        };
+
+        let correct_json = Json::from_str(
+            r#"{
+                "version": "idkman",
+                "build_status": true
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, release.to_json());
     }
 }
