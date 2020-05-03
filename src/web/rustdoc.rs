@@ -209,149 +209,158 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
+    // Get the request parameters
     let router = extension!(req, Router);
-    let name = router.find("crate").unwrap_or("").to_string();
-    let url_version = router.find("version");
-    let version; // pre-declaring it to enforce drop order relative to `req_path`
-    let conn = extension!(req, Pool).get()?;
 
+    // Get the crate name and version from the request
+    let (name, url_version) = (
+        router.find("crate").unwrap_or("").to_string(),
+        router.find("version"),
+    );
+
+    let conn = extension!(req, Pool).get();
     let mut req_path = req.url.path();
 
-    // remove name and version from path
-    for _ in 0..2 {
-        req_path.remove(0);
-    }
+    // Remove the name and version from the path
+    req_path.drain(..2).for_each(drop);
 
+    // Convenience closure to allow for easy redirection
     let redirect = |name: &str, vers: &str, path: &[&str]| -> IronResult<Response> {
-        let url = ctry!(Url::parse(
-            &format!(
-                "{}/{}/{}/{}",
-                redirect_base(req),
-                name,
-                vers,
-                path.join("/")
-            )[..]
-        ));
+        // Format and parse the redirect url
+        let redirect_path = format!(
+            "{}/{}/{}/{}",
+            redirect_base(req),
+            name,
+            vers,
+            path.join("/")
+        );
+        let url = ctry!(Url::parse(&redirect_path));
+
         Ok(super::redirect(url))
     };
 
-    let corrected_name;
-    version = match match_version(&conn, &name, url_version) {
-        Some(mv) => {
-            corrected_name = mv.corrected_name;
-
-            match mv.version {
-                MatchSemver::Exact((v, _)) => v,
-                MatchSemver::Semver((v, _)) => {
-                    // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-                    // versions, redirect the browser to the returned version instead of loading it
-                    // immediately
-                    return redirect(&name, &v, &req_path);
+    // Check the database for releases with the requested version while doing the following:
+    // * Redirecting when the semver is close enough (by semver standards) to the correct page
+    // * Redirecting when the requested crate name isn't correct (dashes vs. underscores)
+    // * Returning a 404 if a crate by that name and version doesn't exist
+    // If none of those conditions are met, the version of the crate is returned
+    let version = if let Some(match_vers) = match_version(&conn, &name, url_version) {
+        match match_vers.version {
+            MatchSemver::Exact((version, _)) => {
+                // Redirect when the requested crate name isn't correct
+                if let Some(name) = match_vers.corrected_name {
+                    return redirect(&name, &version, &req_path);
                 }
+
+                version
+            }
+
+            // Redirect when the requested version isn't correct
+            MatchSemver::Semver((v, _)) => {
+                // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+                // versions, redirect the browser to the returned version instead of loading it
+                // immediately
+                return redirect(&name, &v, &req_path);
             }
         }
-        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+    } else {
+        // Return a 404, as a crate by that name and version doesn't exist
+        return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
     };
 
-    if let Some(name) = corrected_name {
-        return redirect(&name, &version, &req_path);
-    }
-
-    // docs have "rustdoc" prefix in database
-    req_path.insert(0, "rustdoc");
-
-    // add crate name and version
-    req_path.insert(1, &name);
-    req_path.insert(2, &version);
-
+    // Get the crate's details from the database
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
-    if req_path[3] == crate_details.metadata.default_target {
-        return redirect(&name, &version, &req_path[4..]);
+    if req_path.get(0).copied() == Some(&crate_details.metadata.default_target) {
+        return redirect(&name, &version, &req_path[1..]);
     }
 
-    let mut path = {
-        let mut path = req_path.join("/");
-        if path.ends_with('/') {
-            req_path.pop(); // get rid of empty string
-            path.push_str("index.html");
-            req_path.push("index.html");
-        }
-        path
+    // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
+    req_path.insert(0, "rustdoc");
+    req_path.insert(1, &name);
+    req_path.insert(2, &version);
+
+    // Create the path to access the file from
+    let mut path = req_path.join("/");
+    if path.ends_with('/') {
+        req_path.pop(); // get rid of empty string
+        path.push_str("index.html");
+        req_path.push("index.html");
+    }
+
+    // Attempt to load the file from the database
+    let file = if let Some(file) = File::from_path(&conn, &path) {
+        file
+    } else {
+        // If it fails, we try again with /index.html at the end
+        path.push_str("/index.html");
+        req_path.push("index.html");
+
+        File::from_path(&conn, &path)
+            .ok_or_else(|| IronError::new(Nope::ResourceNotFound, status::NotFound))?
     };
 
-    let file = match File::from_path(&conn, &path) {
-        Some(f) => f,
-        None => {
-            // If it fails, we try again with /index.html at the end
-            path.push_str("/index.html");
-            req_path.push("index.html");
-            match File::from_path(&conn, &path) {
-                Some(f) => f,
-                None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
-            }
-        }
-    };
-
-    let req_path = req_path;
-
-    // serve file directly if it's not html
+    // Serve non-html files immediately
     if !path.ends_with(".html") {
         return Ok(file.serve());
     }
 
-    let mut content = RustdocPage::default();
-
     let file_content = ctry!(String::from_utf8(file.0.content));
-
+    // Extract the head and body of the rustdoc file so that we can insert it into our own html
     let (head, body, mut body_class) = ctry!(utils::extract_head_and_body(&file_content));
-    content.head = head;
-    content.body = body;
 
+    // Add the `rustdoc` classes to the html body
     if body_class.is_empty() {
         body_class = "rustdoc container-rustdoc".to_string();
     } else {
-        // rustdoc adds its own "rustdoc" class to the body
         body_class.push_str(" container-rustdoc");
     }
-    content.body_class = body_class;
 
-    content.full = file_content;
-
-    let latest_release = crate_details.latest_release();
-    let latest_version = latest_release.version.to_owned();
+    // Get the latest version of the crate
+    let latest_version = crate_details.latest_version().to_owned();
     let is_latest_version = latest_version == version;
 
-    let latest_path = if is_latest_version {
-        format!("/{}/{}", name, latest_version)
-    } else if latest_release.build_status {
+    // If the requested version is not the latest, then find the path of the latest version for easy redirection
+    let path_in_latest = if !is_latest_version {
+        // Replace the version of the old path with the latest version
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
-        format!(
-            "/{}/{}/{}",
-            name,
-            latest_version,
-            path_for_version(&latest_path, &crate_details.doc_targets, &conn)
-        )
+
+        // Retrieve the path in the database of the latest crate version
+        path_for_version(&latest_path, &crate_details.doc_targets, &conn)
     } else {
-        format!("/crate/{}/{}", name, latest_version)
+        String::new()
     };
 
     // The path within this crate version's rustdoc output
     let inner_path = {
         let mut inner_path = req_path.clone();
+
         // Drop the `rustdoc/:crate/:version[/:platform]` prefix
-        inner_path.drain(..3);
+        inner_path.drain(..3).for_each(drop);
+
         if inner_path.len() > 1 && crate_details.doc_targets.iter().any(|s| s == inner_path[0]) {
             inner_path.remove(0);
         }
+
         inner_path.join("/")
     };
 
-    content.crate_details = Some(crate_details);
+    // Build the page of documentation
+    let content = RustdocPage {
+        head,
+        body,
+        body_class,
+        name,
+        full: file_content,
+        version,
+        crate_details: Some(crate_details),
+        ..Default::default()
+    };
 
+    // Build the page served to the user while setting options for templating
     Page::new(content)
         .set_true("show_package_navigation")
         .set_true("package_navigation_documentation_tab")
