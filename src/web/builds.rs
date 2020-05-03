@@ -144,3 +144,216 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             .to_resp("builds")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustc_serialize::json::Json;
+
+    #[test]
+    fn serialize_build() {
+        let time = time::get_time();
+        let mut build = Build {
+            id: 22,
+            rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
+            cratesfyi_version: "docsrs 0.6.0 (3dd32ec 2020-05-01)".to_string(),
+            build_status: true,
+            build_time: time,
+            output: None,
+        };
+
+        let correct_json = format!(
+            r#"{{
+                "id": 22,
+                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                "build_time": "{}",
+                "build_time_relative": "{}",
+                "output": null,
+                "build_status": true
+            }}"#,
+            time::at(time).rfc3339().to_string(),
+            duration_to_str(time),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            build.to_json().to_string()
+        );
+
+        build.output = Some("some random stuff".to_string());
+        let correct_json = format!(
+            r#"{{
+                "id": 22,
+                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                "build_time": "{}",
+                "build_time_relative": "{}",
+                "output": "some random stuff",
+                "build_status": true
+            }}"#,
+            time::at(time).rfc3339().to_string(),
+            duration_to_str(time),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            build.to_json().to_string()
+        );
+    }
+
+    #[test]
+    fn serialize_build_page() {
+        let time = time::get_time();
+        let build = Build {
+            id: 22,
+            rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
+            cratesfyi_version: "docsrs 0.6.0 (3dd32ec 2020-05-01)".to_string(),
+            build_status: true,
+            build_time: time,
+            output: None,
+        };
+        let limits = Limits::default();
+        let mut builds = BuildsPage {
+            metadata: Some(MetaData {
+                name: "serde".to_string(),
+                version: "1.0.0".to_string(),
+                description: Some("serde does stuff".to_string()),
+                target_name: None,
+                rustdoc_status: true,
+                default_target: "x86_64-unknown-linux-gnu".to_string(),
+            }),
+            builds: vec![build.clone()],
+            build_details: Some(build.clone()),
+            limits: limits.clone(),
+        };
+
+        let correct_json = format!(
+            r#"{{
+                "metadata": {{
+                    "name": "serde",
+                    "version": "1.0.0",
+                    "description": "serde does stuff",
+                    "target_name": null,
+                    "rustdoc_status": true,
+                    "default_target": "x86_64-unknown-linux-gnu"
+                }},
+                "builds": [{{
+                    "id": 22,
+                    "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                    "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                    "build_time": "{time}",
+                    "build_time_relative": "{time_rel}",
+                    "output": null,
+                    "build_status": true
+                }}],
+                "build_details": {{
+                    "id": 22,
+                    "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                    "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                    "build_time": "{time}",
+                    "build_time_relative": "{time_rel}",
+                    "output": null,
+                    "build_status": true
+                }},
+                "limits": {}
+            }}"#,
+            limits.for_website().to_json().to_string(),
+            time = time::at(time).rfc3339().to_string(),
+            time_rel = duration_to_str(time),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            builds.to_json().to_string()
+        );
+
+        builds.metadata = None;
+        let correct_json = format!(
+            r#"{{
+                "metadata": null,
+                "builds": [{{
+                    "id": 22,
+                    "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                    "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                    "build_time": "{time}",
+                    "build_time_relative": "{time_rel}",
+                    "output": null,
+                    "build_status": true
+                }}],
+                "build_details": {{
+                    "id": 22,
+                    "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                    "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                    "build_time": "{time}",
+                    "build_time_relative": "{time_rel}",
+                    "output": null,
+                    "build_status": true
+                }},
+                "limits": {}
+            }}"#,
+            limits.for_website().to_json().to_string(),
+            time = time::at(time).rfc3339().to_string(),
+            time_rel = duration_to_str(time),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            builds.to_json().to_string()
+        );
+
+        builds.builds = Vec::new();
+        let correct_json = format!(
+            r#"{{
+                "metadata": null,
+                "builds": [],
+                "build_details": {{
+                    "id": 22,
+                    "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
+                    "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
+                    "build_time": "{time}",
+                    "build_time_relative": "{time_rel}",
+                    "output": null,
+                    "build_status": true
+                }},
+                "limits": {}
+            }}"#,
+            limits.for_website().to_json().to_string(),
+            time = time::at(time).rfc3339().to_string(),
+            time_rel = duration_to_str(time),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            builds.to_json().to_string()
+        );
+
+        builds.build_details = None;
+        let correct_json = format!(
+            r#"{{
+                "metadata": null,
+                "builds": [],
+                "build_details": null,
+                "limits": {}
+            }}"#,
+            limits.for_website().to_json().to_string(),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes the `id`s unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            builds.to_json().to_string()
+        );
+    }
+}

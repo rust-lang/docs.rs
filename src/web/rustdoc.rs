@@ -541,6 +541,7 @@ impl Handler for SharedResourceHandler {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::test::*;
     use reqwest::StatusCode;
     use std::{collections::BTreeMap, iter::FromIterator};
@@ -1342,5 +1343,113 @@ mod test {
 
             Ok(())
         })
+    }
+
+    fn serialize_rustdoc_page() {
+        let time = time::get_time();
+        let details = format!(
+            r#"{{
+                "name": "rcc",
+                "version": "100.0.0",
+                "description": null,
+                "authors": [],
+                "owners": [],
+                "authors_json": null,
+                "dependencies": null,
+                "release_time": "{}",
+                "build_status": true,
+                "last_successful_build": null,
+                "rustdoc_status": true,
+                "repository_url": null,
+                "homepage_url": null,
+                "keywords": null,
+                "have_examples": true,
+                "target_name": "x86_64-unknown-linux-gnu",
+                "releases": [],
+                "github": true,
+                "github_stars": null,
+                "github_forks": null,
+                "github_issues": null,
+                "metadata": {{
+                    "name": "serde",
+                    "version": "1.0.0",
+                    "description": "serde does stuff",
+                    "target_name": null,
+                    "rustdoc_status": true,
+                    "default_target": "x86_64-unknown-linux-gnu"
+                }},
+                "is_library": true,
+                "doc_targets": [],
+                "license": null,
+                "documentation_url": null
+            }}"#,
+            super::super::duration_to_str(time),
+        );
+
+        let mut page = RustdocPage {
+            head: "<head><title>Whee</title></head>".to_string(),
+            body: "<body><h1>idk</h1></body>".to_string(),
+            body_class: "docsrs-body".to_string(),
+            name: "rcc".to_string(),
+            full: "??".to_string(),
+            version: "100.0.100".to_string(),
+            description: Some("a Rust compiler in C. Wait, maybe the other way around".to_string()),
+            crate_details: Some(CrateDetails::default_tester(time)),
+        };
+
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+                "rustdoc_head": "<head><title>Whee</title></head>",
+                "rustdoc_body": "<body><h1>idk</h1></body>",
+                "rustdoc_body_class": "docsrs-body",
+                "rustdoc_full": "??",
+                "rustdoc_status": true,
+                "name": "rcc",
+                "version": "100.0.100",
+                "description": "a Rust compiler in C. Wait, maybe the other way around",
+                "crate_details": {}
+            }}"#,
+            details,
+        ))
+        .unwrap();
+
+        assert_eq!(correct_json, page.to_json());
+
+        page.description = None;
+        let correct_json = Json::from_str(&format!(
+            r#"{{
+                "rustdoc_head": "<head><title>Whee</title></head>",
+                "rustdoc_body": "<body><h1>idk</h1></body>",
+                "rustdoc_body_class": "docsrs-body",
+                "rustdoc_full": "??",
+                "rustdoc_status": true,
+                "name": "rcc",
+                "version": "100.0.100",
+                "description": null,
+                "crate_details": {}
+            }}"#,
+            details,
+        ))
+        .unwrap();
+
+        assert_eq!(correct_json, page.to_json());
+
+        page.crate_details = None;
+        let correct_json = Json::from_str(
+            r#"{
+                "rustdoc_head": "<head><title>Whee</title></head>",
+                "rustdoc_body": "<body><h1>idk</h1></body>",
+                "rustdoc_body_class": "docsrs-body",
+                "rustdoc_full": "??",
+                "rustdoc_status": true,
+                "name": "rcc",
+                "version": "100.0.100",
+                "description": null,
+                "crate_details": null
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, page.to_json());
     }
 }
