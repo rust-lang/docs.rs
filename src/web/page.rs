@@ -31,6 +31,7 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
     failure::bail!("failed to parse the rustc version");
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,
     pub(crate) text: &'static str,
@@ -49,6 +50,7 @@ impl ToJson for GlobalAlert {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page<T: ToJson> {
     title: Option<String>,
     content: T,
@@ -156,5 +158,130 @@ impl<T: ToJson> ToJson for Page<T> {
         tree.insert("varsb".to_owned(), self.varsb.to_json());
         tree.insert("varsi".to_owned(), self.varsi.to_json());
         Json::Object(tree)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::releases::{self, Release};
+    use super::*;
+    use rustc_serialize::json::Json;
+
+    #[test]
+    fn serialize_page() {
+        let time = time::get_time();
+
+        let mut release = Release::default();
+        release.name = "lasso".into();
+        release.version = "0.1.0".into();
+        release.release_time = time.clone();
+
+        let mut varss = BTreeMap::new();
+        varss.insert("test".into(), "works".into());
+        let mut varsb = BTreeMap::new();
+        varsb.insert("test2".into(), true);
+        let mut varsi = BTreeMap::new();
+        varsi.insert("test3".into(), 1337);
+
+        let page = Page {
+            title: None,
+            content: vec![release.clone()],
+            status: status::Status::Ok,
+            varss,
+            varsb,
+            varsi,
+            rustc_resource_suffix: &*RUSTC_RESOURCE_SUFFIX,
+        };
+
+        let correct_json = format!(
+            r#"{{
+                "content": [{{
+                    "name": "lasso",
+                    "version": "0.1.0",
+                    "description": null,
+                    "target_name": null,
+                    "rustdoc_status": false,
+                    "release_time": "{}",
+                    "release_time_rfc3339": "{}",
+                    "stars": 0
+                }}],
+                "varss": {{ "test": "works" }},
+                "varsb": {{ "test2": true }},
+                "varsi": {{ "test3": 1337 }},
+                "rustc_resource_suffix": "{}",
+                "cratesfyi_version": "{}",
+                "cratesfyi_version_safe": "{}",
+                "has_global_alert": {}
+            }}"#,
+            super::super::duration_to_str(time.clone()),
+            time::at(time).rfc3339().to_string(),
+            &*RUSTC_RESOURCE_SUFFIX,
+            crate::BUILD_VERSION,
+            crate::BUILD_VERSION
+                .replace(" ", "-")
+                .replace("(", "")
+                .replace(")", ""),
+            crate::GLOBAL_ALERT.is_some(),
+        );
+
+        // Have to call `.to_string()` here because for some reason rustc_serialize defaults to
+        // u64s for `Json::from_str`, which makes everything in the respective `varsi` unequal
+        assert_eq!(
+            Json::from_str(&correct_json).unwrap().to_string(),
+            page.to_json().to_string()
+        );
+    }
+
+    #[test]
+    fn load_page_from_releases() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("foo").version("0.1.0").create()?;
+            let packages = releases::get_releases(&db.conn(), 1, 1, releases::Order::ReleaseTime);
+
+            let mut varsb = BTreeMap::new();
+            varsb.insert("show_search_form".into(), true);
+            varsb.insert("hide_package_navigation".into(), true);
+
+            let correct_page = Page {
+                title: None,
+                content: packages.clone(),
+                status: status::Status::Ok,
+                varss: BTreeMap::new(),
+                varsb,
+                varsi: BTreeMap::new(),
+                rustc_resource_suffix: &RUSTC_RESOURCE_SUFFIX,
+            };
+
+            let page = Page::new(packages)
+                .set_true("show_search_form")
+                .set_true("hide_package_navigation");
+
+            assert_eq!(page, correct_page);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn serialize_global_alert() {
+        let alert = GlobalAlert {
+            url: "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
+            text: "THE WORLD IS ENDING",
+            css_class: "THE END IS NEAR",
+            fa_icon: "https://gph.is/1uOvmqR",
+        };
+
+        let correct_json = Json::from_str(
+            r#"{
+            "url": "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
+            "text": "THE WORLD IS ENDING",
+            "css_class": "THE END IS NEAR",
+            "fa_icon": "https://gph.is/1uOvmqR"
+        }"#,
+        )
+        .unwrap();
+
+        assert_eq!(correct_json, alert.to_json());
     }
 }
