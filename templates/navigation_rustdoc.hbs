@@ -5,7 +5,8 @@
             {{#unless varsb.show_search_form}}
             <div id="search-input-nav">
               <label for="nav-search"><i class="fa fa-fw fa-search"></i></label>
-              <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
+              {{! The tabindex="-1" is used to prevent it to be the first input focused on the page when using the browser shortcut}}
+              <input id="nav-search" name="query" tabindex="-1" type="text" aria-label="Find crate by search query" placeholder="Find crate"{{#if varss.search_query}} value="{{varss.search_query}}"{{/if}}>
             </div>
             {{/unless}}
             <a href="/" class="pure-menu-heading pure-menu-link"><i class="fa fa-cubes fa-fw"></i><span class="title"> Docs.rs</span></a>
