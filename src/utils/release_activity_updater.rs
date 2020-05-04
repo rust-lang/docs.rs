@@ -62,8 +62,8 @@ pub fn update_release_activity() -> Result<()> {
 
     conn.query(
         "INSERT INTO config (name, value) VALUES ('release_activity', $1)
-         ON CONFLICT (name)
-            SET value = $1 WHERE name = 'release_activity'",
+         ON CONFLICT (name) DO UPDATE
+            SET value = $1 WHERE config.name = 'release_activity'",
         &[&map],
     )?;
 
