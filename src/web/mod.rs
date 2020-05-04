@@ -43,19 +43,6 @@ macro_rules! extension {
     };
 }
 
-/// Formats a route message with the status of the response
-macro_rules! msg {
-    ($resp:expr, $msg:expr) => {{
-        use iron::status::Status;
-
-        match $resp.map_or_else(|err| err.response.status, |resp| resp.status) {
-            Some(Status::Ok) | Some(Status::Found) => format!("{} (found)", $msg),
-            Some(Status::NotFound) => format!("{} (404)", $msg),
-            _ => $msg.to_string(),
-        }
-    }};
-}
-
 mod builds;
 mod crate_details;
 mod error;
@@ -73,11 +60,7 @@ use handlebars_iron::{DirectorySource, HandlebarsEngine};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
-use iron::{
-    self,
-    status::{self, Status},
-    Handler, Listening, Url,
-};
+use iron::{self, status, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
 use rustc_serialize::json::{Json, ToJson};
@@ -158,12 +141,9 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let mut metrics = metrics::ResponseRecorder::new();
-
         // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
-        let response = self
-            .shared_resource_handler
+        self.shared_resource_handler
             .handle(req)
             .or_else(|e| self.router_handler.handle(req).or(Err(e)))
             .or_else(|e| {
@@ -208,80 +188,7 @@ impl Handler for CratesfyiHandler {
                 }
 
                 Self::chain(&self.pool_factory, err).handle(req)
-            });
-
-        let path: &[&str] = &req.url.path();
-        match path {
-            [""] => metrics.route(msg!(response.as_ref(), "home")),
-
-            ["style.css"]
-            | ["index.js"]
-            | ["menu.js"]
-            | ["robots.txt"]
-            | ["sitemap.xml"]
-            | ["opensearch.xml"] => metrics.route(msg!(response.as_ref(), "resources")),
-
-            ["about"] => metrics.route(msg!(response.as_ref(), "about")),
-            ["about", "metrics"] => { /* Metrics route for prometheus */ }
-
-            ["releases"] | ["releases", "recent", _] => {
-                metrics.route(msg!(response.as_ref(), "recent releases"));
-            }
-            ["releases", "feed"] => metrics.route(msg!(response.as_ref(), "release feed")),
-            ["releases", "queue"] => metrics.route(msg!(response.as_ref(), "release queue")),
-            ["releases", "search"] => metrics.route(msg!(response.as_ref(), "search releases")),
-            ["releases", "stars", ..] => metrics.route(msg!(response.as_ref(), "release stars")),
-            ["releases", "activity"] => metrics.route(msg!(response.as_ref(), "release activity")),
-            ["releases", "failures", ..] => {
-                metrics.route(msg!(response.as_ref(), "build failures"));
-            }
-            ["releases", "recent-failures", ..] => {
-                metrics.route(msg!(response.as_ref(), "recent failures"));
-            }
-
-            ["crate", _] | ["crate", _, ""] | ["crate", _, _, ""] => {
-                if let Some(Status::NotFound) = response
-                    .as_ref()
-                    .map_or_else(|err| err.response.status, |resp| resp.status)
-                {
-                    // Crates that don't exist won't be redirected
-                    metrics.route(msg!(response.as_ref(), "crate details"));
-                } else {
-                    // `/crate/:name` and `/crate/:name/` redirect to `/crate/:name/:version`
-                    // `/crate/:name/:version/` redirects to `/crate/:name/:version`
-                }
-            }
-            ["crate", _, _] => {
-                metrics.route(msg!(response.as_ref(), "crate details"));
-            }
-            ["crate", _, _, _, "builds"]
-            | ["crate", _, _, _, "builds.json"]
-            | ["crate", _, _, _, "builds", _] => {
-                metrics.route(msg!(response.as_ref(), "crate builds"));
-            }
-            ["crate", _, _, _, "source", ..] => {
-                metrics.route(msg!(response.as_ref(), "crate source"));
-            }
-            ["crate", _, _, _, "target-redirect", ..] => {
-                metrics.route(msg!(response.as_ref(), "crate target redirect"));
-            }
-
-            [_, "badge.svg"] => metrics.route(msg!(response.as_ref(), "crate badge")),
-            [_, _, "settings.html"] => metrics.route(msg!(response.as_ref(), "crate settings")),
-
-            [_, _] | [_, _, _] => metrics.route(msg!(response.as_ref(), "crate docs")),
-            [_, _, _, file] if file.ends_with(".html") => {
-                metrics.route(msg!(response.as_ref(), "crate docs"));
-            }
-
-            [route] if routes::DOC_RUST_LANG_ORG_REDIRECTS.contains(route) => {
-                metrics.route(msg!(response.as_ref(), "rust-lang redirect"));
-            }
-
-            _ => metrics.route(msg!(response.as_ref(), "crate docs")),
-        }
-
-        response
+            })
     }
 }
 

@@ -99,40 +99,35 @@ fn duration_to_seconds(d: Duration) -> f64 {
     d.as_secs() as f64 + nanos
 }
 
-#[derive(Debug, Clone)]
-pub struct ResponseRecorder {
-    start_time: Instant,
-    route: Option<String>,
+pub struct RequestRecorder {
+    handler: Box<dyn iron::Handler>,
+    route_name: String,
 }
 
-impl ResponseRecorder {
-    #[inline]
-    pub fn new() -> Self {
+impl RequestRecorder {
+    pub fn new(handler: impl iron::Handler, route: impl Into<String>) -> Self {
         Self {
-            start_time: Instant::now(),
-            route: None,
+            handler: Box::new(handler),
+            route_name: route.into(),
         }
-    }
-
-    #[inline]
-    pub fn route(&mut self, route: impl Into<String>) {
-        self.route = Some(route.into());
     }
 }
 
-impl Drop for ResponseRecorder {
-    fn drop(&mut self) {
-        if let Some(route) = &self.route {
-            ROUTES_VISITED.with_label_values(&[route]).inc();
+impl iron::Handler for RequestRecorder {
+    fn handle(&self, request: &mut Request) -> IronResult<Response> {
+        let start = Instant::now();
+        let result = self.handler.handle(request);
+        let resp_time = duration_to_seconds(start.elapsed());
 
-            let response_time = duration_to_seconds(self.start_time.elapsed());
-            RESPONSE_TIMES
-                .with_label_values(&[route])
-                .observe(response_time);
+        ROUTES_VISITED.with_label_values(&[&self.route_name]).inc();
+        RESPONSE_TIMES
+            .with_label_values(&[&self.route_name])
+            .observe(resp_time);
 
-            #[cfg(test)]
-            tests::record_tests(route);
-        }
+        #[cfg(test)]
+        tests::record_tests(&self.route_name);
+
+        result
     }
 }
 
@@ -178,14 +173,14 @@ mod tests {
             frontend.get("/").send()?;
             frontend.get("/").send()?;
             assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("home (found)"), Some(&2));
+            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("/"), Some(&2));
 
             reset_records();
 
             frontend.get("").send()?;
             frontend.get("").send()?;
             assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("home (found)"), Some(&2));
+            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("/"), Some(&2));
 
             Ok(())
         })
@@ -202,6 +197,7 @@ mod tests {
                 "/menu.js",
                 "/sitemap.xml",
                 "/opensearch.xml",
+                "/robots.txt",
             ];
 
             for route in routes.iter() {
@@ -212,18 +208,10 @@ mod tests {
 
                 assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
                 assert_eq!(
-                    RESPONSE_TIMES.lock().unwrap().get("resources (found)"),
+                    RESPONSE_TIMES.lock().unwrap().get("static resource"),
                     Some(&2)
                 );
             }
-
-            reset_records();
-
-            frontend.get("/robots.txt").send()?;
-            frontend.get("/robots.txt").send()?;
-
-            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("resources"), Some(&2));
 
             Ok(())
         })
@@ -248,19 +236,15 @@ mod tests {
             let frontend = env.frontend();
 
             let routes = [
-                ("/releases", "recent releases (found)"),
-                // ("/releases/recent", "recent releases (found)"),
-                ("/releases/recent/1", "recent releases (found)"),
-                ("/releases/feed", "release feed (found)"),
-                ("/releases/queue", "release queue (found)"),
-                // ("/releases/search", "search releases (found)"),
-                // ("/releases/stars", "release stars (found)"),
-                // ("/releases/stars/1", "release stars (found)"),
-                // ("/releases/activity", "release activity (found)"),
-                // ("/releases/failures", "build failures (found)"),
-                // ("/releases/failures/1", "build failures (found)"),
-                ("/releases/recent-failures", "recent failures (found)"),
-                ("/releases/recent-failures/1", "recent failures (found)"),
+                ("/releases", "/releases"),
+                ("/releases/recent/1", "/releases/recent/:page"),
+                ("/releases/feed", "static resource"),
+                ("/releases/queue", "/releases/queue"),
+                ("/releases/recent-failures", "/releases/recent-failures"),
+                (
+                    "/releases/recent-failures/1",
+                    "/releases/recent-failures/:page",
+                ),
             ];
 
             for (route, correct) in routes.iter() {
@@ -293,29 +277,19 @@ mod tests {
 
             let frontend = env.frontend();
 
-            let routes = [
-                ("/crate/rcc", "crate details (found)"),
-                ("/crate/rcc/", "crate details (found)"),
-                ("/crate/hexponent", "crate details (found)"),
-                ("/crate/hexponent/", "crate details (found)"),
-                ("/crate/rcc/0.0.0", "crate details (found)"),
-                ("/crate/rcc/0.0.0/", "crate details (found)"),
-                ("/crate/hexponent/0.2.0", "crate details (found)"),
-                ("/crate/hexponent/0.2.0/", "crate details (found)"),
-                ("/crate/i_dont_exist", "crate details (404)"),
-                ("/crate/i_dont_exist/", "crate details (404)"),
-                ("/crate/i_dont_exist/4.0.4", "crate details (404)"),
-                ("/crate/i_dont_exist/4.0.4/", "crate details (404)"),
-            ];
+            let routes = ["/crate/rcc/0.0.0", "/crate/hexponent/0.2.0"];
 
-            for (route, correct) in routes.iter() {
+            for route in routes.iter() {
                 reset_records();
 
                 frontend.get(route).send()?;
                 frontend.get(route).send()?;
 
                 assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-                assert_eq!(RESPONSE_TIMES.lock().unwrap().get(*correct), Some(&2));
+                assert_eq!(
+                    RESPONSE_TIMES.lock().unwrap().get("/crate/:name/:version"),
+                    Some(&2)
+                );
             }
 
             Ok(())
