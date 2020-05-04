@@ -13,10 +13,10 @@ impl DocBuilder {
     pub fn get_new_crates(&mut self) -> Result<usize> {
         let conn = connect_db()?;
         let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
-        let mut changes = index.fetch_changes()?;
+        let (mut changes, oid) = index.peek_changes()?;
         let mut add_count: usize = 0;
 
-        // I belive this will fix ordering of queue if we get more than one crate from changes
+        // I believe this will fix ordering of queue if we get more than one crate from changes
         changes.reverse();
 
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
@@ -26,6 +26,8 @@ impl DocBuilder {
             debug!("{}-{} added into build queue", krate.name, krate.version);
             add_count += 1;
         }
+
+        index.set_last_seen_reference(oid)?;
 
         Ok(add_count)
     }
