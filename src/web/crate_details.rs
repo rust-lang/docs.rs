@@ -113,34 +113,34 @@ impl CrateDetails {
     pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
         let query = "SELECT crates.id,
-                            releases.id,
-                            crates.name,
-                            releases.version,
-                            releases.description,
-                            releases.authors,
-                            releases.dependencies,
-                            releases.readme,
-                            releases.description_long,
-                            releases.release_time,
-                            releases.build_status,
-                            releases.rustdoc_status,
-                            releases.repository_url,
-                            releases.homepage_url,
-                            releases.keywords,
-                            releases.have_examples,
-                            releases.target_name,
-                            crates.versions,
-                            crates.github_stars,
-                            crates.github_forks,
-                            crates.github_issues,
-                            releases.is_library,
-                            releases.doc_targets,
-                            releases.license,
-                            releases.documentation_url,
-                            releases.default_target
-                     FROM releases
-                     INNER JOIN crates ON releases.crate_id = crates.id
-                     WHERE crates.name = $1 AND releases.version = $2;";
+                releases.id,
+                crates.name,
+                releases.version,
+                releases.description,
+                releases.authors,
+                releases.dependencies,
+                releases.readme,
+                releases.description_long,
+                releases.release_time,
+                releases.build_status,
+                releases.rustdoc_status,
+                releases.repository_url,
+                releases.homepage_url,
+                releases.keywords,
+                releases.have_examples,
+                releases.target_name,
+                crates.versions,
+                crates.github_stars,
+                crates.github_forks,
+                crates.github_issues,
+                releases.is_library,
+                releases.doc_targets,
+                releases.license,
+                releases.documentation_url,
+                releases.default_target
+         FROM releases
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
