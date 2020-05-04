@@ -21,15 +21,15 @@ pub fn github_updater() -> Result<()> {
     //       always the same across all versions of a crate
     for row in &conn.query(
         "SELECT DISTINCT ON (crates.name)
-                                        crates.name,
-                                        crates.id,
-                                        releases.repository_url
-                                 FROM crates
-                                 INNER JOIN releases ON releases.crate_id = crates.id
-                                 WHERE releases.repository_url ~ '^https*://github.com' AND
-                                       (crates.github_last_update < NOW() - INTERVAL '1 day' OR
-                                        crates.github_last_update IS NULL)
-                                 ORDER BY crates.name, releases.release_time DESC",
+                crates.name,
+                crates.id,
+                releases.repository_url
+         FROM crates
+         INNER JOIN releases ON releases.crate_id = crates.id
+         WHERE releases.repository_url ~ '^https*://github.com' AND
+               (crates.github_last_update < NOW() - INTERVAL '1 day' OR
+                crates.github_last_update IS NULL)
+         ORDER BY crates.name, releases.release_time DESC",
         &[],
     )? {
         let crate_name: String = row.get(0);
@@ -42,10 +42,10 @@ pub fn github_updater() -> Result<()> {
             .and_then(|fields| {
                 conn.execute(
                     "UPDATE crates
-                              SET github_description = $1,
-                                  github_stars = $2, github_forks = $3,
-                                  github_issues = $4, github_last_commit = $5,
-                                  github_last_update = NOW() WHERE id = $6",
+                     SET github_description = $1,
+                         github_stars = $2, github_forks = $3,
+                         github_issues = $4, github_last_commit = $5,
+                         github_last_update = NOW() WHERE id = $6",
                     &[
                         &fields.description,
                         &(fields.stars as i32),
