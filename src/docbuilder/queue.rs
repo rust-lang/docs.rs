@@ -21,9 +21,15 @@ impl DocBuilder {
 
         for krate in changes.iter().filter(|k| k.kind != ChangeKind::Yanked) {
             let priority = get_crate_priority(&conn, &krate.name)?;
-            add_crate_to_queue(&conn, &krate.name, &krate.version, priority).ok();
 
-            debug!("{}-{} added into build queue", krate.name, krate.version);
+            match add_crate_to_queue(&conn, &krate.name, &krate.version, priority) {
+                Ok(()) => debug!("{}-{} added into build queue", krate.name, krate.version),
+                Err(err) => error!(
+                    "failed adding {}-{} into build queue: {}",
+                    krate.name, krate.version, err
+                ),
+            }
+
             add_count += 1;
         }
 
