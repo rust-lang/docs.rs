@@ -58,10 +58,6 @@ jobs:
           sleep 5
           # Make sure the database is actually working
           psql "${CRATESFYI_DATABASE_URL}"
-          psql "${CRATESFYI_DATABASE_URL}" -c "CREATE EXTENSION IF NOT EXISTS fuzzystrsearch"
-
-      - name: Build docs.rs
-        run: cargo build --locked
 
       - name: Run rustfmt
         run: cargo fmt -- --check

@@ -274,13 +274,13 @@ fn get_search_results(
 
     let statement = "
         SELECT
-            crates.name,
-            releases.version,
-            releases.description,
-            releases.target_name,
-            releases.release_time,
-            releases.rustdoc_status,
-            crates.github_stars,
+            crates.name AS name,
+            releases.version AS version,
+            releases.description AS description,
+            releases.target_name AS target_name,
+            releases.release_time AS release_time,
+            releases.rustdoc_status AS rustdoc_status,
+            crates.github_stars AS github_stars,
             COUNT(*) OVER() as total
         FROM crates
         INNER JOIN (
@@ -289,7 +289,7 @@ fn get_search_results(
                 SELECT
                     releases.id,
                     releases.crate_id,
-                    rank() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
+                    RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
                 FROM releases
                 WHERE releases.rustdoc_status AND NOT releases.yanked
             ) AS releases
@@ -299,19 +299,14 @@ fn get_search_results(
         WHERE
             ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65
             OR crates.name ILIKE CONCAT('%', $1, '%')
-            OR plainto_tsquery($1) @@ to_tsvector(releases.description)
         GROUP BY crates.id, releases.id
         ORDER BY
             levenshtein(crates.name, $1) ASC,
             crates.name ILIKE CONCAT('%', $1, '%'),
-            ts_rank_cd(to_tsvector(releases.description), plainto_tsquery($1), 32) DESC,
             releases.downloads DESC
         LIMIT $2 OFFSET $3";
 
-    let rows = if let Ok(rows) = conn
-        .query(statement, &[&query, &limit, &offset])
-        .map_err(|err| dbg!(err))
-    {
+    let rows = if let Ok(rows) = conn.query(statement, &[&query, &limit, &offset]) {
         rows
     } else {
         return (0, Vec::new());
@@ -321,18 +316,18 @@ fn get_search_results(
     let total_results = rows
         .iter()
         .next()
-        .map(|row| row.get::<_, i64>(7))
+        .map(|row| row.get::<_, i64>("total"))
         .unwrap_or_default();
     let packages: Vec<Release> = rows
         .into_iter()
         .map(|row| Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            release_time: row.get(4),
-            rustdoc_status: row.get(5),
-            stars: row.get::<_, i32>(6),
+            name: row.get("name"),
+            version: row.get("version"),
+            description: row.get("description"),
+            target_name: row.get("target_name"),
+            release_time: row.get("release_time"),
+            rustdoc_status: row.get("rustdoc_status"),
+            stars: row.get::<_, i32>("github_stars"),
         })
         .collect();
 
@@ -804,29 +799,30 @@ mod tests {
         })
     }
 
-    #[test]
-    fn search_descriptions() {
-        wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
-                .name("something_completely_unrelated")
-                .description("Supercalifragilisticexpialidocious")
-                .create()?;
-
-            let (num_results, results) =
-                get_search_results(&db.conn(), "supercalifragilisticexpialidocious", 1, 100);
-            assert_eq!(num_results, 1);
-
-            let mut results = results.into_iter();
-            assert_eq!(
-                results.next().unwrap().name,
-                "something_completely_unrelated"
-            );
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
+    // Description searching more than doubles search time
+    // #[test]
+    // fn search_descriptions() {
+    //     wrapper(|env| {
+    //         let db = env.db();
+    //         db.fake_release()
+    //             .name("something_completely_unrelated")
+    //             .description("Supercalifragilisticexpialidocious")
+    //             .create()?;
+    //
+    //         let (num_results, results) =
+    //             get_search_results(&db.conn(), "supercalifragilisticexpialidocious", 1, 100);
+    //         assert_eq!(num_results, 1);
+    //
+    //         let mut results = results.into_iter();
+    //         assert_eq!(
+    //             results.next().unwrap().name,
+    //             "something_completely_unrelated"
+    //         );
+    //         assert_eq!(results.count(), 0);
+    //
+    //         Ok(())
+    //     })
+    // }
 
     #[test]
     fn search_limits() {
@@ -921,44 +917,45 @@ mod tests {
         })
     }
 
-    #[test]
-    fn fuzzy_over_description() {
-        wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
-                .name("name_better_than_description")
-                .description("this is the correct choice")
-                .create()?;
-            db.fake_release()
-                .name("im_completely_unrelated")
-                .description("name_better_than_description")
-                .create()?;
-            db.fake_release()
-                .name("i_have_zero_relation_whatsoever")
-                .create()?;
-
-            let (num_results, results) =
-                get_search_results(&db.conn(), "name_better_than_description", 1, 100);
-            assert_eq!(num_results, 2);
-
-            let mut results = results.into_iter();
-
-            let next = results.next().unwrap();
-            assert_eq!(next.name, "name_better_than_description");
-            assert_eq!(next.description, Some("this is the correct choice".into()));
-
-            let next = results.next().unwrap();
-            assert_eq!(next.name, "im_completely_unrelated");
-            assert_eq!(
-                next.description,
-                Some("name_better_than_description".into())
-            );
-
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
+    // Description searching more than doubles search time
+    // #[test]
+    // fn fuzzy_over_description() {
+    //     wrapper(|env| {
+    //         let db = env.db();
+    //         db.fake_release()
+    //             .name("name_better_than_description")
+    //             .description("this is the correct choice")
+    //             .create()?;
+    //         db.fake_release()
+    //             .name("im_completely_unrelated")
+    //             .description("name_better_than_description")
+    //             .create()?;
+    //         db.fake_release()
+    //             .name("i_have_zero_relation_whatsoever")
+    //             .create()?;
+    //
+    //         let (num_results, results) =
+    //             get_search_results(&db.conn(), "name_better_than_description", 1, 100);
+    //         assert_eq!(num_results, 2);
+    //
+    //         let mut results = results.into_iter();
+    //
+    //         let next = results.next().unwrap();
+    //         assert_eq!(next.name, "name_better_than_description");
+    //         assert_eq!(next.description, Some("this is the correct choice".into()));
+    //
+    //         let next = results.next().unwrap();
+    //         assert_eq!(next.name, "im_completely_unrelated");
+    //         assert_eq!(
+    //             next.description,
+    //             Some("name_better_than_description".into())
+    //         );
+    //
+    //         assert_eq!(results.count(), 0);
+    //
+    //         Ok(())
+    //     })
+    // }
 
     #[test]
     fn dont_return_unrelated() {
