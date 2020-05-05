@@ -1,55 +1,47 @@
 # Migrating docs.rs to asynchronous code and hyper
 
-1. Update `tokio`, `futures` and `rusoto_{s3, core, credential}` to their latest versions (I think Joshua started on this, I'd be happy to help with finishing it)
+## Approach
+
+1. Update `tokio`, `futures` and `rusoto_{s3, core, credential}` to their latest versions
+
 2. Make `main` an `async fn` with `#[tokio::main]` to start the tokio runtime, add the `hyper` dependency and migrate the side services to async (By side services I mean the ones in the daemon)
 
-Making the side services async sounds like a larger thing than it actually is, e.g.
+3. Move all routing to `hyper`, separate the handlers out from being within `iron` code and forward requests with `spawn_blocking`
+   1. Routes should be migrated to asynchronous code from least used to most used
 
-```rust
-thread::spawn(move || loop {
-    thread::sleep(Duration::from_secs(60 * 60 * 6));
-    if let Err(e) = github_updater() {
-        error!("Failed to update github fields: {}", e);
-    }
-})
-```
+4. Switch from `postgres` to `tokio-postgres` for database interaction
 
-Would become
+## Rationale
 
-```rust
-task::spawn(async move {
-    let mut interval = time::interval(Duration::from_secs(60 * 60 * 6));
-    loop {
-        interval.tick().await;
-        if let Err(e) = github_updater().await {
-            error!("Failed to update github fields: {}", e);
-        }
-    }
-})
-```
+### Why async
 
-This actually will do a lot for the server's performance, as the many threads that were doing nothing but sleeping can now be used for useful work. Additionally, for the `release activity updater` this is a good change, as instead un-sleeping every minute and checking if it's `23:55`, we can use tokio's `interval_at` to make it automatically wake once at `23:55` and execute.
-Additionally, all the services are quite small and consist of basically http requests, so migrating can be literally as simple as adding awaits in some cases.
+A web server is inherently io bound, which is the type of task that asynchronous execution excels at. If all goes well, the server will run faster and with potentially less resource usage than it currently has.
+Some of our current dependencies already use async (such as `rusoto`), and we could also potentially see improvements from them executing in an actually asynchronous environment.
+Additionally, updating things allows us to both gain newer (and generally faster, safer and better supported) dependencies, as well as letting us give a critical eye to our current infrastructure to see what's good and what's bad.
 
-3. Now, at this point the next step would be to migrate from `iron` to `hyper`, and there's a few ways to go about it
-    1. Move all routing to `hyper`, separate the handlers out from being within `iron` code and forwarding requests with `spawn_blocking`
-        1. Requires some glue code, but adding that (in an inert state where it isn't used) can be done in separate prs
-        2. Will be slightly slower until full migration is complete, as we'll have to translations from hyper requests to iron ones and from `IronResult` into the hyper equivalent
-        3. Looking at the code, this will actually be made much easier by the fact that we already have a custom wrapper around managing routes, and we can use that to our advantage
-    2. Use nginx to have two 'separate' servers on different ports that cross-forward things they can't handle
-        1. Messy and kind of impractical, not to mention difficult to develop locally
-        2. Probably the worst option
-    3. Do it all at once
-        1. Has the greatest code churn, but rips off the band-aid, so to speak
-        2. The easiest and quickest option as far as developers are concerned, takes much more review time
-    4. Have iron forward any requests it doesn't know how to handle to hyper and slowly move over handlers to hyper
-        1. Very similar to option 1 except flipped, as instead of going hyper -> iron we go iron -> hyper
-        2. Like option 1 it requires some initial setup/glue code that can be separated out into PRs
-4. Here's where the database migration would happen, and again there are options
-    1. Switch to `tokio-postgres`
-        1. Virtually no change in actual code past changing imports and adding `.await`s
-        2. Still requires *eventually* migrating to diesel
-    2. Incrementally migrate to `diesel`/`tokio-diesel`
-        1. The initial switch can be relatively small and can just involve switching migrations to diesel's format, making the diesel schemas and changing all queries to use `diesel::sql_query` (Allows using raw sql for queries, this lets us have a smaller change in code)
-        2. (Not blocking for anything else, can be much smaller and more numerous PRs) Move existing queries to use actual diesel query building
-        3. In the end I think this would be the better route, as it'd "force" us to actually migrate the database to the better option, as well as removing quite a few dependencies, namely `schemamam`, `r2d2` and `postgres`. Moving from those (postgres in particular) would also allow us to move other dependencies to better/newer options, such as changing the deprecated `time` crate to `chrono`. This would also force us to think a little more critically about how the database is structured and help with starting thinking about how to improve it (as there's some significant tech debt there, but that's a separate thing entirely)
+### The approach
+
+1. Updating all async-related dependencies gives a foothold to start the update process. Updating all of the dependencies at once is required because their versioning is intertwined
+
+2. All functions down the 'pipeline' need to be slowly migrated to async, as you need async code to effectively call async code. At this point we can also migrate the side services to async, which will help with the overall efficiency of the server, as the background tasks that were just spinning on their own thread now are effectively scheduled by the tokio runtime.
+
+3. Moving the routing to hyper allows us to incrementally change over the handlers to async code, at the cost of intermediate weirdness due to the request conversion. It also allows us to migrate the less-traveled routes first in order to make sure that everything works as it should.
+   1. Migrating less used routes first allows us to potentially catch ill side-effects before they affect more critical code
+
+4. Until this point all calls to postgres will be synchronous (Likely using `spawn_blocking`), but that's not the most efficient way to deal with an io type of task. Switching to `tokio-postgres` allows the minimum of code change while also gaining the benefits of multi-tasking.
+   1. The actual change in code will be rather small, mostly just adding `.await`s and removing the `spawn_blocking`s that were used before
+
+## Alternatives
+
+Alternative migration strategies are as follows
+
+1. Use nginx to have two 'separate' servers on different ports that cross-forward things they can't handle
+   1. Messy, complicated and impractical
+   2. Is a large drain and detriment to developers trying to work during the transition period
+
+2. Migrate all at once
+   1. Has the greatest code churn but gets things done with as soon as possible
+   2. In the event that something goes wrong and the changes need to be reverted, much more development and review time will have been wasted
+
+3. Have iron forward any requests it doesn't know how to handle to hyper and slowly move over handlers to hyper
+   1. Very similar to the chosen option, except it would be much more complicated to actually get asynchronous execution started, causing us to not see any real changes until every single route was migrated over, potentially having the side effect of wasting all of the used time in the event it needs to be reverted
