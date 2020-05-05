@@ -18,6 +18,7 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
+#[derive(Debug, Clone)]
 pub struct Release {
     name: String,
     version: String,

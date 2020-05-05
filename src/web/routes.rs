@@ -1,10 +1,12 @@
+use super::metrics::RequestRecorder;
 use crate::web::{INDEX_JS, MENU_JS};
 use iron::middleware::Handler;
 use iron::Request;
 use router::Router;
 use std::collections::HashSet;
 
-const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] = &["alloc", "core", "proc_macro", "std", "test"];
+pub(super) const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] =
+    &["alloc", "core", "proc_macro", "std", "test"];
 
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
@@ -183,7 +185,10 @@ impl Routes {
 
     /// A static resource is a normal page without any special behavior on the router side.
     fn static_resource(&mut self, pattern: &str, handler: impl Handler) {
-        self.get.push((pattern.to_string(), Box::new(handler)));
+        self.get.push((
+            pattern.to_string(),
+            Box::new(RequestRecorder::new(handler, "static resource")),
+        ));
     }
 
     /// Internal pages are docs.rs's own pages, instead of the documentation of a crate uploaded by
@@ -196,16 +201,22 @@ impl Routes {
     /// - If the page URL doesn't end with a slash, a redirect from the URL with the trailing slash
     /// to the one without is automatically added.
     fn internal_page(&mut self, pattern: &str, handler: impl Handler) {
-        self.get.push((pattern.to_string(), Box::new(handler)));
+        self.get.push((
+            pattern.to_string(),
+            Box::new(RequestRecorder::new(handler, pattern)),
+        ));
 
         // Automatically add another route ending with / that redirects to the slash-less route.
         if !pattern.ends_with('/') {
             let pattern = format!("{}/", pattern);
             self.get.push((
-                pattern,
-                Box::new(SimpleRedirect::new(|url| {
-                    url.set_path(&url.path().trim_end_matches('/').to_string())
-                })),
+                pattern.to_string(),
+                Box::new(RequestRecorder::new(
+                    SimpleRedirect::new(|url| {
+                        url.set_path(&url.path().trim_end_matches('/').to_string())
+                    }),
+                    pattern,
+                )),
             ));
         }
 
@@ -224,8 +235,10 @@ impl Routes {
     /// resource, but path prefixes are automatically blacklisted (see internal pages to learn more
     /// about page prefixes).
     fn rustdoc_page(&mut self, pattern: &str, handler: impl Handler) {
-        self.rustdoc_get
-            .push((pattern.to_string(), Box::new(handler)));
+        self.get.push((
+            pattern.to_string(),
+            Box::new(RequestRecorder::new(handler, "rustdoc page")),
+        ));
     }
 }
 
