@@ -58,7 +58,7 @@ jobs:
           sleep 5
           # Make sure the database is actually working
           psql "${CRATESFYI_DATABASE_URL}"
-          sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS fuzzystrsearch"
+          psql "${CRATESFYI_DATABASE_URL}" -c "CREATE EXTENSION IF NOT EXISTS fuzzystrsearch"
 
       - name: Build docs.rs
         run: cargo build --locked

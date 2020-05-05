@@ -281,40 +281,27 @@ fn get_search_results(
             releases.release_time,
             releases.rustdoc_status,
             crates.github_stars,
-            -- Get the total number of results, disregarding the limit 
             COUNT(*) OVER() as total
-        FROM releases
-        INNER JOIN crates on releases.crate_id = crates.id
-        WHERE
-            -- Only select the newest release by release time
-            releases.id = (
-                SELECT releases.id
+        FROM crates
+        INNER JOIN (
+            SELECT releases.id, releases.crate_id
+            FROM (
+                SELECT
+                    releases.id,
+                    releases.crate_id,
+                    rank() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
                 FROM releases
-                -- Filter unbuilt/failing builds and yanked releases
-                WHERE
-                    releases.crate_id = crates.id
-                    AND releases.rustdoc_status
-                    AND NOT releases.yanked
-                    -- Only select releases/crates that pass our criteria:
-                    --      - Levenshtein distance between the name and query is acceptable
-                    --      - The query sandwiched between wildcards matches the crate's name
-                    --      - The query matches the release's description
-                    AND (
-                        -- Turn the levenshtein distance into a percentage using `distance / max(query.len(), crates.name.len())`
-                        -- this percentage is normalized and allows us to empirically compare the 'sameness' of different names
-                        ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65
-                        OR crates.name ILIKE CONCAT('%', $1, '%')
-                        OR plainto_tsquery($1) @@ to_tsvector(releases.description)
-                    )
-                ORDER BY releases.release_time DESC
-                LIMIT 1
-            )
+                WHERE releases.rustdoc_status AND NOT releases.yanked
+            ) AS releases
+            WHERE releases.rank = 1
+        ) AS latest_release ON latest_release.crate_id = crates.id
+        INNER JOIN releases ON latest_release.id = releases.id
+        WHERE
+            ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65
+            OR crates.name ILIKE CONCAT('%', $1, '%')
+            OR plainto_tsquery($1) @@ to_tsvector(releases.description)
         GROUP BY crates.id, releases.id
-        -- Order by the levenshtein distance of the name, the text search ranking of the description
-        -- and finally the number of downloads
         ORDER BY
-            -- Order the levenshtein matches by their literal distance, so that `fo` matches `foo` more closely than `fooo`,
-            -- because their normalized distances will be the same
             levenshtein(crates.name, $1) ASC,
             crates.name ILIKE CONCAT('%', $1, '%'),
             ts_rank_cd(to_tsvector(releases.description), plainto_tsquery($1), 32) DESC,
@@ -738,7 +725,7 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            let releases = ["regex", "reg3x", "regex-", "regex-syntax"];
+            let releases = ["regex", "regex-", "regex-syntax"];
             for release in releases.iter() {
                 db.fake_release().name(release).version("0.0.0").create()?;
             }
@@ -746,8 +733,9 @@ mod tests {
             let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
 
             for name in near_matches.iter() {
-                let (num_results, mut results) = get_search_results(&db.conn(), *name, 1, 100);
-                assert_eq!(num_results, 4);
+                let (num_results, mut results) =
+                    dbg!(get_search_results(&db.conn(), *name, 1, 100));
+                assert_eq!(num_results, 3);
 
                 for name in releases.iter() {
                     assert_eq!(results.remove(0).name, *name);
