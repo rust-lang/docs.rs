@@ -22,14 +22,24 @@ impl DocBuilder {
         for krate in &changes {
             match krate.kind {
                 ChangeKind::Yanked => {
-                    // FIXME: remove built doc files? set build as failed?
-                    conn.execute(
-                        "UPDATE releases SET yanked = TRUE FROM crates WHERE \
-                                  crates.id = releases.crate_id AND name = $1 AND version = $2",
+                    let res = conn.execute(
+                        "
+                        UPDATE releases
+                            SET yanked = TRUE
+                        FROM crates
+                        WHERE crates.id = releases.crate_id
+                            AND name = $1
+                            AND version = $2
+                        ",
                         &[&krate.name, &krate.version],
-                    )
-                    .ok();
-                    debug!("{}-{} yanked", krate.name, krate.version);
+                    );
+                    match res {
+                        Ok(_) => debug!("{}-{} yanked", krate.name, krate.version),
+                        Err(err) => error!(
+                            "error while setting {}-{} to yanked: {}",
+                            krate.name, krate.version, err
+                        ),
+                    }
                 }
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&conn, &krate.name)?;
