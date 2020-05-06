@@ -44,116 +44,76 @@ pub(crate) fn add_package_into_database(
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let is_library = metadata_pkg.is_library();
 
-    let release_id: i32 = {
-        let rows = conn.query(
-            "SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
-            &[&crate_id, &metadata_pkg.version.to_string()],
-        )?;
+    let rows = conn.query(
+        "INSERT INTO releases (
+            crate_id, version, release_time,
+            dependencies, target_name, yanked, build_status,
+            rustdoc_status, test_status, license, repository_url,
+            homepage_url, description, description_long, readme,
+            authors, keywords, have_examples, downloads, files,
+            doc_targets, is_library, doc_rustc_version,
+            documentation_url, default_target
+         )
+         VALUES (
+            $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,
+            $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23, $24, $25
+         )
+         ON CONFLICT (crate_id, version) DO UPDATE
+            SET release_time = $3,
+                dependencies = $4,
+                target_name = $5,
+                yanked = $6,
+                build_status = $7,
+                rustdoc_status = $8,
+                test_status = $9,
+                license = $10,
+                repository_url = $11,
+                homepage_url = $12,
+                description = $13,
+                description_long = $14,
+                readme = $15,
+                authors = $16,
+                keywords = $17,
+                have_examples = $18,
+                downloads = $19,
+                files = $20,
+                doc_targets = $21,
+                is_library = $22,
+                doc_rustc_version = $23,
+                documentation_url = $24,
+                default_target = $25
+         RETURNING id",
+        &[
+            &crate_id,
+            &metadata_pkg.version,
+            &cratesio_data.release_time,
+            &dependencies.to_json(),
+            &metadata_pkg.package_name(),
+            &cratesio_data.yanked,
+            &res.successful,
+            &has_docs,
+            &false, // TODO: Add test status somehow
+            &metadata_pkg.license,
+            &metadata_pkg.repository,
+            &metadata_pkg.homepage,
+            &metadata_pkg.description,
+            &rustdoc,
+            &readme,
+            &metadata_pkg.authors.to_json(),
+            &metadata_pkg.keywords.to_json(),
+            &has_examples,
+            &cratesio_data.downloads,
+            &source_files,
+            &doc_targets.to_json(),
+            &is_library,
+            &res.rustc_version,
+            &metadata_pkg.documentation,
+            &default_target,
+        ],
+    )?;
 
-        if rows.is_empty() {
-            let rows = conn.query(
-                "INSERT INTO releases (
-                                            crate_id, version, release_time,
-                                            dependencies, target_name, yanked, build_status,
-                                            rustdoc_status, test_status, license, repository_url,
-                                            homepage_url, description, description_long, readme,
-                                            authors, keywords, have_examples, downloads, files,
-                                            doc_targets, is_library, doc_rustc_version,
-                                            documentation_url, default_target
-                                        )
-                                        VALUES ( $1,  $2,  $3,  $4, $5, $6,  $7, $8, $9, $10,
-                                                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                                                 $20, $21, $22, $23, $24, $25
-                                        )
-                                        RETURNING id",
-                &[
-                    &crate_id,
-                    &metadata_pkg.version,
-                    &cratesio_data.release_time,
-                    &dependencies.to_json(),
-                    &metadata_pkg.package_name(),
-                    &cratesio_data.yanked,
-                    &res.successful,
-                    &has_docs,
-                    &false, // TODO: Add test status somehow
-                    &metadata_pkg.license,
-                    &metadata_pkg.repository,
-                    &metadata_pkg.homepage,
-                    &metadata_pkg.description,
-                    &rustdoc,
-                    &readme,
-                    &metadata_pkg.authors.to_json(),
-                    &metadata_pkg.keywords.to_json(),
-                    &has_examples,
-                    &cratesio_data.downloads,
-                    &source_files,
-                    &doc_targets.to_json(),
-                    &is_library,
-                    &res.rustc_version,
-                    &metadata_pkg.documentation,
-                    &default_target,
-                ],
-            )?;
-            // return id
-            rows.get(0).get(0)
-        } else {
-            conn.query(
-                "UPDATE releases
-                             SET release_time = $3,
-                                 dependencies = $4,
-                                 target_name = $5,
-                                 yanked = $6,
-                                 build_status = $7,
-                                 rustdoc_status = $8,
-                                 test_status = $9,
-                                 license = $10,
-                                 repository_url = $11,
-                                 homepage_url = $12,
-                                 description = $13,
-                                 description_long = $14,
-                                 readme = $15,
-                                 authors = $16,
-                                 keywords = $17,
-                                 have_examples = $18,
-                                 downloads = $19,
-                                 files = $20,
-                                 doc_targets = $21,
-                                 is_library = $22,
-                                 doc_rustc_version = $23,
-                                 documentation_url = $24,
-                                 default_target = $25
-                             WHERE crate_id = $1 AND version = $2",
-                &[
-                    &crate_id,
-                    &metadata_pkg.version.to_string(),
-                    &cratesio_data.release_time,
-                    &dependencies.to_json(),
-                    &metadata_pkg.package_name(),
-                    &cratesio_data.yanked,
-                    &res.successful,
-                    &has_docs,
-                    &false, // TODO: Add test status somehow
-                    &metadata_pkg.license,
-                    &metadata_pkg.repository,
-                    &metadata_pkg.homepage,
-                    &metadata_pkg.description,
-                    &rustdoc,
-                    &readme,
-                    &metadata_pkg.authors.to_json(),
-                    &metadata_pkg.keywords.to_json(),
-                    &has_examples,
-                    &cratesio_data.downloads,
-                    &source_files,
-                    &doc_targets.to_json(),
-                    &is_library,
-                    &res.rustc_version,
-                    &metadata_pkg.documentation,
-                    &default_target,
-                ],
-            )?;
-            rows.get(0).get(0)
-        }
-    };
+    let release_id: i32 = rows.get(0).get(0);
 
     add_keywords_into_database(&conn, &metadata_pkg, release_id)?;
     add_authors_into_database(&conn, &metadata_pkg, release_id)?;

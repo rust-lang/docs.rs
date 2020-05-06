@@ -78,10 +78,18 @@
                           <ul class="pure-menu-list">
                             {{#each releases}}
                             <li class="pure-menu-item">
-                              {{#if this.build_status}}
-                              <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
+                              {{#if this.yanked}}
+                                {{#if this.build_status}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="{{../name}}-{{this.version}} is yanked"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{else}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="{{../name}}-{{this.version}} is yanked and docs.rs failed to build it"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{/if}}
                               {{else}}
-                              <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="docs.rs failed to build {{../name}}-{{this.version}}"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{#if this.build_status}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link">{{this.version}}</a>
+                                {{else}}
+                                <a href="/crate/{{../name}}/{{this.version}}" class="pure-menu-link warn" title="docs.rs failed to build {{../name}}-{{this.version}}"><i class="fa fa-fw fa-warning"></i> {{this.version}}</a>
+                                {{/if}}
                               {{/if}}
                             </li>
                             {{/each}}
@@ -93,11 +101,23 @@
                 </div>
               </div>
             </li>
-            {{#unless ../../varsb.is_latest_version}}
-            <li class="pure-menu-item">
-              <a href="/{{name}}/{{../../varss.latest_version}}/{{../../varss.path_in_latest}}" class="pure-menu-link warn" title="You are seeing an outdated version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> Go to latest version</span></a>
-            </li>
-            {{/unless}}
+            {{#if ../../varsb.is_latest_version}}
+              {{#if yanked}}
+              <li class="pure-menu-item">
+                <span class="pure-menu-link warn"><i class="fa fa-fw fa-warning"></i><span class="title"> This release has been yanked</span></a>
+              </li>
+              {{/if}}
+            {{else}}
+              {{#if ../../content.crate_details.yanked}}
+              <li class="pure-menu-item">
+                <a href="{{../../varss.latest_path}}" class="pure-menu-link warn" title="You are seeing a yanked version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> This release has been yanked, go to latest version</span></a>
+              </li>
+              {{else}}
+              <li class="pure-menu-item">
+                <a href="{{../../varss.latest_path}}" class="pure-menu-link warn" title="You are seeing an outdated version of {{name}} crate. Click here to go to latest version."><i class="fa fa-fw fa-warning"></i><span class="title"> Go to latest version</span></a>
+              </li>
+              {{/if}}
+            {{/if}}
             <li class="pure-menu-item">
               <a href="/crate/{{name}}/{{version}}/source/" title="Browse source of {{name}}-{{version}}" class="pure-menu-link{{#if ../../varsb.package_source_tab}} pure-menu-active{{/if}}"><i class="fa fa-fw fa-folder-open-o"></i><span class="title"> Source</span></a>
             </li>

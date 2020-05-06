@@ -56,7 +56,7 @@ mod sitemap;
 mod source;
 
 use self::pool::Pool;
-use handlebars_iron::{DirectorySource, HandlebarsEngine};
+use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
@@ -87,6 +87,17 @@ const DEFAULT_BIND: &str = "0.0.0.0:3000";
 type PoolFactoryFn = dyn Fn() -> Pool + Send + Sync;
 type PoolFactory = Box<PoolFactoryFn>;
 
+fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
+    // TODO: Use DocBuilderOptions for paths
+    let mut hbse = HandlebarsEngine::new();
+    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+    // load templates
+    hbse.reload()?;
+
+    Ok(hbse)
+}
+
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
@@ -97,14 +108,7 @@ struct CratesfyiHandler {
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
-        // TODO: Use DocBuilderOptions for paths
-        let mut hbse = HandlebarsEngine::new();
-        hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-        // load templates
-        if let Err(e) = hbse.reload() {
-            panic!("Failed to load handlebar templates: {}", e);
-        }
+        let hbse = handlebars_engine().expect("Failed to load handlebar templates");
 
         let mut chain = Chain::new(base);
         chain.link_before(pool_factory());
@@ -259,10 +263,10 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
         .unwrap_or_else(|| "*".into());
 
     let mut corrected_name = None;
-    let versions: Vec<(String, i32)> = {
-        let query = "SELECT name, version, releases.id
+    let versions: Vec<(String, i32, bool)> = {
+        let query = "SELECT name, version, releases.id, releases.yanked
             FROM releases INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE normalize_crate_name(name) = normalize_crate_name($1) AND yanked = false";
+            WHERE normalize_crate_name(name) = normalize_crate_name($1)";
 
         let rows = conn.query(query, &[&name]).unwrap();
         let mut rows = rows.iter().peekable();
@@ -275,11 +279,12 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
             }
         };
 
-        rows.map(|row| (row.get(1), row.get(2))).collect()
+        rows.map(|row| (row.get(1), row.get(2), row.get(3)))
+            .collect()
     };
 
     // first check for exact match, we can't expect users to use semver in query
-    if let Some((version, id)) = versions.iter().find(|(vers, _)| vers == &req_version) {
+    if let Some((version, id, _)) = versions.iter().find(|(vers, _, _)| vers == &req_version) {
         return Some(MatchVersion {
             corrected_name,
             version: MatchSemver::Exact((version.to_owned(), *id)),
@@ -293,7 +298,7 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     let versions_sem = {
         let mut versions_sem: Vec<(Version, i32)> = Vec::new();
 
-        for version in &versions {
+        for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version, but check result just in case
             versions_sem.push((Version::parse(&version.0).ok()?, version.1));
         }
@@ -314,11 +319,11 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
     }
 
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
-    // return first version if requested version is '*'
-    if req_version == "*" && !versions_sem.is_empty() {
-        return Some(MatchVersion {
+    // return first non-yanked version if requested version is '*'
+    if req_version == "*" {
+        return versions_sem.first().map(|v| MatchVersion {
             corrected_name,
-            version: MatchSemver::Semver((versions_sem[0].0.to_string(), versions_sem[0].1)),
+            version: MatchSemver::Semver((v.0.to_string(), v.1)),
         });
     }
 
@@ -571,7 +576,7 @@ impl ToJson for MetaData {
 #[cfg(test)]
 mod test {
     use crate::test::*;
-    use crate::web::match_version;
+    use crate::web::{handlebars_engine, match_version};
     use html5ever::tendril::TendrilSink;
 
     fn release(version: &str, db: &TestDatabase) -> i32 {
@@ -777,5 +782,10 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_templates_are_valid() {
+        handlebars_engine().expect("Failed to load handlebar templates");
     }
 }

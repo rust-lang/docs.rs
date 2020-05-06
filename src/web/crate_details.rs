@@ -40,6 +40,7 @@ pub struct CrateDetails {
     github_issues: Option<i32>,
     pub(crate) metadata: MetaData,
     is_library: bool,
+    yanked: bool,
     pub(crate) doc_targets: Vec<String>,
     license: Option<String>,
     documentation_url: Option<String>,
@@ -83,6 +84,7 @@ impl ToJson for CrateDetails {
         m.insert("github_issues".to_string(), self.github_issues.to_json());
         m.insert("metadata".to_string(), self.metadata.to_json());
         m.insert("is_library".to_string(), self.is_library.to_json());
+        m.insert("yanked".to_string(), self.yanked.to_json());
         m.insert("doc_targets".to_string(), self.doc_targets.to_json());
         m.insert("license".to_string(), self.license.to_json());
         m.insert(
@@ -94,10 +96,10 @@ impl ToJson for CrateDetails {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct Release {
-    version: String,
-    build_status: bool,
-    yanked: bool,
+pub struct Release {
+    pub version: String,
+    pub build_status: bool,
+    pub yanked: bool,
 }
 
 impl ToJson for Release {
@@ -105,6 +107,7 @@ impl ToJson for Release {
         let mut m: BTreeMap<String, Json> = BTreeMap::new();
         m.insert("version".to_string(), self.version.to_json());
         m.insert("build_status".to_string(), self.build_status.to_json());
+        m.insert("yanked".to_string(), self.yanked.to_json());
         m.to_json()
     }
 }
@@ -113,34 +116,35 @@ impl CrateDetails {
     pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
         let query = "SELECT crates.id,
-                            releases.id,
-                            crates.name,
-                            releases.version,
-                            releases.description,
-                            releases.authors,
-                            releases.dependencies,
-                            releases.readme,
-                            releases.description_long,
-                            releases.release_time,
-                            releases.build_status,
-                            releases.rustdoc_status,
-                            releases.repository_url,
-                            releases.homepage_url,
-                            releases.keywords,
-                            releases.have_examples,
-                            releases.target_name,
-                            crates.versions,
-                            crates.github_stars,
-                            crates.github_forks,
-                            crates.github_issues,
-                            releases.is_library,
-                            releases.doc_targets,
-                            releases.license,
-                            releases.documentation_url,
-                            releases.default_target
-                     FROM releases
-                     INNER JOIN crates ON releases.crate_id = crates.id
-                     WHERE crates.name = $1 AND releases.version = $2;";
+                releases.id,
+                crates.name,
+                releases.version,
+                releases.description,
+                releases.authors,
+                releases.dependencies,
+                releases.readme,
+                releases.description_long,
+                releases.release_time,
+                releases.build_status,
+                releases.rustdoc_status,
+                releases.repository_url,
+                releases.homepage_url,
+                releases.keywords,
+                releases.have_examples,
+                releases.target_name,
+                crates.versions,
+                crates.github_stars,
+                crates.github_forks,
+                crates.github_issues,
+                releases.is_library,
+                releases.yanked,
+                releases.doc_targets,
+                releases.license,
+                releases.documentation_url,
+                releases.default_target
+         FROM releases
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
@@ -180,11 +184,11 @@ impl CrateDetails {
             description: rows.get(0).get(4),
             rustdoc_status: rows.get(0).get(11),
             target_name: rows.get(0).get(16),
-            default_target: rows.get(0).get(25),
+            default_target: rows.get(0).get(26),
         };
 
         let doc_targets = {
-            let data: Json = rows.get(0).get(22);
+            let data: Json = rows.get(0).get(23);
             data.as_array()
                 .map(|array| {
                     array
@@ -221,9 +225,10 @@ impl CrateDetails {
             github_issues: rows.get(0).get(20),
             metadata,
             is_library: rows.get(0).get(21),
+            yanked: rows.get(0).get(22),
             doc_targets,
-            license: rows.get(0).get(23),
-            documentation_url: rows.get(0).get(24),
+            license: rows.get(0).get(24),
+            documentation_url: rows.get(0).get(25),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
@@ -271,10 +276,13 @@ impl CrateDetails {
         Some(crate_details)
     }
 
-    /// Returns the version of the latest release of this crate.
-    pub fn latest_version(&self) -> &str {
-        // releases will always contain at least one element
-        &self.releases[0].version
+    /// Returns the latest non-yanked release of this crate (or latest yanked if they are all
+    /// yanked).
+    pub fn latest_release(&self) -> &Release {
+        self.releases
+            .iter()
+            .find(|release| !release.yanked)
+            .unwrap_or(&self.releases[0])
     }
 }
 
@@ -367,13 +375,13 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.4")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
                 .version("0.0.5")
                 .build_result_successful(false)
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
@@ -403,7 +411,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
@@ -427,7 +435,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release().name("foo").version("0.0.4").create()?;
 
@@ -457,7 +465,7 @@ mod tests {
             db.fake_release()
                 .name("foo")
                 .version("0.2.0")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
             db.fake_release()
                 .name("foo")
@@ -519,14 +527,62 @@ mod tests {
             db.fake_release().name("foo").version("0.0.3").create()?;
             db.fake_release().name("foo").version("0.0.2").create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.3");
+            }
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.2").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+            Ok(())
+        })
+    }
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.3").unwrap();
-            assert_eq!(details.latest_version(), "0.0.3");
+    #[test]
+    fn test_latest_version_ignores_yanked() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release().name("foo").version("0.0.1").create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .yanked(true)
+                .create()?;
+            db.fake_release().name("foo").version("0.0.2").create()?;
+
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.2");
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_latest_version_only_yanked() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .yanked(true)
+                .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .yanked(true)
+                .create()?;
+
+            for version in &["0.0.1", "0.0.2", "0.0.3"] {
+                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, "0.0.3");
+            }
 
             Ok(())
         })

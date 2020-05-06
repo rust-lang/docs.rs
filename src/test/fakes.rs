@@ -76,12 +76,17 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn repo(mut self, repo: impl Into<String>) -> Self {
+        self.package.repository = Some(repo.into());
+        self
+    }
+
     pub(crate) fn build_result_successful(mut self, new: bool) -> Self {
         self.build_result.successful = new;
         self
     }
 
-    pub(crate) fn cratesio_data_yanked(mut self, new: bool) -> Self {
+    pub(crate) fn yanked(mut self, new: bool) -> Self {
         self.cratesio_data.yanked = new;
         self
     }
@@ -134,54 +139,57 @@ impl<'a> FakeRelease<'a> {
         let package = self.package;
         let db = self.db;
 
-        let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
-            let mut path_prefix = tempdir.path().join(prefix);
-            if let Some(target) = target {
-                path_prefix.push(target);
-            }
-            fs::create_dir(&path_prefix)?;
-
-            for (path, data) in files {
-                // allow `src/main.rs`
-                if let Some(parent) = Path::new(path).parent() {
-                    fs::create_dir_all(path_prefix.join(parent))?;
+        let mut source_meta = None;
+        if self.build_result.successful {
+            let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
+                let mut path_prefix = tempdir.path().join(prefix);
+                if let Some(target) = target {
+                    path_prefix.push(target);
                 }
-                let file = path_prefix.join(&path);
-                log::debug!("writing file {}", file.display());
-                fs::write(file, data)?;
+                fs::create_dir(&path_prefix)?;
+
+                for (path, data) in files {
+                    // allow `src/main.rs`
+                    if let Some(parent) = Path::new(path).parent() {
+                        fs::create_dir_all(path_prefix.join(parent))?;
+                    }
+                    let file = path_prefix.join(&path);
+                    log::debug!("writing file {}", file.display());
+                    fs::write(file, data)?;
+                }
+
+                let prefix = format!(
+                    "{}/{}/{}/{}",
+                    prefix,
+                    package.name,
+                    package.version,
+                    target.unwrap_or("")
+                );
+                log::debug!("adding directory {} from {}", prefix, path_prefix.display());
+                crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
+            };
+
+            let index = [&package.name, "index.html"].join("/");
+            let mut rustdoc_files = self.rustdoc_files;
+            if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
+                rustdoc_files.push((&index, b"default index content"));
             }
-
-            let prefix = format!(
-                "{}/{}/{}/{}",
-                prefix,
-                package.name,
-                package.version,
-                target.unwrap_or("")
-            );
-            log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-            crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
-        };
-
-        let index = [&package.name, "index.html"].join("/");
-        let mut rustdoc_files = self.rustdoc_files;
-        if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
-            rustdoc_files.push((&index, b"default index content"));
-        }
-        for (source_path, data) in &self.source_files {
-            if source_path.starts_with("src/") {
-                let updated = ["src", &package.name, &source_path[4..]].join("/");
-                rustdoc_files.push((Box::leak(Box::new(updated)), data));
+            for (source_path, data) in &self.source_files {
+                if source_path.starts_with("src/") {
+                    let updated = ["src", &package.name, &source_path[4..]].join("/");
+                    rustdoc_files.push((Box::leak(Box::new(updated)), data));
+                }
             }
-        }
-        let rustdoc_meta = upload_files("rustdoc", &rustdoc_files, None)?;
-        log::debug!("added rustdoc files {}", rustdoc_meta);
-        let source_meta = upload_files("source", &self.source_files, None)?;
-        log::debug!("added source files {}", source_meta);
+            let rustdoc_meta = upload_files("rustdoc", &rustdoc_files, None)?;
+            log::debug!("added rustdoc files {}", rustdoc_meta);
+            source_meta = Some(upload_files("source", &self.source_files, None)?);
+            log::debug!("added source files {}", source_meta.as_ref().unwrap());
 
-        for target in &package.targets[1..] {
-            let platform = target.src_path.as_ref().unwrap();
-            upload_files("rustdoc", &rustdoc_files, Some(platform))?;
-            log::debug!("added platform files for {}", platform);
+            for target in &package.targets[1..] {
+                let platform = target.src_path.as_ref().unwrap();
+                upload_files("rustdoc", &rustdoc_files, Some(platform))?;
+                log::debug!("added platform files for {}", platform);
+            }
         }
 
         let release_id = crate::db::add_package_into_database(
@@ -190,7 +198,7 @@ impl<'a> FakeRelease<'a> {
             tempdir.path(),
             &self.build_result,
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
-            Some(source_meta),
+            source_meta,
             self.doc_targets,
             &self.cratesio_data,
             self.has_docs,
