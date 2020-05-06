@@ -14,7 +14,6 @@ impl DocBuilder {
         let conn = connect_db()?;
         let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
         let (mut changes, oid) = index.peek_changes()?;
-        let mut add_count: usize = 0;
 
         // I believe this will fix ordering of queue if we get more than one crate from changes
         changes.reverse();
@@ -29,13 +28,15 @@ impl DocBuilder {
                     krate.name, krate.version, err
                 ),
             }
-
-            add_count += 1;
         }
 
         index.set_last_seen_reference(oid)?;
 
-        Ok(add_count)
+        // Get the size of the queue
+        let query = conn.query("SELECT COUNT(*) as size FROM queue", &[])?;
+        let queue_size = query.iter().next().unwrap().get::<_, i64>("size") as usize;
+
+        Ok(queue_size)
     }
 
     pub fn get_queue_count(&self) -> Result<i64> {
