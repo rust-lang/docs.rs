@@ -43,7 +43,7 @@ impl DocBuilder {
 
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&conn, &krate.name)?;
-                  
+
                     match add_crate_to_queue(&conn, &krate.name, &krate.version, priority) {
                         Ok(()) => debug!("{}-{} added into build queue", krate.name, krate.version),
                         Err(err) => error!(
