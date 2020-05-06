@@ -26,7 +26,7 @@ pub fn github_updater() -> Result<()> {
                 releases.repository_url
          FROM crates
          INNER JOIN releases ON releases.crate_id = crates.id
-         WHERE releases.repository_url ~ '^https*://github.com' AND
+         WHERE releases.repository_url ~ '^https?://github.com' AND
                (crates.github_last_update < NOW() - INTERVAL '1 day' OR
                 crates.github_last_update IS NULL)
          ORDER BY crates.name, releases.release_time DESC",
