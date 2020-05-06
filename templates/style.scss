@@ -294,6 +294,10 @@ div.nav-container-rustdoc {
     z-index: 999;
 }
 
+.rustdoc:focus {
+    outline: unset;
+}
+
 div.landing {
     text-align: center;
     padding-top: 30px;
