@@ -45,7 +45,8 @@ pub fn github_updater() -> Result<()> {
                      SET github_description = $1,
                          github_stars = $2, github_forks = $3,
                          github_issues = $4, github_last_commit = $5,
-                         github_last_update = NOW() WHERE id = $6",
+                         github_last_update = NOW()
+                     WHERE id = $6",
                     &[
                         &fields.description,
                         &(fields.stars as i32),
