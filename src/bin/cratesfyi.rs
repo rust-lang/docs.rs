@@ -8,6 +8,7 @@ use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
 use structopt::StructOpt;
 
 pub fn main() {
+    let _ = dotenv::dotenv();
     logger_init();
 
     CommandLine::from_args().handle_args();
