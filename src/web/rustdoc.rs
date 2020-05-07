@@ -1371,6 +1371,7 @@ mod test {
             "target_name": "x86_64-unknown-linux-gnu",
             "releases": [],
             "github": true,
+            "yanked": false,
             "github_stars": null,
             "github_forks": null,
             "github_issues": null,
