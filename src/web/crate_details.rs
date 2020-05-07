@@ -293,6 +293,7 @@ impl CrateDetails {
             repository_url: None,
             homepage_url: None,
             keywords: None,
+            yanked: false,
             have_examples: true,
             target_name: "x86_64-unknown-linux-gnu".to_string(),
             releases: vec![],
@@ -644,6 +645,7 @@ mod tests {
             "target_name": "x86_64-unknown-linux-gnu",
             "releases": [],
             "github": true,
+            "yanked": false,
             "github_stars": null,
             "github_forks": null,
             "github_issues": null,
@@ -689,6 +691,7 @@ mod tests {
             "target_name": "x86_64-unknown-linux-gnu",
             "releases": [],
             "github": true,
+            "yanked": false,
             "github_stars": null,
             "github_forks": null,
             "github_issues": null,
@@ -719,7 +722,8 @@ mod tests {
 
         let correct_json = json!({
             "version": "idkman",
-            "build_status": true
+            "build_status": true,
+            "yanked": true,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
