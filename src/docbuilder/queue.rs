@@ -9,14 +9,14 @@ use log::{debug, error};
 
 impl DocBuilder {
     /// Updates crates.io-index repository and adds new crates into build queue.
-    /// Returns size of queue
+    /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
         let conn = connect_db()?;
         let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
-        let mut changes = index.fetch_changes()?;
-        let mut add_count: usize = 0;
+        let (mut changes, oid) = index.peek_changes()?;
+        let mut crates_added = 0;
 
-        // I belive this will fix ordering of queue if we get more than one crate from changes
+        // I believe this will fix ordering of queue if we get more than one crate from changes
         changes.reverse();
 
         for krate in &changes {
@@ -41,17 +41,27 @@ impl DocBuilder {
                         ),
                     }
                 }
+
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&conn, &krate.name)?;
-                    add_crate_to_queue(&conn, &krate.name, &krate.version, priority).ok();
 
-                    debug!("{}-{} added into build queue", krate.name, krate.version);
-                    add_count += 1;
+                    match add_crate_to_queue(&conn, &krate.name, &krate.version, priority) {
+                        Ok(()) => {
+                            debug!("{}-{} added into build queue", krate.name, krate.version);
+                            crates_added += 1;
+                        }
+                        Err(err) => error!(
+                            "failed adding {}-{} into build queue: {}",
+                            krate.name, krate.version, err
+                        ),
+                    }
                 }
             }
         }
 
-        Ok(add_count)
+        index.set_last_seen_reference(oid)?;
+
+        Ok(crates_added)
     }
 
     pub fn get_queue_count(&self) -> Result<i64> {
