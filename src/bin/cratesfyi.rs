@@ -349,9 +349,6 @@ impl BuildSubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
 enum DatabaseSubcommand {
-    #[structopt(name = "move-to-s3")]
-    MoveToS3,
-
     /// Run database migrations
     Migrate {
         /// The database version to migrate to
@@ -394,21 +391,6 @@ enum DatabaseSubcommand {
 impl DatabaseSubcommand {
     pub fn handle_args(self) {
         match self {
-            Self::MoveToS3 => {
-                let conn = db::connect_db().expect("failed to connect to the database");
-
-                let (mut count, mut total) = (1, 0);
-                while count != 0 {
-                    count = db::move_to_s3(&conn, 5_000).expect("Failed to upload batch to S3");
-                    total += count;
-
-                    eprintln!(
-                        "moved {} rows to s3 in this batch, total moved so far: {}",
-                        count, total
-                    );
-                }
-            }
-
             Self::Migrate { version } => {
                 let conn = connect_db().expect("failed to connect to the database");
                 db::migrate(version, &conn).expect("Failed to run database migrations");
