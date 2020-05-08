@@ -769,7 +769,7 @@ mod tests {
             db.fake_release()
                 .name("regex")
                 .version("0.0.0")
-                .cratesio_data_yanked(true)
+                .yanked(true)
                 .create()?;
 
             let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
