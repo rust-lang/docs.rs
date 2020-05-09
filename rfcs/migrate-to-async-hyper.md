@@ -6,7 +6,7 @@
 
 2. Make `main` an `async fn` with `#[tokio::main]` to start the tokio runtime, add the `hyper` dependency and migrate the side services to async (By side services I mean the ones in the daemon)
 
-3. Move all routing to `hyper`, separate the handlers out from being within `iron` code and forward requests with `spawn_blocking`
+3. Add a catch-all handler that uses `hyper`, so that any requests not picked up by `iron` are handled by hyper
    1. Routes should be migrated to asynchronous code from least used to most used
 
 4. Switch from `postgres` to `tokio-postgres` for database interaction
