@@ -15,7 +15,7 @@
 
 ### Why async
 
-A web server is inherently io bound, which is the type of task that asynchronous execution excels at. If all goes well, the server will run faster and with potentially less resource usage than it currently has.
+A web server is inherently io bound, which is the type of task that asynchronous execution excels at. If all goes well, the server will run faster and with potentially less resource usage than it currently has due to using a single runtime to execute all operations.
 Some of our current dependencies already use async (such as `rusoto`), and we could also potentially see improvements from them executing in an actually asynchronous environment.
 Additionally, updating things allows us to both gain newer (and generally faster, safer and better supported) dependencies, as well as letting us give a critical eye to our current infrastructure to see what's good and what's bad.
 
@@ -25,7 +25,7 @@ Additionally, updating things allows us to both gain newer (and generally faster
 
 2. All functions down the 'pipeline' need to be slowly migrated to async, as you need async code to effectively call async code. At this point we can also migrate the side services to async, which will help with the overall efficiency of the server, as the background tasks that were just spinning on their own thread now are effectively scheduled by the tokio runtime.
 
-3. Moving the routing to hyper allows us to incrementally change over the handlers to async code, at the cost of intermediate weirdness due to the request conversion. It also allows us to migrate the less-traveled routes first in order to make sure that everything works as it should.
+3. Using a catch-all for hyper allows us to incrementally transfer from `iron` to `hyper` with minimal code disruption, as well as making the process of migration less complex and more easily reversible since we can do things one at a time.
    1. Migrating less used routes first allows us to potentially catch ill side-effects before they affect more critical code
 
 4. Until this point all calls to postgres will be synchronous (Likely using `spawn_blocking`), but that's not the most efficient way to deal with an io type of task. Switching to `tokio-postgres` allows the minimum of code change while also gaining the benefits of multi-tasking.
