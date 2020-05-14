@@ -29,11 +29,6 @@ toml = "0.5"
 html5ever = "0.22"
 schemamama = "0.3"
 schemamama_postgres = "0.2"
-rusoto_s3 = "0.40"
-rusoto_core = "0.40"
-rusoto_credential = "0.40"
-futures = "0.1"
-tokio = "0.1"
 systemstat = "0.1.4"
 prometheus = { version = "0.7.0", default-features = false }
 lazy_static = "1.0.0"
@@ -48,6 +43,15 @@ handlebars-iron = "0.22"
 params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
 tempfile = "3.1.0"
+
+# Communicating with S3
+rusoto_s3 = "0.43"
+rusoto_core = "0.43"
+rusoto_credential = "0.43"
+
+# Async
+futures = "0.3"
+tokio = "0.2"
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"

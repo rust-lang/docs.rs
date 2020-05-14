@@ -72,7 +72,7 @@ impl<'a> Storage<'a> {
             DatabaseBackend::new(conn).into()
         }
     }
-    pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
+    pub(crate) fn get(&mut self, path: &str) -> Result<Blob, Error> {
         match self {
             Self::Database(db) => db.get(path),
             Self::S3(s3) => s3.get(path),
