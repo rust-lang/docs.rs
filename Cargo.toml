@@ -51,7 +51,7 @@ rusoto_credential = "0.43"
 
 # Async
 futures = "0.3"
-tokio = "0.2"
+tokio = { version = "0.2", features = ["rt-threaded"] }
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"
