@@ -1,5 +1,6 @@
 use crate::storage::s3::{s3_client, S3_BUCKET_NAME};
 use failure::{Error, Fail};
+use futures::executor;
 use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
 
@@ -78,14 +79,12 @@ fn delete_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
 fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
     let mut continuation_token = None;
     loop {
-        let list = s3
-            .list_objects_v2(ListObjectsV2Request {
-                bucket: S3_BUCKET_NAME.into(),
-                prefix: Some(name.into()),
-                continuation_token,
-                ..ListObjectsV2Request::default()
-            })
-            .sync()?;
+        let list = executor::block_on(s3.list_objects_v2(ListObjectsV2Request {
+            bucket: S3_BUCKET_NAME.into(),
+            prefix: Some(name.into()),
+            continuation_token,
+            ..ListObjectsV2Request::default()
+        }))?;
 
         let to_delete = list
             .contents
@@ -97,16 +96,16 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
                 version_id: None,
             })
             .collect::<Vec<_>>();
-        let resp = s3
-            .delete_objects(DeleteObjectsRequest {
-                bucket: S3_BUCKET_NAME.into(),
-                delete: rusoto_s3::Delete {
-                    objects: to_delete,
-                    quiet: None,
-                },
-                ..DeleteObjectsRequest::default()
-            })
-            .sync()?;
+
+        let resp = executor::block_on(s3.delete_objects(DeleteObjectsRequest {
+            bucket: S3_BUCKET_NAME.into(),
+            delete: rusoto_s3::Delete {
+                objects: to_delete,
+                quiet: None,
+            },
+            ..DeleteObjectsRequest::default()
+        }))?;
+
         if let Some(errs) = resp.errors {
             for err in &errs {
                 log::error!("error deleting file from s3: {:?}", err);
