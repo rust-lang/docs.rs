@@ -1,4 +1,0 @@
-   Compiling tokio v0.2.21
-   Compiling cratesfyi v0.6.0 (G:\Users\Chase\Code\Rust\docs.rs)
-   Compiling tokio-util v0.3.1
-   Compiling tokio-tls v0.3.1
