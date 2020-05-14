@@ -247,14 +247,14 @@ enum BuildSubcommand {
         /// Crate name
         #[structopt(
             name = "CRATE_NAME",
-            required_unless("LOCAL"),
+            required_unless("local"),
             requires("CRATE_VERSION")
         )]
-        crate_name: String,
+        crate_name: Option<String>,
 
         /// Version of crate
         #[structopt(name = "CRATE_VERSION")]
-        crate_version: String,
+        crate_version: Option<String>,
 
         /// Build a crate at a specific path
         #[structopt(short = "l", long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
@@ -308,7 +308,12 @@ impl BuildSubcommand {
                         .expect("Building documentation failed");
                 } else {
                     builder
-                        .build_package(&mut docbuilder, &crate_name, &crate_version, None)
+                        .build_package(
+                            &mut docbuilder,
+                            &crate_name.unwrap(),
+                            &crate_version.unwrap(),
+                            None,
+                        )
                         .expect("Building documentation failed");
                 }
 
