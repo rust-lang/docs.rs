@@ -15,7 +15,7 @@ regex = "1"
 structopt = "0.3"
 crates-index-diff = "7"
 time = "0.1"
-reqwest = "0.9"
+reqwest = { version = "0.10", features = ["blocking"] }
 semver = "0.9"
 slug = "=0.1.1"
 env_logger = "0.7"
