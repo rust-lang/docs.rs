@@ -1,16 +1,17 @@
 use super::Blob;
 use failure::Error;
-use futures::future::{self, FutureExt};
-use log::{error, warn};
-use rusoto_core::{region::Region, RusotoError};
-use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{
-    GetObjectRequest, PutObjectError, PutObjectOutput, PutObjectRequest, S3Client, S3,
+use futures_util::{
+    future::{FutureExt, TryFutureExt},
+    stream::{FuturesUnordered, StreamExt},
 };
+use log::{error, warn};
+use rusoto_core::region::Region;
+use rusoto_credential::DefaultCredentialsProvider;
+use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 
 #[cfg(test)]
 mod test;
@@ -70,12 +71,16 @@ impl<'a> S3Backend<'a> {
         })
     }
 
-    pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
+    pub(super) fn store_batch(&mut self, mut uploads: Vec<Blob>) -> Result<(), Error> {
         let mut attempts = 0;
 
         loop {
-            let mut futures = Vec::with_capacity(batch.len());
-            for blob in batch {
+            // `FuturesUnordered` is used because the order of execution doesn't
+            // matter, we just want things to execute as fast as possible
+            let futures = FuturesUnordered::new();
+
+            // Drain uploads, filling `futures` with upload requests
+            for blob in uploads.drain(..) {
                 futures.push(
                     self.client
                         .put_object(PutObjectRequest {
@@ -85,32 +90,51 @@ impl<'a> S3Backend<'a> {
                             content_type: Some(blob.mime.clone()),
                             ..Default::default()
                         })
-                        .inspect(|_| {
+                        // Drop the value returned by `put_object` because we don't need it,
+                        // emit an error and replace the error values with the blob that failed
+                        // to upload so that we can retry failed uploads
+                        .map(|resp| match resp {
+                            Ok(..) => Ok(()),
+                            Err(err) => {
+                                error!("failed to upload file to s3: {:?}", err);
+                                Err(blob)
+                            }
+                        })
+                        .inspect_ok(|_| {
+                            // Increment the total uploaded files when a file is uploaded
                             crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
                         }),
                 );
             }
             attempts += 1;
 
-            let result: Result<Vec<PutObjectOutput>, RusotoError<PutObjectError>> = self
-                .runtime
-                .block_on(future::join_all(futures))
-                .into_iter()
-                .collect();
+            // Collect all the failed uploads so that we can retry them
+            uploads = self.runtime.block_on(
+                futures
+                    .filter_map(|resp| async move { resp.err() })
+                    .collect(),
+            );
 
-            match result {
-                // this batch was successful, start another batch if there are still more files
-                Ok(..) => break,
-                Err(err) => {
-                    error!("failed to upload to s3: {:?}", err);
-                    // if a futures error occurs, retry the batch
-                    if attempts > 2 {
-                        panic!("failed to upload 3 times, exiting");
-                    }
-                }
+            // If there are no further uploads we were successful and can return
+            if uploads.is_empty() {
+                break;
+
+            // If more than three attempts to upload fail, return an error
+            } else if attempts >= 3 {
+                error!("failed to upload to s3, abandoning");
+                failure::bail!("Failed to upload to s3 three times, abandoning");
             }
         }
+
         Ok(())
+    }
+
+    pub fn runtime_handle(&self) -> Handle {
+        self.runtime.handle().clone()
+    }
+
+    pub fn client(&self) -> &S3Client {
+        &self.client
     }
 }
 
@@ -125,6 +149,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
     if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
         return None;
     }
+
     let creds = match DefaultCredentialsProvider::new() {
         Ok(creds) => creds,
         Err(err) => {
@@ -132,6 +157,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
             return None;
         }
     };
+
     Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         creds,
@@ -149,7 +175,6 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 pub(crate) mod tests {
     use super::*;
     use crate::test::*;
-    use std::slice;
 
     #[test]
     fn test_parse_timespec() {
@@ -179,7 +204,7 @@ pub(crate) mod tests {
 
             // Add a test file to the database
             let s3 = env.s3();
-            s3.upload(slice::from_ref(&blob)).unwrap();
+            s3.upload(vec![blob.clone()]).unwrap();
 
             // Test that the proper file was returned
             s3.assert_blob(&blob, "dir/foo.txt");
@@ -215,7 +240,7 @@ pub(crate) mod tests {
                 })
                 .collect();
 
-            s3.upload(&blobs).unwrap();
+            s3.upload(blobs.clone()).unwrap();
             for blob in &blobs {
                 s3.assert_blob(blob, &blob.path);
             }

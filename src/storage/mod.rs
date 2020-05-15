@@ -61,7 +61,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
 
 pub(crate) enum Storage<'a> {
     Database(DatabaseBackend<'a>),
-    S3(S3Backend<'a>),
+    S3(Box<S3Backend<'a>>),
 }
 
 impl<'a> Storage<'a> {
@@ -79,9 +79,9 @@ impl<'a> Storage<'a> {
         }
     }
 
-    fn store_batch(&mut self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+    fn store_batch(&mut self, batch: Vec<Blob>, trans: &Transaction) -> Result<(), Error> {
         match self {
-            Self::Database(db) => db.store_batch(batch, trans),
+            Self::Database(db) => db.store_batch(&batch, trans),
             Self::S3(s3) => s3.store_batch(batch),
         }
     }
@@ -141,7 +141,7 @@ impl<'a> Storage<'a> {
             if batch.is_empty() {
                 break;
             }
-            self.store_batch(&batch, &trans)?;
+            self.store_batch(batch, &trans)?;
         }
 
         trans.commit()?;
@@ -180,7 +180,7 @@ impl<'a> From<DatabaseBackend<'a>> for Storage<'a> {
 
 impl<'a> From<S3Backend<'a>> for Storage<'a> {
     fn from(db: S3Backend<'a>) -> Self {
-        Self::S3(db)
+        Self::S3(Box::new(db))
     }
 }
 

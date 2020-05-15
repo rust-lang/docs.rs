@@ -1,5 +1,6 @@
 use super::*;
 use crate::storage::test::assert_blob_eq;
+use rusoto_core::RusotoError;
 use rusoto_s3::{
     CreateBucketRequest, DeleteBucketRequest, DeleteObjectRequest, ListObjectsRequest, S3,
 };
@@ -28,7 +29,7 @@ impl TestS3 {
         )))
     }
 
-    pub(crate) fn upload(&self, blobs: &[Blob]) -> Result<(), Error> {
+    pub(crate) fn upload(&self, blobs: Vec<Blob>) -> Result<(), Error> {
         self.0.borrow_mut().store_batch(blobs)
     }
 
