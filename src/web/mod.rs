@@ -84,9 +84,6 @@ const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
-type PoolFactoryFn = dyn Fn() -> Pool + Send + Sync;
-type PoolFactory = Box<PoolFactoryFn>;
-
 fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
     // TODO: Use DocBuilderOptions for paths
     let mut hbse = HandlebarsEngine::new();
@@ -103,25 +100,25 @@ struct CratesfyiHandler {
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
     static_handler: Box<dyn Handler>,
-    pool_factory: PoolFactory,
+    pool: Pool,
 }
 
 impl CratesfyiHandler {
-    fn chain<H: Handler>(pool_factory: &PoolFactoryFn, base: H) -> Chain {
+    fn chain<H: Handler>(pool: Pool, base: H) -> Chain {
         let hbse = handlebars_engine().expect("Failed to load handlebar templates");
 
         let mut chain = Chain::new(base);
-        chain.link_before(pool_factory());
+        chain.link_before(pool);
         chain.link_after(hbse);
         chain
     }
 
-    fn new(pool_factory: PoolFactory) -> CratesfyiHandler {
+    fn new(pool: Pool) -> CratesfyiHandler {
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
 
-        let shared_resources = Self::chain(&pool_factory, rustdoc::SharedResourceHandler);
-        let router_chain = Self::chain(&pool_factory, routes.iron_router());
+        let shared_resources = Self::chain(pool.clone(), rustdoc::SharedResourceHandler);
+        let router_chain = Self::chain(pool.clone(), routes.iron_router());
         let prefix = PathBuf::from(
             env::var("CRATESFYI_PREFIX")
                 .expect("the CRATESFYI_PREFIX environment variable is not set"),
@@ -138,7 +135,7 @@ impl CratesfyiHandler {
                 Box::new(file::DatabaseFileHandler),
             )),
             static_handler: Box::new(static_handler),
-            pool_factory,
+            pool,
         }
     }
 }
@@ -191,7 +188,7 @@ impl Handler for CratesfyiHandler {
                     debug!("Path not found: {}", DebugPath(&req.url));
                 }
 
-                Self::chain(&self.pool_factory, err).handle(req)
+                Self::chain(self.pool.clone(), err).handle(req)
             })
     }
 }
@@ -354,20 +351,17 @@ pub struct Server {
 
 impl Server {
     pub fn start(addr: Option<&str>) -> Self {
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Box::new(Pool::new));
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new());
         info!("Running docs.rs web server on http://{}", server.addr());
         server
     }
 
     #[cfg(test)]
     pub(crate) fn start_test(conn: Arc<Mutex<Connection>>) -> Self {
-        Self::start_inner(
-            "127.0.0.1:0",
-            Box::new(move || Pool::new_simple(conn.clone())),
-        )
+        Self::start_inner("127.0.0.1:0", Pool::new_simple(conn.clone()))
     }
 
-    fn start_inner(addr: &str, pool_factory: PoolFactory) -> Self {
+    fn start_inner(addr: &str, pool: Pool) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
         metrics::SUCCESSFUL_BUILDS.inc_by(0);
@@ -375,7 +369,7 @@ impl Server {
         metrics::NON_LIBRARY_BUILDS.inc_by(0);
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
 
-        let cratesfyi = CratesfyiHandler::new(pool_factory);
+        let cratesfyi = CratesfyiHandler::new(pool);
         let inner = Iron::new(cratesfyi)
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
