@@ -65,6 +65,12 @@ lazy_static::lazy_static! {
         &["route"]
     )
     .unwrap();
+
+    pub static ref FAILED_DB_CONNECTIONS: IntCounter = register_int_counter!(
+        "docsrs_failed_db_connections",
+        "Number of attempted and failed connections to the database"
+    )
+    .unwrap();
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {

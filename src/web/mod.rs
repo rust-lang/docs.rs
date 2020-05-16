@@ -368,6 +368,7 @@ impl Server {
         metrics::FAILED_BUILDS.inc_by(0);
         metrics::NON_LIBRARY_BUILDS.inc_by(0);
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
+        metrics::FAILED_DB_CONNECTIONS.inc_by(0);
 
         let cratesfyi = CratesfyiHandler::new(pool);
         let inner = Iron::new(cratesfyi)

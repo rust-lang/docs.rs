@@ -28,6 +28,8 @@ impl Pool {
             Self::R2D2(conn) => {
                 let conn = conn.get().map_err(|err| {
                     log::error!("Error getting db connection: {:?}", err);
+                    super::metrics::FAILED_DB_CONNECTIONS.inc();
+
                     IronError::new(err, Status::InternalServerError)
                 })?;
 
