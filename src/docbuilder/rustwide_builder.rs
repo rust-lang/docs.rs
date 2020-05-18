@@ -215,7 +215,9 @@ impl RustwideBuilder {
 
                 info!("copying essential files for {}", self.rustc_version);
                 let source = build.host_target_dir().join("doc");
-                let dest = ::tempdir::TempDir::new("essential-files")?;
+                let dest = tempfile::Builder::new()
+                    .prefix("essential-files")
+                    .tempdir()?;
 
                 let files = ESSENTIAL_FILES_VERSIONED
                     .iter()
@@ -321,7 +323,7 @@ impl RustwideBuilder {
         };
         krate.fetch(&self.workspace)?;
 
-        let local_storage = ::tempdir::TempDir::new("docsrs-docs")?;
+        let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
         let res = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
