@@ -38,7 +38,6 @@ systemstat = "0.1.4"
 prometheus = { version = "0.7.0", default-features = false }
 lazy_static = "1.0.0"
 rustwide = "0.6.0"
-tempdir = "0.3"
 mime_guess = "2"
 dotenv = "0.15"
 
@@ -48,6 +47,7 @@ router = "0.5"
 handlebars-iron = "0.22"
 params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
+tempfile = "3.1.0"
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"

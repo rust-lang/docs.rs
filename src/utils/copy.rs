@@ -47,8 +47,14 @@ mod test {
 
     #[test]
     fn test_copy_doc_dir() {
-        let source = tempdir::TempDir::new("cratesfyi-src").unwrap();
-        let destination = tempdir::TempDir::new("cratesfyi-dst").unwrap();
+        let source = tempfile::Builder::new()
+            .prefix("cratesfyi-src")
+            .tempdir()
+            .unwrap();
+        let destination = tempfile::Builder::new()
+            .prefix("cratesfyi-dst")
+            .tempdir()
+            .unwrap();
         let doc = source.path().join("doc");
         fs::create_dir(&doc).unwrap();
         fs::create_dir(doc.join("inner")).unwrap();

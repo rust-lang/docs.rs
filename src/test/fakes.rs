@@ -151,7 +151,7 @@ impl<'a> FakeRelease<'a> {
         use std::fs;
         use std::path::Path;
 
-        let tempdir = tempdir::TempDir::new("docs.rs-fake")?;
+        let tempdir = tempfile::Builder::new().prefix("docs.rs-fake").tempdir()?;
         let package = self.package;
         let db = self.db;
 

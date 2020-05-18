@@ -199,7 +199,10 @@ mod test {
     }
 
     pub(crate) fn test_roundtrip(blobs: &[Blob]) {
-        let dir = tempdir::TempDir::new("docs.rs-upload-test").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-upload-test")
+            .tempdir()
+            .unwrap();
         for blob in blobs {
             let path = dir.path().join(&blob.path);
             if let Some(parent) = path.parent() {
@@ -228,7 +231,10 @@ mod test {
     #[test]
     fn test_uploads() {
         use std::fs;
-        let dir = tempdir::TempDir::new("docs.rs-upload-test").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-upload-test")
+            .tempdir()
+            .unwrap();
         let files = ["Cargo.toml", "src/main.rs"];
         for &file in &files {
             let path = dir.path().join(file);
