@@ -133,7 +133,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         } else {
             let path = req.url.path();
             let path = path.join("/");
-            let conn = extension!(req, Pool).get();
+            let conn = extension!(req, Pool).get()?;
             match File::from_path(&conn, &path) {
                 Some(f) => return Ok(f.serve()),
                 None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
@@ -162,7 +162,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let req_version = router.find("version");
     let mut target = router.find("target");
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
@@ -213,7 +213,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let name = router.find("crate").unwrap_or("").to_string();
     let url_version = router.find("version");
     let version; // pre-declaring it to enforce drop order relative to `req_path`
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     let mut req_path = req.url.path();
 
@@ -406,7 +406,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(router.find("name"));
     let version = cexpect!(router.find("version"));
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let base = redirect_base(req);
 
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
@@ -460,7 +460,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let name = cexpect!(extension!(req, Router).find("crate"));
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     let options = match match_version(&conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
         Some(MatchSemver::Exact((version, id))) => {
@@ -527,7 +527,7 @@ impl Handler for SharedResourceHandler {
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
         let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
-            let conn = extension!(req, Pool).get();
+            let conn = extension!(req, Pool).get()?;
 
             if let Some(file) = File::from_path(&conn, filename) {
                 return Ok(file.serve());

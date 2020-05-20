@@ -315,7 +315,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(router.find("name"));
     let req_version = router.find("version");
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     match match_version(&conn, &name, req_version).and_then(|m| m.assume_exact()) {
         Some(MatchSemver::Exact((version, _))) => {

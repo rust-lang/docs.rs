@@ -65,10 +65,22 @@ lazy_static::lazy_static! {
         &["route"]
     )
     .unwrap();
+
+    pub static ref FAILED_DB_CONNECTIONS: IntCounter = register_int_counter!(
+        "docsrs_failed_db_connections",
+        "Number of attempted and failed connections to the database"
+    )
+    .unwrap();
+
+    pub static ref CONCURRENT_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+        "docsrs_db_connections",
+        "The number of currently used database connections"
+    )
+    .unwrap();
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     QUEUED_CRATES_COUNT.set(
         ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))
@@ -80,6 +92,9 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
             .get(0)
             .get(0),
     );
+
+    let pool = extension!(req, Pool);
+    CONCURRENT_DB_CONNECTIONS.set(pool.connections() as i64);
 
     let mut buffer = Vec::new();
     let families = prometheus::gather();

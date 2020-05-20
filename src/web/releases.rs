@@ -335,7 +335,7 @@ fn get_search_results(
 }
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
     Page::new(packages)
         .set_true("show_search_form")
@@ -344,7 +344,7 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
     let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
     resp.headers.set(::iron::headers::ContentType(
@@ -391,7 +391,7 @@ pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or("1")
         .parse()
         .unwrap_or(1);
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
     releases_handler(
         packages,
@@ -408,7 +408,7 @@ pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or("1")
         .parse()
         .unwrap_or(1);
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
     releases_handler(
         packages,
@@ -425,7 +425,7 @@ pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Respons
         .unwrap_or("1")
         .parse()
         .unwrap_or(1);
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(
         &conn,
         page_number,
@@ -447,7 +447,7 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
         .unwrap_or("1")
         .parse()
         .unwrap_or(1);
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let packages = get_releases(
         &conn,
         page_number,
@@ -468,7 +468,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     // page number of releases
     let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
 
     #[allow(clippy::or_fun_call)]
     let author = ctry!(router
@@ -518,7 +518,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let params = ctry!(req.get::<Params>());
     let query = params.find(&["query"]);
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     if let Some(&Value::String(ref query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
         // if there is a match
@@ -618,7 +618,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let release_activity_data: Json = ctry!(conn.query(
         "SELECT value FROM config WHERE name = 'release_activity'",
         &[]
@@ -635,7 +635,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let mut crates: Vec<(String, String, i32)> = Vec::new();
     for krate in &conn
         .query(
