@@ -42,6 +42,15 @@ impl Pool {
             )),
         }
     }
+
+    pub(crate) fn connections(&self) -> u32 {
+        match self {
+            Self::R2D2(conn) => conn.state().connections,
+
+            #[cfg(test)]
+            Self::Simple(..) => 0,
+        }
+    }
 }
 
 impl typemap::Key for Pool {

@@ -71,6 +71,12 @@ lazy_static::lazy_static! {
         "Number of attempted and failed connections to the database"
     )
     .unwrap();
+
+    pub static ref CONCURRENT_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+        "docsrs_db_connections",
+        "The number of currently used database connections"
+    )
+    .unwrap();
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
@@ -86,6 +92,9 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
             .get(0)
             .get(0),
     );
+
+    let pool = extension!(req, Pool);
+    CONCURRENT_DB_CONNECTIONS.set(pool.connections() as i64);
 
     let mut buffer = Vec::new();
     let families = prometheus::gather();
