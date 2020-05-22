@@ -1,7 +1,7 @@
 use super::Blob;
 use failure::Error;
 use futures_util::{
-    future::{FutureExt, TryFutureExt},
+    future::FutureExt,
     stream::{FuturesUnordered, StreamExt},
 };
 use log::{error, warn};
@@ -94,15 +94,16 @@ impl<'a> S3Backend<'a> {
                         // emit an error and replace the error values with the blob that failed
                         // to upload so that we can retry failed uploads
                         .map(|resp| match resp {
-                            Ok(..) => Ok(()),
+                            Ok(..) => {
+                                // Increment the total uploaded files when a file is uploaded
+                                crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
+
+                                Ok(())
+                            }
                             Err(err) => {
                                 error!("failed to upload file to s3: {:?}", err);
                                 Err(blob)
                             }
-                        })
-                        .inspect_ok(|_| {
-                            // Increment the total uploaded files when a file is uploaded
-                            crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
                         }),
                 );
             }
