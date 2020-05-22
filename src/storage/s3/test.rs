@@ -54,6 +54,8 @@ impl TestS3 {
 
 impl Drop for TestS3 {
     fn drop(&mut self) {
+        let mut runtime = Runtime::new().unwrap();
+
         // delete the bucket when the test ends
         // this has to delete all the objects in the bucket first or min.io will give an error
         let inner = self.0.borrow();
@@ -62,9 +64,7 @@ impl Drop for TestS3 {
             ..Default::default()
         };
 
-        let objects = inner
-            .runtime
-            .handle()
+        let objects = runtime
             .block_on(inner.client.list_objects(list_req))
             .unwrap();
         assert!(!objects.is_truncated.unwrap_or(false));
@@ -76,9 +76,7 @@ impl Drop for TestS3 {
                 ..Default::default()
             };
 
-            inner
-                .runtime
-                .handle()
+            runtime
                 .block_on(inner.client.delete_object(delete_req))
                 .unwrap();
         }
@@ -87,9 +85,7 @@ impl Drop for TestS3 {
             bucket: inner.bucket.to_owned(),
         };
 
-        inner
-            .runtime
-            .handle()
+        runtime
             .block_on(inner.client.delete_bucket(delete_req))
             .expect("failed to delete test bucket");
     }
