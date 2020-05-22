@@ -1,12 +1,10 @@
 use super::Blob;
 use failure::Error;
-use futures::future::{self, FutureExt};
+use futures::Future;
 use log::{error, warn};
-use rusoto_core::{region::Region, RusotoError};
+use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{
-    GetObjectRequest, PutObjectError, PutObjectOutput, PutObjectRequest, S3Client, S3,
-};
+use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
 use time::Timespec;
@@ -34,23 +32,15 @@ impl<'a> S3Backend<'a> {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_runtime(client: S3Client, bucket: &'a str, runtime: Runtime) -> Self {
-        Self {
-            client,
-            bucket,
-            runtime,
-        }
-    }
-
-    pub(super) fn get(&mut self, path: &str) -> Result<Blob, Error> {
+    pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
         let res = self
-            .runtime
-            .block_on(self.client.get_object(GetObjectRequest {
+            .client
+            .get_object(GetObjectRequest {
                 bucket: self.bucket.to_string(),
                 key: path.into(),
                 ..Default::default()
-            }))?;
+            })
+            .sync()?;
 
         let mut b = res.body.unwrap().into_blocking_read();
         let mut content = Vec::with_capacity(
@@ -71,10 +61,12 @@ impl<'a> S3Backend<'a> {
     }
 
     pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
+        use futures::stream::FuturesUnordered;
+        use futures::stream::Stream;
         let mut attempts = 0;
 
         loop {
-            let mut futures = Vec::with_capacity(batch.len());
+            let mut futures = FuturesUnordered::new();
             for blob in batch {
                 futures.push(
                     self.client
@@ -92,15 +84,9 @@ impl<'a> S3Backend<'a> {
             }
             attempts += 1;
 
-            let result: Result<Vec<PutObjectOutput>, RusotoError<PutObjectError>> = self
-                .runtime
-                .block_on(future::join_all(futures))
-                .into_iter()
-                .collect();
-
-            match result {
+            match self.runtime.block_on(futures.map(drop).collect()) {
                 // this batch was successful, start another batch if there are still more files
-                Ok(..) => break,
+                Ok(_) => break,
                 Err(err) => {
                     error!("failed to upload to s3: {:?}", err);
                     // if a futures error occurs, retry the batch
@@ -201,10 +187,8 @@ pub(crate) mod tests {
                 "b",
                 "a_very_long_file_name_that_has_an.extension",
                 "parent/child",
-                "h/i/
-                g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
+                "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
             ];
-
             let blobs: Vec<_> = names
                 .iter()
                 .map(|&path| Blob {
@@ -214,12 +198,10 @@ pub(crate) mod tests {
                     content: "Hello world!".into(),
                 })
                 .collect();
-
             s3.upload(&blobs).unwrap();
             for blob in &blobs {
                 s3.assert_blob(blob, &blob.path);
             }
-
             Ok(())
         })
     }
