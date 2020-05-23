@@ -11,6 +11,7 @@ pub(crate) use self::rustwide_builder::BuildResult;
 pub use self::rustwide_builder::RustwideBuilder;
 
 use crate::error::Result;
+use crate::index::Index;
 use crate::DocBuilderOptions;
 use log::debug;
 use std::collections::BTreeSet;
@@ -22,14 +23,17 @@ use std::path::PathBuf;
 /// chroot based documentation builder
 pub struct DocBuilder {
     options: DocBuilderOptions,
+    index: Index,
     cache: BTreeSet<String>,
     db_cache: BTreeSet<String>,
 }
 
 impl DocBuilder {
     pub fn new(options: DocBuilderOptions) -> DocBuilder {
+        let index = Index::new(&options.registry_index_path).expect("valid index");
         DocBuilder {
             options,
+            index,
             cache: BTreeSet::new(),
             db_cache: BTreeSet::new(),
         }
