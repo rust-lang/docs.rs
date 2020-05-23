@@ -4,7 +4,7 @@ use super::{DocBuilder, RustwideBuilder};
 use crate::db::connect_db;
 use crate::error::Result;
 use crate::utils::{add_crate_to_queue, get_crate_priority};
-use crates_index_diff::{ChangeKind, Index};
+use crates_index_diff::ChangeKind;
 use log::{debug, error};
 
 impl DocBuilder {
@@ -12,8 +12,7 @@ impl DocBuilder {
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
         let conn = connect_db()?;
-        let index = Index::from_path_or_cloned(&self.options.registry_index_path)?;
-        let (mut changes, oid) = index.peek_changes()?;
+        let (mut changes, oid) = self.index.diff().peek_changes()?;
         let mut crates_added = 0;
 
         // I believe this will fix ordering of queue if we get more than one crate from changes
@@ -59,7 +58,7 @@ impl DocBuilder {
             }
         }
 
-        index.set_last_seen_reference(oid)?;
+        self.index.diff().set_last_seen_reference(oid)?;
 
         Ok(crates_added)
     }

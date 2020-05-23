@@ -32,7 +32,7 @@ pub(crate) fn add_package_into_database(
     default_target: &str,
     source_files: Option<Value>,
     doc_targets: Vec<String>,
-    cratesio_data: &RegistryCrateData,
+    registry_data: &RegistryCrateData,
     has_docs: bool,
     has_examples: bool,
     compression_algorithms: std::collections::HashSet<CompressionAlgorithm>,
@@ -87,10 +87,10 @@ pub(crate) fn add_package_into_database(
         &[
             &crate_id,
             &metadata_pkg.version,
-            &cratesio_data.release_time.naive_utc(),
+            &registry_data.release_time.naive_utc(),
             &serde_json::to_value(&dependencies)?,
             &metadata_pkg.package_name(),
-            &cratesio_data.yanked,
+            &registry_data.yanked,
             &res.successful,
             &has_docs,
             &false, // TODO: Add test status somehow
@@ -103,7 +103,7 @@ pub(crate) fn add_package_into_database(
             &serde_json::to_value(&metadata_pkg.authors)?,
             &serde_json::to_value(&metadata_pkg.keywords)?,
             &has_examples,
-            &cratesio_data.downloads,
+            &registry_data.downloads,
             &source_files,
             &serde_json::to_value(&doc_targets)?,
             &is_library,
@@ -117,7 +117,7 @@ pub(crate) fn add_package_into_database(
 
     add_keywords_into_database(&conn, &metadata_pkg, release_id)?;
     add_authors_into_database(&conn, &metadata_pkg, release_id)?;
-    add_owners_into_database(&conn, &cratesio_data.owners, crate_id)?;
+    add_owners_into_database(&conn, &registry_data.owners, crate_id)?;
     add_compression_into_database(&conn, compression_algorithms.into_iter(), release_id)?;
 
     // Update the crates table with the new release
