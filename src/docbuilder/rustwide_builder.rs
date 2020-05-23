@@ -2,7 +2,9 @@ use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
-use crate::db::{add_build_into_database, add_package_into_database, connect_db, CratesIoData};
+use crate::db::{
+    add_build_into_database, add_package_into_database, connect_db, RegistryCrateData,
+};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
@@ -259,7 +261,7 @@ impl RustwideBuilder {
     pub fn build_world(&mut self, doc_builder: &mut DocBuilder) -> Result<()> {
         let mut count = 0;
         crates_from_path(
-            &doc_builder.options().crates_io_index_path.clone(),
+            &doc_builder.options().registry_index_path.clone(),
             &mut |name, version| {
                 match self.build_package(doc_builder, name, version, None) {
                     Ok(status) => {
@@ -394,7 +396,7 @@ impl RustwideBuilder {
                     &res.target,
                     files_list,
                     successful_targets,
-                    &CratesIoData::get_from_network(res.cargo_metadata.root())?,
+                    &RegistryCrateData::get_from_network(res.cargo_metadata.root())?,
                     has_docs,
                     has_examples,
                 )?;

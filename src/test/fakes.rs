@@ -1,5 +1,5 @@
 use super::TestDatabase;
-use crate::db::CratesIoData;
+use crate::db::RegistryCrateData;
 use crate::docbuilder::BuildResult;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use failure::Error;
@@ -15,7 +15,7 @@ pub(crate) struct FakeRelease<'a> {
     rustdoc_files: Vec<(&'a str, &'a [u8])>,
     doc_targets: Vec<String>,
     default_target: Option<&'a str>,
-    cratesio_data: CratesIoData,
+    registry_crate_data: RegistryCrateData,
     has_docs: bool,
     has_examples: bool,
 }
@@ -53,7 +53,7 @@ impl<'a> FakeRelease<'a> {
             rustdoc_files: Vec::new(),
             doc_targets: Vec::new(),
             default_target: None,
-            cratesio_data: CratesIoData {
+            registry_crate_data: RegistryCrateData {
                 release_time: time::get_time(),
                 yanked: false,
                 downloads: 0,
@@ -65,7 +65,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn downloads(mut self, downloads: i32) -> Self {
-        self.cratesio_data.downloads = downloads;
+        self.registry_crate_data.downloads = downloads;
         self
     }
 
@@ -75,7 +75,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn release_time(mut self, new: time::Timespec) -> Self {
-        self.cratesio_data.release_time = new;
+        self.registry_crate_data.release_time = new;
         self
     }
 
@@ -103,7 +103,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn yanked(mut self, new: bool) -> Self {
-        self.cratesio_data.yanked = new;
+        self.registry_crate_data.yanked = new;
         self
     }
 
@@ -216,7 +216,7 @@ impl<'a> FakeRelease<'a> {
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             source_meta,
             self.doc_targets,
-            &self.cratesio_data,
+            &self.registry_crate_data,
             self.has_docs,
             self.has_examples,
         )?;

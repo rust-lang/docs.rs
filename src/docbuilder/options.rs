@@ -6,7 +6,7 @@ use std::{env, fmt};
 pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
     pub prefix: PathBuf,
-    pub crates_io_index_path: PathBuf,
+    pub registry_index_path: PathBuf,
     pub skip_if_exists: bool,
     pub skip_if_log_exists: bool,
     pub skip_oldest_versions: bool,
@@ -18,11 +18,11 @@ impl Default for DocBuilderOptions {
     fn default() -> DocBuilderOptions {
         let cwd = env::current_dir().unwrap();
 
-        let (prefix, crates_io_index_path) = generate_paths(cwd);
+        let (prefix, registry_index_path) = generate_paths(cwd);
 
         DocBuilderOptions {
             prefix,
-            crates_io_index_path,
+            registry_index_path,
 
             keep_build_directory: false,
             skip_if_exists: false,
@@ -39,10 +39,10 @@ impl fmt::Debug for DocBuilderOptions {
         write!(
             f,
             "DocBuilderOptions {{ \
-                crates_io_index_path: {:?}, \
+                registry_index_path: {:?}, \
                 keep_build_directory: {:?}, skip_if_exists: {:?}, \
                 skip_if_log_exists: {:?}, debug: {:?} }}",
-            self.crates_io_index_path,
+            self.registry_index_path,
             self.keep_build_directory,
             self.skip_if_exists,
             self.skip_if_log_exists,
@@ -54,20 +54,20 @@ impl fmt::Debug for DocBuilderOptions {
 impl DocBuilderOptions {
     /// Creates new DocBuilderOptions from prefix
     pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (prefix, crates_io_index_path) = generate_paths(prefix);
+        let (prefix, registry_index_path) = generate_paths(prefix);
 
         DocBuilderOptions {
             prefix,
-            crates_io_index_path,
+            registry_index_path,
             ..Default::default()
         }
     }
 
     pub fn check_paths(&self) -> Result<()> {
-        if !self.crates_io_index_path.exists() {
+        if !self.registry_index_path.exists() {
             failure::bail!(
-                "crates.io-index path '{}' does not exist",
-                self.crates_io_index_path.display()
+                "registry index path '{}' does not exist",
+                self.registry_index_path.display()
             );
         }
 
@@ -76,7 +76,7 @@ impl DocBuilderOptions {
 }
 
 fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf) {
-    let crates_io_index_path = PathBuf::from(&prefix).join("crates.io-index");
+    let registry_index_path = PathBuf::from(&prefix).join("crates.io-index");
 
-    (prefix, crates_io_index_path)
+    (prefix, registry_index_path)
 }

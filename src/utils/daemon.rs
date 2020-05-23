@@ -63,7 +63,7 @@ pub fn start_daemon(background: bool) {
 
     // check new crates every minute
     thread::Builder::new()
-        .name("crates.io reader".to_string())
+        .name("registry index reader".to_string())
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));

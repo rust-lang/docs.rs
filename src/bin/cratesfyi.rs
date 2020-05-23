@@ -189,9 +189,13 @@ struct Build {
     )]
     prefix: PathBuf,
 
-    /// Sets crates.io-index path
-    #[structopt(name = "CRATES_IO_INDEX_PATH", long = "crates-io-index-path")]
-    crates_io_index_path: Option<PathBuf>,
+    /// Sets the registry index path, where on disk the registry index will be cloned to
+    #[structopt(
+        name = "REGISTRY_INDEX_PATH",
+        long = "registry-index-path",
+        alias = "crates-io-index-path"
+    )]
+    registry_index_path: Option<PathBuf>,
 
     /// Skips building documentation if documentation exists
     #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
@@ -218,8 +222,8 @@ impl Build {
         let docbuilder = {
             let mut doc_options = DocBuilderOptions::from_prefix(self.prefix);
 
-            if let Some(crates_io_index_path) = self.crates_io_index_path {
-                doc_options.crates_io_index_path = crates_io_index_path;
+            if let Some(registry_index_path) = self.registry_index_path {
+                doc_options.registry_index_path = registry_index_path;
             }
 
             doc_options.skip_if_exists = self.skip_if_exists;

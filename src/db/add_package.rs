@@ -33,7 +33,7 @@ pub(crate) fn add_package_into_database(
     default_target: &str,
     source_files: Option<Json>,
     doc_targets: Vec<String>,
-    cratesio_data: &CratesIoData,
+    cratesio_data: &RegistryCrateData,
     has_docs: bool,
     has_examples: bool,
 ) -> Result<i32> {
@@ -262,14 +262,14 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
     }
 }
 
-pub(crate) struct CratesIoData {
+pub(crate) struct RegistryCrateData {
     pub(crate) release_time: Timespec,
     pub(crate) yanked: bool,
     pub(crate) downloads: i32,
     pub(crate) owners: Vec<CrateOwner>,
 }
 
-impl CratesIoData {
+impl RegistryCrateData {
     pub(crate) fn get_from_network(pkg: &MetadataPackage) -> Result<Self> {
         let (release_time, yanked, downloads) = get_release_time_yanked_downloads(pkg)?;
         let owners = get_owners(pkg)?;
@@ -283,7 +283,7 @@ impl CratesIoData {
     }
 }
 
-/// Get release_time, yanked and downloads from crates.io
+/// Get release_time, yanked and downloads from the registry's API
 fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Timespec, bool, i32)> {
     let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
     // FIXME: There is probably better way to do this
@@ -435,7 +435,7 @@ pub(crate) struct CrateOwner {
     pub(crate) name: String,
 }
 
-/// Fetch owners from crates.io
+/// Fetch owners from the registry's API
 fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", pkg.name);
