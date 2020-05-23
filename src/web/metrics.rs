@@ -16,6 +16,12 @@ lazy_static::lazy_static! {
     )
     .unwrap();
 
+    pub static ref PRIORITIZED_CRATES_COUNT: IntGauge = register_int_gauge!(
+        "docsrs_prioritized_crates_count",
+        "Number of crates in the build queue that have a positive priority"
+    )
+    .unwrap();
+
     static ref FAILED_CRATES_COUNT: IntGauge = register_int_gauge!(
         "docsrs_failed_crates_count",
         "Number of crates that failed to build"
@@ -77,24 +83,52 @@ lazy_static::lazy_static! {
         "The number of currently used database connections"
     )
     .unwrap();
+
+    pub static ref OPEN_FILE_DESCRIPTORS: IntGauge = register_int_gauge!(
+        "docsrs_open_file_descriptors",
+        "The number of currently opened file descriptors"
+    )
+    .unwrap();
+
+    pub static ref CURRENTLY_RUNNING_THREADS: IntGauge = register_int_gauge!(
+        "docsrs_running_threads",
+        "The number of threads being used by docs.rs"
+    )
+    .unwrap();
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
+    {
+        let pool = extension!(req, Pool);
+        let conn = pool.get()?;
 
-    QUEUED_CRATES_COUNT.set(
-        ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))
-            .get(0)
-            .get(0),
-    );
-    FAILED_CRATES_COUNT.set(
-        ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt >= 5;", &[]))
-            .get(0)
-            .get(0),
-    );
+        CONCURRENT_DB_CONNECTIONS.set(pool.connections() as i64);
 
-    let pool = extension!(req, Pool);
-    CONCURRENT_DB_CONNECTIONS.set(pool.connections() as i64);
+        QUEUED_CRATES_COUNT.set(
+            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))
+                .get(0)
+                .get(0),
+        );
+        PRIORITIZED_CRATES_COUNT.set(
+            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE priority >= 0;", &[]))
+                .get(0)
+                .get(0),
+        );
+        FAILED_CRATES_COUNT.set(
+            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt >= 5;", &[]))
+                .get(0)
+                .get(0),
+        );
+    }
+
+    #[cfg(not(windows))]
+    {
+        use procfs::process::Process;
+
+        let process = Process::myself().unwrap();
+        OPEN_FILE_DESCRIPTORS.set(process.fd().unwrap().len() as i64);
+        CURRENTLY_RUNNING_THREADS.set(process.stat().unwrap().num_threads as i64);
+    }
 
     let mut buffer = Vec::new();
     let families = prometheus::gather();

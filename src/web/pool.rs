@@ -45,7 +45,7 @@ impl Pool {
 
     pub(crate) fn connections(&self) -> u32 {
         match self {
-            Self::R2D2(conn) => conn.state().connections,
+            Self::R2D2(conn) => conn.state().connections - conn.state().idle_connections,
 
             #[cfg(test)]
             Self::Simple(..) => 0,
