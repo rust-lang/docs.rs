@@ -1,6 +1,6 @@
 use super::TestDatabase;
-use crate::db::RegistryCrateData;
 use crate::docbuilder::BuildResult;
+use crate::index::api::RegistryCrateData;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use failure::Error;
 

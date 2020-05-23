@@ -2,11 +2,10 @@ use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
-use crate::db::{
-    add_build_into_database, add_package_into_database, connect_db, RegistryCrateData,
-};
+use crate::db::{add_build_into_database, add_package_into_database, connect_db};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
+use crate::index::api::RegistryCrateData;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
