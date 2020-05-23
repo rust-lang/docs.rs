@@ -78,9 +78,15 @@ lazy_static::lazy_static! {
     )
     .unwrap();
 
-    pub static ref CONCURRENT_DB_CONNECTIONS: IntGauge = register_int_gauge!(
-        "docsrs_db_connections",
-        "The number of currently used database connections"
+    pub static ref USED_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+        "docsrs_used_db_connections",
+        "The number of used database connections"
+    )
+    .unwrap();
+
+    pub static ref IDLE_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+        "docsrs_idle_db_connections",
+        "The number of idle database connections"
     )
     .unwrap();
 
@@ -102,7 +108,8 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
         let pool = extension!(req, Pool);
         let conn = pool.get()?;
 
-        CONCURRENT_DB_CONNECTIONS.set(pool.connections() as i64);
+        USED_DB_CONNECTIONS.set(pool.used_connections() as i64);
+        IDLE_DB_CONNECTIONS.set(pool.idle_connections() as i64);
 
         QUEUED_CRATES_COUNT.set(
             ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))
