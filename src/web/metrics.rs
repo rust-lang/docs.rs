@@ -104,6 +104,7 @@ lazy_static::lazy_static! {
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
+    // Database calls are scoped in order to minimize the time a db connection is locked
     {
         let pool = extension!(req, Pool);
         let conn = pool.get()?;
