@@ -38,7 +38,7 @@ jobs:
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-key: |
+          restore-keys: |
             ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
 
       - name: Launch the postgres and min.io images
