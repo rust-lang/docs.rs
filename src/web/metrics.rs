@@ -90,6 +90,12 @@ lazy_static::lazy_static! {
     )
     .unwrap();
 
+    pub static ref MAX_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+        "docsrs_max_db_connections",
+        "The maximum database connections"
+    )
+    .unwrap();
+
     pub static ref OPEN_FILE_DESCRIPTORS: IntGauge = register_int_gauge!(
         "docsrs_open_file_descriptors",
         "The number of currently opened file descriptors"
