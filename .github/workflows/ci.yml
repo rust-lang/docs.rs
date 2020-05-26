@@ -25,21 +25,14 @@ jobs:
         run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
 
       # Caching
-      - name: Cache Cargo Registry
+      - name: Cache Cargo directories
         uses: actions/cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache Cargo Bin
-        uses: actions/cache@v2
-        with:
-          path: ~/.cargo/bin
-          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache Cargo Git
-        uses: actions/cache@v2
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache Cargo Build
         uses: actions/cache@v2
         with:
