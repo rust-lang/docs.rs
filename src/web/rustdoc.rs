@@ -243,10 +243,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     // Check the database for releases with the requested version while doing the following:
-    // * Redirecting when the semver is close enough (by semver standards) to the correct page
-    // * Redirecting when the requested crate name isn't correct (dashes vs. underscores)
-    // * Returning a 404 if a crate by that name and version doesn't exist
-    // If none of those conditions are met, the version of the crate is returned
+    // * If both the name and the version are an exact match, return the version of the crate.
+    // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
+    // * If there is a semver (but not exact) match, redirect to the exact version.
+    // * Otherwise, return a 404.
     let version = if let Some(match_vers) = match_version(&conn, &name, url_version) {
         match match_vers.version {
             MatchSemver::Exact((version, _)) => {
@@ -275,7 +275,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
     // if visiting the full path to the default target, remove the target from the path
-    // expects a req_path that looks like `/rustdoc/:crate/:version[/:target]/.*`
+    // expects a req_path that looks like `[/:target]/.*`
     if req_path.get(0).copied() == Some(&crate_details.metadata.default_target) {
         return redirect(&name, &version, &req_path[1..]);
     }
@@ -305,7 +305,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             .ok_or_else(|| IronError::new(Nope::ResourceNotFound, status::NotFound))?
     };
 
-    // Serve non-html files immediately
+    // Serve non-html files directly
     if !path.ends_with(".html") {
         return Ok(file.serve());
     }
@@ -318,6 +318,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     if body_class.is_empty() {
         body_class = "rustdoc container-rustdoc".to_string();
     } else {
+        // rustdoc adds its own "rustdoc" class to the body
         body_class.push_str(" container-rustdoc");
     }
 
@@ -325,13 +326,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let latest_version = crate_details.latest_version().to_owned();
     let is_latest_version = latest_version == version;
 
-    // If the requested version is not the latest, then find the path of the latest version for easy redirection
+    // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
     let path_in_latest = if !is_latest_version {
         // Replace the version of the old path with the latest version
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
-
-        // Retrieve the path in the database of the latest crate version
         path_for_version(&latest_path, &crate_details.doc_targets, &conn)
     } else {
         String::new()
