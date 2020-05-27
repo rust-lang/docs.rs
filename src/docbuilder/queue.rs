@@ -1,4 +1,4 @@
-//! Updates crates.io index and builds new packages
+//! Updates registry index and builds new packages
 
 use super::{DocBuilder, RustwideBuilder};
 use crate::db::connect_db;
@@ -8,11 +8,11 @@ use crates_index_diff::{ChangeKind, Index};
 use log::{debug, error};
 
 impl DocBuilder {
-    /// Updates crates.io-index repository and adds new crates into build queue.
+    /// Updates registry index repository and adds new crates into build queue.
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
         let conn = connect_db()?;
-        let index = Index::from_path_or_cloned(&self.options.crates_io_index_path)?;
+        let index = Index::from_path_or_cloned(&self.options.registry_index_path)?;
         let (mut changes, oid) = index.peek_changes()?;
         let mut crates_added = 0;
 
