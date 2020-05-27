@@ -319,18 +319,30 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         body_class.push_str(" container-rustdoc");
     }
 
+    let latest_release = crate_details.latest_release();
+
     // Get the latest version of the crate
-    let latest_version = crate_details.latest_release().version.to_owned();
+    let latest_version = latest_release.version.to_owned();
     let is_latest_version = latest_version == version;
 
+    // If the requested crate version is the most recent, use it to build the url
+    let latest_path = if is_latest_version {
+        format!("/{}/{}", name, latest_version)
+
     // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
-    let path_in_latest = if !is_latest_version {
+    } else if latest_release.build_status {
         // Replace the version of the old path with the latest version
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
-        path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+
+        format!(
+            "/{}/{}/{}",
+            name,
+            latest_version,
+            path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+        )
     } else {
-        String::new()
+        format!("/crate/{}/{}", name, latest_version)
     };
 
     // The path within this crate version's rustdoc output
@@ -365,7 +377,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
         .set_bool("is_latest_version", is_latest_version)
-        .set("latest_path", &path_in_latest)
+        .set("latest_path", &latest_path)
         .set("latest_version", &latest_version)
         .set("inner_path", &inner_path)
         .to_resp("rustdoc")
