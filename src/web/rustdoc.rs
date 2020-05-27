@@ -221,7 +221,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         router.find("version"),
     );
 
-    let conn = extension!(req, Pool).get();
+    let conn = extension!(req, Pool).get()?;
     let mut req_path = req.url.path();
 
     // Remove the name and version from the path
@@ -323,7 +323,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Get the latest version of the crate
-    let latest_version = crate_details.latest_version().to_owned();
+    let latest_version = crate_details.latest_release().version.to_owned();
     let is_latest_version = latest_version == version;
 
     // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
@@ -368,7 +368,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .set_true("package_navigation_documentation_tab")
         .set_true("package_navigation_show_platforms_tab")
         .set_bool("is_latest_version", is_latest_version)
-        .set("latest_path", &latest_path)
+        .set("latest_path", &path_in_latest)
         .set("latest_version", &latest_version)
         .set("inner_path", &inner_path)
         .to_resp("rustdoc")
