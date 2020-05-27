@@ -1006,14 +1006,16 @@ mod tests {
 
     #[test]
     fn serialize_releases() {
-        let time = time::get_time();
+        let current_time = time::get_time();
+        let now = time::at(current_time);
+
         let mut release = Release {
             name: "serde".to_string(),
             version: "0.0.0".to_string(),
             description: Some("serde makes things other things".to_string()),
             target_name: Some("x86_64-pc-windows-msvc".to_string()),
             rustdoc_status: true,
-            release_time: time,
+            release_time: current_time,
             stars: 100,
         };
 
@@ -1023,8 +1025,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": "x86_64-pc-windows-msvc",
             "rustdoc_status": true,
-            "release_time": duration_to_str(time),
-            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
+            "release_time": duration_to_str(current_time),
+            "release_time_rfc3339": now.rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1037,8 +1039,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(time),
-            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
+            "release_time": duration_to_str(current_time),
+            "release_time_rfc3339": now.rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1051,8 +1053,8 @@ mod tests {
             "description": null,
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(time),
-            "release_time_rfc3339": time::at(time).rfc3339().to_string(),
+            "release_time": duration_to_str(current_time),
+            "release_time_rfc3339": now.rfc3339().to_string(),
             "stars": 100
         });
 

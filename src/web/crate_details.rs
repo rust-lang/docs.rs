@@ -8,7 +8,10 @@ use iron::prelude::*;
 use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
 use serde_json::Value;
 
 // TODO: Add target name and versions
@@ -51,7 +54,15 @@ impl Serialize for CrateDetails {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("CrateDetails", 28)?;
+        // Make sure that the length parameter passed to serde is correct by
+        // adding the someness of `readme` and `rustdoc` to the total. `true`
+        // is 1 and `false` is 0, so it increments if the value is some (and therefore
+        // needs to be serialized)
+        let mut state = serializer.serialize_struct(
+            "CrateDetails",
+            26 + self.readme.is_some() as usize + self.rustdoc.is_some() as usize,
+        )?;
+
         state.serialize_field("metadata", &self.metadata)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("version", &self.version)?;
@@ -94,7 +105,7 @@ impl Serialize for CrateDetails {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct Release {
     pub version: String,
     pub build_status: bool,
@@ -626,7 +637,7 @@ mod tests {
         let time = time::get_time();
         let mut details = CrateDetails::default_tester(time);
 
-        let correct_json = json!({
+        let mut correct_json = json!({
             "name": "rcc",
             "version": "100.0.0",
             "description": null,
@@ -665,49 +676,19 @@ mod tests {
 
         assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
 
-        details.description = Some("serde does stuff".to_string());
-        details.owners = vec![("Owner".to_string(), "owner@ownsstuff.com".to_string())];
-
         let authors = vec![("Somebody".to_string(), "somebody@somebody.com".to_string())];
+        let owners = vec![("Owner".to_string(), "owner@ownsstuff.com".to_string())];
+        let description = "serde does stuff".to_string();
+
+        correct_json["description"] = Value::String(description.clone());
+        correct_json["owners"] = serde_json::to_value(&owners).unwrap();
+        correct_json["authors_json"] = serde_json::to_value(&authors).unwrap();
+        correct_json["authors"] = serde_json::to_value(&authors).unwrap();
+
+        details.description = Some(description);
+        details.owners = owners;
         details.authors_json = Some(serde_json::to_value(&authors).unwrap());
         details.authors = authors;
-
-        let correct_json = json!({
-            "name": "rcc",
-            "version": "100.0.0",
-            "description": "serde does stuff",
-            "authors": [["Somebody", "somebody@somebody.com"]],
-            "owners": [["Owner", "owner@ownsstuff.com"]],
-            "authors_json": [["Somebody", "somebody@somebody.com"]],
-            "dependencies": null,
-            "release_time": super::super::duration_to_str(time),
-            "build_status": true,
-            "last_successful_build": null,
-            "rustdoc_status": true,
-            "repository_url": null,
-            "homepage_url": null,
-            "keywords": null,
-            "have_examples": true,
-            "target_name": "x86_64-unknown-linux-gnu",
-            "releases": [],
-            "github": true,
-            "yanked": false,
-            "github_stars": null,
-            "github_forks": null,
-            "github_issues": null,
-            "metadata": {
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            },
-            "is_library": true,
-            "doc_targets": [],
-            "license": null,
-            "documentation_url": null
-        });
 
         assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
     }

@@ -29,55 +29,6 @@ struct File {
 }
 
 /// A list of source files
-///
-///
-/// Rust:
-///
-/// ```ignore
-/// FileList {
-///     metadata: MetaData {
-///         name: "rcc",
-///         version: "0.0.0",
-///         description: Some("it compiles an unholy language"),
-///         target_name: None,
-///         rustdoc_status: true,
-///         default_target: "x86_64-unknown-linux-gnu",
-///     },
-///     files: vec![
-///         File {
-///             name: "main.rs",
-///             file_type: FileType::RustSource,
-///         },
-///         File {
-///             name: "lib.rs",
-///             file_type: FileType::RustSource,
-///         },
-///     ],
-/// }
-/// ```
-///
-/// Json:
-///
-/// ```json
-/// {
-///     "metadata": {
-///         "name": "rcc",
-///         "version": "0.0.0",
-///         "description": "it compiles an unholy language",
-///         "target_name": null,
-///         "rustdoc_status": true,
-///         "default_target": "x86_64-unknown-linux-gnu",
-///     },
-///     "files": [{
-///         "name": "main.rs",
-///         "file_type_rust_source": true,
-///     }, {
-///         "name": "lib.rs",
-///         "file_type_rust_source": true,
-///     }],
-/// }
-/// ```
-///
 struct FileList {
     metadata: MetaData,
     files: Vec<File>,
@@ -93,7 +44,7 @@ impl Serialize for FileList {
 
         let mut files = Vec::with_capacity(self.files.len());
         for file in &self.files {
-            let mut map = HashMap::with_capacity(3);
+            let mut map = HashMap::with_capacity(2);
             map.insert("name", Value::String(file.name.to_owned()));
 
             let file_type = match file.file_type {
@@ -119,10 +70,10 @@ impl FileList {
     ///
     /// ```text
     /// [
-    ///   ["text/plain",".gitignore"],
-    ///   ["text/x-c","src/reseeding.rs"],
-    ///   ["text/x-c","src/lib.rs"],
-    ///   ["text/x-c","README.md"],
+    ///   ["text/plain", ".gitignore"],
+    ///   ["text/x-c", "src/reseeding.rs"],
+    ///   ["text/x-c", "src/lib.rs"],
+    ///   ["text/x-c", "README.md"],
     ///   ...
     /// ]
     /// ```

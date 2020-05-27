@@ -116,7 +116,12 @@ impl<T: Serialize> Serialize for Page<T> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Page", 10)?;
+        // Make sure that the length parameter passed to serde is correct by
+        // adding the someness of the global alert to the total. `true`
+        // is 1 and `false` is 0, so it increments if the value is some (and therefore
+        // needs to be serialized)
+        let mut state =
+            serializer.serialize_struct("Page", 9 + crate::GLOBAL_ALERT.is_some() as usize)?;
 
         if let Some(ref title) = self.title {
             state.serialize_field("title", title)?;
@@ -132,10 +137,7 @@ impl<T: Serialize> Serialize for Page<T> {
         state.serialize_field("cratesfyi_version", crate::BUILD_VERSION)?;
         state.serialize_field(
             "cratesfyi_version_safe",
-            &crate::BUILD_VERSION
-                .replace(" ", "-")
-                .replace("(", "")
-                .replace(")", ""),
+            &build_version_safe(crate::BUILD_VERSION),
         )?;
         state.serialize_field("varss", &self.varss)?;
         state.serialize_field("varsb", &self.varsb)?;
@@ -145,10 +147,15 @@ impl<T: Serialize> Serialize for Page<T> {
     }
 }
 
+fn build_version_safe(version: &str) -> String {
+    version.replace(" ", "-").replace("(", "").replace(")", "")
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::releases::{self, Release};
     use super::*;
+    use iron::Url;
     use serde_json::json;
 
     #[test]
@@ -193,10 +200,7 @@ mod tests {
             "varsi": { "test3": 1337 },
             "rustc_resource_suffix": &*RUSTC_RESOURCE_SUFFIX,
             "cratesfyi_version": crate::BUILD_VERSION,
-            "cratesfyi_version_safe": crate::BUILD_VERSION
-                .replace(" ", "-")
-                .replace("(", "")
-                .replace(")", ""),
+            "cratesfyi_version_safe": build_version_safe(crate::BUILD_VERSION),
             "has_global_alert": crate::GLOBAL_ALERT.is_some()
         });
 
@@ -238,18 +242,27 @@ mod tests {
     fn serialize_global_alert() {
         let alert = GlobalAlert {
             url: "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
-            text: "THE WORLD IS ENDING",
+            text: "THE WORLD WILL SOON END",
             css_class: "THE END IS NEAR",
             fa_icon: "https://gph.is/1uOvmqR",
         };
 
         let correct_json = json!({
             "url": "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
-            "text": "THE WORLD IS ENDING",
+            "text": "THE WORLD WILL SOON END",
             "css_class": "THE END IS NEAR",
             "fa_icon": "https://gph.is/1uOvmqR"
         });
 
         assert_eq!(correct_json, serde_json::to_value(&alert).unwrap());
+    }
+
+    #[test]
+    fn build_version_url_safe() {
+        let safe = format!(
+            "https://docs.rs/builds/{}",
+            build_version_safe(crate::BUILD_VERSION)
+        );
+        assert!(Url::parse(&safe).is_ok());
     }
 }
