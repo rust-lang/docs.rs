@@ -309,7 +309,6 @@ impl CrateDetails {
             target_name: "x86_64-unknown-linux-gnu".to_string(),
             releases: vec![],
             github: true,
-            yanked: false,
             github_stars: None,
             github_forks: None,
             github_issues: None,
