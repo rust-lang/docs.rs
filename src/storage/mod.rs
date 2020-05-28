@@ -312,6 +312,21 @@ mod test {
     }
 
     #[test]
+    fn test_compression() {
+        let orig = "fn main() {}";
+        let compressed = compress(orig.as_bytes()).unwrap();
+        let blob = Blob {
+            mime: "text/rust".into(),
+            content: compressed.clone(),
+            path: "main.rs".into(),
+            date_updated: Timespec::new(42, 0),
+            compressed: true,
+        };
+        test_roundtrip(std::slice::from_ref(&blob));
+        assert_eq!(decompress(compressed.as_slice()).unwrap(), orig.as_bytes());
+    }
+
+    #[test]
     fn test_mime_types() {
         check_mime(".gitignore", "text/plain");
         check_mime("hello.toml", "text/toml");
