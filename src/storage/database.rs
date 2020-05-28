@@ -18,7 +18,7 @@ impl<'a> DatabaseBackend<'a> {
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
         let rows = self.conn.query(
-            "SELECT path, mime, date_updated, content FROM files WHERE path = $1;",
+            "SELECT path, mime, date_updated, content, compressed FROM files WHERE path = $1;",
             &[&path],
         )?;
 
@@ -31,6 +31,7 @@ impl<'a> DatabaseBackend<'a> {
                 mime: row.get("mime"),
                 date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
                 content: row.get("content"),
+                compressed: row.get("compressed"),
             })
         }
     }
@@ -38,11 +39,11 @@ impl<'a> DatabaseBackend<'a> {
     pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
         for blob in batch {
             trans.query(
-                "INSERT INTO files (path, mime, content)
-                 VALUES ($1, $2, $3)
+                "INSERT INTO files (path, mime, content, compressed)
+                 VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content",
-                &[&blob.path, &blob.mime, &blob.content],
+                &[&blob.path, &blob.mime, &blob.content, &blob.compressed],
             )?;
         }
         Ok(())
@@ -79,6 +80,7 @@ mod tests {
                     mime: "text/plain".into(),
                     date_updated: now.trunc_subsecs(6),
                     content: "Hello world!".bytes().collect(),
+                    compressed: false,
                 },
                 backend.get("dir/foo.txt")?
             );

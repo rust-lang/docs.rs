@@ -20,6 +20,7 @@ pub(crate) struct Blob {
     pub(crate) mime: String,
     pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
+    pub(crate) compressed: bool,
 }
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> Result<(), Error> {
@@ -71,10 +72,15 @@ impl<'a> Storage<'a> {
         }
     }
     pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
-        match self {
+        let mut blob = match self {
             Self::Database(db) => db.get(path),
             Self::S3(s3) => s3.get(path),
+        }?;
+        if blob.compressed {
+            blob.content = decompress(blob.content.as_slice())?;
+            blob.compressed = false;
         }
+        Ok(blob)
     }
 
     fn store_batch(&mut self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
@@ -109,9 +115,10 @@ impl<'a> Storage<'a> {
                     .ok()
                     .map(|file| (file_path, file))
             })
-            .map(|(file_path, mut file)| -> Result<_, Error> {
-                let mut content: Vec<u8> = Vec::new();
-                file.read_to_end(&mut content)?;
+            .map(|(file_path, file)| -> Result<_, Error> {
+                //let mut content: Vec<u8> = Vec::new();
+                //file.read_to_end(&mut content)?;
+                let content = compress(file)?;
 
                 let bucket_path = Path::new(prefix).join(&file_path);
 
@@ -121,12 +128,13 @@ impl<'a> Storage<'a> {
                 let bucket_path = bucket_path.into_os_string().into_string().unwrap();
 
                 let mime = detect_mime(&file_path)?;
-
                 file_paths_and_mimes.insert(file_path, mime.to_string());
+
                 Ok(Blob {
                     path: bucket_path,
                     mime: mime.to_string(),
                     content,
+                    compressed: true,
                     // this field is ignored by the backend
                     date_updated: Utc::now(),
                 })
@@ -145,6 +153,14 @@ impl<'a> Storage<'a> {
         trans.commit()?;
         Ok(file_paths_and_mimes)
     }
+}
+
+fn compress(content: impl Read) -> Result<Vec<u8>, Error> {
+    zstd::encode_all(content, 5).map_err(Into::into)
+}
+
+fn decompress(content: impl Read) -> Result<Vec<u8>, Error> {
+    zstd::decode_all(content).map_err(Into::into)
 }
 
 fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
@@ -277,9 +293,10 @@ mod test {
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| Blob {
                 mime: "text/rust".into(),
-                content: "fn main() {}".into(),
+                content: compress("fn main() {}".as_bytes()).unwrap(),
                 path: format!("{}.rs", i),
                 date_updated: Utc::now(),
+                compressed: true,
             })
             .collect();
 
