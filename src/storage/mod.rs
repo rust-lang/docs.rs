@@ -116,10 +116,7 @@ impl<'a> Storage<'a> {
                     .map(|file| (file_path, file))
             })
             .map(|(file_path, file)| -> Result<_, Error> {
-                //let mut content: Vec<u8> = Vec::new();
-                //file.read_to_end(&mut content)?;
                 let content = compress(file)?;
-
                 let bucket_path = Path::new(prefix).join(&file_path);
 
                 #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
