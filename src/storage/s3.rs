@@ -51,19 +51,25 @@ impl<'a> S3Backend<'a> {
         b.read_to_end(&mut content).unwrap();
 
         let date_updated = parse_timespec(&res.last_modified.unwrap())?;
+        let compressed = res.metadata.unwrap_or_default().get("compressed").is_some();
 
         Ok(Blob {
             path: path.into(),
             mime: res.content_type.unwrap(),
             date_updated,
             content,
+            compressed,
         })
     }
 
     pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
         use futures::stream::FuturesUnordered;
         use futures::stream::Stream;
+        use std::collections::HashMap;
+
         let mut attempts = 0;
+        let mut compressed = HashMap::with_capacity(1);
+        compressed.insert("compressed".into(), "true".into());
 
         loop {
             let mut futures = FuturesUnordered::new();
@@ -75,6 +81,7 @@ impl<'a> S3Backend<'a> {
                             key: blob.path.clone(),
                             body: Some(blob.content.clone().into()),
                             content_type: Some(blob.mime.clone()),
+                            metadata: Some(compressed.clone()),
                             ..Default::default()
                         })
                         .inspect(|_| {
@@ -168,6 +175,7 @@ pub(crate) mod tests {
                 mime: "text/plain".into(),
                 date_updated: Utc::now(),
                 content: "Hello world!".into(),
+                compressed: false,
             };
 
             // Add a test file to the database
@@ -204,6 +212,7 @@ pub(crate) mod tests {
                     mime: "text/plain".into(),
                     date_updated: Utc::now(),
                     content: "Hello world!".into(),
+                    compressed: false,
                 })
                 .collect();
 

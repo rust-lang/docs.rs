@@ -340,6 +340,17 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
              ADD COLUMN content tsvector,
              ADD COLUMN versions JSON DEFAULT '[]';"
         ),
+        migration!(
+            context,
+            // version
+            14,
+            // description
+            "Add a field for compression",
+            // upgrade query
+            "ALTER TABLE files ADD COLUMN compressed BOOLEAN NOT NULL DEFAULT false;",
+            // downgrade query
+            "ALTER TABLE files DROP COLUMN compressed;",
+        ),
     ];
 
     for migration in migrations {
