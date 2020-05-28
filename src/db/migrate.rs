@@ -347,9 +347,9 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // description
             "Add a field for compression",
             // upgrade query
-            "ALTER TABLE files ADD COLUMN compressed BOOLEAN NOT NULL DEFAULT false;",
+            "ALTER TABLE files ADD COLUMN compression VARCHAR;",
             // downgrade query
-            "ALTER TABLE files DROP COLUMN compressed;",
+            "ALTER TABLE files DROP COLUMN compression;",
         ),
     ];
 

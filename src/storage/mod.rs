@@ -8,11 +8,35 @@ use failure::{err_msg, Error};
 use postgres::{transaction::Transaction, Connection};
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::fmt;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CompressionAlgorithm {
+    Zstd,
+}
+
+impl std::str::FromStr for CompressionAlgorithm {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "zstd" => Ok(CompressionAlgorithm::Zstd),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for CompressionAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressionAlgorithm::Zstd => write!(f, "zstd"),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
@@ -20,7 +44,7 @@ pub(crate) struct Blob {
     pub(crate) mime: String,
     pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
-    pub(crate) compressed: bool,
+    pub(crate) compression: Option<CompressionAlgorithm>,
 }
 
 fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> Result<(), Error> {
@@ -76,9 +100,9 @@ impl<'a> Storage<'a> {
             Self::Database(db) => db.get(path),
             Self::S3(s3) => s3.get(path),
         }?;
-        if blob.compressed {
-            blob.content = decompress(blob.content.as_slice())?;
-            blob.compressed = false;
+        if let Some(alg) = blob.compression {
+            blob.content = decompress(blob.content.as_slice(), alg)?;
+            blob.compression = None;
         }
         Ok(blob)
     }
@@ -116,7 +140,7 @@ impl<'a> Storage<'a> {
                     .map(|file| (file_path, file))
             })
             .map(|(file_path, file)| -> Result<_, Error> {
-                let content = compress(file)?;
+                let (content, alg) = compress(file)?;
                 let bucket_path = Path::new(prefix).join(&file_path);
 
                 #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
@@ -131,7 +155,7 @@ impl<'a> Storage<'a> {
                     path: bucket_path,
                     mime: mime.to_string(),
                     content,
-                    compressed: true,
+                    compression: Some(alg),
                     // this field is ignored by the backend
                     date_updated: Utc::now(),
                 })
@@ -153,12 +177,15 @@ impl<'a> Storage<'a> {
 }
 
 // public for benchmarking
-pub fn compress(content: impl Read) -> Result<Vec<u8>, Error> {
-    zstd::encode_all(content, 9).map_err(Into::into)
+pub fn compress(content: impl Read) -> Result<(Vec<u8>, CompressionAlgorithm), Error> {
+    let data = zstd::encode_all(content, 9)?;
+    Ok((data, CompressionAlgorithm::Zstd))
 }
 
-pub fn decompress(content: impl Read) -> Result<Vec<u8>, Error> {
-    zstd::decode_all(content).map_err(Into::into)
+pub fn decompress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
+    match algorithm {
+        CompressionAlgorithm::Zstd => zstd::decode_all(content).map_err(Into::into),
+    }
 }
 
 fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
@@ -289,12 +316,15 @@ mod test {
     #[test]
     fn test_batched_uploads() {
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
-            .map(|i| Blob {
-                mime: "text/rust".into(),
-                content: compress("fn main() {}".as_bytes()).unwrap(),
-                path: format!("{}.rs", i),
-                date_updated: Utc::now(),
-                compressed: true,
+            .map(|i| {
+                let (content, alg) = compress("fn main() {}".as_bytes()).unwrap();
+                Blob {
+                    mime: "text/rust".into(),
+                    content,
+                    path: format!("{}.rs", i),
+                    date_updated: Utc::now(),
+                    compression: Some(alg),
+                }
             })
             .collect();
 
@@ -315,16 +345,16 @@ mod test {
     #[test]
     fn test_compression() {
         let orig = "fn main() {}";
-        let compressed = compress(orig.as_bytes()).unwrap();
+        let (data, alg) = compress(orig.as_bytes()).unwrap();
         let blob = Blob {
             mime: "text/rust".into(),
-            content: compressed.clone(),
+            content: data.clone(),
             path: "main.rs".into(),
             date_updated: Timespec::new(42, 0),
-            compressed: true,
+            compression: Some(alg),
         };
         test_roundtrip(std::slice::from_ref(&blob));
-        assert_eq!(decompress(compressed.as_slice()).unwrap(), orig.as_bytes());
+        assert_eq!(decompress(data.as_slice(), alg).unwrap(), orig.as_bytes());
     }
 
     #[test]
