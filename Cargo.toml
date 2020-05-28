@@ -85,6 +85,10 @@ rand = "0.7.3"
 name = "html5ever"
 harness = false
 
+[[bench]]
+name = "compression"
+harness = false
+
 [build-dependencies]
 time = "0.1"
 git2 = { version = "0.13", default-features = false }
