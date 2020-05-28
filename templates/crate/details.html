@@ -1,0 +1,280 @@
+{% extends "base.html" -%}
+
+{% block title %}
+    {{ macros::doc_title(name=details.name, version=details.version) }}
+{% endblock title %}
+
+{% block header -%}
+    {{ navigation::package_navigation(metadata=details.metadata, active_tab="crate") }}
+{% endblock header -%}
+
+{% block body -%}
+    <div class="container package-page-container">
+        <div class="pure-g">
+            <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
+                <div class="pure-menu package-menu">
+                    <ul class="pure-menu-list">
+                        <li class="pure-menu-heading">Authors</li>
+
+                        {% for author in details.authors -%}
+                            <li class="pure-menu-item">
+                                <a href="/releases/{{ author[1] }}" class="pure-menu-link">
+                                    {{ author[0] }}
+                                </a>
+                            </li>
+                        {% endfor -%}
+
+                        <li class="pure-menu-heading">Links</li>
+
+                        {% if details.homepage_url -%}
+                            <li class="pure-menu-item">
+                                <a href="{{ details.homepage_url }}" class="pure-menu-link">
+                                    <i class="fa fa-home fa-fw"></i> Homepage
+                                </a>
+                            </li>
+                        {% endif -%}
+
+                        {% if details.documentation_url -%}
+                            <li class="pure-menu-item">
+                                <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
+                                    <i class="fa fa-fw fa-file-text"></i> Documentation
+                                </a>
+                            </li>
+                        {% endif -%}
+
+                        {% if details.repository_url -%}
+                            <li class="pure-menu-item">
+                                <a href="{{ details.repository_url }}" class="pure-menu-link">
+                                    {% if details.github -%}
+                                        <i class="fa fa-github fa-fw"></i>
+                                        <i class="fa fa-star-o fa-fw"></i> {{ details.github_stars }}
+                                        <i class="fa fa-code-fork fa-fw"></i> {{ details.github_forks }}
+                                        <i class="fa fa-exclamation-circle fa-fw"></i> {{ details.github_issues }}
+                                    {% else -%}
+                                        <i class="fa fa-code-fork fa-fw"></i> Repository
+                                    {% endif -%}
+                                </a>
+                            </li>
+                        {% endif -%}
+
+                        <li class="pure-menu-item">
+                            <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
+                                title="See {{ details.name }} in crates.io">
+                                <i class="fa fa-cube fa-fw"></i> Crates.io
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-heading">Dependencies</li>
+                        <li class="pure-menu-item">
+                            <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <ul class="pure-menu-list">
+                                    {% for dep in details.dependencies -%}
+                                        <li class="pure-menu-item">
+                                            <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
+                                                {{ dep[0] }} {{ dep[1] }}
+                                                <i class="dependencies {{ dep[2] }}">{{ dep[2] }}</i>
+                                            </a>
+                                        </li>
+                                    {% endfor -%}
+                                </ul>
+                            </div>
+                        </li>
+
+                        <li class="pure-menu-heading">Versions</li>
+                        <li class="pure-menu-item">
+                            <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <ul class="pure-menu-list">
+                                    {% for release in details.releases -%}
+                                        <li class="pure-menu-item">
+                                            {% if release.yanked -%}
+                                                {% if release.build_status -%}
+                                                    <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                        title="{{ details.name }}-{{ release.version }} is yanked">
+                                                        <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                    </a>
+                                                {% else -%}
+                                                    <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                        title="{{ details.name }}-{{ release.version }} is yanked and docs.rs failed to build it">
+                                                        <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                    </a>
+                                                {% endif -%}
+                                            {% else -%}
+                                                {% if release.build_status -%}
+                                                    <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link">
+                                                        {{ release.version }}
+                                                    </a>
+                                                {% else -%}
+                                                    <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                        title="docs.rs failed to build {{ details.name }}-{{ release.version }}">
+                                                        <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                    </a>
+                                                {% endif -%}
+                                            {% endif -%}
+                                        </li>
+                                    {% endfor -%}
+                                </ul>
+                            </div>
+                        </li>
+
+                        <li class="pure-menu-heading">Owners</li>
+                        <li class="pure-menu-item">
+                            {% for owner in details.owners -%}
+                                <a href="/releases/@{{ owner[0] }}">
+                                    <img src="{{ owner[1] }}" alt="{{ owner[0] }}" class="owner">
+                                </a>
+                            {% endfor -%}
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            {# TODO: These branches can be flattened #}
+            <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
+                {% if not details.is_library -%}
+                    <div class="warning">
+                        {{ details.name }}-{{ details.version }} is not a library.
+                    </div>
+                {% else -%}
+                    {% if details.yanked -%}
+                        <div class="warning">
+                            {{ details.name }}-{{ details.version }} has been yanked.
+                        </div>
+                    {% else -%}
+                        {% if not details.build_status -%}
+                            <div class="warning">
+                                docs.rs failed to build {{ details.name }}-{{ details.version }}<br>Please check the
+                                 <a href="/crate/{{ details.name }}/{{ details.version }}/builds">build logs</a> and, if you believe this is
+                                docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.
+                            </div>
+
+                            {% if details.last_successful_build -%}
+                                <div class="info">
+                                    Visit the last successful build:
+                                    <a href="/crate/{{ details.name }}/{{ details.last_successful_build }}">
+                                         {{ details.name }}-{{ details.last_successful_build }}
+                                    </a>
+                                </div>
+                            {% endif -%}
+                        {% else -%}
+                            {% if not details.rustdoc_status -%}
+                                <div class="warning">{{ details.name }}-{{ details.version }} doesn't have any documentation.</div>
+                            {% endif -%}
+
+                            {% if details.readme -%}
+                                {{ details.readme | safe }}
+                            {% else -%}
+                                {{ details.rustdoc | safe }}
+                            {% endif -%}
+                        {% endif -%}
+                    {% endif -%}
+                {% endif -%}
+            </div>
+        </div>
+    </div>
+{% endblock body -%}
+
+
+{% block css -%}
+    {{ macros::highlight_css() }}
+{% endblock css -%}
+
+{% block javascript -%}
+    {{ macros::highlight_js(languages=["rust", "ini"]) }}
+
+    <script type="text/javascript" charset="utf-8">
+        function getKey(ev) {
+            if ("key" in ev && typeof ev.key != "undefined") {
+                return ev.key;
+            }
+
+            return String.fromCharCode(ev.charCode || ev.keyCode);
+        }
+
+        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
+            var form = document.getElementsByClassName("landing-search-form");
+            var input = document.createElement('input');
+
+            input.type = 'hidden';
+            input.name = 'i-am-feeling-lucky';
+            input.value = 1;
+            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+
+            return true;
+        };
+
+        function handleShortcut(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+
+            switch (getKey(ev)) {
+                case "s":
+                case "S":
+                    ev.preventDefault();
+                    document.getElementById("search").focus();
+                    break;
+            }
+        }
+
+        document.onkeypress = handleShortcut;
+        document.onkeydown = handleShortcut;
+
+        var active = null;
+
+        function handleKey(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+
+            if (ev.which === 40) { // Down arrow
+                ev.preventDefault();
+                if (active === null) {
+                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+                } else if (active.nextElementSibling) {
+                    active.classList.remove("selected");
+                    active = active.nextElementSibling;
+                }
+
+                active.classList.add("selected");
+            } else if (ev.which === 38) { // Up arrow
+                ev.preventDefault();
+
+                if (active === null) {
+                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+                } else if (active.previousElementSibling) {
+                    active.classList.remove("selected");
+                    active = active.previousElementSibling;
+                }
+
+                active.classList.add("selected");
+                active.focus();
+            } else if (ev.which === 13) { // Return
+                if (active !== null) {
+                    document.location.href = active.getElementsByTagName("a")[0].href;
+                }
+            } else {
+                switch (getKey(ev)) {
+                    case "s":
+                    case "S":
+                        ev.preventDefault();
+                        document.getElementsByClassName("search-input-nav")[0].focus();
+                        break;
+                }
+            }
+        }
+
+        document.onkeypress = handleKey;
+        document.onkeydown = handleKey;
+
+        var crates =
+            Array.prototype.slice.call(document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li"));
+
+        for (var i = 0; i < crates.length; ++i) {
+            crates[i].addEventListener("mouseover", function (event) {
+                this.classList.remove("selected"); active = null;
+            }); crates[i].addEventListener("mouseout", function (event) {
+                this.classList.remove("selected"); active = null;
+            });
+        }
+    </script>
+{% endblock javascript -%}

@@ -1,66 +1,30 @@
 //! Source code browser
 
 use super::file::File as DbFile;
-use super::page::Page;
+use super::page::{SourcePage, WebPage};
 use super::pool::Pool;
 use super::MetaData;
 use iron::prelude::*;
 use postgres::Connection;
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::Serialize;
 use serde_json::Value;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
-/// A source file's type
-#[derive(PartialEq, PartialOrd)]
-enum FileType {
-    Dir,
-    Text,
-    Binary,
-    RustSource,
-}
-
-/// A source file
-#[derive(PartialEq, PartialOrd)]
+/// A source file's name and mime type
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize)]
 struct File {
+    /// The name of the file
     name: String,
-    file_type: FileType,
+    /// The MIME type of the file
+    mime: String,
 }
 
 /// A list of source files
-struct FileList {
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FileList {
     metadata: MetaData,
     files: Vec<File>,
-}
-
-impl Serialize for FileList {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("FileList", 2)?;
-        state.serialize_field("metadata", &self.metadata)?;
-
-        let mut files = Vec::with_capacity(self.files.len());
-        for file in &self.files {
-            let mut map = HashMap::with_capacity(2);
-            map.insert("name", Value::String(file.name.to_owned()));
-
-            let file_type = match file.file_type {
-                FileType::Dir => "file_type_dir",
-                FileType::Text => "file_type_text",
-                FileType::Binary => "file_type_binary",
-                FileType::RustSource => "file_type_rust_source",
-            };
-            map.insert(file_type, Value::Bool(true));
-
-            files.push(map);
-        }
-        state.serialize_field("files", &files)?;
-
-        state.end()
-    }
 }
 
 impl FileList {
@@ -125,19 +89,15 @@ impl FileList {
                         let path_splited: Vec<&str> = path.split('/').collect();
 
                         // if path have '/' it is a directory
-                        let ftype = if path_splited.len() > 1 {
-                            FileType::Dir
-                        } else if mime.starts_with("text") && path_splited[0].ends_with(".rs") {
-                            FileType::RustSource
-                        } else if mime.starts_with("text") {
-                            FileType::Text
+                        let mime = if path_splited.len() > 1 {
+                            "dir".to_owned()
                         } else {
-                            FileType::Binary
+                            mime.to_owned()
                         };
 
                         let file = File {
                             name: path_splited[0].to_owned(),
-                            file_type: ftype,
+                            mime,
                         };
 
                         // avoid adding duplicates, a directory may occur more than once
@@ -154,9 +114,9 @@ impl FileList {
 
             file_list.sort_by(|a, b| {
                 // directories must be listed first
-                if a.file_type == FileType::Dir && b.file_type != FileType::Dir {
+                if a.mime == "dir" && b.mime != "dir" {
                     Ordering::Less
-                } else if a.file_type != FileType::Dir && b.file_type == FileType::Dir {
+                } else if a.mime != "dir" && b.mime == "dir" {
                     Ordering::Greater
                 } else {
                     a.name.to_lowercase().cmp(&b.name.to_lowercase())
@@ -220,7 +180,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         None
     };
 
-    let (content, is_rust_source) = if let Some(file) = file {
+    let (file_content, is_rust_source) = if let Some(file) = file {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !file.0.mime.starts_with("text") && !file.is_empty() {
             return Ok(file.serve());
@@ -236,74 +196,21 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (None, false)
     };
 
-    let list = FileList::from_path(&conn, &name, &version, &req_path);
-    if list.is_none() {
+    let file_list = if let Some(file_list) = FileList::from_path(&conn, &name, &version, &req_path)
+    {
+        file_list
+    } else {
         use super::error::Nope;
         use iron::status;
+
         return Err(IronError::new(Nope::NoResults, status::NotFound));
+    };
+
+    SourcePage {
+        file_list,
+        show_parent_link: !req_path.is_empty(),
+        file_content,
+        is_rust_source,
     }
-
-    let page = Page::new(list)
-        .set_bool("show_parent_link", !req_path.is_empty())
-        .set_true("javascript_highlightjs")
-        .set_true("show_package_navigation")
-        .set_true("package_source_tab");
-
-    if let Some(content) = content {
-        page.set("file_content", &content)
-            .set_bool("file_content_rust_source", is_rust_source)
-            .to_resp("source")
-    } else {
-        page.to_resp("source")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn serialize_file_list() {
-        let file_list = FileList {
-            metadata: MetaData {
-                name: "rcc".to_string(),
-                version: "0.0.0".to_string(),
-                description: Some("it compiles an unholy language".to_string()),
-                target_name: None,
-                rustdoc_status: true,
-                default_target: "x86_64-unknown-linux-gnu".to_string(),
-            },
-            files: vec![
-                File {
-                    name: "main.rs".to_string(),
-                    file_type: FileType::RustSource,
-                },
-                File {
-                    name: "lib.rs".to_string(),
-                    file_type: FileType::RustSource,
-                },
-            ],
-        };
-
-        let correct_json = json!({
-            "metadata": {
-                "name": "rcc",
-                "version": "0.0.0",
-                "description": "it compiles an unholy language",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            },
-            "files": [{
-                "name": "main.rs",
-                "file_type_rust_source": true
-            }, {
-                "name": "lib.rs",
-                "file_type_rust_source": true
-            }],
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&file_list).unwrap(),);
-    }
+    .into_response()
 }

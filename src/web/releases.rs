@@ -1,14 +1,20 @@
 //! Releases web handlers
 
-use super::error::Nope;
-use super::page::Page;
-use super::pool::Pool;
-use super::{duration_to_str, match_version, redirect_base};
+use super::{
+    error::Nope,
+    match_version,
+    page::{
+        HomePage, ReleaseActivity, ReleaseFeed, ReleaseQueue, ReleaseType, Search, ViewReleases,
+        WebPage,
+    },
+    pool::Pool,
+    redirect_base,
+};
 use iron::prelude::*;
 use iron::status;
 use postgres::Connection;
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::Serialize;
 use serde_json::Value;
 
 /// Number of release in home page
@@ -18,13 +24,14 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Release {
     pub(crate) name: String,
     pub(crate) version: String,
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
+    #[serde(serialize_with = "super::rfc3339")]
     pub(crate) release_time: time::Timespec,
     stars: i32,
 }
@@ -40,28 +47,6 @@ impl Default for Release {
             release_time: time::get_time(),
             stars: 0,
         }
-    }
-}
-
-impl Serialize for Release {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Release", 8)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("version", &self.version)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("target_name", &self.target_name)?;
-        state.serialize_field("rustdoc_status", &self.rustdoc_status)?;
-        state.serialize_field("release_time", &duration_to_str(self.release_time))?;
-        state.serialize_field(
-            "release_time_rfc3339",
-            &time::at(self.release_time).rfc3339().to_string(),
-        )?;
-        state.serialize_field("stars", &self.stars)?;
-
-        state.end()
     }
 }
 
@@ -343,52 +328,40 @@ fn get_search_results(
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
-    Page::new(packages)
-        .set_true("show_search_form")
-        .set_true("hide_package_navigation")
-        .to_resp("releases")
+    let recent_releases = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+
+    HomePage { recent_releases }.into_response()
 }
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
-    let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
-    resp.headers.set(::iron::headers::ContentType(
-        "application/atom+xml".parse().unwrap(),
-    ));
-    Ok(resp)
+    let recent_releases = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+
+    ReleaseFeed { recent_releases }.into_response()
 }
 
 fn releases_handler(
-    packages: Vec<Release>,
+    releases: Vec<Release>,
     page_number: i64,
-    release_type: &str,
-    tab: &str,
-    title: &str,
+    release_type: ReleaseType,
+    description: impl Into<String>,
 ) -> IronResult<Response> {
-    if packages.is_empty() {
-        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
-    }
-
     // Show next and previous page buttons
-    // This is a temporary solution to avoid expensive COUNT(*)
     let (show_next_page, show_previous_page) = (
-        packages.len() == RELEASES_IN_RELEASES as usize,
+        releases.len() == RELEASES_IN_RELEASES as usize,
         page_number != 1,
     );
 
-    Page::new(packages)
-        .title("Releases")
-        .set("description", title)
-        .set("release_type", release_type)
-        .set_true("show_releases_navigation")
-        .set_true(tab)
-        .set_bool("show_next_page_button", show_next_page)
-        .set_int("next_page", page_number + 1)
-        .set_bool("show_previous_page_button", show_previous_page)
-        .set_int("previous_page", page_number - 1)
-        .to_resp("releases")
+    ViewReleases {
+        releases,
+        description: description.into(),
+        release_type,
+        show_next_page,
+        show_previous_page,
+        page_number,
+        author: None,
+    }
+    .into_response()
 }
 
 // Following functions caused a code repeat due to design of our /releases/ URL routes
@@ -400,11 +373,11 @@ pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or(1);
     let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
+
     releases_handler(
         packages,
         page_number,
-        "recent",
-        "releases_navigation_recent_tab",
+        ReleaseType::Recent,
         "Recently uploaded crates",
     )
 }
@@ -417,11 +390,11 @@ pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
         .unwrap_or(1);
     let conn = extension!(req, Pool).get()?;
     let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
+
     releases_handler(
         packages,
         page_number,
-        "stars",
-        "releases_navigation_stars_tab",
+        ReleaseType::Stars,
         "Crates with most stars",
     )
 }
@@ -439,11 +412,11 @@ pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Respons
         RELEASES_IN_RELEASES,
         Order::RecentFailures,
     );
+
     releases_handler(
         packages,
         page_number,
-        "recent-failures",
-        "releases_navigation_recent_failures_tab",
+        ReleaseType::RecentFailures,
         "Recent crates failed to build",
     )
 }
@@ -461,11 +434,11 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
         RELEASES_IN_RELEASES,
         Order::FailuresByGithubStars,
     );
+
     releases_handler(
         packages,
         page_number,
-        "failures",
-        "releases_navigation_failures_by_stars_tab",
+        ReleaseType::Failures,
         "Crates with most stars failed to build",
     )
 }
@@ -477,12 +450,11 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     let conn = extension!(req, Pool).get()?;
 
-    #[allow(clippy::or_fun_call)]
     let author = ctry!(router
         .find("author")
-        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
+        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound)));
 
-    let (author_name, packages) = if author.starts_with('@') {
+    let (author_name, releases) = if author.starts_with('@') {
         let mut author = author.split('@');
 
         get_releases_by_owner(
@@ -495,28 +467,27 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
     };
 
-    if packages.is_empty() {
+    if releases.is_empty() {
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     // Show next and previous page buttons
     // This is a temporary solution to avoid expensive COUNT(*)
     let (show_next_page, show_previous_page) = (
-        packages.len() == RELEASES_IN_RELEASES as usize,
+        releases.len() == RELEASES_IN_RELEASES as usize,
         page_number != 1,
     );
-    Page::new(packages)
-        .title("Releases")
-        .set("description", &format!("Crates from {}", author_name))
-        .set("author", &author_name)
-        .set("release_type", author)
-        .set_true("show_releases_navigation")
-        .set_true("show_stars")
-        .set_bool("show_next_page_button", show_next_page)
-        .set_int("next_page", page_number + 1)
-        .set_bool("show_previous_page_button", show_previous_page)
-        .set_int("previous_page", page_number - 1)
-        .to_resp("releases")
+
+    ViewReleases {
+        releases,
+        description: format!("Crates from {}", author_name),
+        release_type: ReleaseType::Author,
+        show_next_page,
+        show_previous_page,
+        page_number,
+        author: Some(author_name.to_owned()),
+    }
+    .into_response()
 }
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
@@ -526,7 +497,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let query = params.find(&["query"]);
 
     let conn = extension!(req, Pool).get()?;
-    if let Some(&Value::String(ref query)) = query {
+    if let Some(Value::String(query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
         // if there is a match
         // TODO: Redirecting to latest doc might be more useful
@@ -615,10 +586,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         };
 
         // FIXME: There is no pagination
-        Page::new(results)
-            .set("search_query", &query)
-            .title(&title)
-            .to_resp("releases")
+        Search {
+            title: title,
+            results,
+            search_query: Some(query.to_owned()),
+            ..Default::default()
+        }
+        .into_response()
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))
     }
@@ -626,19 +600,18 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let release_activity_data: Value = ctry!(conn.query(
+    let activity_data: Value = ctry!(conn.query(
         "SELECT value FROM config WHERE name = 'release_activity'",
         &[]
     ))
     .get(0)
     .get(0);
-    Page::new(release_activity_data)
-        .title("Releases")
-        .set("description", "Monthly release activity")
-        .set_true("show_releases_navigation")
-        .set_true("releases_navigation_activity_tab")
-        .set_true("javascript_highchartjs")
-        .to_resp("releases_activity")
+
+    ReleaseActivity {
+        description: "Monthly release activity".to_owned(),
+        activity_data,
+    }
+    .into_response()
 }
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
@@ -653,8 +626,8 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         )
         .unwrap();
 
-    let crates: Vec<(String, String, i32)> = query
-        .into_iter()
+    let queue: Vec<(String, String, i32)> = query
+        .iter()
         .map(|krate| {
             (
                 krate.get("name"),
@@ -667,14 +640,12 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         })
         .collect();
 
-    let is_empty = crates.is_empty();
-    Page::new(crates)
-        .title("Build queue")
-        .set("description", "List of crates scheduled to build")
-        .set_bool("queue_empty", is_empty)
-        .set_true("show_releases_navigation")
-        .set_true("releases_queue_tab")
-        .to_resp("releases_queue")
+    ReleaseQueue {
+        description: "List of crates scheduled to build".to_owned(),
+        queue_is_empty: queue.is_empty(),
+        queue,
+    }
+    .into_response()
 }
 
 #[cfg(test)]
@@ -740,8 +711,7 @@ mod tests {
             let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
 
             for name in near_matches.iter() {
-                let (num_results, mut results) =
-                    dbg!(get_search_results(&db.conn(), *name, 1, 100));
+                let (num_results, mut results) = get_search_results(&db.conn(), *name, 1, 100);
                 assert_eq!(num_results, 3);
 
                 for name in releases.iter() {
@@ -1016,8 +986,7 @@ mod tests {
 
     #[test]
     fn serialize_releases() {
-        let current_time = time::get_time();
-        let now = time::at(current_time);
+        let now = time::get_time();
 
         let mut release = Release {
             name: "serde".to_string(),
@@ -1025,7 +994,7 @@ mod tests {
             description: Some("serde makes things other things".to_string()),
             target_name: Some("x86_64-pc-windows-msvc".to_string()),
             rustdoc_status: true,
-            release_time: current_time,
+            release_time: now,
             stars: 100,
         };
 
@@ -1035,8 +1004,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": "x86_64-pc-windows-msvc",
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": super::super::duration_to_str(now),
+            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1049,8 +1018,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": super::super::duration_to_str(now),
+            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1063,8 +1032,8 @@ mod tests {
             "description": null,
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": super::super::duration_to_str(now),
+            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 

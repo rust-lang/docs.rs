@@ -1,5 +1,5 @@
 use super::error::Nope;
-use super::page::Page;
+use super::page::{CrateDetailsPage, WebPage};
 use super::pool::Pool;
 use super::{
     duration_to_str, match_version, redirect_base, render_markdown, MatchSemver, MetaData,
@@ -16,7 +16,7 @@ use serde_json::Value;
 
 // TODO: Add target name and versions
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CrateDetails {
     name: String,
     version: String,
@@ -41,6 +41,7 @@ pub struct CrateDetails {
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
+    // TODO: Is this even needed for rendering pages?
     pub(crate) metadata: MetaData,
     is_library: bool,
     yanked: bool,
@@ -105,7 +106,7 @@ impl Serialize for CrateDetails {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Release {
     pub version: String,
     pub build_status: bool,
@@ -373,11 +374,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
         Some(MatchSemver::Exact((version, _))) => {
             let details = CrateDetails::new(&conn, &name, &version);
 
-            Page::new(details)
-                .set_true("show_package_navigation")
-                .set_true("javascript_highlightjs")
-                .set_true("package_navigation_crate_tab")
-                .to_resp("crate_details")
+            CrateDetailsPage { details }.into_response()
         }
         Some(MatchSemver::Semver((version, _))) => {
             let url = ctry!(Url::parse(

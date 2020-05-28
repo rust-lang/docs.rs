@@ -260,7 +260,7 @@ pub fn start_daemon(background: bool) {
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None);
+    crate::Server::start(None, false);
 }
 
 fn opts() -> DocBuilderOptions {

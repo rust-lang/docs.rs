@@ -1,0 +1,108 @@
+{% extends "base.html" -%}
+
+{% block title -%}Docs.rs{% endblock title -%}
+
+{% block body -%}
+    <div class="container landing">
+        <h1 class="brand"><i class="fa fa-cubes fa-fw"></i> Docs.rs</h1>
+
+        <form action="/releases/search" method="GET" class="landing-search-form">
+            <div>
+                <input class="search-input" id="search" name="query" type="text" aria-label="Find crate by search query"
+                    placeholder="Click or press 'S' to search" autofocus>
+            </div>
+
+            <div class="buttons">
+                <button type="submit" class="pure-button pure-button-normal">Search</button>
+                <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button">
+                    I'm Feeling Lucky
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="container">
+        <div class="recent-releases-container">
+            <div class="release">
+                <a href="/releases">
+                    <strong>Recent Releases</strong>
+                </a>
+                <a href="/releases/feed" title="Atom feed">
+                    <i class="fa fa-rss-square"></i>
+                </a>
+            </div>
+
+            <ul>
+                {% for release in recent_releases -%}
+                    {% if rustdoc_status -%}
+                        {% set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+                    {% else -%}
+                        {% set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+                    {% endif -%}
+
+                    <li>
+                        <a href="{{ release_url }}"
+                            class="release">
+                            <div class="pure-g">
+                                <div class="pure-u-1 pure-u-sm-6-24 pure-u-md-5-24 name">
+                                    {{ release.name }}-{{ release.version }}
+                                </div>
+                                <div class="pure-u-1 pure-u-sm-14-24 pure-u-md-16-24 description">
+                                    {{ release.description }}
+                                </div>
+
+                                {% if varsb.show_stars -%}
+                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                        {{ release.stars }}
+                                        <i class="fa fa-star-o"></i>
+                                    </div>
+                                {% else -%}
+                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                        {{ release.release_time | timeformat(relative=true) }}
+                                    </div>
+                                {% endif -%}
+                            </div>
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endblock body -%}
+
+{% block javascript -%}
+    <script type="text/javascript" charset="utf-8">
+        function getKey(ev) {
+            if ("key" in ev && typeof ev.key != "undefined") {
+                return ev.key;
+            }
+            return String.fromCharCode(ev.charCode || ev.keyCode);
+        }
+
+        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
+            var form = document.getElementsByClassName("landing-search-form");
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'i-am-feeling-lucky';
+            input.value = 1;
+            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+            return true;
+        };
+
+        function handleShortcut(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+            switch (getKey(ev)) {
+                case "s":
+                case "S":
+                    ev.preventDefault();
+                    document.getElementById("search").focus();
+                    break;
+            }
+        }
+
+        document.onkeypress = handleShortcut;
+        document.onkeydown = handleShortcut;
+    </script>
+{% endblock javascript -%}

@@ -7,33 +7,50 @@ use log::{debug, info};
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
 macro_rules! ctry {
-    ($result:expr) => {
+    ($result:expr) => {{
+        use $crate::web::page::WebPage;
+
         match $result {
             Ok(v) => v,
             Err(e) => {
-                return $crate::web::page::Page::new(format!("{:?}", e))
-                    .title("An error has occured")
-                    .set_status(::iron::status::BadRequest)
-                    .to_resp("resp");
+                log::error!("An error occurred: {:?}", e);
+
+                return $crate::web::page::Error {
+                    search_query: None,
+                    title: "An error has occurred".to_owned(),
+                    status: iron::status::BadRequest,
+                }
+                .into_response();
             }
         }
-    };
+    }};
 }
 
 /// cexpect will check an option and if it's not Some
 /// it will return an error page response
 macro_rules! cexpect {
-    ($option:expr) => {
+    ($option:expr) => {{
+        use $crate::web::page::WebPage;
+
         match $option {
             Some(v) => v,
             None => {
-                return $crate::web::page::Page::new("Resource not found".to_owned())
-                    .title("An error has occured")
-                    .set_status(::iron::status::BadRequest)
-                    .to_resp("resp");
+                log::error!(
+                    "{}:{}:{} Called `cexpect` on a None value",
+                    file!(),
+                    line!(),
+                    column!(),
+                );
+
+                return $crate::web::page::Error {
+                    search_query: None,
+                    title: "Resource not found".to_owned(),
+                    status: iron::status::BadRequest,
+                }
+                .into_response();
             }
         }
-    };
+    }};
 }
 
 /// Gets an extension from Request
@@ -56,7 +73,6 @@ mod sitemap;
 mod source;
 
 use self::pool::Pool;
-use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
@@ -64,6 +80,7 @@ use iron::{self, status, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
+use serde::ser::{Serialize, Serializer};
 use staticfile::Static;
 use std::net::SocketAddr;
 use std::{env, fmt, path::PathBuf, time::Duration};
@@ -80,17 +97,6 @@ const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
-fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
-    // TODO: Use DocBuilderOptions for paths
-    let mut hbse = HandlebarsEngine::new();
-    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
-
-    // load templates
-    hbse.reload()?;
-
-    Ok(hbse)
-}
-
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
@@ -101,11 +107,8 @@ struct CratesfyiHandler {
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(pool: Pool, base: H) -> Chain {
-        let hbse = handlebars_engine().expect("Failed to load handlebar templates");
-
         let mut chain = Chain::new(base);
         chain.link_before(pool);
-        chain.link_after(hbse);
         chain
     }
 
@@ -346,7 +349,12 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(addr: Option<&str>) -> Self {
+    pub fn start(addr: Option<&str>, reload_templates: bool) -> Self {
+        page::TEMPLATE_DATA.poke().expect("This returns Ok(())");
+        if reload_templates {
+            page::TemplateData::start_template_reloading();
+        }
+
         let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new());
         info!("Running docs.rs web server on http://{}", server.addr());
         server
@@ -550,13 +558,14 @@ impl MetaData {
     }
 }
 
+fn rfc3339<S: Serializer>(time: &time::Timespec, serializer: S) -> Result<S::Ok, S::Error> {
+    time::at(*time).rfc3339().to_string().serialize(serializer)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        test::*,
-        web::{handlebars_engine, match_version},
-    };
+    use crate::{test::*, web::match_version};
     use html5ever::tendril::TendrilSink;
     use serde_json::json;
 
@@ -763,11 +772,6 @@ mod test {
 
             Ok(())
         });
-    }
-
-    #[test]
-    fn test_templates_are_valid() {
-        handlebars_engine().expect("Failed to load handlebar templates");
     }
 
     #[test]

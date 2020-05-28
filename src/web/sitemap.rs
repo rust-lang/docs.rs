@@ -1,9 +1,10 @@
-use super::page::Page;
-use super::pool::Pool;
-use iron::headers::ContentType;
-use iron::prelude::*;
+use super::{
+    page::{About, SitemapXml, WebPage},
+    pool::Pool,
+};
+use crate::docbuilder::Limits;
+use iron::{headers::ContentType, prelude::*};
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
@@ -28,10 +29,9 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         })
         .collect::<Vec<(String, String)>>();
 
-    let mut resp = ctry!(Page::new(releases).to_resp("sitemap"));
-    resp.headers
-        .set(ContentType("application/xml".parse().unwrap()));
-    Ok(resp)
+    // TODO: Only the second element of each tuple (the release time) is actually used
+    //       in the template
+    SitemapXml { releases }.into_response()
 }
 
 pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
@@ -41,23 +41,21 @@ pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
 }
 
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
-    let mut content = BTreeMap::new();
-
     let conn = extension!(req, Pool).get()?;
     let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
 
+    let mut rustc_version = None;
     if let Some(row) = res.iter().next() {
         if let Some(Ok::<Value, _>(res)) = row.get_opt(0) {
             if let Some(vers) = res.as_str() {
-                content.insert("rustc_version".to_string(), Value::String(vers.to_string()));
+                rustc_version = Some(vers.to_owned());
             }
         }
     }
 
-    content.insert(
-        "limits".to_string(),
-        serde_json::to_value(&crate::docbuilder::Limits::default().for_website()).unwrap(),
-    );
-
-    Page::new(content).title("About Docs.rs").to_resp("about")
+    About {
+        rustc_version,
+        limits: Limits::default(),
+    }
+    .into_response()
 }

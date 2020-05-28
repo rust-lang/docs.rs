@@ -1,9 +1,8 @@
-use crate::web::page::Page;
+use crate::web::page::{Error, Search, WebPage};
 use iron::prelude::*;
 use iron::status;
 use iron::Handler;
-use std::error::Error;
-use std::fmt;
+use std::{error, fmt};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Nope {
@@ -22,41 +21,51 @@ impl fmt::Display for Nope {
     }
 }
 
-impl Error for Nope {}
+impl error::Error for Nope {}
 
 impl Handler for Nope {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         match *self {
             Nope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
-                Page::new("no such resource".to_owned())
-                    .set_status(status::NotFound)
-                    .title("The requested resource does not exist")
-                    .to_resp("error")
+                Error {
+                    title: "The requested resource does not exist".to_owned(),
+                    search_query: None,
+                    status: status::NotFound,
+                }
+                .into_response()
             }
+
             Nope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
-                Page::new("no such crate".to_owned())
-                    .set_status(status::NotFound)
-                    .title("The requested crate does not exist")
-                    .to_resp("error")
+                Error {
+                    title: "The requested crate does not exist".to_owned(),
+                    search_query: None,
+                    status: status::NotFound,
+                }
+                .into_response()
             }
+
             Nope::NoResults => {
                 use params::{Params, Value};
                 let params = req.get::<Params>().unwrap();
                 if let Some(&Value::String(ref query)) = params.find(&["query"]) {
                     // this used to be a search
-                    Page::new(Vec::<super::releases::Release>::new())
-                        .set_status(status::NotFound)
-                        .set("search_query", &query)
-                        .title(&format!("No crates found matching '{}'", query))
-                        .to_resp("releases")
+                    Search {
+                        title: format!("No crates found matching '{}'", query),
+                        search_query: Some(query.to_owned()),
+                        status: status::NotFound,
+                        ..Default::default()
+                    }
+                    .into_response()
                 } else {
                     // user did a search with no search terms
-                    Page::new(Vec::<super::releases::Release>::new())
-                        .set_status(status::NotFound)
-                        .title("No results given for empty search query")
-                        .to_resp("releases")
+                    Search {
+                        title: "No results given for empty search query".to_owned(),
+                        status: status::NotFound,
+                        ..Default::default()
+                    }
+                    .into_response()
                 }
             }
         }

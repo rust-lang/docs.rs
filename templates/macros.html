@@ -1,0 +1,77 @@
+{# Constructs a title based on the given crate name and version #}
+{% macro doc_title(name, version) %}
+    {% if name %}
+        {{ name }} {{ version | default(value="") }} - Docs.rs
+    {% else %}
+        Docs.rs
+    {% endif %}
+{% endmacro doc_title %}
+
+{#
+    Makes the appropriate JS imports for highlighting
+    * `languages` An array of strings where each is a valid highlight.js language
+#}
+{% macro highlight_js(languages) %}
+    {# Load the highlight script #}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/highlight.min.js" type="text/javascript"
+        charset="utf-8"></script>
+
+    {# Load the script for each provided language #}
+    {% for language in languages %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/languages/{{ language }}.min.js"
+        type="text/javascript" charset="utf-8"></script>
+    {% endfor %}
+
+    {# Activate highlighting #}
+    <script type="text/javascript" charset="utf-8">
+        hljs.initHighlighting();
+    </script>
+{% endmacro highlight_js %}
+
+{# Makes the appropriate CSS imports for highlighting #}
+{% macro highlight_css() %}
+    {# Load the highlighting theme css #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/github.min.css"
+        type="text/css" media="all" />
+{% endmacro highlight_css %}
+
+{#
+    Creates a formatted table showing the resource limits of a crate
+    * `limits` A non-null `Limits` struct
+#}
+{% macro crate_limits(limits) %}
+    <table class="pure-table pure-table-horizontal">
+        <tbody>
+            <tr>
+                <td>Available RAM</td>
+                <td>{{ limits.memory | filesizeformat }}</td>
+            </tr>
+
+            <tr>
+                <td>Maximum rustdoc execution time</td>
+                <td>{{ limits.timeout.secs | timeformat }}</td>
+            </tr>
+
+            <tr>
+                <td>Maximum size of a build log</td>
+                <td>{{ limits.max_log_size | filesizeformat }}</td>
+            </tr>
+
+            <tr>
+                <td>Network access</td>
+                <td>
+                    {% if limits.networking -%}
+                        allowed
+                    {% else -%}
+                        blocked
+                    {% endif -%}
+                </td>
+            </tr>
+
+            <tr>
+                <td>Maximum number of build targets</td>
+                <td>{{ limits.targets }}</td>
+            </tr>
+        </tbody>
+    </table>
+{% endmacro crate_limits %}

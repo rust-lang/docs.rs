@@ -3,7 +3,7 @@
 use super::crate_details::CrateDetails;
 use super::error::Nope;
 use super::file::File;
-use super::page::Page;
+use super::page::{RustdocPage, WebPage};
 use super::pool::Pool;
 use super::redirect_base;
 use super::{match_version, MatchSemver};
@@ -15,39 +15,6 @@ use iron::Handler;
 use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
-
-#[derive(Debug, Default)]
-struct RustdocPage {
-    head: String,
-    body: String,
-    body_class: String,
-    name: String,
-    full: String,
-    version: String,
-    description: Option<String>,
-    crate_details: Option<CrateDetails>,
-}
-
-impl Serialize for RustdocPage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("RustdocPage", 9)?;
-        state.serialize_field("rustdoc_head", &self.head)?;
-        state.serialize_field("rustdoc_body", &self.body)?;
-        state.serialize_field("rustdoc_body_class", &self.body_class)?;
-        state.serialize_field("rustdoc_full", &self.full)?;
-        state.serialize_field("rustdoc_status", &true)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("version", &self.version)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("crate_details", &self.crate_details)?;
-
-        state.end()
-    }
-}
 
 #[derive(Clone)]
 pub struct RustLangRedirector {
@@ -272,11 +239,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     // Get the crate's details from the database
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    let krate = cexpect!(CrateDetails::new(&conn, &name, &version));
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
-    if req_path.get(0).copied() == Some(&crate_details.metadata.default_target) {
+    if req_path.get(0).copied() == Some(&krate.metadata.default_target) {
         return redirect(&name, &version, &req_path[1..]);
     }
 
@@ -312,17 +279,18 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let file_content = ctry!(String::from_utf8(file.0.content));
     // Extract the head and body of the rustdoc file so that we can insert it into our own html
-    let (head, body, mut body_class) = ctry!(utils::extract_head_and_body(&file_content));
+    let (rustdoc_head, rustdoc_body, mut rustdoc_body_class) =
+        ctry!(utils::extract_head_and_body(&file_content));
 
     // Add the `rustdoc` classes to the html body
-    if body_class.is_empty() {
-        body_class = "rustdoc container-rustdoc".to_string();
+    if rustdoc_body_class.is_empty() {
+        rustdoc_body_class = "rustdoc container-rustdoc".to_string();
     } else {
         // rustdoc adds its own "rustdoc" class to the body
-        body_class.push_str(" container-rustdoc");
+        rustdoc_body_class.push_str(" container-rustdoc");
     }
 
-    let latest_release = crate_details.latest_release();
+    let latest_release = krate.latest_release();
 
     // Get the latest version of the crate
     let latest_version = latest_release.version.to_owned();
@@ -342,7 +310,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             "/{}/{}/{}",
             name,
             latest_version,
-            path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+            path_for_version(&latest_path, &krate.doc_targets, &conn)
         )
     } else {
         format!("/crate/{}/{}", name, latest_version)
@@ -355,35 +323,24 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         // Drop the `rustdoc/:crate/:version[/:platform]` prefix
         inner_path.drain(..3).for_each(drop);
 
-        if inner_path.len() > 1 && crate_details.doc_targets.iter().any(|s| s == inner_path[0]) {
+        if inner_path.len() > 1 && krate.doc_targets.iter().any(|s| s == inner_path[0]) {
             inner_path.remove(0);
         }
 
         inner_path.join("/")
     };
 
-    // Build the page of documentation
-    let content = RustdocPage {
-        head,
-        body,
-        body_class,
-        name,
-        full: file_content,
-        version,
-        crate_details: Some(crate_details),
-        ..Default::default()
-    };
-
-    // Build the page served to the user while setting options for templating
-    Page::new(content)
-        .set_true("show_package_navigation")
-        .set_true("package_navigation_documentation_tab")
-        .set_true("package_navigation_show_platforms_tab")
-        .set_bool("is_latest_version", is_latest_version)
-        .set("latest_path", &latest_path)
-        .set("latest_version", &latest_version)
-        .set("inner_path", &inner_path)
-        .to_resp("rustdoc")
+    RustdocPage {
+        latest_path,
+        latest_version,
+        inner_path,
+        is_latest_version,
+        rustdoc_head,
+        rustdoc_body,
+        rustdoc_body_class,
+        krate,
+    }
+    .into_response()
 }
 
 /// Checks whether the given path exists.
@@ -564,10 +521,8 @@ impl Handler for SharedResourceHandler {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::test::*;
     use reqwest::StatusCode;
-    use serde_json::json;
     use std::{collections::BTreeMap, iter::FromIterator};
 
     fn try_latest_version_redirect(
@@ -1368,101 +1323,5 @@ mod test {
 
             Ok(())
         })
-    }
-
-    #[test]
-    fn serialize_rustdoc_page() {
-        let time = time::get_time();
-        let details = json!({
-            "name": "rcc",
-            "version": "100.0.0",
-            "description": null,
-            "authors": [],
-            "owners": [],
-            "authors_json": null,
-            "dependencies": null,
-            "release_time": super::super::duration_to_str(time),
-            "build_status": true,
-            "last_successful_build": null,
-            "rustdoc_status": true,
-            "repository_url": null,
-            "homepage_url": null,
-            "keywords": null,
-            "have_examples": true,
-            "target_name": "x86_64-unknown-linux-gnu",
-            "releases": [],
-            "github": true,
-            "yanked": false,
-            "github_stars": null,
-            "github_forks": null,
-            "github_issues": null,
-            "metadata": {
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            },
-            "is_library": true,
-            "doc_targets": [],
-            "license": null,
-            "documentation_url": null
-        });
-
-        let mut page = RustdocPage {
-            head: "<head><title>Whee</title></head>".to_string(),
-            body: "<body><h1>idk</h1></body>".to_string(),
-            body_class: "docsrs-body".to_string(),
-            name: "rcc".to_string(),
-            full: "??".to_string(),
-            version: "100.0.100".to_string(),
-            description: Some("a Rust compiler in C. Wait, maybe the other way around".to_string()),
-            crate_details: Some(CrateDetails::default_tester(time)),
-        };
-
-        let correct_json = json!({
-            "rustdoc_head": "<head><title>Whee</title></head>",
-            "rustdoc_body": "<body><h1>idk</h1></body>",
-            "rustdoc_body_class": "docsrs-body",
-            "rustdoc_full": "??",
-            "rustdoc_status": true,
-            "name": "rcc",
-            "version": "100.0.100",
-            "description": "a Rust compiler in C. Wait, maybe the other way around",
-            "crate_details": details
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
-
-        page.description = None;
-        let correct_json = json!({
-            "rustdoc_head": "<head><title>Whee</title></head>",
-            "rustdoc_body": "<body><h1>idk</h1></body>",
-            "rustdoc_body_class": "docsrs-body",
-            "rustdoc_full": "??",
-            "rustdoc_status": true,
-            "name": "rcc",
-            "version": "100.0.100",
-            "description": null,
-            "crate_details": details
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
-
-        page.crate_details = None;
-        let correct_json = json!({
-            "rustdoc_head": "<head><title>Whee</title></head>",
-            "rustdoc_body": "<body><h1>idk</h1></body>",
-            "rustdoc_body_class": "docsrs-body",
-            "rustdoc_full": "??",
-            "rustdoc_status": true,
-            "name": "rcc",
-            "version": "100.0.100",
-            "description": null,
-            "crate_details": null
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
     }
 }
