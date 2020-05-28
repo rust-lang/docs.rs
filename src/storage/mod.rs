@@ -154,7 +154,7 @@ impl<'a> Storage<'a> {
 
 // public for benchmarking
 pub fn compress(content: impl Read) -> Result<Vec<u8>, Error> {
-    zstd::encode_all(content, 5).map_err(Into::into)
+    zstd::encode_all(content, 9).map_err(Into::into)
 }
 
 pub fn decompress(content: impl Read) -> Result<Vec<u8>, Error> {
