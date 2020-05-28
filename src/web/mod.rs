@@ -56,6 +56,7 @@ mod sitemap;
 mod source;
 
 use self::pool::Pool;
+use chrono::{DateTime, Utc};
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
@@ -414,9 +415,10 @@ impl Server {
 }
 
 /// Converts Timespec to nice readable relative time string
-fn duration_to_str(ts: time::Timespec) -> String {
-    let tm = time::at(ts);
-    let delta = time::now() - tm;
+fn duration_to_str(init: DateTime<Utc>) -> String {
+    let now = Utc::now();
+    let delta = now.signed_duration_since(init);
+
     let delta = (
         delta.num_days(),
         delta.num_hours(),
@@ -425,7 +427,7 @@ fn duration_to_str(ts: time::Timespec) -> String {
     );
 
     match delta {
-        (days, ..) if days > 5 => format!("{}", tm.strftime("%b %d, %Y").unwrap()),
+        (days, ..) if days > 5 => format!("{}", init.format("%b %d, %Y")),
         (days @ 2..=5, ..) => format!("{} days ago", days),
         (1, ..) => "one day ago".to_string(),
 

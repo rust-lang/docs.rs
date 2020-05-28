@@ -215,7 +215,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     // try to get actual file first
     // skip if request is a directory
     let file = if !file_path.ends_with('/') {
-        DbFile::from_path(&conn, &file_path)
+        DbFile::from_path(&conn, &file_path).ok()
     } else {
         None
     };

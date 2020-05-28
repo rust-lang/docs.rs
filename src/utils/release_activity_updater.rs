@@ -1,7 +1,7 @@
 use crate::db::connect_db;
 use crate::error::Result;
+use chrono::{Duration, Utc};
 use serde_json::{Map, Value};
-use time::{now, Duration};
 
 pub fn update_release_activity() -> Result<()> {
     let conn = connect_db()?;
@@ -37,11 +37,10 @@ pub fn update_release_activity() -> Result<()> {
 
         let release_count: i64 = rows.get(0).get(0);
         let failure_count: i64 = failures_count_rows.get(0).get(0);
-        let now = now();
+        let now = Utc::now().naive_utc();
         let date = now - Duration::days(day);
 
-        // unwrap is fine here, as our date format is always valid
-        dates.push(format!("{}", date.strftime("%d %b").unwrap()));
+        dates.push(format!("{}", date.format("%d %b")));
         crate_counts.push(release_count);
         failure_counts.push(failure_count);
     }

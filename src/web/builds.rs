@@ -3,6 +3,7 @@ use super::page::Page;
 use super::pool::Pool;
 use super::MetaData;
 use crate::docbuilder::Limits;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use router::Router;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -13,7 +14,7 @@ struct Build {
     rustc_version: String,
     cratesfyi_version: String,
     build_status: bool,
-    build_time: time::Timespec,
+    build_time: DateTime<Utc>,
     output: Option<String>,
 }
 
@@ -27,10 +28,7 @@ impl Serialize for Build {
         state.serialize_field("rustc_version", &self.rustc_version)?;
         state.serialize_field("cratesfyi_version", &self.cratesfyi_version)?;
         state.serialize_field("build_status", &self.build_status)?;
-        state.serialize_field(
-            "build_time",
-            &time::at(self.build_time).rfc3339().to_string(),
-        )?;
+        state.serialize_field("build_time", &self.build_time.format("%+").to_string())?;
         state.serialize_field("build_time_relative", &duration_to_str(self.build_time))?;
         state.serialize_field("output", &self.output)?;
 
@@ -102,7 +100,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                 rustc_version: row.get(6),
                 cratesfyi_version: row.get(7),
                 build_status: row.get(8),
-                build_time: row.get(9),
+                build_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(9), Utc),
                 output: row.get(10),
             };
 
@@ -153,11 +151,12 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use serde_json::json;
 
     #[test]
     fn serialize_build() {
-        let time = time::get_time();
+        let time = Utc::now();
         let mut build = Build {
             id: 22,
             rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
@@ -171,7 +170,7 @@ mod tests {
             "id": 22,
             "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
             "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-            "build_time": time::at(time).rfc3339().to_string(),
+            "build_time": time.format("%+").to_string(),
             "build_time_relative": duration_to_str(time),
             "output": null,
             "build_status": true
@@ -184,7 +183,7 @@ mod tests {
             "id": 22,
             "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
             "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-            "build_time": time::at(time).rfc3339().to_string(),
+            "build_time": time.format("%+").to_string(),
             "build_time_relative": duration_to_str(time),
             "output": "some random stuff",
             "build_status": true
@@ -195,7 +194,7 @@ mod tests {
 
     #[test]
     fn serialize_build_page() {
-        let time = time::get_time();
+        let time = Utc::now();
         let build = Build {
             id: 22,
             rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
@@ -232,7 +231,7 @@ mod tests {
                 "id": 22,
                 "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
                 "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time::at(time).rfc3339().to_string(),
+                "build_time": time.format("%+").to_string(),
                 "build_time_relative": duration_to_str(time),
                 "output": null,
                 "build_status": true
@@ -241,7 +240,7 @@ mod tests {
                 "id": 22,
                 "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
                 "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time::at(time).rfc3339().to_string(),
+                "build_time": time.format("%+").to_string(),
                 "build_time_relative": duration_to_str(time),
                 "output": null,
                 "build_status": true
@@ -258,7 +257,7 @@ mod tests {
                 "id": 22,
                 "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
                 "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time::at(time).rfc3339().to_string(),
+                "build_time": time.format("%+").to_string(),
                 "build_time_relative": duration_to_str(time),
                 "output": null,
                 "build_status": true
@@ -267,7 +266,7 @@ mod tests {
                 "id": 22,
                 "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
                 "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time::at(time).rfc3339().to_string(),
+                "build_time": time.format("%+").to_string(),
                 "build_time_relative": duration_to_str(time),
                 "output": null,
                 "build_status": true
@@ -285,7 +284,7 @@ mod tests {
                 "id": 22,
                 "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
                 "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time::at(time).rfc3339().to_string(),
+                "build_time": time.format("%+").to_string(),
                 "build_time_relative": duration_to_str(time),
                 "output": null,
                 "build_status": true

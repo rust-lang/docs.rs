@@ -1,4 +1,5 @@
 use crate::{db::connect_db, error::Result};
+use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::debug;
 use regex::Regex;
@@ -11,7 +12,7 @@ struct GitHubFields {
     stars: i64,
     forks: i64,
     issues: i64,
-    last_commit: time::Timespec,
+    last_commit: DateTime<Utc>,
 }
 
 /// Updates github fields in crates table
@@ -53,7 +54,7 @@ pub fn github_updater() -> Result<()> {
                         &(fields.stars as i32),
                         &(fields.forks as i32),
                         &(fields.issues as i32),
-                        &(fields.last_commit),
+                        &fields.last_commit.naive_utc(),
                         &crate_id,
                     ],
                 )
@@ -121,12 +122,11 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
             .unwrap_or(0),
         forks: obj.get("forks_count").and_then(|d| d.as_i64()).unwrap_or(0),
         issues: obj.get("open_issues").and_then(|d| d.as_i64()).unwrap_or(0),
-        last_commit: time::strptime(
+        last_commit: DateTime::parse_from_rfc3339(
             obj.get("pushed_at").and_then(|d| d.as_str()).unwrap_or(""),
-            "%Y-%m-%dT%H:%M:%S",
         )
-        .unwrap_or_else(|_| time::now())
-        .to_timespec(),
+        .map(|datetime| datetime.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now()),
     })
 }
 
@@ -152,7 +152,7 @@ fn get_github_path(url: &str) -> Option<String> {
 
 #[cfg(test)]
 mod test {
-    use super::{get_github_fields, get_github_path, github_updater};
+    use super::*;
 
     #[test]
     fn test_get_github_path() {
@@ -190,8 +190,7 @@ mod test {
         assert!(fields.forks >= 0);
         assert!(fields.issues >= 0);
 
-        use time;
-        assert!(fields.last_commit <= time::now().to_timespec());
+        assert!(fields.last_commit <= Utc::now());
     }
 
     #[test]

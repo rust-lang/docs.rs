@@ -7,6 +7,7 @@ use crate::{
     utils::{github_updater, pubsubhubbub, update_release_activity},
     DocBuilder, DocBuilderOptions,
 };
+use chrono::{Timelike, Utc};
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
@@ -221,8 +222,9 @@ pub fn start_daemon(background: bool) {
         .name("release activity updater".to_string())
         .spawn(move || loop {
             thread::sleep(Duration::from_secs(60));
-            let now = time::now();
-            if now.tm_hour == 23 && now.tm_min == 55 {
+            let now = Utc::now();
+
+            if now.hour() == 23 && now.minute() == 55 {
                 info!("Updating release activity");
                 if let Err(e) = update_release_activity() {
                     error!("Failed to update release activity: {}", e);

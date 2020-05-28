@@ -1,17 +1,16 @@
 //! Database based file handler
 
 use super::pool::Pool;
-use crate::db;
-use iron::status;
-use iron::{Handler, IronError, IronResult, Request, Response};
+use crate::{db, error::Result};
+use iron::{status, Handler, IronError, IronResult, Request, Response};
 use postgres::Connection;
 
 pub(crate) struct File(pub(crate) db::file::Blob);
 
 impl File {
     /// Gets file from database
-    pub fn from_path(conn: &Connection, path: &str) -> Option<File> {
-        Some(File(db::file::get_path(conn, path)?))
+    pub fn from_path(conn: &Connection, path: &str) -> Result<File> {
+        Ok(File(db::file::get_path(conn, path)?))
     }
 
     /// Consumes File and creates a iron response
@@ -27,9 +26,14 @@ impl File {
             .headers
             .set(ContentType(self.0.mime.parse().unwrap()));
         response.headers.set(CacheControl(cache));
-        response
-            .headers
-            .set(LastModified(HttpDate(time::at(self.0.date_updated))));
+        // FIXME: This is so horrible
+        response.headers.set(LastModified(HttpDate(
+            time::strptime(
+                &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
+                "%a, %d %b %Y %T %Z",
+            )
+            .unwrap(),
+        )));
         response
     }
 
@@ -48,7 +52,7 @@ impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path().join("/");
         let conn = extension!(req, Pool).get()?;
-        if let Some(file) = File::from_path(&conn, &path) {
+        if let Ok(file) = File::from_path(&conn, &path) {
             Ok(file.serve())
         } else {
             Err(IronError::new(
@@ -56,5 +60,37 @@ impl Handler for DatabaseFileHandler {
                 status::NotFound,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::wrapper;
+    use chrono::Utc;
+
+    #[test]
+    fn file_roundtrip() {
+        wrapper(|env| {
+            let db = env.db();
+            let now = Utc::now();
+
+            db.fake_release().create()?;
+
+            let mut file = File::from_path(
+                &*db.conn(),
+                "rustdoc/fake-package/1.0.0/fake-package/index.html",
+            )
+            .unwrap();
+            file.0.date_updated = now;
+
+            let resp = file.serve();
+            assert_eq!(
+                resp.headers.get_raw("Last-Modified").unwrap(),
+                [now.format("%a, %d %b %Y %T GMT").to_string().into_bytes()].as_ref(),
+            );
+
+            Ok(())
+        });
     }
 }
