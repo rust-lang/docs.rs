@@ -18,7 +18,7 @@ impl<'a> DatabaseBackend<'a> {
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
         let rows = self.conn.query(
-            "SELECT path, mime, date_updated, content, compressed FROM files WHERE path = $1;",
+            "SELECT path, mime, date_updated, content, compression FROM files WHERE path = $1;",
             &[&path],
         )?;
 
@@ -26,24 +26,29 @@ impl<'a> DatabaseBackend<'a> {
             Err(PathNotFoundError.into())
         } else {
             let row = rows.get(0);
+            let compression = row.get::<_, Option<String>>("compression").map(|alg| {
+                alg.parse()
+                    .expect("invalid or unknown compression algorithm")
+            });
             Ok(Blob {
                 path: row.get("path"),
                 mime: row.get("mime"),
                 date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
                 content: row.get("content"),
-                compressed: row.get("compressed"),
+                compression,
             })
         }
     }
 
     pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
         for blob in batch {
+            let compression = blob.compression.as_ref().map(|alg| alg.to_string());
             trans.query(
-                "INSERT INTO files (path, mime, content, compressed)
+                "INSERT INTO files (path, mime, content, compression)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
-                    SET mime = EXCLUDED.mime, content = EXCLUDED.content",
-                &[&blob.path, &blob.mime, &blob.content, &blob.compressed],
+                    SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
+                &[&blob.path, &blob.mime, &blob.content, &compression],
             )?;
         }
         Ok(())
@@ -80,7 +85,7 @@ mod tests {
                     mime: "text/plain".into(),
                     date_updated: now.trunc_subsecs(6),
                     content: "Hello world!".bytes().collect(),
-                    compressed: false,
+                    compression: None,
                 },
                 backend.get("dir/foo.txt")?
             );

@@ -9,9 +9,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("compress regex html", |b| {
         b.iter(|| compress(black_box(html_slice)))
     });
-    let compressed = compress(html_slice).unwrap();
+    let (compressed, alg) = compress(html_slice).unwrap();
     c.bench_function("decompress regex html", |b| {
-        b.iter(|| decompress(black_box(compressed.as_slice())))
+        b.iter(|| decompress(black_box(compressed.as_slice()), alg))
     });
 }
 
