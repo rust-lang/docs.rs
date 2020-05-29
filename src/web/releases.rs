@@ -670,7 +670,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::test::{assert_success, wrapper};
     use serde_json::json;
 
     #[test]
@@ -1059,5 +1059,13 @@ mod tests {
         });
 
         assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
+    }
+
+    #[test]
+    fn release_feed() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/feed", web)
+        })
     }
 }
