@@ -120,8 +120,10 @@ impl<T: Serialize> Serialize for Page<T> {
         // adding the someness of the global alert to the total. `true`
         // is 1 and `false` is 0, so it increments if the value is some (and therefore
         // needs to be serialized)
-        let mut state =
-            serializer.serialize_struct("Page", 9 + crate::GLOBAL_ALERT.is_some() as usize)?;
+        let mut state = serializer.serialize_struct(
+            "Page",
+            8 + crate::GLOBAL_ALERT.is_some() as usize + self.title.is_some() as usize,
+        )?;
 
         if let Some(ref title) = self.title {
             state.serialize_field("title", title)?;
