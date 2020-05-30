@@ -4,7 +4,7 @@
 
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::DocBuilder;
-pub use self::docbuilder::RustwideBuilder;
+pub use self::docbuilder::{Limits, RustwideBuilder};
 pub use self::web::Server;
 
 pub mod db;

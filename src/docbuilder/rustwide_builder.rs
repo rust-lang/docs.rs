@@ -242,7 +242,7 @@ impl RustwideBuilder {
                     })?;
                 }
 
-                add_path_into_database(&conn, "", &dest)?;
+                add_path_into_database(&conn, "", &dest, &limits)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
@@ -349,6 +349,7 @@ impl RustwideBuilder {
                         &conn,
                         &prefix,
                         build.host_source_dir(),
+                        &limits,
                     )?);
 
                     if let Some(name) = res.cargo_metadata.root().library_name() {
@@ -376,7 +377,7 @@ impl RustwideBuilder {
                             &metadata,
                         )?;
                     }
-                    self.upload_docs(&conn, name, version, local_storage.path())?;
+                    self.upload_docs(&conn, name, version, local_storage.path(), &limits)?;
                 }
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
@@ -572,13 +573,16 @@ impl RustwideBuilder {
         name: &str,
         version: &str,
         local_storage: &Path,
+        limits: &Limits,
     ) -> Result<()> {
         debug!("Adding documentation into database");
         add_path_into_database(
             conn,
             &format!("rustdoc/{}/{}", name, version),
             local_storage,
+            limits,
         )?;
+
         Ok(())
     }
 }

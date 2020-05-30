@@ -5,7 +5,7 @@ pub(crate) mod options;
 mod queue;
 mod rustwide_builder;
 
-pub(crate) use self::limits::Limits;
+pub use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
 pub(crate) use self::rustwide_builder::BuildResult;
 pub use self::rustwide_builder::RustwideBuilder;

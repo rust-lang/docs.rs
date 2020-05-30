@@ -1,7 +1,9 @@
 use super::TestDatabase;
-use crate::docbuilder::BuildResult;
-use crate::index::api::RegistryCrateData;
-use crate::utils::{Dependency, MetadataPackage, Target};
+use crate::{
+    docbuilder::{BuildResult, Limits},
+    index::api::RegistryCrateData,
+    utils::{Dependency, MetadataPackage, Target},
+};
 use failure::Error;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
@@ -181,8 +183,14 @@ impl<'a> FakeRelease<'a> {
                     package.version,
                     target.unwrap_or("")
                 );
+
                 log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-                crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
+                crate::db::add_path_into_database(
+                    &db.conn(),
+                    &prefix,
+                    path_prefix,
+                    &Limits::default(),
+                )
             };
 
             let index = [&package.name, "index.html"].join("/");

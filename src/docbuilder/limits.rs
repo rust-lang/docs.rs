@@ -3,13 +3,21 @@ use postgres::Connection;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+/// The limits imposed on a crate for building its documentation
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Limits {
+pub struct Limits {
+    /// The maximum memory usage allowed for a crate
     memory: usize,
+    /// The maximum number of targets
     targets: usize,
+    /// The build timeout
     timeout: Duration,
+    /// Whether networking is enabled
     networking: bool,
+    /// The maximum log size kept
     max_log_size: usize,
+    /// The maximum allowed size of a file upload
+    upload_size: u64,
 }
 
 impl Default for Limits {
@@ -19,7 +27,8 @@ impl Default for Limits {
             timeout: Duration::from_secs(15 * 60), // 15 minutes
             targets: 10,
             networking: false,
-            max_log_size: 100 * 1024, // 100 KB
+            max_log_size: 100 * 1024,            // 100 KB
+            upload_size: 5 * 1024 * 1024 * 1024, // 5 GB
         }
     }
 }
@@ -32,16 +41,24 @@ impl Limits {
             "SELECT * FROM sandbox_overrides WHERE crate_name = $1;",
             &[&name],
         )?;
+
         if !res.is_empty() {
             let row = res.get(0);
+
             if let Some(memory) = row.get::<_, Option<i64>>("max_memory_bytes") {
                 limits.memory = memory as usize;
             }
+
             if let Some(timeout) = row.get::<_, Option<i32>>("timeout_seconds") {
                 limits.timeout = Duration::from_secs(timeout as u64);
             }
+
             if let Some(targets) = row.get::<_, Option<i32>>("max_targets") {
                 limits.targets = targets as usize;
+            }
+
+            if let Some(upload_size) = row.get::<_, Option<i64>>("upload_size") {
+                limits.upload_size = upload_size as u64;
             }
         }
 
@@ -68,6 +85,10 @@ impl Limits {
         self.targets
     }
 
+    pub(crate) fn upload_size(&self) -> u64 {
+        self.upload_size
+    }
+
     pub(crate) fn for_website(&self) -> BTreeMap<String, String> {
         let mut res = BTreeMap::new();
         res.insert("Available RAM".into(), SIZE_SCALE(self.memory));
@@ -87,6 +108,10 @@ impl Limits {
         res.insert(
             "Maximum number of build targets".into(),
             self.targets.to_string(),
+        );
+        res.insert(
+            "Maximum uploaded file size".into(),
+            self.upload_size.to_string(),
         );
         res
     }
