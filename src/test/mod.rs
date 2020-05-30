@@ -93,10 +93,14 @@ pub(crate) struct TestEnvironment {
     s3: OnceCell<TestS3>,
 }
 
+pub(crate) fn init_logger() {
+    // If this fails it's probably already initialized
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
 impl TestEnvironment {
     fn new() -> Self {
-        // If this fails it's probably already initialized
-        let _ = env_logger::try_init();
+        init_logger();
         Self {
             db: OnceCell::new(),
             frontend: OnceCell::new(),
