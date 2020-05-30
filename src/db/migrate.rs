@@ -325,6 +325,17 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
             "
         ),
+        migration!(
+            context,
+            // version
+            13,
+            // description
+            "Allow max file upload size to be overridden",
+            // upgrade query
+            "ALTER TABLE sandbox_overrides ADD COLUMN upload_size BIGINT;",
+            // downgrade query
+            "ALTER TABLE sandbox_overrides DROP COLUMN upload_size;"
+        ),
     ];
 
     for migration in migrations {

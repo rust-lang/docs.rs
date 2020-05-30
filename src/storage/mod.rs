@@ -3,16 +3,19 @@ pub(crate) mod s3;
 
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
-use failure::Error;
-use time::Timespec;
 
+use crate::docbuilder::Limits;
 use failure::err_msg;
+use failure::Error;
 use postgres::{transaction::Transaction, Connection};
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::fs;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
+use time::Timespec;
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -72,6 +75,7 @@ impl<'a> Storage<'a> {
             DatabaseBackend::new(conn).into()
         }
     }
+
     pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
         match self {
             Self::Database(db) => db.get(path),
@@ -97,6 +101,7 @@ impl<'a> Storage<'a> {
         conn: &Connection,
         prefix: &str,
         root_dir: &Path,
+        limits: &Limits,
     ) -> Result<HashMap<PathBuf, String>, Error> {
         let trans = conn.transaction()?;
         let mut file_paths_and_mimes = HashMap::new();
@@ -107,9 +112,19 @@ impl<'a> Storage<'a> {
                 // Some files have insufficient permissions
                 // (like .lock file created by cargo in documentation directory).
                 // Skip these files.
-                fs::File::open(root_dir.join(&file_path))
+                let (path, file) = File::open(root_dir.join(&file_path))
                     .ok()
-                    .map(|file| (file_path, file))
+                    .map(|file| (file_path, file))?;
+
+                // Filter out files which are larger than the current crate's upload limit
+                let file_size = file.metadata().expect("Failed to get file metadata").len();
+                if file_size <= limits.upload_size() as u64 {
+                    Some((path, file))
+                } else {
+                    log::error!("Failed to upload {:?}, {} bytes is larger than the crate limit of {} bytes", path, file_size, limits.upload_size());
+
+                    None
+                }
             })
             .map(|(file_path, mut file)| -> Result<_, Error> {
                 let mut content: Vec<u8> = Vec::new();
@@ -188,7 +203,7 @@ impl<'a> From<S3Backend<'a>> for Storage<'a> {
 mod test {
     use super::*;
     use crate::test::wrapper;
-    use std::env;
+    use std::{env, fs};
 
     pub(crate) fn assert_blob_eq(blob: &Blob, actual: &Blob) {
         assert_eq!(blob.path, actual.path);
@@ -197,24 +212,29 @@ mod test {
         // NOTE: this does _not_ compare the upload time since min.io doesn't allow this to be configured
     }
 
-    pub(crate) fn test_roundtrip(blobs: &[Blob]) {
+    pub(crate) fn test_roundtrip(blobs: &[Blob], limits: &Limits) {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()
             .unwrap();
+
         for blob in blobs {
             let path = dir.path().join(&blob.path);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).unwrap();
             }
+
             fs::write(path, &blob.content).expect("failed to write to file");
         }
+
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
+
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
-            let stored_files = backend.store_all(&conn, "", dir.path()).unwrap();
+            let stored_files = backend.store_all(&conn, "", dir.path(), limits).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
+
             for blob in blobs {
                 let name = Path::new(&blob.path);
                 assert!(stored_files.contains_key(name));
@@ -230,23 +250,32 @@ mod test {
     #[test]
     fn test_uploads() {
         use std::fs;
+
+        let limits = Limits::default();
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()
             .unwrap();
+
         let files = ["Cargo.toml", "src/main.rs"];
         for &file in &files {
             let path = dir.path().join(file);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).unwrap();
             }
+
             fs::write(path, "data").expect("failed to write to file");
         }
+
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
+
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
-            let stored_files = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
+            let stored_files = backend
+                .store_all(&conn, "rustdoc", dir.path(), &limits)
+                .unwrap();
+
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
                 let name = Path::new(name);
@@ -276,6 +305,7 @@ mod test {
 
     #[test]
     fn test_batched_uploads() {
+        let limits = Limits::default();
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| Blob {
                 mime: "text/rust".into(),
@@ -284,7 +314,8 @@ mod test {
                 date_updated: Timespec::new(42, 0),
             })
             .collect();
-        test_roundtrip(&uploads);
+
+        test_roundtrip(&uploads, &limits);
     }
 
     #[test]
@@ -297,6 +328,7 @@ mod test {
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
+
     #[test]
     fn test_mime_types() {
         check_mime(".gitignore", "text/plain");
@@ -316,5 +348,35 @@ mod test {
         let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
+    }
+
+    #[test]
+    fn uploads_limited() {
+        let mut limits = Limits::default();
+        limits.set_upload_size(64);
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-max-upload-test")
+            .tempdir()
+            .unwrap();
+
+        let files = [("over-limit", 128), ("at-limit", 64), ("under-limit", 20)];
+        for (file, size) in files.iter() {
+            fs::write(dir.path().join(file), b"\x00".repeat(*size)).unwrap();
+        }
+
+        wrapper(|env| {
+            let db = env.db();
+            let conn = db.conn();
+
+            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
+            let stored_files = backend.store_all(&conn, "", dir.path(), &limits).unwrap();
+
+            // The only files that should have been uploaded are the ones <= the upload limit
+            assert!(stored_files.contains_key(&PathBuf::from("under-limit")));
+            assert!(stored_files.contains_key(&PathBuf::from("at-limit")));
+            assert_eq!(stored_files.len(), 2);
+
+            Ok(())
+        });
     }
 }

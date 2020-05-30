@@ -3,8 +3,7 @@ use std::path::PathBuf;
 
 use cratesfyi::db::{self, add_path_into_database, connect_db};
 use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
-use cratesfyi::Server;
-use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
+use cratesfyi::{DocBuilder, DocBuilderOptions, Limits, RustwideBuilder, Server};
 use structopt::StructOpt;
 
 pub fn main() {
@@ -412,7 +411,7 @@ impl DatabaseSubcommand {
 
             Self::AddDirectory { directory, prefix } => {
                 let conn = db::connect_db().expect("failed to connect to the database");
-                add_path_into_database(&conn, &prefix, directory)
+                add_path_into_database(&conn, &prefix, directory, &Limits::default())
                     .expect("Failed to add directory into database");
             }
 

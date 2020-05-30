@@ -4,8 +4,7 @@
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 
-use crate::error::Result;
-use crate::storage::Storage;
+use crate::{docbuilder::Limits, error::Result, storage::Storage};
 use postgres::Connection;
 
 use serde_json::Value;
@@ -30,9 +29,11 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     conn: &Connection,
     prefix: &str,
     path: P,
+    limits: &Limits,
 ) -> Result<Value> {
     let mut backend = Storage::new(conn);
-    let file_list = backend.store_all(conn, prefix, path.as_ref())?;
+    let file_list = backend.store_all(conn, prefix, path.as_ref(), limits)?;
+
     file_list_to_json(file_list.into_iter().collect())
 }
 
