@@ -1,8 +1,8 @@
-{% extends "base.html" -%}
+{%- extends "base.html" -%}
 
-{% block title -%}Docs.rs{% endblock title -%}
+{%- block title -%}Docs.rs{%- endblock title -%}
 
-{% block body -%}
+{%- block body -%}
     <div class="container landing">
         <h1 class="brand"><i class="fa fa-cubes fa-fw"></i> Docs.rs</h1>
 
@@ -33,12 +33,12 @@
             </div>
 
             <ul>
-                {% for release in recent_releases -%}
-                    {% if rustdoc_status -%}
-                        {% set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
-                    {% else -%}
-                        {% set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
-                    {% endif -%}
+                {%- for release in recent_releases -%}
+                    {%- if rustdoc_status -%}
+                        {%- set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+                    {%- else -%}
+                        {%- set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+                    {%- endif -%}
 
                     <li>
                         <a href="{{ release_url }}"
@@ -51,26 +51,26 @@
                                     {{ release.description }}
                                 </div>
 
-                                {% if varsb.show_stars -%}
+                                {%- if varsb.show_stars -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
                                         {{ release.stars }}
                                         <i class="fa fa-star-o"></i>
                                     </div>
-                                {% else -%}
+                                {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
                                         {{ release.release_time | timeformat(relative=true) }}
                                     </div>
-                                {% endif -%}
+                                {%- endif -%}
                             </div>
                         </a>
                     </li>
-                {% endfor %}
+                {%- endfor -%}
             </ul>
         </div>
     </div>
-{% endblock body -%}
+{%- endblock body -%}
 
-{% block javascript -%}
+{%- block javascript -%}
     <script type="text/javascript" charset="utf-8">
         function getKey(ev) {
             if ("key" in ev && typeof ev.key != "undefined") {
@@ -105,4 +105,4 @@
         document.onkeypress = handleShortcut;
         document.onkeydown = handleShortcut;
     </script>
-{% endblock javascript -%}
+{%- endblock javascript -%}

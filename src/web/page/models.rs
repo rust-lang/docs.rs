@@ -218,6 +218,10 @@ impl WebPage for Error {
     fn template() -> &'static str {
         "error.html"
     }
+
+    fn get_status(&self) -> Status {
+        self.status
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -238,6 +242,10 @@ pub(crate) struct Search {
 impl WebPage for Search {
     fn template() -> &'static str {
         "releases/releases.html"
+    }
+
+    fn get_status(&self) -> Status {
+        self.status
     }
 }
 

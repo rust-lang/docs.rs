@@ -1,9 +1,9 @@
-{% extends "base.html" %}
+{% extends "base.html" -%}
 
-{% block title -%} About Docs.rs {% endblock title -%}
+{%- block title -%} About Docs.rs {%- endblock title -%}
 
-{% block body -%}
-    {% set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
+{%- block body -%}
+    {%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
 
     <h1 id="crate-title">About Docs.rs</h1>
     <div class="container about">
@@ -19,12 +19,12 @@
             <a href="https://crates.io/">crates.io</a>
             using the nightly release of the Rust compiler.
 
-            {% if rustc_version -%}
+            {%- if rustc_version -%}
             The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
             If you need a newer version of this compiler, check the
             <a href="{{ docsrs_repo }}/issues">issues page</a>
             and file a new issue if you don't see an existing request.
-            {% endif -%}
+            {%- endif -%}
         </p>
 
         <p>
@@ -132,7 +132,7 @@
             </thead>
 
             <tbody>
-                {% set mio_badge = "https://docs.rs/mio/badge.svg" -%}
+                {%- set mio_badge = "https://docs.rs/mio/badge.svg" -%}
                 <tr>
                     <td>Latest version: <a href="{{ mio_badge }}">{{ mio_badge }}</a></td>
                     <td><img src="{{ mio_badge }}" alt="mio" /></td>
@@ -164,10 +164,10 @@
         <p>The available configuration flags you can customize are:</p>
 
         {# Include the example file #}
-        <pre><code>{% include "docsrs/Cargo.toml.example" -%}</code></pre>
+        <pre><code>{%- include "docsrs/Cargo.toml.example" -%}</code></pre>
 
         <h4>Test crate documentation build locally</h4>
-        {% set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
+        {%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
         <p>
             The <a href="{{ build_subcommand }}">docs.rs README</a> describes how to build an
             unpublished crate's documentation locally using the same build nvironment as the build agent.
@@ -177,19 +177,19 @@
         <p>Currently running Docs.rs version is: <strong>{{ docsrs_version() }}</strong></p>
 
         <h4>Contact</h4>
-        {% set governance_link = "https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" -%}
+        {%- set governance_link = "https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" -%}
         <p>
             Docs.rs is run and maintained by the <a href="{{ governance_link }}">Docs.rs team</a>.
             You can find us in #docs-rs on <a href="https://discordapp.com/invite/f7mTXPW/">Discord</a>.
         </p>
 
     </div>
-{% endblock body -%}
+{%- endblock body -%}
 
-{% block css -%}
+{%- block css -%}
     {{ macros::highlight_css() }}
-{% endblock css -%}
+{%- endblock css -%}
 
-{% block javascript -%}
+{%- block javascript -%}
     {{ macros::highlight_js(languages=["ini"]) }}
-{% endblock javascript -%}
+{%- endblock javascript -%}

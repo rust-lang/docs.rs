@@ -1,20 +1,20 @@
-{% extends "base.html" -%}
-{% import "releases/header.html" as release_macros -%}
+{%- extends "base.html" -%}
+{%- import "releases/header.html" as release_macros -%}
 
-{% block title%}Releases - Docs.rs{% endblock title %}
+{%- block title -%}Releases - Docs.rs{%- endblock title -%}
 
-{% block header %}
+{%- block header -%}
     {{ release_macros::header(title="Releases", description=description, tab="activity") }}
-{% endblock header %}
+{%- endblock header -%}
 
-{% block body -%}
+{%- block body -%}
     <div class="container">
         <div id="releases-activity-chart"></div>
     </div>
-{% endblock body -%}
+{%- endblock body -%}
 
 {# TODO: Do this with tera alone #}
-{% block javascript -%}
+{%- block javascript -%}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/4.2.5/highcharts.js" type="text/javascript"
         charset="utf-8"></script>
 
@@ -54,4 +54,4 @@
             }]
         });
     </script>
-{% endblock javascript -%}
+{%- endblock javascript -%}

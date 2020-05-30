@@ -1,10 +1,10 @@
 {# Constructs a title based on the given crate name and version #}
 {% macro doc_title(name, version) %}
-    {% if name %}
+    {%- if name -%}
         {{ name }} {{ version | default(value="") }} - Docs.rs
-    {% else %}
+    {%- else -%}
         Docs.rs
-    {% endif %}
+    {%- endif -%}
 {% endmacro doc_title %}
 
 {#
@@ -17,10 +17,10 @@
         charset="utf-8"></script>
 
     {# Load the script for each provided language #}
-    {% for language in languages %}
+    {%- for language in languages -%}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/languages/{{ language }}.min.js"
         type="text/javascript" charset="utf-8"></script>
-    {% endfor %}
+    {%- endfor -%}
 
     {# Activate highlighting #}
     <script type="text/javascript" charset="utf-8">
@@ -60,11 +60,11 @@
             <tr>
                 <td>Network access</td>
                 <td>
-                    {% if limits.networking -%}
+                    {%- if limits.networking -%}
                         allowed
-                    {% else -%}
+                    {%- else -%}
                         blocked
-                    {% endif -%}
+                    {%- endif -%}
                 </td>
             </tr>
 

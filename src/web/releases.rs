@@ -485,7 +485,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         show_next_page,
         show_previous_page,
         page_number,
-        author: Some(author_name.to_owned()),
+        author: Some(author_name),
     }
     .into_response()
 }
@@ -587,7 +587,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
         // FIXME: There is no pagination
         Search {
-            title: title,
+            title,
             results,
             search_query: Some(query.to_owned()),
             ..Default::default()
@@ -1004,8 +1004,7 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": "x86_64-pc-windows-msvc",
             "rustdoc_status": true,
-            "release_time": super::super::duration_to_str(now),
-            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
+            "release_time": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1018,8 +1017,7 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": super::super::duration_to_str(now),
-            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
+            "release_time": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 
@@ -1032,8 +1030,7 @@ mod tests {
             "description": null,
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": super::super::duration_to_str(now),
-            "release_time_rfc3339": time::at(now).rfc3339().to_string(),
+            "release_time": time::at(now).rfc3339().to_string(),
             "stars": 100
         });
 

@@ -9,16 +9,16 @@
     <link href="https://pubsubhubbub.superfeedr.com" rel="hub" />
 
     <id>urn:docs-rs:{{ docsrs_version() }}</id>
-    <updated>{{ recent_releases[0].release_time | date(format="%+") }}</updated>
+    <updated>{{ recent_releases[0].release_time | default(value=now()) | date(format="%+") }}</updated>
 
-    {% for release in recent_releases -%}
+    {%- for release in recent_releases -%}
         {%- set name = release.name | escape_xml -%}
         {%- set version = release.version | escape_xml -%}
-        {% if rustdoc_status -%}
-            {% set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
-        {% else -%}
-            {% set link = "/crate/" ~ release.name ~ "/" ~ version -%}
-        {% endif -%}
+        {%- if rustdoc_status -%}
+            {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+        {%- else -%}
+            {%- set link = "/crate/" ~ release.name ~ "/" ~ version -%}
+        {%- endif -%}
 
         <entry>
             <title>{{ name }}-{{ version }}</title>
@@ -35,5 +35,5 @@
                 <name>docs.rs</name>
             </author>
         </entry>
-    {% endfor %}
+    {%- endfor -%}
 </feed>

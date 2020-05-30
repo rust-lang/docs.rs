@@ -1,5 +1,5 @@
 {# The url of the current release, `/crate/:name/:version` #}
-{% set crate_url = "/crate/" ~ krate.name ~ "/" ~ krate.version -%}
+{%- set crate_url = "/crate/" ~ krate.name ~ "/" ~ krate.version -%}
 
 <div class="nav-container nav-container-rustdoc">
     <div class="container-rustdoc rustdoc-navigation">
@@ -7,10 +7,8 @@
             <form action="/releases/search" method="GET" class="landing-search-form-nav">
                 <div id="search-input-nav">
                     <label for="nav-search"><i class="fa fa-fw fa-search"></i></label>
-                    {#
-                        TODO: Figure out what the tera equivalent of this is and if it's needed
-                        {{! The tabindex="-1" is used to prevent it to be the first input focused on the page when using the browser shortcut}}
-                    #}
+                    <input id="nav-search" name="query" tabindex="-1" type="text"
+                        aria-label="Find crate by search query" placeholder="Find crate">
                 </div>
 
                 <a href="/" class="pure-menu-heading pure-menu-link">
@@ -50,25 +48,25 @@
                                         <li class="pure-menu-heading">Links</li>
 
                                         {# If the crate has a homepage, show a link to it #}
-                                        {% if krate.homepage_url %}
+                                        {%- if krate.homepage_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.homepage_url }}" class="pure-menu-link">
                                                     <i class="fa fa-home fa-fw"></i> Homepage
                                                 </a>
                                             </li>
-                                        {% endif %}
+                                        {%- endif -%}
 
                                         {# If the crate has external docs, show a link #}
-                                        {% if krate.documentation_url %}
+                                        {%- if krate.documentation_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
                                                     <i class="fa fa-fw fa-file-text"></i> Documentation
                                                 </a>
                                             </li>
-                                        {% endif %}
+                                        {%- endif -%}
 
                                         {# If the crate is hosted on GitHub, show some stats #}
-                                        {% if krate.github %}
+                                        {%- if krate.github -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                                     <i class="fa fa-github fa-fw"></i>
@@ -79,13 +77,13 @@
                                             </li>
 
                                         {# If all the crate has is a repo url, show it #}
-                                        {% elif repository_url %}
+                                        {%- elif repository_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                                     <i class="fa fa-code-fork fa-fw"></i> Repository
                                                 </a>
                                             </li>
-                                        {% endif %}
+                                        {%- endif -%}
 
                                         <li class="pure-menu-item">
                                             <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
@@ -100,13 +98,13 @@
                                     <ul class="pure-menu-list">
                                         <li class="pure-menu-heading">Authors</li>
 
-                                        {% for author in krate.authors %}
+                                        {%- for author in krate.authors -%}
                                             <li class="pure-menu-item">
                                                 <a href="/releases/{{ author[1] }}" class="pure-menu-link">
                                                     <i class="fa fa-fw fa-user"></i> {{ author[0] }}
                                                 </a>
                                             </li>
-                                        {% endfor %}
+                                        {%- endfor -%}
                                     </ul>
                                 </div>
                             </div>
@@ -120,14 +118,14 @@
                                         <li class="pure-menu-item">
                                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                                 <ul class="pure-menu-list">
-                                                    {% for dep in krate.dependencies %}
+                                                    {%- for dep in krate.dependencies -%}
                                                         <li class="pure-menu-item">
                                                             <a href="/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
                                                                 {{ dep[0] }} {{ dep[1] }}
                                                                 <i class="dependencies {{ dep[2] }}">{{ dep[2] }}</i>
                                                             </a>
                                                         </li>
-                                                    {% endfor %}
+                                                    {%- endfor -%}
                                                 </ul>
                                             </div>
                                         </li>
@@ -142,40 +140,40 @@
                                         <li class="pure-menu-item">
                                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                                 <ul class="pure-menu-list">
-                                                    {% for release in krate.releases %}
+                                                    {%- for release in krate.releases -%}
                                                         {# The url for the release, `/crate/:name/:version` #}
-                                                        {% set release_url = "/crate/" ~ krate.name ~ "/" ~ release.version -%}
+                                                        {%- set release_url = "/crate/" ~ krate.name ~ "/" ~ release.version -%}
                                                         {# The release's name and version, `{name}-{version}` #}
-                                                        {% set release_name = krate.name ~ "-" ~ release.version -%}
+                                                        {%- set release_name = krate.name ~ "-" ~ release.version -%}
 
                                                         <li class="pure-menu-item">
                                                             {# If the release has been yanked and failed to build, display a warning #}
-                                                            {% if release.yanked and release.build_status %}
+                                                            {%- if release.yanked and release.build_status -%}
+                                                                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
+                                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                                </a>
+
+                                                            {# If the release is yanked but built, display an warning #}
+                                                            {%- elif release.yanked and not release.build_status -%}
                                                                 <a href="{{ release_url }}" class="pure-menu-link warn"
                                                                     title="{{ release_name }} is yanked and docs.rs failed to build it">
                                                                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                                                                 </a>
 
-                                                            {# If the release is yanked, display an warning #}
-                                                            {% elif release.yanked %}
-                                                                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
-                                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
-                                                                </a>
-
                                                             {# If the release failed to build, display a warning #}
-                                                            {% elif release.build_status %}
+                                                            {%- elif release.build_status -%}
                                                                 <a href="{{ release_url }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
                                                                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                                                                 </a>
 
                                                             {# Otherwise just display the version #}
-                                                            {% else %}
+                                                            {%- else -%}
                                                                 <a href="{{ release_url }}" class="pure-menu-link">
                                                                     {{ release.version }}
                                                                 </a>
-                                                            {% endif %}
+                                                            {%- endif -%}
                                                         </li>
-                                                    {% endfor %}
+                                                    {%- endfor -%}
                                                 </ul>
                                             </div>
                                         </li>
@@ -185,8 +183,17 @@
                         </div>
                     </li>
 
+                    {# If this is the latest release and it's been yanked, just display a warning #}
+                    {%- if is_latest_version and krate.yanked -%}
+                        <li class="pure-menu-item">
+                            <span class="pure-menu-link warn">
+                                <i class="fa fa-fw fa-warning"></i>
+                                <span class="title"> This release has been yanked</span>
+                            </span>
+                        </li>
+
                     {# If the crate isn't the latest & is yanked, display a warning and offer a link to the latest release #}
-                    {% if is_latest_version and krate.yanked %}
+                    {%- elif not is_latest_version and krate.yanked -%}
                         <li class="pure-menu-item">
                             <a href="{{ latest_path }}" class="pure-menu-link warn"
                                 title="You are seeing a yanked version of {{ krate.name }} crate. Click here to go to latest version.">
@@ -195,17 +202,8 @@
                             </a>
                         </li>
 
-                    {# If this is the latest release and it's been yanked, just display a warning #}
-                    {% elif krate.yanked %}
-                        <li class="pure-menu-item">
-                            <span class="pure-menu-link warn">
-                                <i class="fa fa-fw fa-warning"></i>
-                                <span class="title"> This release has been yanked</span>
-                            </span>
-                        </li>
-
                     {# If this isn't the most recent release, offer a link to the latest #}
-                    {% elif not is_latest_version %}
+                    {%- elif not is_latest_version -%}
                         <li class="pure-menu-item">
                             <a href="{{ latest_path }}" class="pure-menu-link warn"
                                 title="You are seeing an outdated version of {{ krate.name }} crate. Click here to go to latest version.">
@@ -213,7 +211,7 @@
                                 <span class="title"> Go to latest version</span>
                             </a>
                         </li>
-                    {% endif %}
+                    {%- endif -%}
 
                     {# A link to the release's source view #}
                     <li class="pure-menu-item">
@@ -232,17 +230,17 @@
 
                         {# Build the dropdown list showing avaliable targets #}
                         <ul class="pure-menu-children">
-                            {% for target in krate.doc_targets -%}
-                                {% set target_url = "/crate/" ~ krate.name ~ "/" ~ krate.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+                            {%- for target in krate.doc_targets -%}
+                                {%- set target_url = "/crate/" ~ krate.name ~ "/" ~ krate.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
 
                                 <li class="pure-menu-item">
                                     <a href="{{ target_url }}" class="pure-menu-link">{{ target }}</a>
                                 </li>
-                            {% endfor -%}
+                            {%- endfor -%}
                         </ul>
                     </li>
 
-                    {% include "header/global_alert.html" -%}
+                    {%- include "header/global_alert.html" -%}
                 </ul>
             </form>
         </div>

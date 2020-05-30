@@ -17,47 +17,47 @@
         <div class="container">
             {# Page title #}
             <h1 id="crate-title">
-                {% if title %}
+                {%- if title -%}
                     {{ title }}
-                {% else %}
+                {%- else -%}
                     {{ metadata.name }} {{ metadata.version }}
                     <i class="fa fa-clipboard fa-1" id="clipboard" aria-label="Copy crate name and version information"></i>
-                {% endif %}
+                {%- endif -%}
             </h1>
 
             {# Page description #}
             <div class="description">
-                {% if metadata.description %}
+                {%- if metadata.description -%}
                     {{ metadata.description }}
-                {% endif %}
+                {%- endif -%}
             </div>
 
             <div class="pure-menu pure-menu-horizontal">
                 {# If there are platforms, show a dropdown with them #}
-                {% if platforms %}
+                {%- if platforms -%}
                     <ul class="pure-menu-list platforms-menu">
                         <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                             <a href="#" class="pure-menu-link">Platform</a>
                             <ul class="pure-menu-children">
-                                {% for platform in platforms %}
-                                <li class="pure-menu-item">
-                                    <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
-                                        class="pure-menu-link">
-                                        {{ platform }}
-                                    </a>
-                                </li>
-                                {% endfor %}
+                                {%- for platform in platforms -%}
+                                    <li class="pure-menu-item">
+                                        <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
+                                            class="pure-menu-link">
+                                            {{ platform }}
+                                        </a>
+                                    </li>
+                                {%- endfor -%}
                             </ul>
                         </li>
                     </ul>
-                {% endif %}
+                {%- endif -%}
 
                 <ul class="pure-menu-list">
                     {# The partial path of the crate, `:name/:release` #}
-                    {% set crate_path = metadata.name ~ "/" ~ metadata.version -%}
+                    {%- set crate_path = metadata.name ~ "/" ~ metadata.version -%}
 
                     {# If docs are built, show a tab for them #}
-                    {% if metadata.rustdoc_status %}
+                    {%- if metadata.rustdoc_status -%}
                         <li class="pure-menu-item">
                             {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
                             <a href="/{{ crate_path }}/{{ metadata.target_name }}/" class="pure-menu-link">
@@ -65,7 +65,7 @@
                                 <span class="title"> Documentation</span>
                             </a>
                         </li>
-                    {% endif %}
+                    {%- endif -%}
 
                     {# The crate information tab #}
                     <li class="pure-menu-item"><a href="/crate/{{ crate_path }}"

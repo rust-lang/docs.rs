@@ -813,8 +813,8 @@ mod test {
                 .create()?;
 
             let web = env.frontend();
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");
+            let redirect = dbg!(latest_version_redirect("/dummy/0.1.0/dummy/", web))?;
+            assert_eq!(dbg!(redirect), "/dummy/0.2.1/dummy/index.html");
 
             let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
             assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");

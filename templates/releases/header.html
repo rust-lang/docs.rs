@@ -19,7 +19,7 @@
             <div class="description">{{ description | default(value="") }}</div>
 
             {# This does double-duty as the search, so hide all tabs when we're searching something #}
-            {% if tab != "search" %}
+            {%- if tab != "search" -%}
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
                         <li class="pure-menu-item">
@@ -61,17 +61,17 @@
                             </a>
                         </li>
 
-                        {% if author %}
+                        {%- if author -%}
                             <li class="pure-menu-item">
                                 <a href="#" class="pure-menu-link{% if tab == 'author' %} pure-menu-active{% endif %}">
                                     <i class="fa fa-fw fa-user"></i>
                                     <span class="title"> {{ author }}</span>
                                 </a>
                             </li>
-                        {% endif %}
+                        {%- endif -%}
                     </ul>
                 </div>
-            {% endif %}
+            {%- endif -%}
         </div>
     </div>
 {% endmacro header %}
