@@ -332,7 +332,7 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // description
             "Allow max file upload size to be overridden",
             // upgrade query
-            "ALTER TABLE sandbox_overrides ADD COLUMN upload_size INT;",
+            "ALTER TABLE sandbox_overrides ADD COLUMN upload_size BIGINT;",
             // downgrade query
             "ALTER TABLE sandbox_overrides DROP COLUMN upload_size;"
         ),

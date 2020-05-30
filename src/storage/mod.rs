@@ -117,8 +117,8 @@ impl<'a> Storage<'a> {
                     .map(|file| (file_path, file))?;
 
                 // Filter out files which are larger than the current crate's upload limit
-                let file_size = file.metadata().unwrap().len();
-                if file_size <= limits.upload_size() {
+                let file_size = file.metadata().expect("Failed to get file metadata").len();
+                if file_size <= limits.upload_size() as u64 {
                     Some((path, file))
                 } else {
                     log::error!("Failed to upload {:?}, {} bytes is larger than the crate limit of {} bytes", path, file_size, limits.upload_size());
@@ -328,6 +328,7 @@ mod test {
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
+
     #[test]
     fn test_mime_types() {
         check_mime(".gitignore", "text/plain");
@@ -347,5 +348,35 @@ mod test {
         let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
+    }
+
+    #[test]
+    fn uploads_limited() {
+        let mut limits = Limits::default();
+        limits.set_upload_size(64);
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-max-upload-test")
+            .tempdir()
+            .unwrap();
+
+        let files = [("over-limit", 128), ("at-limit", 64), ("under-limit", 20)];
+        for (file, size) in files.iter() {
+            fs::write(dir.path().join(file), b"\x00".repeat(*size)).unwrap();
+        }
+
+        wrapper(|env| {
+            let db = env.db();
+            let conn = db.conn();
+
+            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
+            let stored_files = backend.store_all(&conn, "", dir.path(), &limits).unwrap();
+
+            // The only files that should have been uploaded are the ones <= the upload limit
+            assert!(stored_files.contains_key(&PathBuf::from("under-limit")));
+            assert!(stored_files.contains_key(&PathBuf::from("at-limit")));
+            assert_eq!(stored_files.len(), 2);
+
+            Ok(())
+        });
     }
 }
