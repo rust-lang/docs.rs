@@ -186,7 +186,6 @@ impl<'a> From<S3Backend<'a>> for Storage<'a> {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use super::*;
     use crate::test::wrapper;
     use std::env;
@@ -290,8 +289,7 @@ mod test {
 
     #[test]
     fn test_get_file_list() {
-        let _ = env_logger::try_init();
-
+        crate::test::init_logger();
         let files = get_file_list(env::current_dir().unwrap());
         assert!(files.is_ok());
         assert!(files.unwrap().len() > 0);

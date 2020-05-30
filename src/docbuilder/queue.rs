@@ -134,7 +134,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_get_new_crates() {
-        let _ = env_logger::try_init();
+        crate::test::init_logger();
         let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
         let mut docbuilder = DocBuilder::new(options);
         let res = docbuilder.get_new_crates();
