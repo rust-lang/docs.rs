@@ -397,7 +397,7 @@ impl RustwideBuilder {
                     &res.target,
                     files_list,
                     successful_targets,
-                    &RegistryCrateData::get_from_network(res.cargo_metadata.root())?,
+                    &RegistryCrateData::get_from_network(name, version)?,
                     has_docs,
                     has_examples,
                     algs,
