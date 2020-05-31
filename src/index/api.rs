@@ -1,10 +1,12 @@
-use crate::{error::Result, utils::MetadataPackage};
+use std::io::Read;
+
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde_json::Value;
-use std::io::Read;
+
+use crate::error::Result;
 
 const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -27,9 +29,9 @@ pub(crate) struct CrateOwner {
 }
 
 impl RegistryCrateData {
-    pub(crate) fn get_from_network(pkg: &MetadataPackage) -> Result<Self> {
-        let (release_time, yanked, downloads) = get_release_time_yanked_downloads(pkg)?;
-        let owners = get_owners(pkg)?;
+    pub(crate) fn get_from_network(name: &str, version: &str) -> Result<Self> {
+        let (release_time, yanked, downloads) = get_release_time_yanked_downloads(name, version)?;
+        let owners = get_owners(name)?;
 
         Ok(Self {
             release_time,
@@ -56,8 +58,11 @@ fn client() -> Result<reqwest::blocking::Client> {
 }
 
 /// Get release_time, yanked and downloads from the registry's API
-fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<Utc>, bool, i32)> {
-    let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
+fn get_release_time_yanked_downloads(
+    name: &str,
+    version: &str,
+) -> Result<(DateTime<Utc>, bool, i32)> {
+    let url = format!("https://crates.io/api/v1/crates/{}/versions", name);
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
     let mut res = client()?.get(&url).send()?;
@@ -74,17 +79,17 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
 
     let (mut release_time, mut yanked, mut downloads) = (None, None, None);
 
-    for version in versions {
-        let version = version
+    for version_data in versions {
+        let version_data = version_data
             .as_object()
             .ok_or_else(|| err_msg("Not a JSON object"))?;
-        let version_num = version
+        let version_num = version_data
             .get("num")
             .and_then(|v| v.as_str())
             .ok_or_else(|| err_msg("Not a JSON object"))?;
 
-        if Version::parse(version_num)?.to_string() == pkg.version {
-            let release_time_raw = version
+        if Version::parse(version_num)?.to_string() == version {
+            let release_time_raw = version_data
                 .get("created_at")
                 .and_then(|c| c.as_str())
                 .ok_or_else(|| err_msg("Not a JSON object"))?;
@@ -95,14 +100,14 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
             );
 
             yanked = Some(
-                version
+                version_data
                     .get("yanked")
                     .and_then(|c| c.as_bool())
                     .ok_or_else(|| err_msg("Not a JSON object"))?,
             );
 
             downloads = Some(
-                version
+                version_data
                     .get("downloads")
                     .and_then(|c| c.as_i64())
                     .ok_or_else(|| err_msg("Not a JSON object"))? as i32,
@@ -120,9 +125,8 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
 }
 
 /// Fetch owners from the registry's API
-fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
-    // owners available in: https://crates.io/api/v1/crates/rand/owners
-    let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", pkg.name);
+fn get_owners(name: &str) -> Result<Vec<CrateOwner>> {
+    let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", name);
     let mut res = client()?.get(&owners_url[..]).send()?;
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
