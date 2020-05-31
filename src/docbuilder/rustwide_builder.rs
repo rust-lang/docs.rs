@@ -6,6 +6,7 @@ use crate::db::{add_build_into_database, add_package_into_database, connect_db};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::RegistryCrateData;
+use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
@@ -333,6 +334,7 @@ impl RustwideBuilder {
 
                 let mut files_list = None;
                 let mut has_docs = false;
+                let mut algs = CompressionAlgorithms::default();
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
                 let BuildTargets {
@@ -345,11 +347,10 @@ impl RustwideBuilder {
                 if res.result.successful {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
-                    files_list = Some(add_path_into_database(
-                        &conn,
-                        &prefix,
-                        build.host_source_dir(),
-                    )?);
+                    let (files, new_algs) =
+                        add_path_into_database(&conn, &prefix, build.host_source_dir())?;
+                    files_list = Some(files);
+                    algs.extend(new_algs);
 
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
@@ -376,8 +377,9 @@ impl RustwideBuilder {
                             &metadata,
                         )?;
                     }
-                    self.upload_docs(&conn, name, version, local_storage.path())?;
-                }
+                    let new_algs = self.upload_docs(&conn, name, version, local_storage.path())?;
+                    algs.extend(new_algs);
+                };
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
                 if res.result.successful {
@@ -398,6 +400,7 @@ impl RustwideBuilder {
                     &RegistryCrateData::get_from_network(res.cargo_metadata.root())?,
                     has_docs,
                     has_examples,
+                    algs,
                 )?;
                 add_build_into_database(&conn, release_id, &res.result)?;
 
@@ -572,14 +575,14 @@ impl RustwideBuilder {
         name: &str,
         version: &str,
         local_storage: &Path,
-    ) -> Result<()> {
+    ) -> Result<CompressionAlgorithms> {
         debug!("Adding documentation into database");
         add_path_into_database(
             conn,
             &format!("rustdoc/{}/{}", name, version),
             local_storage,
-        )?;
-        Ok(())
+        )
+        .map(|t| t.1)
     }
 }
 

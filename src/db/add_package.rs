@@ -8,6 +8,7 @@ use crate::{
     docbuilder::BuildResult,
     error::Result,
     index::api::{CrateOwner, RegistryCrateData},
+    storage::CompressionAlgorithm,
     utils::MetadataPackage,
 };
 use log::debug;
@@ -34,6 +35,7 @@ pub(crate) fn add_package_into_database(
     cratesio_data: &RegistryCrateData,
     has_docs: bool,
     has_examples: bool,
+    compression_algorithms: std::collections::HashSet<CompressionAlgorithm>,
 ) -> Result<i32> {
     debug!("Adding package into database");
     let crate_id = initialize_package_in_database(&conn, metadata_pkg)?;
@@ -116,6 +118,7 @@ pub(crate) fn add_package_into_database(
     add_keywords_into_database(&conn, &metadata_pkg, release_id)?;
     add_authors_into_database(&conn, &metadata_pkg, release_id)?;
     add_owners_into_database(&conn, &cratesio_data.owners, crate_id)?;
+    add_compression_into_database(&conn, compression_algorithms.into_iter(), release_id)?;
 
     // Update the crates table with the new release
     conn.execute(
@@ -349,6 +352,24 @@ fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: 
             "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
             &[&crate_id, &owner_id],
         );
+    }
+    Ok(())
+}
+
+/// Add the compression algorithms used for this crate to the database
+fn add_compression_into_database<I>(conn: &Connection, algorithms: I, release_id: i32) -> Result<()>
+where
+    I: Iterator<Item = CompressionAlgorithm>,
+{
+    let sql = "
+    INSERT INTO compression_rels (release, algorithm)
+    VALUES (
+        $1,
+        (SELECT id FROM compression WHERE name = $2)
+    )";
+    let prepared = conn.prepare_cached(sql)?;
+    for alg in algorithms {
+        prepared.execute(&[&release_id, &alg.to_string()])?;
     }
     Ok(())
 }

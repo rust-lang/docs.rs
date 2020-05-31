@@ -345,11 +345,23 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             // version
             14,
             // description
-            "Add a field for compression",
+            "Add compression",
             // upgrade query
-            "ALTER TABLE files ADD COLUMN compression VARCHAR;",
+            "
+            CREATE TABLE compression (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100)
+            );
+            INSERT INTO compression (name) VALUES ('zstd');
+            -- many to many table between releases and compression
+            -- stores the set of all compression algorithms used in the release files
+            CREATE TABLE compression_rels (
+                release INT NOT NULL REFERENCES releases(id),
+                algorithm INT NOT NULL REFERENCES compression(id)
+            );",
             // downgrade query
-            "ALTER TABLE files DROP COLUMN compression;",
+            "DROP TABLE compression_rels;
+             DROP TABLE compression;",
         ),
     ];
 

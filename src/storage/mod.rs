@@ -6,7 +6,7 @@ pub(crate) use self::s3::S3Backend;
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use postgres::{transaction::Transaction, Connection};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
@@ -14,6 +14,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
+
+pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CompressionAlgorithm {
@@ -119,15 +121,16 @@ impl<'a> Storage<'a> {
     // If the environment is configured with S3 credentials, this will upload to S3;
     // otherwise, this will store files in the database.
     //
-    // This returns a HashMap<filename, mime type>.
+    // This returns (map<filename, mime type>, set<compression algorithms>).
     pub(crate) fn store_all(
         &mut self,
         conn: &Connection,
         prefix: &str,
         root_dir: &Path,
-    ) -> Result<HashMap<PathBuf, String>, Error> {
+    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
         let trans = conn.transaction()?;
         let mut file_paths_and_mimes = HashMap::new();
+        let mut algs = HashSet::with_capacity(1);
 
         let mut blobs = get_file_list(root_dir)?
             .into_iter()
@@ -150,6 +153,7 @@ impl<'a> Storage<'a> {
 
                 let mime = detect_mime(&file_path)?;
                 file_paths_and_mimes.insert(file_path, mime.to_string());
+                algs.insert(alg);
 
                 Ok(Blob {
                     path: bucket_path,
@@ -172,7 +176,7 @@ impl<'a> Storage<'a> {
         }
 
         trans.commit()?;
-        Ok(file_paths_and_mimes)
+        Ok((file_paths_and_mimes, algs))
     }
 }
 
