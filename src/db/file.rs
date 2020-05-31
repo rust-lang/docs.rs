@@ -5,7 +5,7 @@
 //! filesystem. This module is adding files into database and retrieving them.
 
 use crate::error::Result;
-use crate::storage::Storage;
+use crate::storage::{CompressionAlgorithms, Storage};
 use postgres::Connection;
 
 use serde_json::Value;
@@ -30,10 +30,13 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     conn: &Connection,
     prefix: &str,
     path: P,
-) -> Result<Value> {
+) -> Result<(Value, CompressionAlgorithms)> {
     let mut backend = Storage::new(conn);
-    let file_list = backend.store_all(conn, prefix, path.as_ref())?;
-    file_list_to_json(file_list.into_iter().collect())
+    let (file_list, algorithms) = backend.store_all(conn, prefix, path.as_ref())?;
+    Ok((
+        file_list_to_json(file_list.into_iter().collect())?,
+        algorithms,
+    ))
 }
 
 fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Value> {
