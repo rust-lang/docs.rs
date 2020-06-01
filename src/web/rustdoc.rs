@@ -57,7 +57,7 @@ pub struct RustLangRedirector {
 
 impl RustLangRedirector {
     pub fn new(target: &'static str) -> Self {
-        let url = url::Url::parse("https://doc.rust-lang.org/stable/")
+        let url = iron::url::Url::parse("https://doc.rust-lang.org/stable/")
             .expect("failed to parse rust-lang.org base URL")
             .join(target)
             .expect("failed to append crate name to rust-lang.org base URL");
@@ -75,7 +75,7 @@ impl iron::Handler for RustLangRedirector {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
-    use url::percent_encoding::percent_decode;
+    use iron::url::percent_encoding::percent_decode;
 
     fn redirect_to_doc(
         req: &Request,
@@ -520,7 +520,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 
         Some(MatchSemver::Semver((version, _))) => {
             let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
-            let url = ctry!(url::Url::parse_with_params(
+            let url = ctry!(iron::url::Url::parse_with_params(
                 &base_url,
                 &[("version", version)]
             ));
