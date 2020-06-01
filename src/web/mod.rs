@@ -1,9 +1,5 @@
 //! Web interface of cratesfyi
 
-pub(crate) mod page;
-
-use log::{debug, info};
-
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
 macro_rules! ctry {
@@ -43,11 +39,13 @@ macro_rules! extension {
     };
 }
 
+mod api;
 mod builds;
 mod crate_details;
 mod error;
 mod file;
 pub(crate) mod metrics;
+pub(crate) mod page;
 mod pool;
 mod releases;
 mod routes;
@@ -55,12 +53,13 @@ mod rustdoc;
 mod sitemap;
 mod source;
 
-use self::pool::Pool;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
 use iron::{self, status, Handler, Listening, Url};
+use log::{debug, info};
+use pool::Pool;
 use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};

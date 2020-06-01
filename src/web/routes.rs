@@ -93,6 +93,7 @@ pub(super) fn build_routes() -> Routes {
         "/crate/:name/:version/target-redirect/*",
         super::rustdoc::target_redirect_handler,
     );
+    routes.internal_page("/api/v1/badges", super::api::badge_handler_v1);
 
     routes.rustdoc_page("/:crate", super::rustdoc::rustdoc_redirector_handler);
     routes.rustdoc_page("/:crate/", super::rustdoc::rustdoc_redirector_handler);
