@@ -1,6 +1,8 @@
+use reqwest::{
+    blocking::{Client, Response},
+    Result,
+};
 use std::collections::HashMap;
-
-use reqwest::*;
 
 fn ping_hub(url: &str) -> Result<Response> {
     let mut params = HashMap::with_capacity(2);

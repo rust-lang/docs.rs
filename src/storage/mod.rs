@@ -59,7 +59,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
 
 pub(crate) enum Storage<'a> {
     Database(DatabaseBackend<'a>),
-    S3(S3Backend<'a>),
+    S3(Box<S3Backend<'a>>),
 }
 
 impl<'a> Storage<'a> {
@@ -70,16 +70,17 @@ impl<'a> Storage<'a> {
             DatabaseBackend::new(conn).into()
         }
     }
-    pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
+
+    pub(crate) fn get(&mut self, path: &str) -> Result<Blob, Error> {
         match self {
             Self::Database(db) => db.get(path),
             Self::S3(s3) => s3.get(path),
         }
     }
 
-    fn store_batch(&mut self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+    fn store_batch(&mut self, batch: Vec<Blob>, trans: &Transaction) -> Result<(), Error> {
         match self {
-            Self::Database(db) => db.store_batch(batch, trans),
+            Self::Database(db) => db.store_batch(&batch, trans),
             Self::S3(s3) => s3.store_batch(batch),
         }
     }
@@ -131,15 +132,18 @@ impl<'a> Storage<'a> {
                     date_updated: Utc::now(),
                 })
             });
+
         loop {
             let batch: Vec<_> = blobs
                 .by_ref()
                 .take(MAX_CONCURRENT_UPLOADS)
                 .collect::<Result<_, Error>>()?;
+
             if batch.is_empty() {
                 break;
             }
-            self.store_batch(&batch, &trans)?;
+
+            self.store_batch(batch, &trans)?;
         }
 
         trans.commit()?;
@@ -152,6 +156,7 @@ fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
         .first_raw()
         .map(|m| m)
         .unwrap_or("text/plain");
+
     Ok(match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.extension().and_then(OsStr::to_str) {
@@ -178,7 +183,7 @@ impl<'a> From<DatabaseBackend<'a>> for Storage<'a> {
 
 impl<'a> From<S3Backend<'a>> for Storage<'a> {
     fn from(db: S3Backend<'a>) -> Self {
-        Self::S3(db)
+        Self::S3(Box::new(db))
     }
 }
 
@@ -200,19 +205,23 @@ mod test {
             .prefix("docs.rs-upload-test")
             .tempdir()
             .unwrap();
+
         for blob in blobs {
             let path = dir.path().join(&blob.path);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).unwrap();
             }
+
             fs::write(path, &blob.content).expect("failed to write to file");
         }
+
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
             let stored_files = backend.store_all(&conn, "", dir.path()).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
+
             for blob in blobs {
                 let name = Path::new(&blob.path);
                 assert!(stored_files.contains_key(name));
