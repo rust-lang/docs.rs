@@ -13,7 +13,7 @@ log = "0.4"
 regex = "1"
 structopt = "0.3"
 crates-index-diff = "7"
-reqwest = "0.9"
+reqwest = { version = "0.10", features = ["blocking"] }
 semver = "0.9"
 slug = "=0.1.1"
 env_logger = "0.7"
@@ -27,11 +27,6 @@ toml = "0.5"
 html5ever = "0.22"
 schemamama = "0.3"
 schemamama_postgres = "0.2"
-rusoto_s3 = "0.40"
-rusoto_core = "0.40"
-rusoto_credential = "0.40"
-futures = "0.1"
-tokio = "0.1"
 systemstat = "0.1.4"
 prometheus = { version = "0.7.0", default-features = false }
 lazy_static = "1.0.0"
@@ -61,6 +56,15 @@ notify = "4.0.15"
 # Date and Time utilities
 chrono = { version = "0.4.11", features = ["serde"] }
 time = "0.1" # TODO: Remove once `iron` is removed
+
+# Communicating with S3
+rusoto_s3 = "0.43"
+rusoto_core = "0.43"
+rusoto_credential = "0.43"
+
+# Async
+futures-util = "0.3"
+tokio = { version = "0.2", features = ["rt-threaded"] }
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"
