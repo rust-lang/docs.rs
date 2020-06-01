@@ -279,7 +279,7 @@ impl MatchSemver {
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
 fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
     // version is an Option<&str> from router::Router::get, need to decode first
-    use url::percent_encoding::percent_decode;
+    use iron::url::percent_encoding::percent_decode;
 
     let req_version = version
         .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())

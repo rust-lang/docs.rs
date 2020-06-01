@@ -413,7 +413,7 @@ dependencies = [
  "time 0.1.43 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "zstd 0.5.2+zstd.1.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3766,6 +3766,7 @@ dependencies = [
  "idna 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "matches 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "percent-encoding 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.110 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
