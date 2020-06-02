@@ -138,19 +138,24 @@ impl CratesfyiHandler {
 
 impl Handler for CratesfyiHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        fn if_404(
+            e: IronError,
+            handle: impl FnOnce() -> IronResult<Response>,
+        ) -> IronResult<Response> {
+            if e.response.status == Some(status::NotFound) {
+                handle()
+            } else {
+                Err(e)
+            }
+        };
+
         // try serving shared rustdoc resources first, then router, then db/static file handler
         // return 404 if none of them return Ok
         self.shared_resource_handler
             .handle(req)
-            .or_else(|e| self.router_handler.handle(req).or(Err(e)))
-            .or_else(|e| {
-                // if router fails try to serve files from database first
-                self.database_file_handler.handle(req).or(Err(e))
-            })
-            .or_else(|e| {
-                // and then try static handler. if all of them fails, return 404
-                self.static_handler.handle(req).or(Err(e))
-            })
+            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
+            .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
+            .or_else(|e| if_404(e, || self.static_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
