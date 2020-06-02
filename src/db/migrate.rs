@@ -325,6 +325,21 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
             "
         ),
+        migration!(
+            context,
+            // version
+            13,
+            // description
+            "Remove the content column and releases column",
+            // upgrade query
+            "ALTER TABLE crates
+             DROP COLUMN content,
+             DROP COLUMN versions;",
+            // downgrade query
+            "ALTER TABLE crates
+             ADD COLUMN content,
+             ADD COLUMN versions;"
+        ),
     ];
 
     for migration in migrations {

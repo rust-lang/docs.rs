@@ -27,7 +27,6 @@ while true; do
 done
 set -e
 
-cratesfyi database update-search-index
 cratesfyi database update-release-activity
 
 if ! [ -d "${CRATESFYI_PREFIX}/crates.io-index/.git" ]; then

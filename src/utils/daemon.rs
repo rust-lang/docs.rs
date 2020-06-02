@@ -3,7 +3,6 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    db::{connect_db, update_search_index},
     docbuilder::RustwideBuilder,
     utils::{github_updater, pubsubhubbub, update_release_activity},
     DocBuilder, DocBuilderOptions,
@@ -228,18 +227,6 @@ pub fn start_daemon(background: bool) {
                 if let Err(e) = update_release_activity() {
                     error!("Failed to update release activity: {}", e);
                 }
-            }
-        })
-        .unwrap();
-
-    // update search index every 3 hours
-    thread::Builder::new()
-        .name("search index updater".to_string())
-        .spawn(move || loop {
-            thread::sleep(Duration::from_secs(60 * 60 * 3));
-            let conn = connect_db().expect("Failed to connect database");
-            if let Err(e) = update_search_index(&conn) {
-                error!("Failed to update search index: {}", e);
             }
         })
         .unwrap();

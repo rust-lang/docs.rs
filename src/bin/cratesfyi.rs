@@ -381,9 +381,6 @@ enum DatabaseSubcommand {
     /// Updates monthly release activity chart
     UpdateReleaseActivity,
 
-    /// Updates search index
-    UpdateSearchIndex,
-
     /// Removes a whole crate from the database
     DeleteCrate {
         /// Name of the crate to delete
@@ -419,11 +416,6 @@ impl DatabaseSubcommand {
             // FIXME: This is actually util command not database
             Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity()
                 .expect("Failed to update release activity"),
-
-            Self::UpdateSearchIndex => {
-                let conn = db::connect_db().expect("failed to connect to the database");
-                db::update_search_index(&conn).expect("Failed to update search index");
-            }
 
             Self::DeleteCrate { crate_name } => {
                 let conn = db::connect_db().expect("failed to connect to the database");
