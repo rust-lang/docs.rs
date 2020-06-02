@@ -159,10 +159,21 @@ impl Handler for CratesfyiHandler {
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
-                } else if e.error.downcast::<NoRoute>().is_some() {
+                } else if e.error.downcast::<NoRoute>().is_some()
+                    || e.response.status == Some(status::NotFound)
+                {
                     error::Nope::ResourceNotFound
+                } else if e.response.status == Some(status::InternalServerError) {
+                    log::error!("internal server error: {}", e.error);
+                    error::Nope::InternalServerError
                 } else {
-                    panic!("all cratesfyi errors should be of type Nope");
+                    log::error!(
+                        "No error page for status {:?}; {}",
+                        e.response.status,
+                        e.error
+                    );
+                    // TODO: add in support for other errors that are actually used
+                    error::Nope::InternalServerError
                 };
 
                 if let error::Nope::ResourceNotFound = err {
@@ -186,7 +197,7 @@ impl Handler for CratesfyiHandler {
                         }
                     }
 
-                    debug!("Path not found: {}", DebugPath(&req.url));
+                    debug!("Path not found: {}; {}", DebugPath(&req.url), e.error);
                 }
 
                 Self::chain(self.pool.clone(), err).handle(req)

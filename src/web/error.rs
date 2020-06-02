@@ -10,6 +10,7 @@ pub enum Nope {
     ResourceNotFound,
     CrateNotFound,
     NoResults,
+    InternalServerError,
 }
 
 impl fmt::Display for Nope {
@@ -18,6 +19,7 @@ impl fmt::Display for Nope {
             Nope::ResourceNotFound => "Requested resource not found",
             Nope::CrateNotFound => "Requested crate not found",
             Nope::NoResults => "Search yielded no results",
+            Nope::InternalServerError => "Internal server error",
         })
     }
 }
@@ -58,6 +60,13 @@ impl Handler for Nope {
                         .title("No results given for empty search query")
                         .to_resp("releases")
                 }
+            }
+            Nope::InternalServerError => {
+                // something went wrong, details should have been logged
+                Page::new("internal server error".to_owned())
+                    .set_status(status::InternalServerError)
+                    .title("Internal server error")
+                    .to_resp("error")
             }
         }
     }
