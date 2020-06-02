@@ -7,7 +7,6 @@ pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
 
 use failure::Fail;
-use postgres::error::Error;
 use postgres::{Connection, TlsMode};
 use std::env;
 
@@ -52,42 +51,6 @@ pub(crate) fn create_pool() -> r2d2::Pool<r2d2_postgres::PostgresConnectionManag
         .min_idle(Some(min_pool_idle))
         .build(manager)
         .expect("Failed to create r2d2 pool")
-}
-
-/// Updates content column in crates table.
-///
-/// This column will be used for searches and always contains `tsvector` of:
-///
-///   * crate name (rank A-weight)
-///   * latest release description (rank B-weight)
-///   * latest release keywords (rank B-weight)
-///   * latest release readme (rank C-weight)
-///   * latest release root rustdoc (rank C-weight)
-pub fn update_search_index(conn: &Connection) -> Result<u64, Error> {
-    conn.execute(
-        "
-        WITH doc as (
-            SELECT DISTINCT ON(releases.crate_id)
-                   releases.id,
-                   releases.crate_id,
-                   setweight(to_tsvector(crates.name), 'A')                                   ||
-                   setweight(to_tsvector(coalesce(releases.description, '')), 'B')            ||
-                   setweight(to_tsvector(coalesce((
-                                SELECT string_agg(value, ' ')
-                                FROM json_array_elements_text(releases.keywords)), '')), 'B')
-                    as content
-            FROM releases
-            INNER JOIN crates ON crates.id = releases.crate_id
-            ORDER BY releases.crate_id, releases.release_time DESC
-        )
-        UPDATE crates
-        SET latest_version_id = doc.id,
-            content = doc.content
-        FROM doc
-        WHERE crates.id = doc.crate_id AND
-            (crates.latest_version_id = 0 OR crates.latest_version_id != doc.id);",
-        &[],
-    )
 }
 
 #[cfg(test)]

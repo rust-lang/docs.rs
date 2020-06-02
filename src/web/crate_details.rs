@@ -115,8 +115,10 @@ pub struct Release {
 impl CrateDetails {
     pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
-        let query = "SELECT crates.id,
-                releases.id,
+        let query = "
+            SELECT
+                crates.id AS crate_id,
+                releases.id AS release_id,
                 crates.name,
                 releases.version,
                 releases.description,
@@ -132,7 +134,7 @@ impl CrateDetails {
                 releases.keywords,
                 releases.have_examples,
                 releases.target_name,
-                crates.versions,
+                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS versions,
                 crates.github_stars,
                 crates.github_forks,
                 crates.github_issues,
@@ -142,59 +144,48 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target
-         FROM releases
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE crates.name = $1 AND releases.version = $2;";
+            FROM releases
+            INNER JOIN crates ON releases.crate_id = crates.id
+            WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
 
-        if rows.is_empty() {
+        let krate = if rows.is_empty() {
             return None;
-        }
+        } else {
+            rows.get(0)
+        };
 
-        let crate_id: i32 = rows.get(0).get(0);
-        let release_id: i32 = rows.get(0).get(1);
+        let crate_id: i32 = krate.get("crate_id");
+        let release_id: i32 = krate.get("release_id");
 
         // sort versions with semver
         let releases = {
-            let versions_from_db: Value = rows.get(0).get(17);
+            let versions: Vec<String> = krate.get("versions");
+            let mut versions: Vec<semver::Version> = versions
+                .iter()
+                .filter_map(|version| semver::Version::parse(&version).ok())
+                .collect();
 
-            if let Some(versions_from_db) = versions_from_db.as_array() {
-                let mut versions: Vec<semver::Version> = versions_from_db
-                    .iter()
-                    .filter_map(|version| {
-                        if let Some(version) = version.as_str() {
-                            if let Ok(sem_ver) = semver::Version::parse(&version) {
-                                return Some(sem_ver);
-                            }
-                        }
-
-                        None
-                    })
-                    .collect();
-
-                versions.sort();
-                versions.reverse();
-                versions
-                    .iter()
-                    .map(|version| map_to_release(&conn, crate_id, version.to_string()))
-                    .collect()
-            } else {
-                Vec::new()
-            }
+            versions.sort();
+            versions.reverse();
+            versions
+                .iter()
+                .map(|version| map_to_release(&conn, crate_id, version.to_string()))
+                .collect()
         };
 
         let metadata = MetaData {
-            name: rows.get(0).get(2),
-            version: rows.get(0).get(3),
-            description: rows.get(0).get(4),
-            rustdoc_status: rows.get(0).get(11),
-            target_name: rows.get(0).get(16),
-            default_target: rows.get(0).get(26),
+            name: krate.get("name"),
+            version: krate.get("version"),
+            description: krate.get("description"),
+            rustdoc_status: krate.get("rustdoc_status"),
+            target_name: krate.get("target_name"),
+            default_target: krate.get("default_target"),
         };
 
         let doc_targets = {
-            let data: Value = rows.get(0).get(23);
+            let data: Value = krate.get("doc_targets");
             data.as_array()
                 .map(|array| {
                     array
@@ -206,35 +197,35 @@ impl CrateDetails {
         };
 
         let mut crate_details = CrateDetails {
-            name: rows.get(0).get(2),
-            version: rows.get(0).get(3),
-            description: rows.get(0).get(4),
+            name: krate.get("name"),
+            version: krate.get("version"),
+            description: krate.get("description"),
             authors: Vec::new(),
             owners: Vec::new(),
-            authors_json: rows.get(0).get(5),
-            dependencies: rows.get(0).get(6),
-            readme: rows.get(0).get(7),
-            rustdoc: rows.get(0).get(8),
-            release_time: rows.get(0).get(9),
-            build_status: rows.get(0).get(10),
+            authors_json: krate.get("authors"),
+            dependencies: krate.get("dependencies"),
+            readme: krate.get("readme"),
+            rustdoc: krate.get("description_long"),
+            release_time: krate.get("release_time"),
+            build_status: krate.get("build_status"),
             last_successful_build: None,
-            rustdoc_status: rows.get(0).get(11),
-            repository_url: rows.get(0).get(12),
-            homepage_url: rows.get(0).get(13),
-            keywords: rows.get(0).get(14),
-            have_examples: rows.get(0).get(15),
-            target_name: rows.get(0).get(16),
+            rustdoc_status: krate.get("rustdoc_status"),
+            repository_url: krate.get("repository_url"),
+            homepage_url: krate.get("homepage_url"),
+            keywords: krate.get("keywords"),
+            have_examples: krate.get("have_examples"),
+            target_name: krate.get("target_name"),
             releases,
             github: false,
-            github_stars: rows.get(0).get(18),
-            github_forks: rows.get(0).get(19),
-            github_issues: rows.get(0).get(20),
+            github_stars: krate.get("github_stars"),
+            github_forks: krate.get("github_forks"),
+            github_issues: krate.get("github_issues"),
             metadata,
-            is_library: rows.get(0).get(21),
-            yanked: rows.get(0).get(22),
+            is_library: krate.get("is_library"),
+            yanked: krate.get("yanked"),
             doc_targets,
-            license: rows.get(0).get(24),
-            documentation_url: rows.get(0).get(25),
+            license: krate.get("license"),
+            documentation_url: krate.get("documentation_url"),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
@@ -255,7 +246,7 @@ impl CrateDetails {
 
         crate_details.authors = authors
             .into_iter()
-            .map(|row| (row.get(0), row.get(1)))
+            .map(|row| (row.get("name"), row.get("slug")))
             .collect();
 
         // get owners
@@ -271,7 +262,7 @@ impl CrateDetails {
 
         crate_details.owners = owners
             .into_iter()
-            .map(|row| (row.get(0), row.get(1)))
+            .map(|row| (row.get("login"), row.get("avatar")))
             .collect();
 
         if !crate_details.build_status {

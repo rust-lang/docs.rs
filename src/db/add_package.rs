@@ -13,7 +13,6 @@ use crate::{
 use log::debug;
 use postgres::Connection;
 use regex::Regex;
-use semver::Version;
 use serde_json::Value;
 use slug::slugify;
 
@@ -118,31 +117,13 @@ pub(crate) fn add_package_into_database(
     add_authors_into_database(&conn, &metadata_pkg, release_id)?;
     add_owners_into_database(&conn, &cratesio_data.owners, crate_id)?;
 
-    // Update versions
-    {
-        let metadata_version = Version::parse(&metadata_pkg.version)?;
-        let mut versions: Value = conn
-            .query("SELECT versions FROM crates WHERE id = $1", &[&crate_id])?
-            .get(0)
-            .get(0);
-        if let Some(versions_array) = versions.as_array_mut() {
-            let mut found = false;
-            for version in versions_array.clone() {
-                let version = Version::parse(version.as_str().unwrap())?;
-                if version == metadata_version {
-                    found = true;
-                }
-            }
-
-            if !found {
-                versions_array.push(Value::String(metadata_pkg.version.clone()));
-            }
-        }
-        let _ = conn.query(
-            "UPDATE crates SET versions = $1 WHERE id = $2",
-            &[&versions, &crate_id],
-        );
-    }
+    // Update the crates table with the new release
+    conn.execute(
+        "UPDATE crates
+         SET latest_version_id = $2
+         WHERE id = $1",
+        &[&crate_id, &release_id],
+    )?;
 
     Ok(release_id)
 }
