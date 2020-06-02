@@ -346,7 +346,12 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(addr: Option<&str>) -> Self {
+    pub fn start(addr: Option<&str>, reload_templates: bool) -> Self {
+        page::TEMPLATE_DATA.poke().expect("This returns Ok(())");
+        if reload_templates {
+            page::TemplateData::start_template_reloading();
+        }
+
         let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new());
         info!("Running docs.rs web server on http://{}", server.addr());
         server

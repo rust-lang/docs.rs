@@ -52,6 +52,12 @@ params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
 tempfile = "3.1.0"
 
+# Templating
+tera = { version = "1.3.0", features = ["builtins"] }
+
+# Template hot-reloading
+arc-swap = "0.4.6"
+
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"
 

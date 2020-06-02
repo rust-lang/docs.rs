@@ -3,7 +3,10 @@
 use handlebars_iron::Template;
 use iron::response::Response;
 use iron::{status, IronResult, Set};
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -30,14 +33,6 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
     }
 
     failure::bail!("failed to parse the rustc version");
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
-pub(crate) struct GlobalAlert {
-    pub(crate) url: &'static str,
-    pub(crate) text: &'static str,
-    pub(crate) css_class: &'static str,
-    pub(crate) fa_icon: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,5 +261,49 @@ mod tests {
             build_version_safe(crate::BUILD_VERSION)
         );
         assert!(Url::parse(&safe).is_ok());
+    }
+}
+
+// --- Tera ---
+
+mod templates;
+
+pub(crate) use templates::TemplateData;
+
+lazy_static::lazy_static! {
+    /// Holds all data relevant to templating
+    pub(crate) static ref TEMPLATE_DATA: TemplateData = TemplateData::new().expect("Failed to load template data");
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct GlobalAlert {
+    pub(crate) url: &'static str,
+    pub(crate) text: &'static str,
+    pub(crate) css_class: &'static str,
+    pub(crate) fa_icon: &'static str,
+}
+
+#[cfg(test)]
+mod tera_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn serialize_global_alert() {
+        let alert = GlobalAlert {
+            url: "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
+            text: "THE WORLD WILL SOON END",
+            css_class: "THE END IS NEAR",
+            fa_icon: "https://gph.is/1uOvmqR",
+        };
+
+        let correct_json = json!({
+            "url": "http://www.hasthelargehadroncolliderdestroyedtheworldyet.com/",
+            "text": "THE WORLD WILL SOON END",
+            "css_class": "THE END IS NEAR",
+            "fa_icon": "https://gph.is/1uOvmqR"
+        });
+
+        assert_eq!(correct_json, serde_json::to_value(&alert).unwrap());
     }
 }
