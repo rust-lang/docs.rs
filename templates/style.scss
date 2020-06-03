@@ -28,8 +28,7 @@ $media-xl: "screen and (min-width: 80em)";
 // usage:
 // @media #{$media-sm} { ... }
 
-html, button, input, select, textarea,
-.pure-g [class *= "pure-u"] {
+html, input, select, textarea, .pure-g [class *= "pure-u"] {
     font-family: $font-family-sans;
     color: $color-standard;
 }
