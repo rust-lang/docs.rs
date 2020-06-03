@@ -6,6 +6,10 @@ use std::collections::HashMap;
 use tera::{Result as TeraResult, Tera};
 
 /// Holds all data relevant to templating
+///
+/// Most data is stored as a pre-serialized `Value` so that we don't have to
+/// re-serialize them every time they're needed. The values themselves are exposed
+/// to templates via custom functions
 pub(crate) struct TemplateData {
     /// The actual templates, stored in an `ArcSwap` so that they're hot-swappable
     // TODO: Conditional compilation so it's not always wrapped, the `ArcSwap` is unneeded overhead for prod
@@ -55,13 +59,6 @@ impl TemplateData {
             }
         });
     }
-
-    /// Used to initialize a `TemplateData` instance in a `lazy_static`.
-    /// Loading tera takes a second, so it's important that this is done before any
-    /// requests start coming in
-    pub fn poke(&self) -> Result<()> {
-        Ok(())
-    }
 }
 
 // TODO: Is there a reason this isn't fatal? If the rustc version is incorrect (Or "???" as used by default), then
@@ -87,7 +84,7 @@ fn load_rustc_resource_suffix() -> Result<String> {
 }
 
 pub(super) fn load_templates() -> TeraResult<Tera> {
-    let mut tera = Tera::new("templates/**/*")?;
+    let mut tera = Tera::new("templates-tera/**/*")?;
 
     // Custom functions
     tera.register_function("global_alert", global_alert);
@@ -182,10 +179,11 @@ fn dedent(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
 
 #[cfg(test)]
 mod tests {
-    // TODO: This will fail as long as there are `.hbs` files in `templates/`
-    // #[test]
-    // fn test_templates_are_valid() {
-    //     let tera = load_templates().unwrap();
-    //     tera.check_macro_files().unwrap();
-    // }
+    use super::*;
+
+    #[test]
+    fn test_templates_are_valid() {
+        let tera = load_templates().unwrap();
+        tera.check_macro_files().unwrap();
+    }
 }

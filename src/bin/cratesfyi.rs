@@ -54,8 +54,8 @@ enum CommandLine {
         socket_addr: String,
 
         /// Reload templates when they're changed
-        #[structopt(long = "reload")]
-        reload: bool,
+        #[structopt(long = "reload-templates")]
+        reload_templates: bool,
     },
 
     /// Starts cratesfyi daemon
@@ -84,9 +84,9 @@ impl CommandLine {
             Self::Build(build) => build.handle_args(),
             Self::StartWebServer {
                 socket_addr,
-                reload,
+                reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload);
+                Server::start(Some(&socket_addr), reload_templates);
             }
             Self::Daemon { foreground } => cratesfyi::utils::start_daemon(!foreground),
             Self::Database { subcommand } => subcommand.handle_args(),
