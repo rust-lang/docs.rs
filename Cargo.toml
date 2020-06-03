@@ -57,6 +57,7 @@ tera = { version = "1.3.0", features = ["builtins"] }
 
 # Template hot-reloading
 arc-swap = "0.4.6"
+notify = "4.0.15"
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"
