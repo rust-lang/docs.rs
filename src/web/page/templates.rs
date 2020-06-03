@@ -42,19 +42,31 @@ impl TemplateData {
     }
 
     pub fn start_template_reloading() {
-        use std::{sync::Arc, thread, time::Duration};
+        use notify::{watcher, RecursiveMode, Watcher};
+        use std::{
+            sync::{mpsc::channel, Arc},
+            thread,
+            time::Duration,
+        };
 
-        thread::spawn(|| loop {
-            match load_templates() {
-                Ok(templates) => {
-                    log::info!("Reloaded templates");
-                    TEMPLATE_DATA.templates.swap(Arc::new(templates));
-                    thread::sleep(Duration::from_secs(10));
-                }
+        let (tx, rx) = channel();
+        let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
 
-                Err(err) => {
-                    log::info!("Error Loading Templates:\n{}", err);
-                    thread::sleep(Duration::from_secs(5));
+        watcher
+            .watch("tera-templates", RecursiveMode::Recursive)
+            .unwrap();
+
+        thread::spawn(move || {
+            let _watcher = watcher;
+
+            while rx.recv().is_ok() {
+                match load_templates() {
+                    Ok(templates) => {
+                        log::info!("Reloaded templates");
+                        super::TEMPLATE_DATA.templates.swap(Arc::new(templates));
+                    }
+
+                    Err(err) => log::error!("Error reloading templates: {:?}", err),
                 }
             }
         });
