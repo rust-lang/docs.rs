@@ -363,7 +363,8 @@ pub struct Server {
 
 impl Server {
     pub fn start(addr: Option<&str>, reload_templates: bool) -> Self {
-        page::TEMPLATE_DATA.poke().expect("This returns Ok(())");
+        // Initialize templates
+        let _: &page::TemplateData = &*page::TEMPLATE_DATA;
         if reload_templates {
             page::TemplateData::start_template_reloading();
         }
