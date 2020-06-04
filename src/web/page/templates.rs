@@ -50,6 +50,7 @@ impl TemplateData {
         };
 
         let (tx, rx) = channel();
+        // Set a 2 second event debounce for the watcher
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
 
         watcher
@@ -57,6 +58,8 @@ impl TemplateData {
             .unwrap();
 
         thread::spawn(move || {
+            // The watcher needs to be moved into the thread so that it's not dropped (when dropped,
+            // all updates cease)
             let _watcher = watcher;
 
             while rx.recv().is_ok() {
