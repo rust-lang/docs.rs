@@ -124,9 +124,12 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
                 .get(0),
         );
         PRIORITIZED_CRATES_COUNT.set(
-            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE priority >= 0;", &[]))
-                .get(0)
-                .get(0),
+            ctry!(conn.query(
+                "SELECT COUNT(*) FROM queue WHERE attempt < 5 AND priority <= 0;",
+                &[]
+            ))
+            .get(0)
+            .get(0),
         );
         FAILED_CRATES_COUNT.set(
             ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt >= 5;", &[]))
@@ -196,7 +199,7 @@ impl iron::Handler for RequestRecorder {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::wrapper;
+    use crate::test::{assert_success, wrapper};
     use std::{
         collections::HashMap,
         sync::{
@@ -356,6 +359,14 @@ mod tests {
             }
 
             Ok(())
+        })
+    }
+
+    #[test]
+    fn metrics() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/about/metrics", web)
         })
     }
 }
