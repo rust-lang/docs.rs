@@ -28,7 +28,7 @@ impl Serialize for Build {
         state.serialize_field("rustc_version", &self.rustc_version)?;
         state.serialize_field("cratesfyi_version", &self.cratesfyi_version)?;
         state.serialize_field("build_status", &self.build_status)?;
-        state.serialize_field("build_time", &self.build_time.format("%+").to_string())?;
+        state.serialize_field("build_time", &self.build_time.format("%+").to_string())?; // RFC 3339
         state.serialize_field("build_time_relative", &duration_to_str(self.build_time))?;
         state.serialize_field("output", &self.output)?;
 
