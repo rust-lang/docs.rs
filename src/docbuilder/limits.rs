@@ -1,9 +1,9 @@
 use crate::error::Result;
 use postgres::Connection;
-use std::collections::BTreeMap;
-use std::time::Duration;
+use serde::Serialize;
+use std::{collections::BTreeMap, time::Duration};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Limits {
     memory: usize,
     targets: usize,

@@ -1,10 +1,28 @@
-use super::page::Page;
-use super::pool::Pool;
+use crate::{
+    docbuilder::Limits,
+    impl_webpage,
+    web::{page::WebPage, pool::Pool},
+};
 use chrono::{DateTime, NaiveDateTime, Utc};
-use iron::headers::ContentType;
-use iron::prelude::*;
+use iron::{
+    headers::ContentType,
+    mime::{Mime, SubLevel, TopLevel},
+    IronResult, Request, Response,
+};
+use serde::Serialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
+
+/// The sitemap
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SitemapXml {
+    /// The release's names and RFC 3339 timestamp to be displayed on the sitemap
+    pub releases: Vec<(String, String)>,
+}
+
+impl_webpage! {
+    SitemapXml   = "core/sitemap.xml",
+    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+}
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
@@ -31,36 +49,39 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         })
         .collect::<Vec<(String, String)>>();
 
-    let mut resp = ctry!(Page::new(releases).to_resp("sitemap"));
-    resp.headers
-        .set(ContentType("application/xml".parse().unwrap()));
-    Ok(resp)
+    SitemapXml { releases }.into_response()
 }
 
 pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
     let mut resp = Response::with("Sitemap: https://docs.rs/sitemap.xml");
-    resp.headers.set(ContentType("text/plain".parse().unwrap()));
+    resp.headers.set(ContentType::plaintext());
+
     Ok(resp)
 }
 
-pub fn about_handler(req: &mut Request) -> IronResult<Response> {
-    let mut content = BTreeMap::new();
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct About {
+    /// The current version of rustc that docs.rs is using to build crates
+    pub rustc_version: Option<String>,
+    /// The default crate build limits
+    pub limits: Limits,
+}
 
+impl_webpage!(About = "core/about.html");
+
+pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
     let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
 
-    if let Some(row) = res.iter().next() {
-        if let Some(Ok::<Value, _>(res)) = row.get_opt(0) {
-            if let Some(vers) = res.as_str() {
-                content.insert("rustc_version".to_string(), Value::String(vers.to_string()));
-            }
-        }
+    let mut rustc_version = None;
+
+    if let Some(Ok(Value::String(version))) = res.iter().next().and_then(|row| row.get_opt(0)) {
+        rustc_version = Some(version);
     }
 
-    content.insert(
-        "limits".to_string(),
-        serde_json::to_value(&crate::docbuilder::Limits::default().for_website()).unwrap(),
-    );
-
-    Page::new(content).title("About Docs.rs").to_resp("about")
+    About {
+        rustc_version,
+        limits: Limits::default(),
+    }
+    .into_response()
 }
