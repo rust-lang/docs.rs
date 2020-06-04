@@ -138,8 +138,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             let path = path.join("/");
             let conn = extension!(req, Pool).get()?;
             match File::from_path(&conn, &path) {
-                Some(f) => return Ok(f.serve()),
-                None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+                Ok(f) => return Ok(f.serve()),
+                Err(..) => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
             }
         }
     } else if req
@@ -294,7 +294,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Attempt to load the file from the database
-    let file = if let Some(file) = File::from_path(&conn, &path) {
+    let file = if let Ok(file) = File::from_path(&conn, &path) {
         file
     } else {
         // If it fails, we try again with /index.html at the end
@@ -302,7 +302,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         req_path.push("index.html");
 
         File::from_path(&conn, &path)
-            .ok_or_else(|| IronError::new(Nope::ResourceNotFound, status::NotFound))?
+            .map_err(|_| IronError::new(Nope::ResourceNotFound, status::NotFound))?
     };
 
     // Serve non-html files directly
@@ -398,7 +398,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
 fn path_for_version(req_path: &[&str], known_platforms: &[String], conn: &Connection) -> String {
     // Simple case: page exists in the latest version, so just change the version number
-    if File::from_path(&conn, &req_path.join("/")).is_some() {
+    if File::from_path(&conn, &req_path.join("/")).is_ok() {
         // NOTE: this adds 'index.html' if it wasn't there before
         return req_path[3..].join("/");
     }
@@ -552,7 +552,7 @@ impl Handler for SharedResourceHandler {
         if ["js", "css", "woff", "svg"].contains(&suffix) {
             let conn = extension!(req, Pool).get()?;
 
-            if let Some(file) = File::from_path(&conn, filename) {
+            if let Ok(file) = File::from_path(&conn, filename) {
                 return Ok(file.serve());
             }
         }
@@ -566,6 +566,7 @@ impl Handler for SharedResourceHandler {
 mod test {
     use super::*;
     use crate::test::*;
+    use chrono::Utc;
     use reqwest::StatusCode;
     use serde_json::json;
     use std::{collections::BTreeMap, iter::FromIterator};
@@ -1372,7 +1373,8 @@ mod test {
 
     #[test]
     fn serialize_rustdoc_page() {
-        let time = time::get_time();
+        let time = Utc::now();
+
         let details = json!({
             "name": "rcc",
             "version": "100.0.0",

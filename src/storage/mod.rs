@@ -3,10 +3,8 @@ pub(crate) mod s3;
 
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
-use failure::Error;
-use time::Timespec;
-
-use failure::err_msg;
+use chrono::{DateTime, Utc};
+use failure::{err_msg, Error};
 use postgres::{transaction::Transaction, Connection};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -20,7 +18,7 @@ const MAX_CONCURRENT_UPLOADS: usize = 1000;
 pub(crate) struct Blob {
     pub(crate) path: String,
     pub(crate) mime: String,
-    pub(crate) date_updated: Timespec,
+    pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
 }
 
@@ -130,7 +128,7 @@ impl<'a> Storage<'a> {
                     mime: mime.to_string(),
                     content,
                     // this field is ignored by the backend
-                    date_updated: Timespec::new(0, 0),
+                    date_updated: Utc::now(),
                 })
             });
         loop {
@@ -281,9 +279,10 @@ mod test {
                 mime: "text/rust".into(),
                 content: "fn main() {}".into(),
                 path: format!("{}.rs", i),
-                date_updated: Timespec::new(42, 0),
+                date_updated: Utc::now(),
             })
             .collect();
+
         test_roundtrip(&uploads);
     }
 
@@ -297,6 +296,7 @@ mod test {
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
     }
+
     #[test]
     fn test_mime_types() {
         check_mime(".gitignore", "text/plain");

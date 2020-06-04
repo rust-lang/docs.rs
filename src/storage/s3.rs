@@ -1,4 +1,5 @@
 use super::Blob;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
 use futures::Future;
 use log::{error, warn};
@@ -7,7 +8,6 @@ use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
 use std::io::Read;
-use time::Timespec;
 use tokio::runtime::Runtime;
 
 #[cfg(test)]
@@ -100,9 +100,13 @@ impl<'a> S3Backend<'a> {
     }
 }
 
-fn parse_timespec(raw: &str) -> Result<Timespec, Error> {
-    const TIME_FMT: &str = "%a, %d %b %Y %H:%M:%S %Z";
-    Ok(time::strptime(raw, TIME_FMT)?.to_timespec())
+fn parse_timespec(mut raw: &str) -> Result<DateTime<Utc>, Error> {
+    raw = raw.trim_end_matches(" GMT");
+
+    Ok(DateTime::from_utc(
+        NaiveDateTime::parse_from_str(raw, "%a, %d %b %Y %H:%M:%S")?,
+        Utc,
+    ))
 }
 
 pub(crate) fn s3_client() -> Option<S3Client> {
@@ -111,6 +115,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
     if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
         return None;
     }
+
     let creds = match DefaultCredentialsProvider::new() {
         Ok(creds) => creds,
         Err(err) => {
@@ -118,6 +123,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
             return None;
         }
     };
+
     Some(S3Client::new_with(
         rusoto_core::request::HttpClient::new().unwrap(),
         creds,
@@ -135,6 +141,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 pub(crate) mod tests {
     use super::*;
     use crate::test::*;
+    use chrono::TimeZone;
     use std::slice;
 
     #[test]
@@ -142,11 +149,11 @@ pub(crate) mod tests {
         // Test valid conversions
         assert_eq!(
             parse_timespec("Thu, 1 Jan 1970 00:00:00 GMT").unwrap(),
-            Timespec::new(0, 0)
+            Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         );
         assert_eq!(
             parse_timespec("Mon, 16 Apr 2018 04:33:50 GMT").unwrap(),
-            Timespec::new(1523853230, 0)
+            Utc.ymd(2018, 4, 16).and_hms(4, 33, 50),
         );
 
         // Test invalid conversion
@@ -159,7 +166,7 @@ pub(crate) mod tests {
             let blob = Blob {
                 path: "dir/foo.txt".into(),
                 mime: "text/plain".into(),
-                date_updated: Timespec::new(42, 0),
+                date_updated: Utc::now(),
                 content: "Hello world!".into(),
             };
 
@@ -189,15 +196,17 @@ pub(crate) mod tests {
                 "parent/child",
                 "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
             ];
+
             let blobs: Vec<_> = names
                 .iter()
                 .map(|&path| Blob {
                     path: path.into(),
                     mime: "text/plain".into(),
-                    date_updated: Timespec::new(42, 0),
+                    date_updated: Utc::now(),
                     content: "Hello world!".into(),
                 })
                 .collect();
+
             s3.upload(&blobs).unwrap();
             for blob in &blobs {
                 s3.assert_blob(blob, &blob.path);

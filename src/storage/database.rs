@@ -1,4 +1,5 @@
 use super::Blob;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::{Error, Fail};
 use postgres::{transaction::Transaction, Connection};
 
@@ -28,11 +29,12 @@ impl<'a> DatabaseBackend<'a> {
             Ok(Blob {
                 path: row.get("path"),
                 mime: row.get("mime"),
-                date_updated: row.get("date_updated"),
+                date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
                 content: row.get("content"),
             })
         }
     }
+
     pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
         for blob in batch {
             trans.query(
@@ -50,13 +52,14 @@ impl<'a> DatabaseBackend<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use time::Timespec;
+    use chrono::{SubsecRound, Utc};
 
     #[test]
     fn test_path_get() {
         crate::test::wrapper(|env| {
             let conn = env.db().conn();
             let backend = DatabaseBackend::new(&conn);
+            let now = Utc::now();
 
             // Add a test file to the database
             conn.execute(
@@ -64,7 +67,7 @@ mod tests {
                 &[
                     &"dir/foo.txt",
                     &"text/plain",
-                    &Timespec::new(42, 0),
+                    &now.naive_utc(),
                     &"Hello world!".as_bytes(),
                 ],
             )?;
@@ -74,7 +77,7 @@ mod tests {
                 Blob {
                     path: "dir/foo.txt".into(),
                     mime: "text/plain".into(),
-                    date_updated: Timespec::new(42, 0),
+                    date_updated: now.trunc_subsecs(6),
                     content: "Hello world!".bytes().collect(),
                 },
                 backend.get("dir/foo.txt")?

@@ -1,5 +1,6 @@
 use super::page::Page;
 use super::pool::Pool;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::headers::ContentType;
 use iron::prelude::*;
 use serde_json::Value;
@@ -22,7 +23,9 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let releases = query
         .into_iter()
         .map(|row| {
-            let time = format!("{}", time::at(row.get(1)).rfc3339());
+            let time = DateTime::<Utc>::from_utc(row.get::<_, NaiveDateTime>(1), Utc)
+                .format("%+")
+                .to_string();
 
             (row.get(0), time)
         })

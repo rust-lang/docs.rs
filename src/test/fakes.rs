@@ -2,6 +2,7 @@ use super::TestDatabase;
 use crate::docbuilder::BuildResult;
 use crate::index::api::RegistryCrateData;
 use crate::utils::{Dependency, MetadataPackage, Target};
+use chrono::{DateTime, Utc};
 use failure::Error;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
@@ -54,7 +55,7 @@ impl<'a> FakeRelease<'a> {
             doc_targets: Vec::new(),
             default_target: None,
             registry_crate_data: RegistryCrateData {
-                release_time: time::get_time(),
+                release_time: Utc::now(),
                 yanked: false,
                 downloads: 0,
                 owners: Vec::new(),
@@ -74,7 +75,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn release_time(mut self, new: time::Timespec) -> Self {
+    pub(crate) fn release_time(mut self, new: DateTime<Utc>) -> Self {
         self.registry_crate_data.release_time = new;
         self
     }

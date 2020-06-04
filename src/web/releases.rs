@@ -4,6 +4,7 @@ use super::error::Nope;
 use super::page::Page;
 use super::pool::Pool;
 use super::{duration_to_str, match_version, redirect_base};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::status;
 use postgres::Connection;
@@ -25,7 +26,7 @@ pub struct Release {
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
-    pub(crate) release_time: time::Timespec,
+    pub(crate) release_time: DateTime<Utc>,
     stars: i32,
 }
 
@@ -37,7 +38,7 @@ impl Default for Release {
             description: None,
             target_name: None,
             rustdoc_status: false,
-            release_time: time::get_time(),
+            release_time: Utc::now(),
             stars: 0,
         }
     }
@@ -57,7 +58,7 @@ impl Serialize for Release {
         state.serialize_field("release_time", &duration_to_str(self.release_time))?;
         state.serialize_field(
             "release_time_rfc3339",
-            &time::at(self.release_time).rfc3339().to_string(),
+            &self.release_time.format("%+").to_string(),
         )?;
         state.serialize_field("stars", &self.stars)?;
 
@@ -149,7 +150,7 @@ pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Orde
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
-            release_time: row.get(4),
+            release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
             rustdoc_status: row.get(5),
             stars: row.get(6),
         })
@@ -195,7 +196,7 @@ fn get_releases_by_author(
                 version: row.get(1),
                 description: row.get(2),
                 target_name: row.get(3),
-                release_time: row.get(4),
+                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
                 rustdoc_status: row.get(5),
                 stars: row.get(6),
             }
@@ -248,7 +249,7 @@ fn get_releases_by_owner(
                 version: row.get(1),
                 description: row.get(2),
                 target_name: row.get(3),
-                release_time: row.get(4),
+                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
                 rustdoc_status: row.get(5),
                 stars: row.get(6),
             }
@@ -332,7 +333,7 @@ fn get_search_results(
             version: row.get("version"),
             description: row.get("description"),
             target_name: row.get("target_name"),
-            release_time: row.get("release_time"),
+            release_time: DateTime::from_utc(row.get("release_time"), Utc),
             rustdoc_status: row.get("rustdoc_status"),
             stars: row.get::<_, i32>("github_stars"),
         })
@@ -681,6 +682,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::{assert_success, wrapper};
+    use chrono::TimeZone;
     use serde_json::json;
 
     #[test]
@@ -892,25 +894,25 @@ mod tests {
             let db = env.db();
             db.fake_release()
                 .name("somethang")
-                .release_time(time::Timespec::new(1000, 0))
+                .release_time(Utc.ymd(2021, 4, 16).and_hms(4, 33, 50))
                 .version("0.3.0")
                 .description("this is the correct choice")
                 .create()?;
             db.fake_release()
                 .name("somethang")
-                .release_time(time::Timespec::new(100, 0))
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
                 .description("second")
                 .version("0.2.0")
                 .create()?;
             db.fake_release()
                 .name("somethang")
-                .release_time(time::Timespec::new(10, 0))
+                .release_time(Utc.ymd(2019, 4, 16).and_hms(4, 33, 50))
                 .description("third")
                 .version("0.1.0")
                 .create()?;
             db.fake_release()
                 .name("somethang")
-                .release_time(time::Timespec::new(1, 0))
+                .release_time(Utc.ymd(2018, 4, 16).and_hms(4, 33, 50))
                 .description("fourth")
                 .version("0.0.0")
                 .create()?;
@@ -1016,8 +1018,7 @@ mod tests {
 
     #[test]
     fn serialize_releases() {
-        let current_time = time::get_time();
-        let now = time::at(current_time);
+        let now = Utc::now();
 
         let mut release = Release {
             name: "serde".to_string(),
@@ -1025,7 +1026,7 @@ mod tests {
             description: Some("serde makes things other things".to_string()),
             target_name: Some("x86_64-pc-windows-msvc".to_string()),
             rustdoc_status: true,
-            release_time: current_time,
+            release_time: now,
             stars: 100,
         };
 
@@ -1035,8 +1036,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": "x86_64-pc-windows-msvc",
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": duration_to_str(now),
+            "release_time_rfc3339": now.format("%+").to_string(),
             "stars": 100
         });
 
@@ -1049,8 +1050,8 @@ mod tests {
             "description": "serde makes things other things",
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": duration_to_str(now),
+            "release_time_rfc3339": now.format("%+").to_string(),
             "stars": 100
         });
 
@@ -1063,8 +1064,8 @@ mod tests {
             "description": null,
             "target_name": null,
             "rustdoc_status": true,
-            "release_time": duration_to_str(current_time),
-            "release_time_rfc3339": now.rfc3339().to_string(),
+            "release_time": duration_to_str(now),
+            "release_time_rfc3339": now.format("%+").to_string(),
             "stars": 100
         });
 

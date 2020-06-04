@@ -152,12 +152,13 @@ fn build_version_safe(version: &str) -> String {
 mod tests {
     use super::*;
     use crate::web::releases::{self, Release};
+    use chrono::Utc;
     use iron::Url;
     use serde_json::json;
 
     #[test]
     fn serialize_page() {
-        let time = time::get_time();
+        let time = Utc::now();
 
         let mut release = Release::default();
         release.name = "lasso".into();
@@ -189,7 +190,7 @@ mod tests {
                 "target_name": null,
                 "rustdoc_status": false,
                 "release_time": super::super::super::duration_to_str(time),
-                "release_time_rfc3339": time::at(time).rfc3339().to_string(),
+                "release_time_rfc3339": time.format("%+").to_string(),
                 "stars": 0
             }],
             "varss": { "test": "works" },

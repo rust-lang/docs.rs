@@ -1,6 +1,7 @@
 use super::TEMPLATE_DATA;
 use crate::error::Result;
 use arc_swap::ArcSwap;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::collections::HashMap;
 use tera::{Result as TeraResult, Tera};
@@ -142,9 +143,11 @@ fn rustc_resource_suffix(args: &HashMap<String, Value>) -> TeraResult<Value> {
 // TODO: This can be replaced by chrono
 fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let fmt = if let Some(Value::Bool(true)) = args.get("relative") {
-        let value = time::strptime(value.as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%z").unwrap();
+        let value = DateTime::parse_from_str(value.as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%z")
+            .unwrap()
+            .with_timezone(&Utc);
 
-        super::super::duration_to_str(value.to_timespec())
+        super::super::duration_to_str(value)
     } else {
         const TIMES: &[&str] = &["seconds", "minutes", "hours"];
 
