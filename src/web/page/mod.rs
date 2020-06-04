@@ -1,8 +1,10 @@
 mod handlebars;
 mod templates;
+mod web_page;
 
 pub use handlebars::*;
 pub(crate) use templates::TemplateData;
+pub(crate) use web_page::WebPage;
 
 use serde::Serialize;
 

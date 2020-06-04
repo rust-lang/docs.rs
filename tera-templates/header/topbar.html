@@ -1,0 +1,89 @@
+{#
+    This is the unchanging top bar that is on every single page.
+    The only piece of context it can take is `search_query`, which should
+    be a string and will populate the search field if it exists
+#}
+<div class="nav-container">
+    <div class="container">
+        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
+            <form action="/releases/search" method="GET" class="landing-search-form-nav">
+                {# The search bar #}
+                <div id="search-input-nav">
+                    <label for="nav-search">
+                        <i class="fa fa-fw fa-search"></i>
+                    </label>
+
+                    {# If there is a search query, put it in the search bar #}
+                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query"
+                        placeholder="Find crate" {%- if search_query %} value="{{ search_query }}" {%- endif %}>
+                </div>
+
+                {# The top-left logo and name #}
+                <a href="/" class="pure-menu-heading pure-menu-link" aria-label="Docs.rs">
+                    <i class="fa fa-cubes fa-fw"></i> Docs.rs
+                </a>
+
+                <ul class="pure-menu-list">
+                    <li class="pure-menu-item">
+                        <a href="/releases" class="pure-menu-link">
+                            Releases
+                        </a>
+                    </li>
+
+                    {# The Rust dropdown menu #}
+                    <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+                        <a href="#" class="pure-menu-link">Rust</a>
+
+                        <ul class="pure-menu-children">
+                            <li class="pure-menu-item">
+                                <a href="https://www.rust-lang.org/" target="_blank" class="pure-menu-link">
+                                    The Rust Programming Language
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="https://doc.rust-lang.org/book/" target="_blank" class="pure-menu-link">
+                                    The Book
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="https://doc.rust-lang.org/std/" target="_blank" class="pure-menu-link">
+                                    Standard Library API Reference
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item menu-item-divided">
+                                <a href="https://doc.rust-lang.org/rust-by-example/" target="_blank"
+                                    class="pure-menu-link">
+                                    Rust by Example
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="https://crates.io" target="_blank" class="pure-menu-link">
+                                    Crates.io
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item menu-item-divided">
+                                <a href="http://doc.crates.io/guide.html" target="_blank" class="pure-menu-link">
+                                    The Cargo Guide
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/about" class="pure-menu-link">
+                                    About Docs.rs
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    {# The global alert, if there is one #}
+                    {% include "header/global_alert.html" -%}
+                </ul>
+            </form>
+        </div>
+    </div>
+</div>

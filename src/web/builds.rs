@@ -9,7 +9,7 @@ use router::Router;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Build {
+pub(crate) struct Build {
     id: i32,
     rustc_version: String,
     cratesfyi_version: String,

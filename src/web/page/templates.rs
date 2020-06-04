@@ -100,7 +100,7 @@ fn load_rustc_resource_suffix() -> Result<String> {
 }
 
 pub(super) fn load_templates() -> TeraResult<Tera> {
-    let mut tera = Tera::new("templates-tera/**/*")?;
+    let mut tera = Tera::new("tera-templates/**/*")?;
 
     // Custom functions
     tera.register_function("global_alert", global_alert);

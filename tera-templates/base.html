@@ -1,0 +1,42 @@
+{%- import "macros.html" as macros -%}
+
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="generator" content="docs.rs {{ docsrs_version() }}">
+        {%- block meta -%}{%- endblock meta -%}
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/pure-min.css" type="text/css"
+            media="all" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/grids-responsive-min.css"
+            type="text/css" media="all" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"
+            type="text/css" media="all" />
+        <link rel="stylesheet" href="/normalize-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
+        <link rel="stylesheet" href="/rustdoc-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
+        <link rel="stylesheet" href="/light-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
+        <link rel="stylesheet" href="/style.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
+        {%- block css -%}{%- endblock css -%}
+
+        <link rel="search" href="/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs">
+
+        <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
+    </head>
+
+    <body>
+        {%- include "header/topbar.html" -%}
+
+        {%- block header %}{% endblock header -%}
+
+        {%- block body -%}{%- endblock body -%}
+    </body>
+
+    <script type="text/javascript" src="/menu.js?{{ docsrs_version() | slugify }}"></script>
+    <script type="text/javascript" src="/index.js?{{ docsrs_version() | slugify }}"></script>
+
+    {%- block javascript -%}{%- endblock javascript -%}
+
+</html>
