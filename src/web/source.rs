@@ -85,15 +85,15 @@ impl FileList {
         let rows = conn
             .query(
                 "SELECT crates.name,
-                                      releases.version,
-                                      releases.description,
-                                      releases.target_name,
-                                      releases.rustdoc_status,
-                                      releases.files,
-                                      releases.default_target
-                               FROM releases
-                               LEFT OUTER JOIN crates ON crates.id = releases.crate_id
-                               WHERE crates.name = $1 AND releases.version = $2",
+                        releases.version,
+                        releases.description,
+                        releases.target_name,
+                        releases.rustdoc_status,
+                        releases.files,
+                        releases.default_target
+                FROM releases
+                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
+                WHERE crates.name = $1 AND releases.version = $2",
                 &[&name, &version],
             )
             .unwrap();

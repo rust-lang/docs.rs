@@ -149,6 +149,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn create(self) -> Result<i32, Error> {
+        use std::collections::HashSet;
         use std::fs;
         use std::path::Path;
 
@@ -157,6 +158,7 @@ impl<'a> FakeRelease<'a> {
         let db = self.db;
 
         let mut source_meta = None;
+        let mut algs = HashSet::new();
         if self.build_result.successful {
             let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
                 let mut path_prefix = tempdir.path().join(prefix);
@@ -197,9 +199,15 @@ impl<'a> FakeRelease<'a> {
                     rustdoc_files.push((Box::leak(Box::new(updated)), data));
                 }
             }
-            let rustdoc_meta = upload_files("rustdoc", &rustdoc_files, None)?;
+            let (rustdoc_meta, new_algs) = upload_files("rustdoc", &rustdoc_files, None)?;
+            algs.extend(new_algs);
             log::debug!("added rustdoc files {}", rustdoc_meta);
-            source_meta = Some(upload_files("source", &self.source_files, None)?);
+            match upload_files("source", &self.source_files, None)? {
+                (json, new_algs) => {
+                    source_meta = Some(json);
+                    algs.extend(new_algs);
+                }
+            }
             log::debug!("added source files {}", source_meta.as_ref().unwrap());
 
             for target in &package.targets[1..] {
@@ -220,6 +228,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
             self.has_docs,
             self.has_examples,
+            HashSet::new(),
         )?;
         crate::db::add_build_into_database(&db.conn(), release_id, &self.build_result)?;
 
