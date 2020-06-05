@@ -18,7 +18,9 @@ impl<'a> DatabaseBackend<'a> {
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
         let rows = self.conn.query(
-            "SELECT path, mime, date_updated, content, compression FROM files WHERE path = $1;",
+            "SELECT path, mime, date_updated, content, compression.name
+             FROM files LEFT JOIN compression ON files.compression = compression.id
+             WHERE path = $1;",
             &[&path],
         )?;
 
@@ -26,7 +28,7 @@ impl<'a> DatabaseBackend<'a> {
             Err(PathNotFoundError.into())
         } else {
             let row = rows.get(0);
-            let compression = row.get::<_, Option<String>>("compression").map(|alg| {
+            let compression = row.get::<_, Option<String>>("name").map(|alg| {
                 alg.parse()
                     .expect("invalid or unknown compression algorithm")
             });
@@ -45,7 +47,7 @@ impl<'a> DatabaseBackend<'a> {
             let compression = blob.compression.as_ref().map(|alg| alg.to_string());
             trans.query(
                 "INSERT INTO files (path, mime, content, compression)
-                 VALUES ($1, $2, $3, $4)
+                 VALUES ($1, $2, $3, (SELECT id FROM compression WHERE name = $4))
                  ON CONFLICT (path) DO UPDATE
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &[&blob.path, &blob.mime, &blob.content, &compression],
