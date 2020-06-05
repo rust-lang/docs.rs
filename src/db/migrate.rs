@@ -353,11 +353,15 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
                 name VARCHAR(100)
             );
             INSERT INTO compression (name) VALUES ('zstd');
+            -- NULL indicates the file was not compressed
+            ALTER TABLE files ADD COLUMN compression INT REFERENCES compression(id);
             -- many to many table between releases and compression
             -- stores the set of all compression algorithms used in the release files
             CREATE TABLE compression_rels (
                 release INT NOT NULL REFERENCES releases(id),
-                algorithm INT NOT NULL REFERENCES compression(id)
+                algorithm INT REFERENCES compression(id),
+                -- make sure we don't store duplicates by accident
+                UNIQUE(release, algorithm)
             );",
             // downgrade query
             "DROP TABLE compression_rels;
