@@ -78,7 +78,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
 
     let body = {
         use reqwest::header::USER_AGENT;
-        use reqwest::{Client, StatusCode};
+        use reqwest::{blocking::Client, StatusCode};
         use std::env;
         use std::io::Read;
 
