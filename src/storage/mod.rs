@@ -289,7 +289,7 @@ mod test {
             let db = env.db();
             let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
-            let (stored_files, algs) = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
+            let (stored_files, _algs) = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
                 let name = Path::new(name);
@@ -354,7 +354,7 @@ mod test {
             mime: "text/rust".into(),
             content: data.clone(),
             path: "main.rs".into(),
-            date_updated: Timespec::new(42, 0),
+            date_updated: Utc::now(),
             compression: Some(alg),
         };
         test_roundtrip(std::slice::from_ref(&blob));
