@@ -256,7 +256,7 @@ mod test {
             let db = env.db();
             let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
-            let stored_files = backend.store_all(&conn, "", dir.path()).unwrap();
+            let (stored_files, algs) = backend.store_all(&conn, "", dir.path()).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
             for blob in blobs {
                 let name = Path::new(&blob.path);
@@ -289,7 +289,7 @@ mod test {
             let db = env.db();
             let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(&conn));
-            let stored_files = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
+            let (stored_files, algs) = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
                 let name = Path::new(name);

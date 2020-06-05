@@ -34,7 +34,7 @@ services:
         image: minio/minio
         entrypoint: >
             /bin/sh -c "
-                mkdir /data/rust-docs-rs;
+                mkdir -p /data/rust-docs-rs;
                 minio server /data;
             "
         ports:
