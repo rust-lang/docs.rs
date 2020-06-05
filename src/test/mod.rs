@@ -166,6 +166,7 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
+        crate::db::migrate(Some(0), &self.conn()).expect("downgrading database works");
         if let Err(e) = self
             .conn()
             .execute(&format!("DROP SCHEMA {} CASCADE;", self.schema), &[])

@@ -337,8 +337,8 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
              DROP COLUMN versions;",
             // downgrade query
             "ALTER TABLE crates
-             ADD COLUMN content,
-             ADD COLUMN versions;"
+             ADD COLUMN content tsvector,
+             ADD COLUMN versions JSON DEFAULT '[]';"
         ),
     ];
 
