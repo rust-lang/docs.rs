@@ -1,7 +1,7 @@
 use crate::{error::Result, utils::MetadataPackage};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
-use reqwest::{blocking::Client, header::ACCEPT};
+use reqwest::{header::ACCEPT, Client};
 use semver::Version;
 use serde_json::Value;
 use std::io::Read;
