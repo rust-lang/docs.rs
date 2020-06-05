@@ -365,6 +365,7 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             );",
             // downgrade query
             "DROP TABLE compression_rels;
+             ALTER TABLE files DROP COLUMN compression;
              DROP TABLE compression;",
         ),
     ];
