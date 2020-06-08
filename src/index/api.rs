@@ -40,7 +40,7 @@ impl RegistryCrateData {
     }
 }
 
-fn client() -> Result<reqwest::Client> {
+fn client() -> Result<reqwest::blocking::Client> {
     let headers = vec![
         (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
         (ACCEPT, HeaderValue::from_static("application/json")),
@@ -48,9 +48,11 @@ fn client() -> Result<reqwest::Client> {
     .into_iter()
     .collect();
 
-    Ok(reqwest::Client::builder()
+    let client = reqwest::blocking::Client::builder()
         .default_headers(headers)
-        .build()?)
+        .build()?;
+
+    Ok(client)
 }
 
 /// Get release_time, yanked and downloads from the registry's API

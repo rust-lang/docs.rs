@@ -77,10 +77,8 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
     use serde_json::Value;
 
     let body = {
-        use reqwest::header::USER_AGENT;
-        use reqwest::{Client, StatusCode};
-        use std::env;
-        use std::io::Read;
+        use reqwest::{blocking::Client, header::USER_AGENT, StatusCode};
+        use std::{env, io::Read};
 
         let client = Client::new();
         let mut body = String::new();
