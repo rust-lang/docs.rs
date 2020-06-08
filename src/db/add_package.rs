@@ -361,15 +361,10 @@ fn add_compression_into_database<I>(conn: &Connection, algorithms: I, release_id
 where
     I: Iterator<Item = CompressionAlgorithm>,
 {
-    let sql = "
-    INSERT INTO compression_rels (release, algorithm)
-    VALUES (
-        $1,
-        (SELECT id FROM compression WHERE name = $2)
-    )";
+    let sql = "INSERT INTO compression_rels (release, algorithm) VALUES ($1, $2);";
     let prepared = conn.prepare_cached(sql)?;
     for alg in algorithms {
-        prepared.execute(&[&release_id, &alg.to_string()])?;
+        prepared.execute(&[&release_id, &(alg as i32)])?;
     }
     Ok(())
 }
