@@ -17,9 +17,11 @@ impl<'a> DatabaseBackend<'a> {
     }
 
     pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
+        use std::convert::TryInto;
+
         let rows = self.conn.query(
-            "SELECT path, mime, date_updated, content, compression.name
-             FROM files LEFT JOIN compression ON files.compression = compression.id
+            "SELECT path, mime, date_updated, content, compression
+             FROM files
              WHERE path = $1;",
             &[&path],
         )?;
@@ -28,9 +30,9 @@ impl<'a> DatabaseBackend<'a> {
             Err(PathNotFoundError.into())
         } else {
             let row = rows.get(0);
-            let compression = row.get::<_, Option<String>>("name").map(|alg| {
-                alg.parse()
-                    .expect("invalid or unknown compression algorithm")
+            let compression = row.get::<_, Option<i32>>("compression").map(|i| {
+                i.try_into()
+                    .expect("invalid compression algorithm stored in database")
             });
             Ok(Blob {
                 path: row.get("path"),
@@ -44,10 +46,10 @@ impl<'a> DatabaseBackend<'a> {
 
     pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
         for blob in batch {
-            let compression = blob.compression.as_ref().map(|alg| alg.to_string());
+            let compression = blob.compression.map(|alg| alg as i32);
             trans.query(
                 "INSERT INTO files (path, mime, content, compression)
-                 VALUES ($1, $2, $3, (SELECT id FROM compression WHERE name = $4))
+                 VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &[&blob.path, &blob.mime, &blob.content, &compression],
