@@ -1,10 +1,16 @@
 use crate::{error::Result, utils::MetadataPackage};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
-use reqwest::{header::ACCEPT, Client};
+use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde_json::Value;
 use std::io::Read;
+
+const APP_USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    " ",
+    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+);
 
 pub(crate) struct RegistryCrateData {
     pub(crate) release_time: DateTime<Utc>,
@@ -34,13 +40,25 @@ impl RegistryCrateData {
     }
 }
 
+fn client() -> Result<reqwest::Client> {
+    let headers = vec![
+        (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
+        (ACCEPT, HeaderValue::from_static("application/json")),
+    ]
+    .into_iter()
+    .collect();
+
+    Ok(reqwest::Client::builder()
+        .default_headers(headers)
+        .build()?)
+}
+
 /// Get release_time, yanked and downloads from the registry's API
 fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<Utc>, bool, i32)> {
     let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
-    let client = Client::new();
-    let mut res = client.get(&url).header(ACCEPT, "application/json").send()?;
+    let mut res = client()?.get(&url).send()?;
 
     let mut body = String::new();
     res.read_to_string(&mut body)?;
@@ -103,11 +121,7 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
 fn get_owners(pkg: &MetadataPackage) -> Result<Vec<CrateOwner>> {
     // owners available in: https://crates.io/api/v1/crates/rand/owners
     let owners_url = format!("https://crates.io/api/v1/crates/{}/owners", pkg.name);
-    let client = Client::new();
-    let mut res = client
-        .get(&owners_url[..])
-        .header(ACCEPT, "application/json")
-        .send()?;
+    let mut res = client()?.get(&owners_url[..]).send()?;
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
     let mut body = String::new();
