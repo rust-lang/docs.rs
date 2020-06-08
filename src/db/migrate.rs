@@ -348,25 +348,21 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             "Add compression",
             // upgrade query
             "
-            CREATE TABLE compression (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100)
-            );
-            INSERT INTO compression (name) VALUES ('zstd');
-            -- NULL indicates the file was not compressed
-            ALTER TABLE files ADD COLUMN compression INT REFERENCES compression(id);
+            -- NULL indicates the file was not compressed.
+            -- There is no meaning assigned to the compression id in the database itself,
+            -- it is instead interpreted by the application.
+            ALTER TABLE files ADD COLUMN compression INT;
             -- many to many table between releases and compression
             -- stores the set of all compression algorithms used in the release files
             CREATE TABLE compression_rels (
                 release INT NOT NULL REFERENCES releases(id),
-                algorithm INT REFERENCES compression(id),
+                algorithm INT,
                 -- make sure we don't store duplicates by accident
                 UNIQUE(release, algorithm)
             );",
             // downgrade query
             "DROP TABLE compression_rels;
-             ALTER TABLE files DROP COLUMN compression;
-             DROP TABLE compression;",
+             ALTER TABLE files DROP COLUMN compression;"
         ),
     ];
 

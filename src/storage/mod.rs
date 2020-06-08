@@ -17,9 +17,18 @@ const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
+// NOTE: the `TryFrom` impl must be updated whenever a new variant is added.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CompressionAlgorithm {
-    Zstd,
+    Zstd = 0,
+}
+
+impl fmt::Display for CompressionAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressionAlgorithm::Zstd => write!(f, "zstd"),
+        }
+    }
 }
 
 impl std::str::FromStr for CompressionAlgorithm {
@@ -32,10 +41,12 @@ impl std::str::FromStr for CompressionAlgorithm {
     }
 }
 
-impl fmt::Display for CompressionAlgorithm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompressionAlgorithm::Zstd => write!(f, "zstd"),
+impl std::convert::TryFrom<i32> for CompressionAlgorithm {
+    type Error = i32;
+    fn try_from(i: i32) -> Result<Self, Self::Error> {
+        match i {
+            0 => Ok(Self::Zstd),
+            _ => Err(i),
         }
     }
 }
@@ -380,5 +391,18 @@ mod test {
         let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
+    }
+
+    #[test]
+    fn test_compression_try_from_is_exhaustive() {
+        use std::convert::TryFrom;
+
+        let a = CompressionAlgorithm::Zstd;
+        match a {
+            CompressionAlgorithm::Zstd => {
+                assert_eq!(a, CompressionAlgorithm::try_from(a as i32).unwrap());
+                assert_eq!(a, a.to_string().parse().unwrap());
+            }
+        }
     }
 }
