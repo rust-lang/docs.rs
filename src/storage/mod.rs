@@ -17,37 +17,46 @@ const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
-// NOTE: the `TryFrom` impl must be updated whenever a new variant is added.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum CompressionAlgorithm {
-    Zstd = 0,
-}
+macro_rules! enum_id {
+    ($vis:vis enum $name:ident { $($variant:ident = $discriminant:expr,)* }) => {
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+        $vis enum $name {
+            $($variant = $discriminant,)*
+        }
 
-impl fmt::Display for CompressionAlgorithm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompressionAlgorithm::Zstd => write!(f, "zstd"),
+        impl fmt::Display for CompressionAlgorithm {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(Self::$variant => write!(f, stringify!($variant)),)*
+                }
+            }
+        }
+
+        impl std::str::FromStr for CompressionAlgorithm {
+            type Err = ();
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $(stringify!($variant) => Ok(Self::$variant),)*
+                    _ => Err(()),
+                }
+            }
+        }
+
+        impl std::convert::TryFrom<i32> for CompressionAlgorithm {
+            type Error = i32;
+            fn try_from(i: i32) -> Result<Self, Self::Error> {
+                match i {
+                    $($discriminant => Ok(Self::$variant),)*
+                    _ => Err(i),
+                }
+            }
         }
     }
 }
 
-impl std::str::FromStr for CompressionAlgorithm {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "zstd" => Ok(CompressionAlgorithm::Zstd),
-            _ => Err(()),
-        }
-    }
-}
-
-impl std::convert::TryFrom<i32> for CompressionAlgorithm {
-    type Error = i32;
-    fn try_from(i: i32) -> Result<Self, Self::Error> {
-        match i {
-            0 => Ok(Self::Zstd),
-            _ => Err(i),
-        }
+enum_id! {
+    pub enum CompressionAlgorithm {
+        Zstd = 0,
     }
 }
 
