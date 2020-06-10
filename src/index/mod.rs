@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use log::info;
 use url::Url;
 
 use self::api::Api;
@@ -11,7 +10,7 @@ pub(crate) mod api;
 pub(crate) struct Index {
     diff: crates_index_diff::Index,
     path: PathBuf,
-    api: Option<Api>,
+    api: Api,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -44,12 +43,7 @@ impl Index {
         let path = path.as_ref().to_owned();
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)?;
         let config = load_config(diff.repository())?;
-        let api = if let Some(api_base) = &config.api {
-            Some(Api::new(api_base)?)
-        } else {
-            info!("Cannot load registry data as index is missing an api base url");
-            None
-        };
+        let api = Api::new(config.api)?;
         Ok(Self { diff, path, api })
     }
 
@@ -57,8 +51,8 @@ impl Index {
         &self.diff
     }
 
-    pub(crate) fn api(&self) -> Option<&Api> {
-        self.api.as_ref()
+    pub(crate) fn api(&self) -> &Api {
+        &self.api
     }
 }
 

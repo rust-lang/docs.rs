@@ -13,8 +13,8 @@ log = "0.4"
 regex = "1"
 structopt = "0.3"
 crates-index-diff = "7"
-reqwest = { version = "0.10.6", features = ["blocking"] } # TODO: Remove blocking when async is ready
-semver = "0.9"
+reqwest = { version = "0.10.6", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
+semver = { version = "0.9", features = ["serde"] }
 slug = "=0.1.1"
 env_logger = "0.7"
 r2d2 = "0.8"
