@@ -11,7 +11,7 @@ pub(crate) mod api;
 pub(crate) struct Index {
     diff: crates_index_diff::Index,
     path: PathBuf,
-    config: IndexConfig,
+    api: Option<Api>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -44,20 +44,21 @@ impl Index {
         let path = path.as_ref().to_owned();
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)?;
         let config = load_config(diff.repository())?;
-        Ok(Self { diff, config, path })
+        let api = if let Some(api_base) = &config.api {
+            Some(Api::new(api_base)?)
+        } else {
+            info!("Cannot load registry data as index is missing an api base url");
+            None
+        };
+        Ok(Self { diff, path, api })
     }
 
     pub(crate) fn diff(&self) -> &crates_index_diff::Index {
         &self.diff
     }
 
-    pub(crate) fn api(&self) -> Option<Api<'_>> {
-        if let Some(api_base) = &self.config.api {
-            Some(Api::new(api_base))
-        } else {
-            info!("Cannot load registry data as index is missing an api base url");
-            None
-        }
+    pub(crate) fn api(&self) -> Option<&Api> {
+        self.api.as_ref()
     }
 }
 
