@@ -15,8 +15,9 @@ const APP_USER_AGENT: &str = concat!(
     include_str!(concat!(env!("OUT_DIR"), "/git_version"))
 );
 
-pub(crate) struct Api<'a> {
-    api_base: &'a Url,
+pub(crate) struct Api {
+    api_base: Url,
+    client: reqwest::blocking::Client,
 }
 
 pub(crate) struct RegistryCrateData {
@@ -33,24 +34,23 @@ pub(crate) struct CrateOwner {
     pub(crate) name: String,
 }
 
-fn client() -> Result<reqwest::blocking::Client> {
-    let headers = vec![
-        (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
-        (ACCEPT, HeaderValue::from_static("application/json")),
-    ]
-    .into_iter()
-    .collect();
+impl Api {
+    pub(super) fn new(api_base: &Url) -> Result<Self> {
+        let headers = vec![
+            (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
+            (ACCEPT, HeaderValue::from_static("application/json")),
+        ]
+        .into_iter()
+        .collect();
 
-    let client = reqwest::blocking::Client::builder()
-        .default_headers(headers)
-        .build()?;
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(headers)
+            .build()?;
 
-    Ok(client)
-}
-
-impl<'a> Api<'a> {
-    pub(super) fn new(api_base: &'a Url) -> Self {
-        Self { api_base }
+        Ok(Self {
+            api_base: api_base.clone(),
+            client,
+        })
     }
 
     pub(crate) fn get_crate_data(&self, name: &str, version: &str) -> Result<RegistryCrateData> {
@@ -82,7 +82,7 @@ impl<'a> Api<'a> {
         // FIXME: There is probably better way to do this
         //        and so many unwraps...
         // TODO: When reqwest is upgraded remove the `as_str` here
-        let mut res = client()?.get(url.as_str()).send()?;
+        let mut res = self.client.get(url.as_str()).send()?;
         let mut body = String::new();
         res.read_to_string(&mut body).unwrap();
         let json: Value = serde_json::from_str(&body[..])?;
@@ -149,7 +149,7 @@ impl<'a> Api<'a> {
             url
         };
         // TODO: When reqwest is upgraded remove the `as_str` here
-        let mut res = client()?.get(url.as_str()).send()?;
+        let mut res = self.client.get(url.as_str()).send()?;
         // FIXME: There is probably better way to do this
         //        and so many unwraps...
         let mut body = String::new();
