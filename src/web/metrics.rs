@@ -124,9 +124,12 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
                 .get(0),
         );
         PRIORITIZED_CRATES_COUNT.set(
-            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE priority >= 0;", &[]))
-                .get(0)
-                .get(0),
+            ctry!(conn.query(
+                "SELECT COUNT(*) FROM queue WHERE attempts < 5 AND priority <= 0;",
+                &[]
+            ))
+            .get(0)
+            .get(0),
         );
         FAILED_CRATES_COUNT.set(
             ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt >= 5;", &[]))
