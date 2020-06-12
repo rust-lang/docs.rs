@@ -14,6 +14,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
+const DEFAULT_COMPRESSION: CompressionAlgorithm = CompressionAlgorithm::Zstd;
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
@@ -22,6 +23,11 @@ macro_rules! enum_id {
         #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
         $vis enum $name {
             $($variant = $discriminant,)*
+        }
+
+        impl $name {
+            #[cfg(test)]
+            const AVAILABLE: &'static [Self] = &[$(Self::$variant,)*];
         }
 
         impl fmt::Display for CompressionAlgorithm {
@@ -163,7 +169,8 @@ impl<'a> Storage<'a> {
                     .map(|file| (file_path, file))
             })
             .map(|(file_path, file)| -> Result<_, Error> {
-                let (content, alg) = compress(file)?;
+                let alg = DEFAULT_COMPRESSION;
+                let content = compress(file, alg)?;
                 let bucket_path = Path::new(prefix).join(&file_path);
 
                 #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
@@ -201,9 +208,10 @@ impl<'a> Storage<'a> {
 }
 
 // public for benchmarking
-pub fn compress(content: impl Read) -> Result<(Vec<u8>, CompressionAlgorithm), Error> {
-    let data = zstd::encode_all(content, 9)?;
-    Ok((data, CompressionAlgorithm::Zstd))
+pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
+    match algorithm {
+        CompressionAlgorithm::Zstd => Ok(zstd::encode_all(content, 9)?),
+    }
 }
 
 pub fn decompress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
@@ -341,7 +349,8 @@ mod test {
     fn test_batched_uploads() {
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| {
-                let (content, alg) = compress("fn main() {}".as_bytes()).unwrap();
+                let alg = DEFAULT_COMPRESSION;
+                let content = compress("fn main() {}".as_bytes(), alg).unwrap();
                 Blob {
                     mime: "text/rust".into(),
                     content,
@@ -369,16 +378,20 @@ mod test {
     #[test]
     fn test_compression() {
         let orig = "fn main() {}";
-        let (data, alg) = compress(orig.as_bytes()).unwrap();
-        let blob = Blob {
-            mime: "text/rust".into(),
-            content: data.clone(),
-            path: "main.rs".into(),
-            date_updated: Utc::now(),
-            compression: Some(alg),
-        };
-        test_roundtrip(std::slice::from_ref(&blob));
-        assert_eq!(decompress(data.as_slice(), alg).unwrap(), orig.as_bytes());
+        for alg in CompressionAlgorithm::AVAILABLE {
+            println!("testing algorithm {}", alg);
+
+            let data = compress(orig.as_bytes(), *alg).unwrap();
+            let blob = Blob {
+                mime: "text/rust".into(),
+                content: data.clone(),
+                path: "main.rs".into(),
+                date_updated: Utc::now(),
+                compression: Some(*alg),
+            };
+            test_roundtrip(std::slice::from_ref(&blob));
+            assert_eq!(decompress(data.as_slice(), *alg).unwrap(), orig.as_bytes());
+        }
     }
 
     #[test]
