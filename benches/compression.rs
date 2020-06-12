@@ -1,5 +1,7 @@
-use cratesfyi::storage::{compress, decompress};
+use cratesfyi::storage::{compress, decompress, CompressionAlgorithm};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+const ALGORITHM: CompressionAlgorithm = CompressionAlgorithm::Zstd;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     // this isn't a great benchmark because it only tests on one file
@@ -7,11 +9,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let html = std::fs::read_to_string("benches/struct.CaptureMatches.html").unwrap();
     let html_slice = html.as_bytes();
     c.bench_function("compress regex html", |b| {
-        b.iter(|| compress(black_box(html_slice)))
+        b.iter(|| compress(black_box(html_slice, ALGORITHM)))
     });
-    let (compressed, alg) = compress(html_slice).unwrap();
+    let compressed = compress(html_slice, ALGORITHM).unwrap();
     c.bench_function("decompress regex html", |b| {
-        b.iter(|| decompress(black_box(compressed.as_slice()), alg))
+        b.iter(|| decompress(black_box(compressed.as_slice()), ALGORITHM))
     });
 }
 
