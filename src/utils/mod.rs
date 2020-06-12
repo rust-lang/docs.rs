@@ -23,3 +23,4 @@ mod pubsubhubbub;
 mod queue;
 mod release_activity_updater;
 mod rustc_version;
+pub(crate) mod sized_buffer;
