@@ -30,7 +30,7 @@ impl TestS3 {
         use rusoto_core::RusotoError;
         use rusoto_s3::GetObjectError;
 
-        let err = self.0.borrow().get(path).unwrap_err();
+        let err = self.0.borrow().get(path, std::usize::MAX).unwrap_err();
         match err
             .downcast_ref::<RusotoError<GetObjectError>>()
             .expect("wanted GetObject")
@@ -41,8 +41,12 @@ impl TestS3 {
         };
     }
     pub(crate) fn assert_blob(&self, blob: &Blob, path: &str) {
-        let actual = self.0.borrow().get(path).unwrap();
+        let actual = self.0.borrow().get(path, std::usize::MAX).unwrap();
         assert_blob_eq(blob, &actual);
+    }
+
+    pub(crate) fn with_client(&self, f: impl FnOnce(&mut S3Backend<'static>)) {
+        f(&mut self.0.borrow_mut())
     }
 }
 
