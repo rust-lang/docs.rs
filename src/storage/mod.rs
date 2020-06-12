@@ -129,7 +129,7 @@ impl<'a> Storage<'a> {
             Self::S3(s3) => s3.get(path),
         }?;
         if let Some(alg) = blob.compression {
-            blob.content = decompress(blob.content.as_slice(), alg)?;
+            blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
             blob.compression = None;
         }
         Ok(blob)
@@ -214,10 +214,19 @@ pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<V
     }
 }
 
-pub fn decompress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
+pub fn decompress(
+    content: impl Read,
+    algorithm: CompressionAlgorithm,
+    max_size: usize,
+) -> Result<Vec<u8>, Error> {
+    // The sized buffer prevents a malicious file from decompressing to multiple times its size.
+    let mut buffer = crate::utils::sized_buffer::SizedBuffer::new(max_size);
+
     match algorithm {
-        CompressionAlgorithm::Zstd => zstd::decode_all(content).map_err(Into::into),
+        CompressionAlgorithm::Zstd => zstd::stream::copy_decode(content, &mut buffer)?,
     }
+
+    Ok(buffer.into_inner())
 }
 
 fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
@@ -390,7 +399,27 @@ mod test {
                 compression: Some(*alg),
             };
             test_roundtrip(std::slice::from_ref(&blob));
-            assert_eq!(decompress(data.as_slice(), *alg).unwrap(), orig.as_bytes());
+            assert_eq!(
+                decompress(data.as_slice(), *alg, std::usize::MAX).unwrap(),
+                orig.as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn test_decompression_too_big() {
+        let orginal = &[b'A'; 2000] as &[u8];
+
+        for alg in CompressionAlgorithm::AVAILABLE {
+            let data = compress(orginal, *alg).unwrap();
+
+            // Ensure decompressing a file over the limit returns a SizeLimitReached error.
+            let err = decompress(data.as_slice(), *alg, 1000).unwrap_err();
+            assert!(err
+                .downcast_ref::<std::io::Error>()
+                .and_then(|io| io.get_ref())
+                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                .is_some());
         }
     }
 
