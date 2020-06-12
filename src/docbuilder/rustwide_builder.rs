@@ -61,8 +61,8 @@ const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "SourceSerifPro-It.ttf.woff",
 ];
 
-const DUMMY_CRATE_NAME: &str = "acme-client";
-const DUMMY_CRATE_VERSION: &str = "0.0.0";
+const DUMMY_CRATE_NAME: &str = "empty-library";
+const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
 pub struct RustwideBuilder {
     workspace: Workspace,
@@ -201,7 +201,7 @@ impl RustwideBuilder {
             .build_dir(&format!("essential-files-{}", rustc_version));
         build_dir.purge()?;
 
-        // acme-client-0.0.0 is an empty library crate and it will always build
+        // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
