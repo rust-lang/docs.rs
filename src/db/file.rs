@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 
 pub(crate) use crate::storage::Blob;
 
-pub(crate) fn get_path(conn: &Connection, path: &str) -> Result<Blob> {
-    Storage::new(conn).get(path)
+pub(crate) fn get_path(conn: &Connection, path: &str, max_size: usize) -> Result<Blob> {
+    Storage::new(conn).get(path, max_size)
 }
 
 /// Store all files in a directory and return [[mimetype, filename]] as Json

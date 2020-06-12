@@ -117,7 +117,7 @@ impl<'a> Storage<'a> {
             DatabaseBackend::new(conn).into()
         }
     }
-    pub(crate) fn get(&self, path: &str) -> Result<Blob, Error> {
+    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         let mut blob = match self {
             Self::Database(db) => db.get(path),
             Self::S3(s3) => s3.get(path),
@@ -282,7 +282,7 @@ mod test {
                 let name = Path::new(&blob.path);
                 assert!(stored_files.contains_key(name));
 
-                let actual = backend.get(&blob.path).unwrap();
+                let actual = backend.get(&blob.path, std::usize::MAX).unwrap();
                 assert_blob_eq(blob, &actual);
             }
 
@@ -324,12 +324,12 @@ mod test {
                 "text/rust"
             );
 
-            let file = backend.get("rustdoc/Cargo.toml").unwrap();
+            let file = backend.get("rustdoc/Cargo.toml", std::usize::MAX).unwrap();
             assert_eq!(file.content, b"data");
             assert_eq!(file.mime, "text/toml");
             assert_eq!(file.path, "rustdoc/Cargo.toml");
 
-            let file = backend.get("rustdoc/src/main.rs").unwrap();
+            let file = backend.get("rustdoc/src/main.rs", std::usize::MAX).unwrap();
             assert_eq!(file.content, b"data");
             assert_eq!(file.mime, "text/rust");
             assert_eq!(file.path, "rustdoc/src/main.rs");
