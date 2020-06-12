@@ -7,7 +7,6 @@ use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::convert::TryInto;
-use std::io::Read;
 use tokio::runtime::Runtime;
 
 #[cfg(test)]
@@ -32,7 +31,7 @@ impl<'a> S3Backend<'a> {
         }
     }
 
-    pub(super) fn get(&self, path: &str) -> Result<Blob, Error> {
+    pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         let res = self
             .client
             .get_object(GetObjectRequest {
@@ -42,13 +41,15 @@ impl<'a> S3Backend<'a> {
             })
             .sync()?;
 
-        let mut b = res.body.unwrap().into_blocking_read();
-        let mut content = Vec::with_capacity(
+        let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
+        content.reserve(
             res.content_length
                 .and_then(|l| l.try_into().ok())
                 .unwrap_or(0),
         );
-        b.read_to_end(&mut content).unwrap();
+
+        let mut body = res.body.unwrap().into_blocking_read();
+        std::io::copy(&mut body, &mut content)?;
 
         let date_updated = parse_timespec(&res.last_modified.unwrap())?;
         let compression = res.content_encoding.and_then(|s| s.parse().ok());
@@ -57,7 +58,7 @@ impl<'a> S3Backend<'a> {
             path: path.into(),
             mime: res.content_type.unwrap(),
             date_updated,
-            content,
+            content: content.into_inner(),
             compression,
         })
     }
@@ -191,6 +192,47 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_get_too_big() {
+        const MAX_SIZE: usize = 1024;
+
+        wrapper(|env| {
+            let small_blob = Blob {
+                path: "small-blob.bin".into(),
+                mime: "text/plain".into(),
+                date_updated: Utc::now(),
+                content: vec![0; MAX_SIZE],
+                compression: None,
+            };
+            let big_blob = Blob {
+                path: "big-blob.bin".into(),
+                mime: "text/plain".into(),
+                date_updated: Utc::now(),
+                content: vec![0; MAX_SIZE * 2],
+                compression: None,
+            };
+
+            let s3 = env.s3();
+            s3.upload(slice::from_ref(&small_blob)).unwrap();
+            s3.upload(slice::from_ref(&big_blob)).unwrap();
+
+            s3.with_client(|client| {
+                let blob = client.get("small-blob.bin", MAX_SIZE).unwrap();
+                assert_eq!(blob.content.len(), small_blob.content.len());
+
+                assert!(client
+                    .get("big-blob.bin", MAX_SIZE)
+                    .unwrap_err()
+                    .downcast_ref::<std::io::Error>()
+                    .and_then(|io| io.get_ref())
+                    .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                    .is_some());
+            });
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn test_store() {
         wrapper(|env| {
             let s3 = env.s3();
@@ -220,6 +262,7 @@ pub(crate) mod tests {
             Ok(())
         })
     }
+
     // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
     // NOTE: On s3, it will succeed and create a file called `/`.
     // NOTE: On min.io, it will fail with 'Object name contains unsupported characters.'

@@ -126,7 +126,7 @@ impl<'a> Storage<'a> {
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         let mut blob = match self {
             Self::Database(db) => db.get(path),
-            Self::S3(s3) => s3.get(path),
+            Self::S3(s3) => s3.get(path, max_size),
         }?;
         if let Some(alg) = blob.compression {
             blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
