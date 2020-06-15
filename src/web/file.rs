@@ -5,14 +5,21 @@ use crate::{db, error::Result};
 use iron::{status, Handler, IronError, IronResult, Request, Response};
 use postgres::Connection;
 
-const MAX_FILE_SIZE: usize = 5 * 1024 * 1024; // 5MB
+const MAX_HTML_FILE_SIZE: usize = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE: usize = 50 * 1024 * 1024; // 50MB
 
 pub(crate) struct File(pub(crate) db::file::Blob);
 
 impl File {
     /// Gets file from database
     pub fn from_path(conn: &Connection, path: &str) -> Result<File> {
-        Ok(File(db::file::get_path(conn, path, MAX_FILE_SIZE)?))
+        let max_size = if path.ends_with(".html") {
+            MAX_HTML_FILE_SIZE
+        } else {
+            MAX_FILE_SIZE
+        };
+
+        Ok(File(db::file::get_path(conn, path, max_size)?))
     }
 
     /// Consumes File and creates a iron response
