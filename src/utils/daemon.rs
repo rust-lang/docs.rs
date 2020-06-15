@@ -5,19 +5,20 @@
 use crate::{
     docbuilder::RustwideBuilder,
     utils::{github_updater, pubsubhubbub, update_release_activity},
-    DocBuilder, DocBuilderOptions,
+    Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
 
 #[cfg(not(target_os = "windows"))]
 use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};
 
-pub fn start_daemon(background: bool) {
+pub fn start_daemon(background: bool, config: Arc<Config>) {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -249,7 +250,7 @@ pub fn start_daemon(background: bool) {
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false);
+    crate::Server::start(None, false, config);
 }
 
 fn opts() -> DocBuilderOptions {

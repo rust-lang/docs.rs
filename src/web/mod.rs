@@ -56,21 +56,23 @@ mod sitemap;
 mod source;
 
 use self::pool::Pool;
+use crate::config::Config;
 use chrono::{DateTime, Utc};
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
-use iron::{self, status, Handler, Listening, Url};
+use iron::{self, status, BeforeMiddleware, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
 use staticfile::Static;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::{env, fmt, path::PathBuf, time::Duration};
 
 #[cfg(test)]
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
@@ -97,25 +99,28 @@ struct CratesfyiHandler {
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
     static_handler: Box<dyn Handler>,
-    pool: Pool,
+    inject_extensions: InjectExtensions,
 }
 
 impl CratesfyiHandler {
-    fn chain<H: Handler>(pool: Pool, base: H) -> Chain {
+    fn chain<H: Handler>(inject_extensions: InjectExtensions, base: H) -> Chain {
         let hbse = handlebars_engine().expect("Failed to load handlebar templates");
 
         let mut chain = Chain::new(base);
-        chain.link_before(pool);
+        chain.link_before(inject_extensions);
         chain.link_after(hbse);
         chain
     }
 
-    fn new(pool: Pool) -> CratesfyiHandler {
+    fn new(pool: Pool, config: Arc<Config>) -> CratesfyiHandler {
+        let inject_extensions = InjectExtensions { pool, config };
+
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
 
-        let shared_resources = Self::chain(pool.clone(), rustdoc::SharedResourceHandler);
-        let router_chain = Self::chain(pool.clone(), routes.iron_router());
+        let shared_resources =
+            Self::chain(inject_extensions.clone(), rustdoc::SharedResourceHandler);
+        let router_chain = Self::chain(inject_extensions.clone(), routes.iron_router());
         let prefix = PathBuf::from(
             env::var("CRATESFYI_PREFIX")
                 .expect("the CRATESFYI_PREFIX environment variable is not set"),
@@ -132,7 +137,7 @@ impl CratesfyiHandler {
                 Box::new(file::DatabaseFileHandler),
             )),
             static_handler: Box::new(static_handler),
-            pool,
+            inject_extensions,
         }
     }
 }
@@ -201,8 +206,23 @@ impl Handler for CratesfyiHandler {
                     debug!("Path not found: {}; {}", DebugPath(&req.url), e.error);
                 }
 
-                Self::chain(self.pool.clone(), err).handle(req)
+                Self::chain(self.inject_extensions.clone(), err).handle(req)
             })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct InjectExtensions {
+    pool: Pool,
+    config: Arc<Config>,
+}
+
+impl BeforeMiddleware for InjectExtensions {
+    fn before(&self, req: &mut Request) -> IronResult<()> {
+        req.extensions.insert::<Pool>(self.pool.clone());
+        req.extensions.insert::<Config>(self.config.clone());
+
+        Ok(())
     }
 }
 
@@ -363,24 +383,24 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(addr: Option<&str>, reload_templates: bool) -> Self {
+    pub fn start(addr: Option<&str>, reload_templates: bool, config: Arc<Config>) -> Self {
         // Initialize templates
         let _: &page::TemplateData = &*page::TEMPLATE_DATA;
         if reload_templates {
             page::TemplateData::start_template_reloading();
         }
 
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new());
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new(), config);
         info!("Running docs.rs web server on http://{}", server.addr());
         server
     }
 
     #[cfg(test)]
-    pub(crate) fn start_test(conn: Arc<Mutex<Connection>>) -> Self {
-        Self::start_inner("127.0.0.1:0", Pool::new_simple(conn.clone()))
+    pub(crate) fn start_test(conn: Arc<Mutex<Connection>>, config: Arc<Config>) -> Self {
+        Self::start_inner("127.0.0.1:0", Pool::new_simple(conn.clone()), config)
     }
 
-    fn start_inner(addr: &str, pool: Pool) -> Self {
+    fn start_inner(addr: &str, pool: Pool, config: Arc<Config>) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
         metrics::SUCCESSFUL_BUILDS.inc_by(0);
@@ -389,7 +409,7 @@ impl Server {
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
         metrics::FAILED_DB_CONNECTIONS.inc_by(0);
 
-        let cratesfyi = CratesfyiHandler::new(pool);
+        let cratesfyi = CratesfyiHandler::new(pool, config);
         let inner = Iron::new(cratesfyi)
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));

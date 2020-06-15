@@ -1,5 +1,5 @@
 use crate::db::create_pool;
-use iron::{status::Status, typemap, BeforeMiddleware, IronError, IronResult, Request};
+use iron::{status::Status, typemap, IronError, IronResult};
 use postgres::Connection;
 use std::marker::PhantomData;
 
@@ -64,14 +64,6 @@ impl Pool {
 
 impl typemap::Key for Pool {
     type Value = Pool;
-}
-
-impl BeforeMiddleware for Pool {
-    fn before(&self, req: &mut Request) -> IronResult<()> {
-        req.extensions.insert::<Pool>(self.clone());
-
-        Ok(())
-    }
 }
 
 pub(crate) enum DerefConnection<'a> {
