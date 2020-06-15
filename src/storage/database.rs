@@ -26,29 +26,28 @@ impl<'a> DatabaseBackend<'a> {
         // The size limit is checked at the database level, to avoid receiving data altogether if
         // the limit is exceeded.
         let rows = self.conn.query(
-            "SELECT path, mime, date_updated, content, compression
+            "SELECT
+                 path, mime, date_updated, compression,
+                 (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
+                 (LENGTH(content) > $2) AS is_too_big
              FROM files
-             WHERE path = $1 AND LENGTH(content) <= $2;",
+             WHERE path = $1;",
             &[&path, &(max_size)],
         )?;
 
         if rows.is_empty() {
-            // This second query distinguishes between a path not found error and a size limit
-            // reached error, as the above query returns no result in either cases.
-            if self
-                .conn
-                .query("SELECT 0 FROM files WHERE path = $1;", &[&path])?
-                .is_empty()
-            {
-                Err(PathNotFoundError.into())
-            } else {
-                Err(
-                    std::io::Error::new(std::io::ErrorKind::Other, crate::error::SizeLimitReached)
-                        .into(),
-                )
-            }
+            Err(PathNotFoundError.into())
         } else {
             let row = rows.get(0);
+
+            if row.get::<_, bool>("is_too_big") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    crate::error::SizeLimitReached,
+                )
+                .into());
+            }
+
             let compression = row.get::<_, Option<i32>>("compression").map(|i| {
                 i.try_into()
                     .expect("invalid compression algorithm stored in database")
