@@ -17,7 +17,7 @@ impl SizedBuffer {
         if self.inner.len() + amount > self.limit {
             self.inner.reserve_exact(self.limit - self.inner.len());
         } else {
-            self.inner.reserve_exact(amount);
+            self.inner.reserve(amount);
         }
     }
 
