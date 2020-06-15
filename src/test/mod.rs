@@ -122,17 +122,22 @@ impl TestEnvironment {
         }
     }
 
-    pub(crate) fn set_config(&self, config: Config) {
+    fn base_config(&self) -> Config {
+        Config::from_env().expect("failed to get base config")
+    }
+
+    pub(crate) fn override_config(&self, f: impl FnOnce(&mut Config)) {
+        let mut config = self.base_config();
+        f(&mut config);
+
         if self.config.set(Arc::new(config)).is_err() {
-            panic!("can't call set_config after the configuration is used!");
+            panic!("can't call override_config after the configuration is accessed!");
         }
     }
 
     pub(crate) fn config(&self) -> Arc<Config> {
         self.config
-            .get_or_init(|| {
-                Arc::new(Config::from_env().expect("failed to initialize the configuration"))
-            })
+            .get_or_init(|| Arc::new(self.base_config()))
             .clone()
     }
 
