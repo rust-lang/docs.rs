@@ -75,7 +75,6 @@ impl Handler for DatabaseFileHandler {
 mod tests {
     use super::*;
     use crate::test::wrapper;
-    use crate::Config;
     use chrono::Utc;
 
     #[test]
@@ -110,11 +109,10 @@ mod tests {
         const MAX_HTML_SIZE: usize = 128;
 
         wrapper(|env| {
-            // Ensure the enviornment is not overriding the configuration.
-            let mut config = Config::from_env().expect("failed to get base config");
-            config.max_file_size = MAX_SIZE;
-            config.max_file_size_html = MAX_HTML_SIZE;
-            env.set_config(config);
+            env.override_config(|config| {
+                config.max_file_size = MAX_SIZE;
+                config.max_file_size_html = MAX_HTML_SIZE;
+            });
 
             let db = env.db();
 
