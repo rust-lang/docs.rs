@@ -408,13 +408,33 @@ mod test {
 
     #[test]
     fn test_decompression_too_big() {
-        let orginal = &[b'A'; 2000] as &[u8];
+        const MAX_SIZE: usize = 1024;
+
+        let small = &[b'A'; MAX_SIZE / 2] as &[u8];
+        let exact = &[b'A'; MAX_SIZE] as &[u8];
+        let big = &[b'A'; MAX_SIZE * 2] as &[u8];
 
         for alg in CompressionAlgorithm::AVAILABLE {
-            let data = compress(orginal, *alg).unwrap();
+            let compressed_small = compress(small, *alg).unwrap();
+            let compressed_exact = compress(exact, *alg).unwrap();
+            let compressed_big = compress(big, *alg).unwrap();
+
+            // Ensure decompressing within the limit works.
+            assert_eq!(
+                small.len(),
+                decompress(compressed_small.as_slice(), *alg, MAX_SIZE)
+                    .unwrap()
+                    .len()
+            );
+            assert_eq!(
+                exact.len(),
+                decompress(compressed_exact.as_slice(), *alg, MAX_SIZE)
+                    .unwrap()
+                    .len()
+            );
 
             // Ensure decompressing a file over the limit returns a SizeLimitReached error.
-            let err = decompress(data.as_slice(), *alg, 1000).unwrap_err();
+            let err = decompress(compressed_big.as_slice(), *alg, MAX_SIZE).unwrap_err();
             assert!(err
                 .downcast_ref::<std::io::Error>()
                 .and_then(|io| io.get_ref())
