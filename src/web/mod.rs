@@ -11,10 +11,11 @@ macro_rules! ctry {
         match $result {
             Ok(v) => v,
             Err(e) => {
-                return $crate::web::page::Page::new(format!("{:?}", e))
-                    .title("An error has occured")
+                log::error!("{}\n{:?}", e, backtrace::Backtrace::new());
+                return $crate::web::page::Page::new(format!("{}", e))
+                    .title("Internal Server Error")
                     .set_status(::iron::status::BadRequest)
-                    .to_resp("resp");
+                    .to_resp("error");
             }
         }
     };
@@ -27,10 +28,14 @@ macro_rules! cexpect {
         match $option {
             Some(v) => v,
             None => {
-                return $crate::web::page::Page::new("Resource not found".to_owned())
-                    .title("An error has occured")
+                log::error!(
+                    "called cexpect!() on a `None` value\n{:?}",
+                    backtrace::Backtrace::new()
+                );
+                return $crate::web::page::Page::new("Internal Server Error".to_owned())
+                    .title("Internal Server Error")
                     .set_status(::iron::status::BadRequest)
-                    .to_resp("resp");
+                    .to_resp("error");
             }
         }
     };

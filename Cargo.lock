@@ -364,6 +364,7 @@ name = "cratesfyi"
 version = "0.6.0"
 dependencies = [
  "arc-swap 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "backtrace 0.3.48 (registry+https://github.com/rust-lang/crates.io-index)",
  "badge 0.2.0",
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "comrak 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
