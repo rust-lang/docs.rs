@@ -1,17 +1,20 @@
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use cratesfyi::db::{self, add_path_into_database, connect_db};
 use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
 use cratesfyi::Server;
 use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
+use failure::Error;
 use structopt::StructOpt;
 
-pub fn main() {
+pub fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
     logger_init();
 
-    CommandLine::from_args().handle_args();
+    CommandLine::from_args().handle_args()?;
+    Ok(())
 }
 
 fn logger_init() {
@@ -79,19 +82,23 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    pub fn handle_args(self) {
+    pub fn handle_args(self) -> Result<(), Error> {
+        let config = Arc::new(cratesfyi::Config::from_env()?);
+
         match self {
             Self::Build(build) => build.handle_args(),
             Self::StartWebServer {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload_templates);
+                Server::start(Some(&socket_addr), reload_templates, config);
             }
-            Self::Daemon { foreground } => cratesfyi::utils::start_daemon(!foreground),
+            Self::Daemon { foreground } => cratesfyi::utils::start_daemon(!foreground, config),
             Self::Database { subcommand } => subcommand.handle_args(),
             Self::Queue { subcommand } => subcommand.handle_args(),
         }
+
+        Ok(())
     }
 }
 

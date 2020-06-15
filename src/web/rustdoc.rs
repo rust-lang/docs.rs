@@ -8,6 +8,7 @@ use super::pool::Pool;
 use super::redirect_base;
 use super::{match_version, MatchSemver};
 use crate::utils;
+use crate::Config;
 use iron::headers::{CacheControl, CacheDirective, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
@@ -134,10 +135,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             // this URL is actually from a crate-internal path, serve it there instead
             return rustdoc_html_server_handler(req);
         } else {
+            let conn = extension!(req, Pool).get()?;
+            let config = extension!(req, Config);
+
             let path = req.url.path();
             let path = path.join("/");
-            let conn = extension!(req, Pool).get()?;
-            match File::from_path(&conn, &path) {
+            match File::from_path(&conn, &path, &config) {
                 Ok(f) => return Ok(f.serve()),
                 Err(..) => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
             }
@@ -156,6 +159,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     let router = extension!(req, Router);
+    let conn = extension!(req, Pool).get()?;
+
     // this handler should never called without crate pattern
     let crate_name = cexpect!(router.find("crate"));
     let mut crate_name = percent_decode(crate_name.as_bytes())
@@ -164,8 +169,6 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         .into_owned();
     let req_version = router.find("version");
     let mut target = router.find("target");
-
-    let conn = extension!(req, Pool).get()?;
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
@@ -222,6 +225,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     );
 
     let conn = extension!(req, Pool).get()?;
+    let config = extension!(req, Config);
     let mut req_path = req.url.path();
 
     // Remove the name and version from the path
@@ -294,14 +298,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Attempt to load the file from the database
-    let file = if let Ok(file) = File::from_path(&conn, &path) {
+    let file = if let Ok(file) = File::from_path(&conn, &path, &config) {
         file
     } else {
         // If it fails, we try again with /index.html at the end
         path.push_str("/index.html");
         req_path.push("index.html");
 
-        File::from_path(&conn, &path)
+        File::from_path(&conn, &path, &config)
             .map_err(|_| IronError::new(Nope::ResourceNotFound, status::NotFound))?
     };
 
@@ -342,7 +346,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             "/{}/{}/{}",
             name,
             latest_version,
-            path_for_version(&latest_path, &crate_details.doc_targets, &conn)
+            path_for_version(&latest_path, &crate_details.doc_targets, &conn, &config)
         )
     } else {
         format!("/crate/{}/{}", name, latest_version)
@@ -396,9 +400,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
-fn path_for_version(req_path: &[&str], known_platforms: &[String], conn: &Connection) -> String {
+fn path_for_version(
+    req_path: &[&str],
+    known_platforms: &[String],
+    conn: &Connection,
+    config: &Config,
+) -> String {
     // Simple case: page exists in the latest version, so just change the version number
-    if File::from_path(&conn, &req_path.join("/")).is_ok() {
+    if File::from_path(&conn, &req_path.join("/"), config).is_ok() {
         // NOTE: this adds 'index.html' if it wasn't there before
         return req_path[3..].join("/");
     }
@@ -430,6 +439,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let version = cexpect!(router.find("version"));
 
     let conn = extension!(req, Pool).get()?;
+    let config = extension!(req, Config);
     let base = redirect_base(req);
 
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
@@ -453,7 +463,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         file_path
     };
 
-    let path = path_for_version(&file_path, &crate_details.doc_targets, &conn);
+    let path = path_for_version(&file_path, &crate_details.doc_targets, &conn, &config);
     let url = format!(
         "{base}/{name}/{version}/{path}",
         base = base,
@@ -551,8 +561,9 @@ impl Handler for SharedResourceHandler {
         let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
             let conn = extension!(req, Pool).get()?;
+            let config = extension!(req, Config);
 
-            if let Ok(file) = File::from_path(&conn, filename) {
+            if let Ok(file) = File::from_path(&conn, filename, &config) {
                 return Ok(file.serve());
             }
         }

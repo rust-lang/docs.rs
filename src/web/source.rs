@@ -4,6 +4,7 @@ use super::file::File as DbFile;
 use super::page::Page;
 use super::pool::Pool;
 use super::MetaData;
+use crate::Config;
 use iron::prelude::*;
 use postgres::Connection;
 use router::Router;
@@ -211,11 +212,12 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let conn = extension!(req, Pool).get()?;
+    let config = extension!(req, Config);
 
     // try to get actual file first
     // skip if request is a directory
     let file = if !file_path.ends_with('/') {
-        DbFile::from_path(&conn, &file_path).ok()
+        DbFile::from_path(&conn, &file_path, &config).ok()
     } else {
         None
     };

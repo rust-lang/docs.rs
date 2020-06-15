@@ -2,6 +2,7 @@ mod fakes;
 
 use crate::storage::s3::TestS3;
 use crate::web::Server;
+use crate::Config;
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
@@ -93,6 +94,7 @@ pub(crate) fn assert_redirect(
 }
 
 pub(crate) struct TestEnvironment {
+    config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     frontend: OnceCell<TestFrontend>,
     s3: OnceCell<TestS3>,
@@ -107,6 +109,7 @@ impl TestEnvironment {
     fn new() -> Self {
         init_logger();
         Self {
+            config: OnceCell::new(),
             db: OnceCell::new(),
             frontend: OnceCell::new(),
             s3: OnceCell::new(),
@@ -119,13 +122,28 @@ impl TestEnvironment {
         }
     }
 
+    pub(crate) fn set_config(&self, config: Config) {
+        if self.config.set(Arc::new(config)).is_err() {
+            panic!("can't call set_config after the configuration is used!");
+        }
+    }
+
+    pub(crate) fn config(&self) -> Arc<Config> {
+        self.config
+            .get_or_init(|| {
+                Arc::new(Config::from_env().expect("failed to initialize the configuration"))
+            })
+            .clone()
+    }
+
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db
             .get_or_init(|| TestDatabase::new().expect("failed to initialize the db"))
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend.get_or_init(|| TestFrontend::new(self.db()))
+        self.frontend
+            .get_or_init(|| TestFrontend::new(self.db(), self.config()))
     }
 
     pub(crate) fn s3(&self) -> &TestS3 {
@@ -187,9 +205,9 @@ pub(crate) struct TestFrontend {
 }
 
 impl TestFrontend {
-    fn new(db: &TestDatabase) -> Self {
+    fn new(db: &TestDatabase, config: Arc<Config>) -> Self {
         Self {
-            server: Server::start_test(db.conn.clone()),
+            server: Server::start_test(db.conn.clone(), config),
             client: Client::new(),
         }
     }
