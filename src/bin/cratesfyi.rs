@@ -13,8 +13,7 @@ pub fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
     logger_init();
 
-    CommandLine::from_args().handle_args()?;
-    Ok(())
+    CommandLine::from_args().handle_args()
 }
 
 fn logger_init() {

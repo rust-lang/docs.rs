@@ -40,7 +40,7 @@ impl<'a> DatabaseBackend<'a> {
         } else {
             let row = rows.get(0);
 
-            if row.get::<_, bool>("is_too_big") {
+            if row.get("is_too_big") {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     crate::error::SizeLimitReached,
