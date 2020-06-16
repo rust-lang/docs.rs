@@ -1,6 +1,6 @@
 //! Database based file handler
 
-use super::pool::Pool;
+use crate::db::Pool;
 use crate::{db, error::Result, Config};
 use iron::{status, Handler, IronError, IronResult, Request, Response};
 use postgres::Connection;

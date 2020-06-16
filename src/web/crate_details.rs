@@ -1,9 +1,9 @@
 use super::error::Nope;
 use super::page::Page;
-use super::pool::Pool;
 use super::{
     duration_to_str, match_version, redirect_base, render_markdown, MatchSemver, MetaData,
 };
+use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::{status, Url};

@@ -1,8 +1,5 @@
-use crate::{
-    docbuilder::Limits,
-    impl_webpage,
-    web::{page::WebPage, pool::Pool},
-};
+use crate::db::Pool;
+use crate::{docbuilder::Limits, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::{
     headers::ContentType,
