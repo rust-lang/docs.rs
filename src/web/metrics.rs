@@ -1,4 +1,4 @@
-use super::pool::Pool;
+use crate::db::Pool;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;

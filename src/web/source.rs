@@ -2,8 +2,8 @@
 
 use super::file::File as DbFile;
 use super::page::Page;
-use super::pool::Pool;
 use super::MetaData;
+use crate::db::Pool;
 use crate::Config;
 use iron::prelude::*;
 use postgres::Connection;

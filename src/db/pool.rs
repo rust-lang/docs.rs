@@ -1,6 +1,6 @@
-use crate::db::create_pool;
 use iron::{status::Status, IronError, IronResult};
 use postgres::Connection;
+use std::env;
 use std::marker::PhantomData;
 
 #[cfg(test)]
@@ -15,7 +15,36 @@ pub(crate) enum Pool {
 
 impl Pool {
     pub(crate) fn new() -> Pool {
-        Pool::R2D2(create_pool())
+        let db_url = env::var("CRATESFYI_DATABASE_URL")
+            .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
+
+        let max_pool_size = env::var("DOCSRS_MAX_POOL_SIZE")
+            .map(|s| {
+                s.parse::<u32>()
+                    .expect("DOCSRS_MAX_POOL_SIZE must be an integer")
+            })
+            .unwrap_or(90);
+        crate::web::metrics::MAX_DB_CONNECTIONS.set(max_pool_size as i64);
+
+        let min_pool_idle = env::var("DOCSRS_MIN_POOL_IDLE")
+            .map(|s| {
+                s.parse::<u32>()
+                    .expect("DOCSRS_MIN_POOL_IDLE must be an integer")
+            })
+            .unwrap_or(10);
+
+        let manager = r2d2_postgres::PostgresConnectionManager::new(
+            &db_url[..],
+            r2d2_postgres::TlsMode::None,
+        )
+        .expect("Failed to create PostgresConnectionManager");
+
+        let pool = r2d2::Pool::builder()
+            .max_size(max_pool_size)
+            .min_idle(Some(min_pool_idle))
+            .build(manager)
+            .expect("Failed to create r2d2 pool");
+        Pool::R2D2(pool)
     }
 
     #[cfg(test)]
@@ -23,12 +52,12 @@ impl Pool {
         Pool::Simple(conn)
     }
 
-    pub(super) fn get<'a>(&'a self) -> IronResult<DerefConnection<'a>> {
+    pub(crate) fn get<'a>(&'a self) -> IronResult<DerefConnection<'a>> {
         match self {
             Self::R2D2(conn) => {
                 let conn = conn.get().map_err(|err| {
                     log::error!("Error getting db connection: {:?}", err);
-                    super::metrics::FAILED_DB_CONNECTIONS.inc();
+                    crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
 
                     IronError::new(err, Status::InternalServerError)
                 })?;

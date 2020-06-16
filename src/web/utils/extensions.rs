@@ -1,6 +1,6 @@
 use crate::config::Config;
+use crate::db::Pool;
 use crate::web::page::TemplateData;
-use crate::web::Pool;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 

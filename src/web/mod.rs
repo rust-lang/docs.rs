@@ -48,7 +48,6 @@ mod crate_details;
 mod error;
 mod file;
 pub(crate) mod metrics;
-mod pool;
 mod releases;
 mod routes;
 mod rustdoc;
@@ -57,9 +56,9 @@ mod source;
 mod utils;
 
 use self::page::TemplateData;
-use self::pool::Pool;
 use self::utils::InjectExtensions;
 use crate::config::Config;
+use crate::db::Pool;
 use chrono::{DateTime, Utc};
 use failure::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};

@@ -1,7 +1,7 @@
 use super::duration_to_str;
 use super::page::Page;
-use super::pool::Pool;
 use super::MetaData;
+use crate::db::Pool;
 use crate::docbuilder::Limits;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
