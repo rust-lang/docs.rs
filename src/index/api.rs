@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use failure::err_msg;
-use log::info;
+use log::warn;
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::Deserialize;
@@ -59,12 +59,12 @@ impl Api {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
             .unwrap_or_else(|err| {
-                info!("Failed to get crate data for {}-{}: {}", name, version, err);
+                warn!("Failed to get crate data for {}-{}: {}", name, version, err);
                 (Utc::now(), false, 0)
             });
 
         let owners = self.get_owners(name).unwrap_or_else(|err| {
-            info!("Failed to get owners for {}-{}: {}", name, version, err);
+            warn!("Failed to get owners for {}-{}: {}", name, version, err);
             Vec::new()
         });
 
