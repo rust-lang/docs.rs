@@ -1,5 +1,5 @@
-use super::TEMPLATE_DATA;
-use iron::{headers::ContentType, response::Response, status::Status, IronResult};
+use super::TemplateData;
+use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
 use serde::Serialize;
 use tera::Context;
 
@@ -28,9 +28,13 @@ macro_rules! impl_webpage {
 pub trait WebPage: Serialize + Sized {
     /// Turn the current instance into a `Response`, ready to be served
     // TODO: We could cache similar pages using the `&Context`
-    fn into_response(self) -> IronResult<Response> {
+    fn into_response(self, req: &Request) -> IronResult<Response> {
         let ctx = Context::from_serialize(&self).unwrap();
-        let rendered = TEMPLATE_DATA
+
+        let rendered = req
+            .extensions
+            .get::<TemplateData>()
+            .expect("missing TemplateData from the request extensions")
             .templates
             .load()
             .render(Self::TEMPLATE, &ctx)

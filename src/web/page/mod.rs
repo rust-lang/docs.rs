@@ -8,11 +8,6 @@ pub(crate) use web_page::WebPage;
 
 use serde::Serialize;
 
-lazy_static::lazy_static! {
-    /// Holds all data relevant to templating
-    pub(crate) static ref TEMPLATE_DATA: TemplateData = TemplateData::new().expect("Failed to load template data");
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,

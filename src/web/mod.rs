@@ -55,9 +55,11 @@ mod rustdoc;
 mod sitemap;
 mod source;
 
+use self::page::TemplateData;
 use self::pool::Pool;
 use crate::config::Config;
 use chrono::{DateTime, Utc};
+use failure::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
@@ -112,8 +114,12 @@ impl CratesfyiHandler {
         chain
     }
 
-    fn new(pool: Pool, config: Arc<Config>) -> CratesfyiHandler {
-        let inject_extensions = InjectExtensions { pool, config };
+    fn new(pool: Pool, config: Arc<Config>, template_data: Arc<TemplateData>) -> CratesfyiHandler {
+        let inject_extensions = InjectExtensions {
+            pool,
+            config,
+            template_data,
+        };
 
         let routes = routes::build_routes();
         let blacklisted_prefixes = routes.page_prefixes();
@@ -215,12 +221,15 @@ impl Handler for CratesfyiHandler {
 struct InjectExtensions {
     pool: Pool,
     config: Arc<Config>,
+    template_data: Arc<TemplateData>,
 }
 
 impl BeforeMiddleware for InjectExtensions {
     fn before(&self, req: &mut Request) -> IronResult<()> {
         req.extensions.insert::<Pool>(self.pool.clone());
         req.extensions.insert::<Config>(self.config.clone());
+        req.extensions
+            .insert::<TemplateData>(self.template_data.clone());
 
         Ok(())
     }
@@ -383,24 +392,46 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(addr: Option<&str>, reload_templates: bool, config: Arc<Config>) -> Self {
+    pub fn start(
+        addr: Option<&str>,
+        reload_templates: bool,
+        config: Arc<Config>,
+    ) -> Result<Self, Error> {
         // Initialize templates
-        let _: &page::TemplateData = &*page::TEMPLATE_DATA;
+        let template_data = Arc::new(TemplateData::new()?);
         if reload_templates {
-            page::TemplateData::start_template_reloading();
+            TemplateData::start_template_reloading(template_data.clone());
         }
 
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), Pool::new(), config);
+        let server = Self::start_inner(
+            addr.unwrap_or(DEFAULT_BIND),
+            Pool::new(),
+            config,
+            template_data,
+        );
         info!("Running docs.rs web server on http://{}", server.addr());
-        server
+        Ok(server)
     }
 
     #[cfg(test)]
-    pub(crate) fn start_test(conn: Arc<Mutex<Connection>>, config: Arc<Config>) -> Self {
-        Self::start_inner("127.0.0.1:0", Pool::new_simple(conn.clone()), config)
+    pub(crate) fn start_test(
+        conn: Arc<Mutex<Connection>>,
+        config: Arc<Config>,
+    ) -> Result<Self, Error> {
+        Ok(Self::start_inner(
+            "127.0.0.1:0",
+            Pool::new_simple(conn.clone()),
+            config,
+            Arc::new(TemplateData::new()?),
+        ))
     }
 
-    fn start_inner(addr: &str, pool: Pool, config: Arc<Config>) -> Self {
+    fn start_inner(
+        addr: &str,
+        pool: Pool,
+        config: Arc<Config>,
+        template_data: Arc<TemplateData>,
+    ) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
         metrics::SUCCESSFUL_BUILDS.inc_by(0);
@@ -409,7 +440,7 @@ impl Server {
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
         metrics::FAILED_DB_CONNECTIONS.inc_by(0);
 
-        let cratesfyi = CratesfyiHandler::new(pool, config);
+        let cratesfyi = CratesfyiHandler::new(pool, config, template_data);
         let inner = Iron::new(cratesfyi)
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));

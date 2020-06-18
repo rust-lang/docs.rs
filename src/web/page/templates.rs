@@ -1,11 +1,16 @@
 use crate::error::Result;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
+use notify::{watcher, RecursiveMode, Watcher};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{mpsc::channel, Arc};
+use std::thread;
+use std::time::Duration;
 use tera::{Result as TeraResult, Tera};
 
 /// Holds all data relevant to templating
+#[derive(Debug)]
 pub(crate) struct TemplateData {
     /// The actual templates, stored in an `ArcSwap` so that they're hot-swappable
     // TODO: Conditional compilation so it's not always wrapped, the `ArcSwap` is unneeded overhead for prod
@@ -13,7 +18,7 @@ pub(crate) struct TemplateData {
 }
 
 impl TemplateData {
-    pub fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         log::trace!("Loading templates");
 
         let data = Self {
@@ -25,14 +30,7 @@ impl TemplateData {
         Ok(data)
     }
 
-    pub fn start_template_reloading() {
-        use notify::{watcher, RecursiveMode, Watcher};
-        use std::{
-            sync::{mpsc::channel, Arc},
-            thread,
-            time::Duration,
-        };
-
+    pub(crate) fn start_template_reloading(template_data: Arc<TemplateData>) {
         let (tx, rx) = channel();
         // Set a 2 second event debounce for the watcher
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
@@ -50,7 +48,7 @@ impl TemplateData {
                 match load_templates() {
                     Ok(templates) => {
                         log::info!("Reloaded templates");
-                        super::TEMPLATE_DATA.templates.swap(Arc::new(templates));
+                        template_data.templates.swap(Arc::new(templates));
                     }
 
                     Err(err) => log::error!("Error reloading templates: {:?}", err),
@@ -58,6 +56,10 @@ impl TemplateData {
             }
         });
     }
+}
+
+impl iron::typemap::Key for TemplateData {
+    type Value = std::sync::Arc<TemplateData>;
 }
 
 // TODO: Is there a reason this isn't fatal? If the rustc version is incorrect (Or "???" as used by default), then

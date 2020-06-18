@@ -8,6 +8,7 @@ use crate::{
     Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
+use failure::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
@@ -18,7 +19,7 @@ use std::{env, thread};
 #[cfg(not(target_os = "windows"))]
 use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};
 
-pub fn start_daemon(background: bool, config: Arc<Config>) {
+pub fn start_daemon(background: bool, config: Arc<Config>) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -250,7 +251,8 @@ pub fn start_daemon(background: bool, config: Arc<Config>) {
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, config);
+    crate::Server::start(None, false, config)?;
+    Ok(())
 }
 
 fn opts() -> DocBuilderOptions {
