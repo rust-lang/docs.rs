@@ -1,4 +1,3 @@
-use super::TEMPLATE_DATA;
 use crate::error::Result;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
@@ -7,20 +6,10 @@ use std::collections::HashMap;
 use tera::{Result as TeraResult, Tera};
 
 /// Holds all data relevant to templating
-///
-/// Most data is stored as a pre-serialized `Value` so that we don't have to
-/// re-serialize them every time they're needed. The values themselves are exposed
-/// to templates via custom functions
 pub(crate) struct TemplateData {
     /// The actual templates, stored in an `ArcSwap` so that they're hot-swappable
     // TODO: Conditional compilation so it's not always wrapped, the `ArcSwap` is unneeded overhead for prod
     pub templates: ArcSwap<Tera>,
-    /// The current global alert, serialized into a json value
-    global_alert: Value,
-    /// The version of docs.rs, serialized into a json value
-    docsrs_version: Value,
-    /// The current resource suffix of rustc, serialized into a json value
-    resource_suffix: Value,
 }
 
 impl TemplateData {
@@ -29,12 +18,6 @@ impl TemplateData {
 
         let data = Self {
             templates: ArcSwap::from_pointee(load_templates()?),
-            global_alert: serde_json::to_value(crate::GLOBAL_ALERT)?,
-            docsrs_version: Value::String(crate::BUILD_VERSION.to_owned()),
-            resource_suffix: Value::String(load_rustc_resource_suffix().unwrap_or_else(|err| {
-                log::error!("Failed to load rustc resource suffix: {:?}", err);
-                String::from("???")
-            })),
         };
 
         log::trace!("Finished loading templates");
@@ -99,13 +82,31 @@ fn load_rustc_resource_suffix() -> Result<String> {
     failure::bail!("failed to parse the rustc version");
 }
 
-pub(super) fn load_templates() -> TeraResult<Tera> {
+pub(super) fn load_templates() -> Result<Tera> {
     let mut tera = Tera::new("tera-templates/**/*")?;
 
-    // Custom functions
-    tera.register_function("global_alert", global_alert);
-    tera.register_function("docsrs_version", docsrs_version);
-    tera.register_function("rustc_resource_suffix", rustc_resource_suffix);
+    // This function will return any global alert, if present.
+    ReturnValue::add_function_to(
+        &mut tera,
+        "global_alert",
+        serde_json::to_value(crate::GLOBAL_ALERT)?,
+    );
+    // This function will return the current version of docs.rs.
+    ReturnValue::add_function_to(
+        &mut tera,
+        "docsrs_version",
+        Value::String(crate::BUILD_VERSION.into()),
+    );
+    // This function will return the resource suffix of the latest nightly used to build
+    // documentation on docs.rs, or ??? if no resource suffix was found.
+    ReturnValue::add_function_to(
+        &mut tera,
+        "rustc_resource_suffix",
+        Value::String(load_rustc_resource_suffix().unwrap_or_else(|err| {
+            log::error!("Failed to load rustc resource suffix: {:?}", err);
+            String::from("???")
+        })),
+    );
 
     // Custom filters
     tera.register_filter("timeformat", timeformat);
@@ -115,28 +116,23 @@ pub(super) fn load_templates() -> TeraResult<Tera> {
     Ok(tera)
 }
 
-/// Returns an `Option<GlobalAlert>` in json form for templates
-fn global_alert(args: &HashMap<String, Value>) -> TeraResult<Value> {
-    debug_assert!(args.is_empty(), "global_alert takes no args");
-
-    Ok(TEMPLATE_DATA.global_alert.clone())
+/// Simple function that returns the pre-defined value.
+struct ReturnValue {
+    name: &'static str,
+    value: Value,
 }
 
-/// Returns the version of docs.rs, takes the `safe` parameter which can be `true` to get a url-safe version
-fn docsrs_version(args: &HashMap<String, Value>) -> TeraResult<Value> {
-    debug_assert!(
-        args.is_empty(),
-        "docsrs_version only takes no args, to get a safe version use `docsrs_version() | slugify`",
-    );
-
-    Ok(TEMPLATE_DATA.docsrs_version.clone())
+impl ReturnValue {
+    fn add_function_to(tera: &mut Tera, name: &'static str, value: Value) {
+        tera.register_function(name, Self { name, value })
+    }
 }
 
-/// Returns the current rustc resource suffix
-fn rustc_resource_suffix(args: &HashMap<String, Value>) -> TeraResult<Value> {
-    debug_assert!(args.is_empty(), "rustc_resource_suffix takes no args");
-
-    Ok(TEMPLATE_DATA.resource_suffix.clone())
+impl tera::Function for ReturnValue {
+    fn call(&self, args: &HashMap<String, Value>) -> TeraResult<Value> {
+        debug_assert!(args.is_empty(), format!("{} takes no args", self.name));
+        Ok(self.value.clone())
+    }
 }
 
 /// Prettily format a timestamp
