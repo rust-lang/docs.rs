@@ -136,13 +136,13 @@ impl Api {
         #[derive(Deserialize)]
         struct OwnerData {
             #[serde(default)]
-            avatar: String,
+            avatar: Option<String>,
             #[serde(default)]
-            email: String,
+            email: Option<String>,
             #[serde(default)]
-            login: String,
+            login: Option<String>,
             #[serde(default)]
-            name: String,
+            name: Option<String>,
         }
 
         let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
@@ -150,12 +150,18 @@ impl Api {
         let result = response
             .users
             .into_iter()
-            .filter(|data| !data.login.is_empty())
+            .filter(|data| {
+                !data
+                    .login
+                    .as_ref()
+                    .map(|login| login.is_empty())
+                    .unwrap_or_default()
+            })
             .map(|data| CrateOwner {
-                avatar: data.avatar,
-                email: data.email,
-                login: data.login,
-                name: data.name,
+                avatar: data.avatar.unwrap_or_default(),
+                email: data.email.unwrap_or_default(),
+                login: data.login.unwrap_or_default(),
+                name: data.name.unwrap_or_default(),
             })
             .collect();
 
