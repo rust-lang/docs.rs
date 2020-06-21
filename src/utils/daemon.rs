@@ -16,10 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
 
-#[cfg(not(target_os = "windows"))]
-use ::{libc::fork, std::fs::File, std::io::Write, std::process::exit};
-
-pub fn start_daemon(background: bool, config: Arc<Config>) -> Result<(), Error> {
+pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -37,31 +34,6 @@ pub fn start_daemon(background: bool, config: Arc<Config>) -> Result<(), Error> 
 
     // check paths once
     dbopts.check_paths().unwrap();
-
-    if background {
-        #[cfg(target_os = "windows")]
-        {
-            panic!("running in background not supported on windows");
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            // fork the process
-            let pid = unsafe { fork() };
-            if pid > 0 {
-                let mut file = File::create(dbopts.prefix.join("cratesfyi.pid"))
-                    .expect("Failed to create pid file");
-                writeln!(&mut file, "{}", pid).expect("Failed to write pid");
-
-                info!(
-                    "cratesfyi {} daemon started on: {}",
-                    crate::BUILD_VERSION,
-                    pid
-                );
-                exit(0);
-            }
-        }
-    }
 
     // check new crates every minute
     thread::Builder::new()
