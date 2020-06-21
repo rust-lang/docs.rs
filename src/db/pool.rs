@@ -1,4 +1,3 @@
-use iron::{status::Status, IronError, IronResult};
 use postgres::Connection;
 use std::env;
 use std::marker::PhantomData;
@@ -52,18 +51,15 @@ impl Pool {
         Pool::Simple(conn)
     }
 
-    pub(crate) fn get<'a>(&'a self) -> IronResult<DerefConnection<'a>> {
+    pub(crate) fn get<'a>(&'a self) -> Result<DerefConnection<'a>, PoolError> {
         match self {
-            Self::R2D2(conn) => {
-                let conn = conn.get().map_err(|err| {
-                    log::error!("Error getting db connection: {:?}", err);
+            Self::R2D2(r2d2) => match r2d2.get() {
+                Ok(conn) => Ok(DerefConnection::Connection(conn, PhantomData)),
+                Err(err) => {
                     crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
-
-                    IronError::new(err, Status::InternalServerError)
-                })?;
-
-                Ok(DerefConnection::Connection(conn, PhantomData))
-            }
+                    Err(PoolError::ConnectionError(err))
+                }
+            },
 
             #[cfg(test)]
             Self::Simple(mutex) => Ok(DerefConnection::Guard(
@@ -112,4 +108,10 @@ impl<'a> std::ops::Deref for DerefConnection<'a> {
             Self::Guard(guard) => &guard,
         }
     }
+}
+
+#[derive(Debug, failure::Fail)]
+pub(crate) enum PoolError {
+    #[fail(display = "failed to get a database connection")]
+    ConnectionError(#[fail(cause)] r2d2::Error),
 }

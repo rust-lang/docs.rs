@@ -5,7 +5,7 @@ pub(crate) use self::add_package::add_package_into_database;
 pub use self::delete_crate::delete_crate;
 pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
-pub(crate) use self::pool::Pool;
+pub(crate) use self::pool::{Pool, PoolError};
 
 use failure::Fail;
 use postgres::{Connection, TlsMode};
