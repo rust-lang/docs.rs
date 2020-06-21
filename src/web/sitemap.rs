@@ -49,7 +49,7 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         })
         .collect::<Vec<(String, String)>>();
 
-    SitemapXml { releases }.into_response()
+    SitemapXml { releases }.into_response(req)
 }
 
 pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
@@ -83,5 +83,5 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
         rustc_version,
         limits: Limits::default(),
     }
-    .into_response()
+    .into_response(req)
 }

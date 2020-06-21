@@ -90,9 +90,11 @@ impl CommandLine {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload_templates, config);
+                Server::start(Some(&socket_addr), reload_templates, config)?;
             }
-            Self::Daemon { foreground } => cratesfyi::utils::start_daemon(!foreground, config),
+            Self::Daemon { foreground } => {
+                cratesfyi::utils::start_daemon(!foreground, config)?;
+            }
             Self::Database { subcommand } => subcommand.handle_args(),
             Self::Queue { subcommand } => subcommand.handle_args(),
         }

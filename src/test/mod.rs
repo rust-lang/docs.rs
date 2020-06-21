@@ -212,7 +212,8 @@ pub(crate) struct TestFrontend {
 impl TestFrontend {
     fn new(db: &TestDatabase, config: Arc<Config>) -> Self {
         Self {
-            server: Server::start_test(db.conn.clone(), config),
+            server: Server::start_test(db.conn.clone(), config)
+                .expect("failed to start the server"),
             client: Client::new(),
         }
     }
