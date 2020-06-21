@@ -11,9 +11,9 @@ use serde_json::Value;
 
 /// The sitemap
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct SitemapXml {
+struct SitemapXml {
     /// The release's names and RFC 3339 timestamp to be displayed on the sitemap
-    pub releases: Vec<(String, String)>,
+    releases: Vec<(String, String)>,
 }
 
 impl_webpage! {
@@ -57,11 +57,11 @@ pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct About {
+struct About {
     /// The current version of rustc that docs.rs is using to build crates
-    pub rustc_version: Option<String>,
+    rustc_version: Option<String>,
     /// The default crate build limits
-    pub limits: Limits,
+    limits: Limits,
 }
 
 impl_webpage!(About = "core/about.html");
