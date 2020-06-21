@@ -1,4 +1,6 @@
+use crate::db::PoolError;
 use crate::web::page::Page;
+use failure::Fail;
 use iron::prelude::*;
 use iron::status;
 use iron::Handler;
@@ -69,5 +71,11 @@ impl Handler for Nope {
                     .to_resp("error")
             }
         }
+    }
+}
+
+impl From<PoolError> for IronError {
+    fn from(err: PoolError) -> IronError {
+        IronError::new(err.compat(), status::InternalServerError)
     }
 }
