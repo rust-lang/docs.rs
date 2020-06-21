@@ -3,6 +3,7 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
+    db::Pool,
     docbuilder::RustwideBuilder,
     utils::{github_updater, pubsubhubbub, update_release_activity},
     Config, DocBuilder, DocBuilderOptions,
@@ -16,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
 
-pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
+pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -36,6 +37,7 @@ pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
     dbopts.check_paths().unwrap();
 
     // check new crates every minute
+    let cloned_db = db.clone();
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
@@ -43,7 +45,7 @@ pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
             thread::sleep(Duration::from_secs(30));
             loop {
                 let opts = opts();
-                let mut doc_builder = DocBuilder::new(opts);
+                let mut doc_builder = DocBuilder::new(opts, cloned_db.clone());
 
                 if doc_builder.is_locked() {
                     debug!("Lock file exists, skipping checking new crates");
@@ -62,9 +64,10 @@ pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
 
     // build new crates every minute
     // REFACTOR: Break this into smaller functions
+    let cloned_db = db.clone();
     thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
         let opts = opts();
-        let mut doc_builder = DocBuilder::new(opts);
+        let mut doc_builder = DocBuilder::new(opts, cloned_db.clone());
 
         /// Represents the current state of the builder thread.
         enum BuilderState {
@@ -79,7 +82,7 @@ pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
             QueueInProgress(usize),
         }
 
-        let mut builder = RustwideBuilder::init().unwrap();
+        let mut builder = RustwideBuilder::init(cloned_db).unwrap();
 
         let mut status = BuilderState::Fresh;
 
@@ -192,38 +195,44 @@ pub fn start_daemon(config: Arc<Config>) -> Result<(), Error> {
     }).unwrap();
 
     // update release activity everyday at 23:55
-    thread::Builder::new()
-        .name("release activity updater".to_string())
-        .spawn(move || loop {
-            thread::sleep(Duration::from_secs(60));
-            let now = Utc::now();
-
-            if now.hour() == 23 && now.minute() == 55 {
-                info!("Updating release activity");
-                if let Err(e) = update_release_activity() {
-                    error!("Failed to update release activity: {}", e);
-                }
-            }
-        })
-        .unwrap();
+    let cloned_db = db.clone();
+    cron("release activity updater", 60, move || {
+        let now = Utc::now();
+        if now.hour() == 23 && now.minute() == 55 {
+            info!("Updating release activity");
+            update_release_activity(&*cloned_db.get()?)?;
+        }
+        Ok(())
+    })?;
 
     // update github stats every 6 hours
-    thread::Builder::new()
-        .name("github stat updater".to_string())
-        .spawn(move || loop {
-            thread::sleep(Duration::from_secs(60 * 60 * 6));
-            if let Err(e) = github_updater() {
-                error!("Failed to update github fields: {}", e);
-            }
-        })
-        .unwrap();
+    let cloned_db = db.clone();
+    cron("github stats updater", 60 * 60 * 6, move || {
+        github_updater(&*cloned_db.get()?)?;
+        Ok(())
+    })?;
 
     // TODO: update ssl certificate every 3 months
 
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, config)?;
+    crate::Server::start(None, false, db, config)?;
+    Ok(())
+}
+
+fn cron<F>(name: &'static str, interval: u64, exec: F) -> Result<(), Error>
+where
+    F: Fn() -> Result<(), Error> + Send + 'static,
+{
+    thread::Builder::new()
+        .name(name.into())
+        .spawn(move || loop {
+            thread::sleep(Duration::from_secs(interval));
+            if let Err(err) = exec() {
+                error!("failed to run cron '{}': {:?}", name, err);
+            }
+        })?;
     Ok(())
 }
 

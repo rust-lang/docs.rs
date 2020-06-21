@@ -16,7 +16,14 @@ lazy_static::lazy_static! {
 }
 
 fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
-    let conn = crate::db::connect_db()?;
+    // New instances of the configuration or the connection pool shouldn't be created inside the
+    // application, but we're removing handlebars so this is not going to be a problem in the long
+    // term. To avoid wasting resources, the pool is hardcoded to only keep one connection alive.
+    let mut config = crate::Config::from_env()?;
+    config.max_pool_size = 1;
+    config.min_pool_idle = 1;
+    let pool = crate::db::Pool::new(&config)?;
+    let conn = pool.get()?;
 
     let res = conn.query(
         "SELECT value FROM config WHERE name = 'rustc_version';",

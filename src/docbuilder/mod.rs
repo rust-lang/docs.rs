@@ -10,6 +10,7 @@ pub(self) use self::metadata::Metadata;
 pub(crate) use self::rustwide_builder::BuildResult;
 pub use self::rustwide_builder::RustwideBuilder;
 
+use crate::db::Pool;
 use crate::error::Result;
 use crate::index::Index;
 use crate::DocBuilderOptions;
@@ -24,16 +25,18 @@ use std::path::PathBuf;
 pub struct DocBuilder {
     options: DocBuilderOptions,
     index: Index,
+    db: Pool,
     cache: BTreeSet<String>,
     db_cache: BTreeSet<String>,
 }
 
 impl DocBuilder {
-    pub fn new(options: DocBuilderOptions) -> DocBuilder {
+    pub fn new(options: DocBuilderOptions, db: Pool) -> DocBuilder {
         let index = Index::new(&options.registry_index_path).expect("valid index");
         DocBuilder {
             options,
             index,
+            db,
             cache: BTreeSet::new(),
             db_cache: BTreeSet::new(),
         }
@@ -60,9 +63,7 @@ impl DocBuilder {
     fn load_database_cache(&mut self) -> Result<()> {
         debug!("Loading database cache");
 
-        use crate::db::connect_db;
-        let conn = connect_db()?;
-
+        let conn = self.db.get()?;
         for row in &conn.query(
             "SELECT name, version FROM crates, releases \
              WHERE crates.id = releases.crate_id",

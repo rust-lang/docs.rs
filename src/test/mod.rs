@@ -143,7 +143,7 @@ impl TestEnvironment {
 
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db
-            .get_or_init(|| TestDatabase::new().expect("failed to initialize the db"))
+            .get_or_init(|| TestDatabase::new(&self.config()).expect("failed to initialize the db"))
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
@@ -162,12 +162,12 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    fn new() -> Result<Self, Error> {
+    fn new(config: &Config) -> Result<Self, Error> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let conn = crate::db::connect_db()?;
+        let conn = Connection::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
         conn.batch_execute(&format!(
             "
                 CREATE SCHEMA {0};

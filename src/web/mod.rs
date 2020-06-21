@@ -378,20 +378,16 @@ impl Server {
     pub fn start(
         addr: Option<&str>,
         reload_templates: bool,
+        db: Pool,
         config: Arc<Config>,
     ) -> Result<Self, Error> {
         // Initialize templates
-        let template_data = Arc::new(TemplateData::new()?);
+        let template_data = Arc::new(TemplateData::new(&*db.get()?)?);
         if reload_templates {
-            TemplateData::start_template_reloading(template_data.clone());
+            TemplateData::start_template_reloading(template_data.clone(), db.clone());
         }
 
-        let server = Self::start_inner(
-            addr.unwrap_or(DEFAULT_BIND),
-            Pool::new(),
-            config,
-            template_data,
-        );
+        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), db, config, template_data);
         info!("Running docs.rs web server on http://{}", server.addr());
         Ok(server)
     }
@@ -401,11 +397,13 @@ impl Server {
         conn: Arc<Mutex<Connection>>,
         config: Arc<Config>,
     ) -> Result<Self, Error> {
+        let templates = TemplateData::new(&conn.lock().unwrap())?;
+
         Ok(Self::start_inner(
             "127.0.0.1:0",
             Pool::new_simple(conn.clone()),
             config,
-            Arc::new(TemplateData::new()?),
+            Arc::new(templates),
         ))
     }
 

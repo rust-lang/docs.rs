@@ -1,49 +1,34 @@
+use crate::Config;
 use postgres::Connection;
-use std::env;
 use std::marker::PhantomData;
 
 #[cfg(test)]
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug, Clone)]
-pub(crate) enum Pool {
+pub enum Pool {
     R2D2(r2d2::Pool<r2d2_postgres::PostgresConnectionManager>),
     #[cfg(test)]
     Simple(Arc<Mutex<Connection>>),
 }
 
 impl Pool {
-    pub(crate) fn new() -> Pool {
-        let db_url = env::var("CRATESFYI_DATABASE_URL")
-            .expect("CRATESFYI_DATABASE_URL environment variable is not exists");
-
-        let max_pool_size = env::var("DOCSRS_MAX_POOL_SIZE")
-            .map(|s| {
-                s.parse::<u32>()
-                    .expect("DOCSRS_MAX_POOL_SIZE must be an integer")
-            })
-            .unwrap_or(90);
-        crate::web::metrics::MAX_DB_CONNECTIONS.set(max_pool_size as i64);
-
-        let min_pool_idle = env::var("DOCSRS_MIN_POOL_IDLE")
-            .map(|s| {
-                s.parse::<u32>()
-                    .expect("DOCSRS_MIN_POOL_IDLE must be an integer")
-            })
-            .unwrap_or(10);
+    pub fn new(config: &Config) -> Result<Pool, PoolError> {
+        crate::web::metrics::MAX_DB_CONNECTIONS.set(config.max_pool_size as i64);
 
         let manager = r2d2_postgres::PostgresConnectionManager::new(
-            &db_url[..],
+            config.database_url.as_str(),
             r2d2_postgres::TlsMode::None,
         )
-        .expect("Failed to create PostgresConnectionManager");
+        .map_err(PoolError::PostgresManagerCreationFailed)?;
 
         let pool = r2d2::Pool::builder()
-            .max_size(max_pool_size)
-            .min_idle(Some(min_pool_idle))
+            .max_size(config.max_pool_size)
+            .min_idle(Some(config.min_pool_idle))
             .build(manager)
-            .expect("Failed to create r2d2 pool");
-        Pool::R2D2(pool)
+            .map_err(PoolError::PoolCreationFailed)?;
+
+        Ok(Pool::R2D2(pool))
     }
 
     #[cfg(test)]
@@ -51,7 +36,7 @@ impl Pool {
         Pool::Simple(conn)
     }
 
-    pub(crate) fn get<'a>(&'a self) -> Result<DerefConnection<'a>, PoolError> {
+    pub fn get(&self) -> Result<DerefConnection<'_>, PoolError> {
         match self {
             Self::R2D2(r2d2) => match r2d2.get() {
                 Ok(conn) => Ok(DerefConnection::Connection(conn, PhantomData)),
@@ -87,7 +72,7 @@ impl Pool {
     }
 }
 
-pub(crate) enum DerefConnection<'a> {
+pub enum DerefConnection<'a> {
     Connection(
         r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>,
         PhantomData<&'a ()>,
@@ -111,7 +96,13 @@ impl<'a> std::ops::Deref for DerefConnection<'a> {
 }
 
 #[derive(Debug, failure::Fail)]
-pub(crate) enum PoolError {
+pub enum PoolError {
+    #[fail(display = "failed to create the PostgreSQL connection manager")]
+    PostgresManagerCreationFailed(#[fail(cause)] postgres::Error),
+
+    #[fail(display = "failed to create the connection pool")]
+    PoolCreationFailed(#[fail(cause)] r2d2::Error),
+
     #[fail(display = "failed to get a database connection")]
     ConnectionError(#[fail(cause)] r2d2::Error),
 }

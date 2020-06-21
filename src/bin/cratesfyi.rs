@@ -2,11 +2,11 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cratesfyi::db::{self, add_path_into_database, connect_db};
+use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
-use cratesfyi::Server;
-use cratesfyi::{DocBuilder, DocBuilderOptions, RustwideBuilder};
+use cratesfyi::{Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
 use failure::Error;
+use postgres::Connection;
 use structopt::StructOpt;
 
 pub fn main() -> Result<(), Error> {
@@ -82,25 +82,26 @@ enum CommandLine {
 
 impl CommandLine {
     pub fn handle_args(self) -> Result<(), Error> {
-        let config = Arc::new(cratesfyi::Config::from_env()?);
+        let config = Arc::new(Config::from_env()?);
+        let pool = Pool::new(&config)?;
 
         match self {
-            Self::Build(build) => build.handle_args(),
+            Self::Build(build) => build.handle_args(pool),
             Self::StartWebServer {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload_templates, config)?;
+                Server::start(Some(&socket_addr), reload_templates, pool, config)?;
             }
             Self::Daemon { foreground } => {
                 if foreground {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(config)?;
+                cratesfyi::utils::start_daemon(config, pool)?;
             }
-            Self::Database { subcommand } => subcommand.handle_args(),
-            Self::Queue { subcommand } => subcommand.handle_args(),
+            Self::Database { subcommand } => subcommand.handle_args(&*pool.get()?),
+            Self::Queue { subcommand } => subcommand.handle_args(&*pool.get()?),
         }
 
         Ok(())
@@ -135,19 +136,18 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self) {
+    pub fn handle_args(self, conn: &Connection) {
         match self {
             Self::Add {
                 crate_name,
                 crate_version,
                 build_priority,
             } => {
-                let conn = connect_db().expect("Could not connect to database");
                 add_crate_to_queue(&conn, &crate_name, &crate_version, build_priority)
                     .expect("Could not add crate to queue");
             }
 
-            Self::DefaultPriority { subcommand } => subcommand.handle_args(),
+            Self::DefaultPriority { subcommand } => subcommand.handle_args(conn),
         }
     }
 }
@@ -172,18 +172,14 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self) {
+    pub fn handle_args(self, conn: &Connection) {
         match self {
             Self::Set { pattern, priority } => {
-                let conn = connect_db().expect("Could not connect to the database");
-
                 set_crate_priority(&conn, &pattern, priority)
                     .expect("Could not set pattern's priority");
             }
 
             Self::Remove { pattern } => {
-                let conn = connect_db().expect("Could not connect to the database");
-
                 if let Some(priority) = remove_crate_priority(&conn, &pattern)
                     .expect("Could not remove pattern's priority")
                 {
@@ -237,7 +233,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self) {
+    pub fn handle_args(self, pool: Pool) {
         let docbuilder = {
             let mut doc_options = DocBuilderOptions::from_prefix(self.prefix);
 
@@ -253,10 +249,10 @@ impl Build {
                 .check_paths()
                 .expect("The given paths were invalid");
 
-            DocBuilder::new(doc_options)
+            DocBuilder::new(doc_options, pool.clone())
         };
 
-        self.subcommand.handle_args(docbuilder);
+        self.subcommand.handle_args(docbuilder, pool);
     }
 }
 
@@ -304,12 +300,12 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, mut docbuilder: DocBuilder) {
+    pub fn handle_args(self, mut docbuilder: DocBuilder, pool: cratesfyi::db::Pool) {
         match self {
             Self::World => {
                 docbuilder.load_cache().expect("Failed to load cache");
 
-                let mut builder = RustwideBuilder::init().unwrap();
+                let mut builder = RustwideBuilder::init(pool).unwrap();
                 builder
                     .build_world(&mut docbuilder)
                     .expect("Failed to build world");
@@ -323,7 +319,8 @@ impl BuildSubcommand {
                 local,
             } => {
                 docbuilder.load_cache().expect("Failed to load cache");
-                let mut builder = RustwideBuilder::init().expect("failed to initialize rustwide");
+                let mut builder =
+                    RustwideBuilder::init(pool).expect("failed to initialize rustwide");
 
                 if let Some(path) = local {
                     builder
@@ -345,7 +342,7 @@ impl BuildSubcommand {
 
             Self::UpdateToolchain { only_first_time } => {
                 if only_first_time {
-                    let conn = db::connect_db().unwrap();
+                    let conn = pool.get().expect("failed to get a database connection");
                     let res = conn
                         .query("SELECT * FROM config WHERE name = 'rustc_version';", &[])
                         .unwrap();
@@ -356,14 +353,14 @@ impl BuildSubcommand {
                     }
                 }
 
-                let mut builder = RustwideBuilder::init().unwrap();
+                let mut builder = RustwideBuilder::init(pool).unwrap();
                 builder
                     .update_toolchain()
                     .expect("failed to update toolchain");
             }
 
             Self::AddEssentialFiles => {
-                let mut builder = RustwideBuilder::init().unwrap();
+                let mut builder = RustwideBuilder::init(pool).unwrap();
                 builder
                     .add_essential_files()
                     .expect("failed to add essential files");
@@ -378,7 +375,7 @@ impl BuildSubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
 enum DatabaseSubcommand {
-    /// Run database migrations
+    /// Run database migration
     Migrate {
         /// The database version to migrate to
         #[structopt(name = "VERSION")]
@@ -415,33 +412,30 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self) {
+    pub fn handle_args(self, conn: &Connection) {
         match self {
             Self::Migrate { version } => {
-                let conn = connect_db().expect("failed to connect to the database");
                 db::migrate(version, &conn).expect("Failed to run database migrations");
             }
 
             Self::UpdateGithubFields => {
-                cratesfyi::utils::github_updater().expect("Failed to update github fields");
+                cratesfyi::utils::github_updater(&conn).expect("Failed to update github fields");
             }
 
             Self::AddDirectory { directory, prefix } => {
-                let conn = db::connect_db().expect("failed to connect to the database");
                 add_path_into_database(&conn, &prefix, directory)
                     .expect("Failed to add directory into database");
             }
 
             // FIXME: This is actually util command not database
-            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity()
+            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&conn)
                 .expect("Failed to update release activity"),
 
             Self::DeleteCrate { crate_name } => {
-                let conn = db::connect_db().expect("failed to connect to the database");
                 db::delete_crate(&conn, &crate_name).expect("failed to delete the crate");
             }
 
-            Self::Blacklist { command } => command.handle_args(),
+            Self::Blacklist { command } => command.handle_args(&conn),
         }
     }
 }
@@ -467,9 +461,7 @@ enum BlacklistSubcommand {
 }
 
 impl BlacklistSubcommand {
-    fn handle_args(self) {
-        let conn = db::connect_db().expect("failed to connect to the database");
-
+    fn handle_args(self, conn: &Connection) {
         match self {
             Self::List => {
                 let crates =

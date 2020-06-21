@@ -1,7 +1,9 @@
+use crate::db::Pool;
 use crate::error::Result;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use notify::{watcher, RecursiveMode, Watcher};
+use postgres::Connection;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{mpsc::channel, Arc};
@@ -18,11 +20,11 @@ pub(crate) struct TemplateData {
 }
 
 impl TemplateData {
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new(conn: &Connection) -> Result<Self> {
         log::trace!("Loading templates");
 
         let data = Self {
-            templates: ArcSwap::from_pointee(load_templates()?),
+            templates: ArcSwap::from_pointee(load_templates(conn)?),
         };
 
         log::trace!("Finished loading templates");
@@ -30,7 +32,7 @@ impl TemplateData {
         Ok(data)
     }
 
-    pub(crate) fn start_template_reloading(template_data: Arc<TemplateData>) {
+    pub(crate) fn start_template_reloading(template_data: Arc<TemplateData>, pool: Pool) {
         let (tx, rx) = channel();
         // Set a 2 second event debounce for the watcher
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
@@ -40,29 +42,30 @@ impl TemplateData {
             .unwrap();
 
         thread::spawn(move || {
+            fn reload(template_data: &TemplateData, pool: &Pool) -> Result<()> {
+                let conn = pool.get()?;
+                template_data
+                    .templates
+                    .swap(Arc::new(load_templates(&conn)?));
+                log::info!("Reloaded templates");
+
+                Ok(())
+            }
+
             // The watcher needs to be moved into the thread so that it's not dropped (when dropped,
             // all updates cease)
             let _watcher = watcher;
 
             while rx.recv().is_ok() {
-                match load_templates() {
-                    Ok(templates) => {
-                        log::info!("Reloaded templates");
-                        template_data.templates.swap(Arc::new(templates));
-                    }
-
-                    Err(err) => log::error!("Error reloading templates: {:?}", err),
+                if let Err(err) = reload(&template_data, &pool) {
+                    log::error!("failed to reload templates: {:?}", err);
                 }
             }
         });
     }
 }
 
-// TODO: Is there a reason this isn't fatal? If the rustc version is incorrect (Or "???" as used by default), then
-//       all pages will be served *really* weird because they'll lack all CSS
-fn load_rustc_resource_suffix() -> Result<String> {
-    let conn = crate::db::connect_db()?;
-
+fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
     let res = conn.query(
         "SELECT value FROM config WHERE name = 'rustc_version';",
         &[],
@@ -80,7 +83,7 @@ fn load_rustc_resource_suffix() -> Result<String> {
     failure::bail!("failed to parse the rustc version");
 }
 
-pub(super) fn load_templates() -> Result<Tera> {
+pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
     let mut tera = Tera::new("tera-templates/**/*")?;
 
     // This function will return any global alert, if present.
@@ -100,8 +103,11 @@ pub(super) fn load_templates() -> Result<Tera> {
     ReturnValue::add_function_to(
         &mut tera,
         "rustc_resource_suffix",
-        Value::String(load_rustc_resource_suffix().unwrap_or_else(|err| {
+        Value::String(load_rustc_resource_suffix(conn).unwrap_or_else(|err| {
             log::error!("Failed to load rustc resource suffix: {:?}", err);
+            // This is not fatal because the server might be started before essential files are
+            // generated during development. Returning "???" provides a degraded UX, but allows the
+            // server to start every time.
             String::from("???")
         })),
     );
@@ -195,7 +201,13 @@ mod tests {
 
     #[test]
     fn test_templates_are_valid() {
-        let tera = load_templates().unwrap();
-        tera.check_macro_files().unwrap();
+        crate::test::wrapper(|env| {
+            let db = env.db();
+
+            let tera = load_templates(&db.conn()).unwrap();
+            tera.check_macro_files().unwrap();
+
+            Ok(())
+        });
     }
 }
