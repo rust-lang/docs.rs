@@ -67,8 +67,6 @@ chrono = { version = "0.4.11", features = ["serde"] }
 time = "0.1" # TODO: Remove once `iron` is removed
 
 [target.'cfg(not(windows))'.dependencies]
-libc = "0.2"
-
 # Process information
 procfs = "0.7"
 

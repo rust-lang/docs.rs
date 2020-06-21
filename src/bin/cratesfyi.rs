@@ -62,7 +62,7 @@ enum CommandLine {
 
     /// Starts cratesfyi daemon
     Daemon {
-        /// Run the server in the foreground instead of detaching a child
+        /// Deprecated. Run the server in the foreground instead of detaching a child
         #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
         foreground: bool,
     },
@@ -93,7 +93,11 @@ impl CommandLine {
                 Server::start(Some(&socket_addr), reload_templates, config)?;
             }
             Self::Daemon { foreground } => {
-                cratesfyi::utils::start_daemon(!foreground, config)?;
+                if foreground {
+                    log::warn!("--foreground was passed, but there is no need for it anymore");
+                }
+
+                cratesfyi::utils::start_daemon(config)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(),
             Self::Queue { subcommand } => subcommand.handle_args(),
