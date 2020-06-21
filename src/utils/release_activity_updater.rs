@@ -1,10 +1,9 @@
-use crate::db::connect_db;
 use crate::error::Result;
 use chrono::{Duration, Utc};
+use postgres::Connection;
 use serde_json::{Map, Value};
 
-pub fn update_release_activity() -> Result<()> {
-    let conn = connect_db()?;
+pub fn update_release_activity(conn: &Connection) -> Result<()> {
     let mut dates = Vec::with_capacity(30);
     let mut crate_counts = Vec::with_capacity(30);
     let mut failure_counts = Vec::with_capacity(30);
@@ -66,16 +65,4 @@ pub fn update_release_activity() -> Result<()> {
     )?;
 
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::update_release_activity;
-
-    #[test]
-    #[ignore]
-    fn test_update_release_activity() {
-        crate::test::init_logger();
-        assert!(update_release_activity().is_ok());
-    }
 }

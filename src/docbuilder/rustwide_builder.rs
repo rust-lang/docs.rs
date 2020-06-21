@@ -2,7 +2,7 @@ use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
-use crate::db::{add_build_into_database, add_package_into_database, connect_db};
+use crate::db::{add_build_into_database, add_package_into_database, Pool};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::storage::CompressionAlgorithms;
@@ -66,12 +66,13 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
+    db: Pool,
     rustc_version: String,
     cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
-    pub fn init() -> Result<Self> {
+    pub fn init(db: Pool) -> Result<Self> {
         use rustwide::cmd::SandboxImage;
         let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
         let workspace_path = env_workspace_path
@@ -105,6 +106,7 @@ impl RustwideBuilder {
         Ok(RustwideBuilder {
             workspace,
             toolchain,
+            db,
             rustc_version: String::new(),
             cpu_limit,
         })
@@ -192,7 +194,7 @@ impl RustwideBuilder {
 
         info!("building a dummy crate to get essential files");
 
-        let conn = connect_db()?;
+        let conn = self.db.get()?;
         let limits = Limits::for_crate(&conn, DUMMY_CRATE_NAME)?;
 
         let mut build_dir = self
@@ -305,7 +307,7 @@ impl RustwideBuilder {
 
         info!("building package {} {}", name, version);
 
-        let conn = connect_db()?;
+        let conn = self.db.get()?;
 
         if is_blacklisted(&conn, name)? {
             info!("skipping build of {}, crate has been blacklisted", name);

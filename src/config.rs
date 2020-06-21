@@ -1,9 +1,15 @@
-use failure::{bail, Error, Fail, ResultExt};
+use failure::{bail, format_err, Error, Fail, ResultExt};
 use std::env::VarError;
 use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Config {
+    // Database connection params
+    pub(crate) database_url: String,
+    pub(crate) max_pool_size: u32,
+    pub(crate) min_pool_idle: u32,
+
+    // Max size of the files served by the docs.rs frontend
     pub(crate) max_file_size: usize,
     pub(crate) max_file_size_html: usize,
 }
@@ -11,6 +17,10 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
         Ok(Self {
+            database_url: require_env("CRATESFYI_DATABASE_URL")?,
+            max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
+            min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
+
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 5 * 1024 * 1024)?,
         })
@@ -22,11 +32,28 @@ where
     T: FromStr,
     T::Err: Fail,
 {
+    Ok(maybe_env(var)?.unwrap_or(default))
+}
+
+fn require_env<T>(var: &str) -> Result<T, Error>
+where
+    T: FromStr,
+    T::Err: Fail,
+{
+    maybe_env(var)?.ok_or_else(|| format_err!("configuration variable {} is missing", var))
+}
+
+fn maybe_env<T>(var: &str) -> Result<Option<T>, Error>
+where
+    T: FromStr,
+    T::Err: Fail,
+{
     match std::env::var(var) {
         Ok(content) => Ok(content
             .parse::<T>()
+            .map(Some)
             .with_context(|_| format!("failed to parse configuration variable {}", var))?),
-        Err(VarError::NotPresent) => Ok(default),
+        Err(VarError::NotPresent) => Ok(None),
         Err(VarError::NotUnicode(_)) => bail!("configuration variable {} is not UTF-8", var),
     }
 }

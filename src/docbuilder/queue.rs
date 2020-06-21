@@ -1,7 +1,6 @@
 //! Updates registry index and builds new packages
 
 use super::{DocBuilder, RustwideBuilder};
-use crate::db::connect_db;
 use crate::error::Result;
 use crate::utils::{add_crate_to_queue, get_crate_priority};
 use crates_index_diff::ChangeKind;
@@ -11,7 +10,7 @@ impl DocBuilder {
     /// Updates registry index repository and adds new crates into build queue.
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
-        let conn = connect_db()?;
+        let conn = self.db.get()?;
         let diff = self.index.diff()?;
         let (mut changes, oid) = diff.peek_changes()?;
         let mut crates_added = 0;
@@ -65,7 +64,7 @@ impl DocBuilder {
     }
 
     pub fn get_queue_count(&self) -> Result<i64> {
-        let conn = connect_db()?;
+        let conn = self.db.get()?;
 
         Ok(conn
             .query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])?
@@ -78,32 +77,42 @@ impl DocBuilder {
         &mut self,
         builder: &mut RustwideBuilder,
     ) -> Result<bool> {
-        let conn = connect_db()?;
+        // This is in a nested scope to drop the connection before build_package is called,
+        // otherwise the borrow checker will complain.
+        let (id, name, version) = {
+            let conn = self.db.get()?;
 
-        let query = conn.query(
-            "SELECT id, name, version
-                                     FROM queue
-                                     WHERE attempt < 5
-                                     ORDER BY priority ASC, attempt ASC, id ASC
-                                     LIMIT 1",
-            &[],
-        )?;
+            let query = conn.query(
+                "SELECT id, name, version
+                                         FROM queue
+                                         WHERE attempt < 5
+                                         ORDER BY priority ASC, attempt ASC, id ASC
+                                         LIMIT 1",
+                &[],
+            )?;
 
-        if query.is_empty() {
-            // nothing in the queue; bail
-            return Ok(false);
-        }
+            if query.is_empty() {
+                // nothing in the queue; bail
+                return Ok(false);
+            }
 
-        let id: i32 = query.get(0).get(0);
-        let name: String = query.get(0).get(1);
-        let version: String = query.get(0).get(2);
+            let id: i32 = query.get(0).get(0);
+            let name: String = query.get(0).get(1);
+            let version: String = query.get(0).get(2);
+
+            (id, name, version)
+        };
 
         match builder.build_package(self, &name, &version, None) {
             Ok(_) => {
+                let conn = self.db.get()?;
+
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
                 crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
+                let conn = self.db.get()?;
+
                 // Increase attempt count
                 let rows = conn.query(
                     "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
@@ -125,25 +134,5 @@ impl DocBuilder {
         }
 
         Ok(true)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{DocBuilder, DocBuilderOptions};
-    use log::error;
-    use std::path::PathBuf;
-
-    #[test]
-    #[ignore]
-    fn test_get_new_crates() {
-        crate::test::init_logger();
-        let options = DocBuilderOptions::from_prefix(PathBuf::from("../cratesfyi-prefix"));
-        let mut docbuilder = DocBuilder::new(options);
-        let res = docbuilder.get_new_crates();
-        if res.is_err() {
-            error!("{:?}", res);
-        }
-        assert!(res.is_ok());
     }
 }

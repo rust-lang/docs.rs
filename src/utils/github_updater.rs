@@ -1,7 +1,8 @@
-use crate::{db::connect_db, error::Result};
+use crate::error::Result;
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::debug;
+use postgres::Connection;
 use regex::Regex;
 use std::str::FromStr;
 
@@ -16,9 +17,7 @@ struct GitHubFields {
 }
 
 /// Updates github fields in crates table
-pub fn github_updater() -> Result<()> {
-    let conn = connect_db()?;
-
+pub fn github_updater(conn: &Connection) -> Result<()> {
     // TODO: This query assumes repository field in Cargo.toml is
     //       always the same across all versions of a crate
     for row in &conn.query(
@@ -174,27 +173,5 @@ mod test {
             get_github_path("https://github.com/docopt/docopt.rs"),
             Some("docopt/docopt.rs".to_string())
         );
-    }
-
-    #[test]
-    #[ignore]
-    fn test_get_github_fields() {
-        let fields = get_github_fields("onur/cratesfyi");
-        assert!(fields.is_ok());
-
-        let fields = fields.unwrap();
-        assert!(fields.description != "");
-        assert!(fields.stars >= 0);
-        assert!(fields.forks >= 0);
-        assert!(fields.issues >= 0);
-
-        assert!(fields.last_commit <= Utc::now());
-    }
-
-    #[test]
-    #[ignore]
-    fn test_github_updater() {
-        crate::test::init_logger();
-        assert!(github_updater().is_ok());
     }
 }
