@@ -58,10 +58,6 @@ impl TemplateData {
     }
 }
 
-impl iron::typemap::Key for TemplateData {
-    type Value = std::sync::Arc<TemplateData>;
-}
-
 // TODO: Is there a reason this isn't fatal? If the rustc version is incorrect (Or "???" as used by default), then
 //       all pages will be served *really* weird because they'll lack all CSS
 fn load_rustc_resource_suffix() -> Result<String> {

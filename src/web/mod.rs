@@ -54,9 +54,11 @@ mod routes;
 mod rustdoc;
 mod sitemap;
 mod source;
+mod utils;
 
 use self::page::TemplateData;
 use self::pool::Pool;
+use self::utils::InjectExtensions;
 use crate::config::Config;
 use chrono::{DateTime, Utc};
 use failure::Error;
@@ -64,7 +66,7 @@ use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;
 use iron::prelude::*;
-use iron::{self, status, BeforeMiddleware, Handler, Listening, Url};
+use iron::{self, status, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
@@ -214,24 +216,6 @@ impl Handler for CratesfyiHandler {
 
                 Self::chain(self.inject_extensions.clone(), err).handle(req)
             })
-    }
-}
-
-#[derive(Debug, Clone)]
-struct InjectExtensions {
-    pool: Pool,
-    config: Arc<Config>,
-    template_data: Arc<TemplateData>,
-}
-
-impl BeforeMiddleware for InjectExtensions {
-    fn before(&self, req: &mut Request) -> IronResult<()> {
-        req.extensions.insert::<Pool>(self.pool.clone());
-        req.extensions.insert::<Config>(self.config.clone());
-        req.extensions
-            .insert::<TemplateData>(self.template_data.clone());
-
-        Ok(())
     }
 }
 

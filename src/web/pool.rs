@@ -1,5 +1,5 @@
 use crate::db::create_pool;
-use iron::{status::Status, typemap, IronError, IronResult};
+use iron::{status::Status, IronError, IronResult};
 use postgres::Connection;
 use std::marker::PhantomData;
 
@@ -60,10 +60,6 @@ impl Pool {
             Self::Simple(..) => 0,
         }
     }
-}
-
-impl typemap::Key for Pool {
-    type Value = Pool;
 }
 
 pub(crate) enum DerefConnection<'a> {

@@ -1,7 +1,6 @@
 use failure::{bail, Error, Fail, ResultExt};
 use std::env::VarError;
 use std::str::FromStr;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Config {
@@ -16,10 +15,6 @@ impl Config {
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 5 * 1024 * 1024)?,
         })
     }
-}
-
-impl iron::typemap::Key for Config {
-    type Value = Arc<Config>;
 }
 
 fn env<T>(var: &str, default: T) -> Result<T, Error>
