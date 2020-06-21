@@ -1,16 +1,29 @@
 //! Releases web handlers
 
-use super::error::Nope;
-use super::page::Page;
-use super::{duration_to_str, match_version, redirect_base};
-use crate::db::Pool;
-use crate::BuildQueue;
+use crate::{
+    db::Pool,
+    impl_webpage,
+    web::{
+        duration_to_str,
+        error::Nope,
+        match_version,
+        page::{Page, WebPage},
+        redirect_base,
+    },
+    BuildQueue,
+};
 use chrono::{DateTime, NaiveDateTime, Utc};
-use iron::prelude::*;
-use iron::status;
+use iron::{
+    headers::ContentType,
+    mime::{Mime, SubLevel, TopLevel},
+    status, IronError, IronResult, Plugin, Request, Response,
+};
 use postgres::Connection;
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Serialize,
+};
 use serde_json::Value;
 
 /// Number of release in home page
@@ -352,14 +365,21 @@ pub fn home_page(req: &mut Request) -> IronResult<Response> {
         .to_resp("releases")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ReleaseFeed {
+    recent_releases: Vec<Release>,
+}
+
+impl_webpage! {
+    ReleaseFeed  = "releases/feed.xml",
+    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+}
+
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
-    let mut resp = ctry!(Page::new(packages).to_resp("releases_feed"));
-    resp.headers.set(::iron::headers::ContentType(
-        "application/atom+xml".parse().unwrap(),
-    ));
-    Ok(resp)
+    let recent_releases = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+
+    ReleaseFeed { recent_releases }.into_response(req)
 }
 
 fn releases_handler(
