@@ -72,6 +72,13 @@ lazy_static::lazy_static! {
     )
     .unwrap();
 
+    pub static ref RUSTDOC_RENDERING_TIMES: HistogramVec = register_histogram_vec!(
+        "docsrs_rustdoc_rendering_time",
+        "The time it takes to render a rustdoc page",
+        &["step"]
+    )
+    .unwrap();
+
     pub static ref FAILED_DB_CONNECTIONS: IntCounter = register_int_counter!(
         "docsrs_failed_db_connections",
         "Number of attempted and failed connections to the database"
@@ -194,6 +201,47 @@ impl iron::Handler for RequestRecorder {
         tests::record_tests(&self.route_name);
 
         result
+    }
+}
+
+struct RenderingTime {
+    start: Instant,
+    step: &'static str,
+}
+
+pub(crate) struct RenderingTimesRecorder {
+    metric: &'static HistogramVec,
+    current: Option<RenderingTime>,
+}
+
+impl RenderingTimesRecorder {
+    pub(crate) fn new(metric: &'static HistogramVec) -> Self {
+        Self {
+            metric,
+            current: None,
+        }
+    }
+
+    pub(crate) fn step(&mut self, step: &'static str) {
+        self.record_current();
+        self.current = Some(RenderingTime {
+            start: Instant::now(),
+            step,
+        });
+    }
+
+    fn record_current(&mut self) {
+        if let Some(current) = self.current.take() {
+            self.metric
+                .with_label_values(&[current.step])
+                .observe(duration_to_seconds(current.start.elapsed()));
+        }
+    }
+}
+
+impl Drop for RenderingTimesRecorder {
+    fn drop(&mut self) {
+        self.record_current();
     }
 }
 

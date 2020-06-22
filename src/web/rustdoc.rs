@@ -3,6 +3,7 @@
 use super::crate_details::CrateDetails;
 use super::error::Nope;
 use super::file::File;
+use super::metrics;
 use super::page::Page;
 use super::pool::Pool;
 use super::redirect_base;
@@ -215,6 +216,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
+    let mut rendering_time =
+        metrics::RenderingTimesRecorder::new(&metrics::RUSTDOC_RENDERING_TIMES);
+
     // Get the request parameters
     let router = extension!(req, Router);
 
@@ -246,6 +250,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         Ok(super::redirect(url))
     };
 
+    rendering_time.step("match version");
+
     // Check the database for releases with the requested version while doing the following:
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
@@ -275,6 +281,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
     };
 
+    rendering_time.step("crate details");
+
     // Get the crate's details from the database
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
@@ -283,6 +291,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     if req_path.get(0).copied() == Some(&crate_details.metadata.default_target) {
         return redirect(&name, &version, &req_path[1..]);
     }
+
+    rendering_time.step("fetch from storage");
 
     // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
     req_path.insert(0, "rustdoc");
@@ -311,8 +321,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // Serve non-html files directly
     if !path.ends_with(".html") {
+        rendering_time.step("serve asset");
         return Ok(file.serve());
     }
+
+    rendering_time.step("parse html");
 
     let file_content = ctry!(String::from_utf8(file.0.content));
     // Extract the head and body of the rustdoc file so that we can insert it into our own html
@@ -325,6 +338,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         // rustdoc adds its own "rustdoc" class to the body
         body_class.push_str(" container-rustdoc");
     }
+
+    rendering_time.step("serve html");
 
     let latest_release = crate_details.latest_release();
 
