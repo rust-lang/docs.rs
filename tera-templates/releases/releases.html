@@ -1,0 +1,101 @@
+{%- extends "base.html" -%}
+{%- import "releases/header.html" as release_macros -%}
+
+{%- block title -%}Releases - Docs.rs{%- endblock title -%}
+
+{%- block header -%}
+    {# These all have defaults so searches work #}
+    {{ release_macros::header(title="Releases", description=description | default(value=""), tab=release_type, author=author | default(value=false)) }}
+{%- endblock header -%}
+
+{%- block body -%}
+    <div class="container">
+        <div class="recent-releases-container">
+            <ul>
+                {# TODO: If there are no releases, then display a message that says so #}
+                {%- for release in releases -%}
+                    {%- if rustdoc_status -%}
+                        {% set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+                    {%- else -%}
+                        {% set link = "/" ~ release.name ~ "/" ~ release.version -%}
+                    {%- endif -%}
+
+                    <li>
+                        <a href="{{ link }}"
+                            class="release">
+                            <div class="pure-g">
+                                <div class="pure-u-1 pure-u-sm-6-24 pure-u-md-5-24 name">
+                                    {{ release.name }}-{{ release.version }}
+                                </div>
+
+                                <div class="pure-u-1 pure-u-sm-14-24 pure-u-md-16-24 description">
+                                    {{ release.description }}
+                                </div>
+
+                                <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                    {{ release.release_time | timeformat(relative=true) }}
+                                </div>
+                            </div>
+                        </a>
+                    </li>
+                {%- endfor -%}
+            </ul>
+
+            <div class="pagination">
+                {%- set page_link = "/releases/" ~ release_type -%}
+                {%- if release_type == 'search' -%}
+                    {%- set query = "?search=" ~ search_query -%}
+                {%- endif -%}
+
+                {%- if show_previous_page -%}
+                    <a class="pure-button pure-button-normal" href="{{ page_link }}/{{ page_number - 1 }}{{ query | default(value='') }}">
+                        <i class="fa fa-arrow-left"></i> Previous Page
+                    </a>
+                {%- endif -%}
+
+                {%- if show_next_page -%}
+                    <a class="pure-button pure-button-normal" href="{{ page_link }}/{{ page_number + 1 }}{{ query | default(value='') }}">
+                        Next Page <i class="fa fa-arrow-right"></i>
+                    </a>
+                {%- endif -%}
+            </div>
+        </div>
+    </div>
+{%- endblock body -%}
+
+{%- block javascript -%}
+    <script type="text/javascript" charset="utf-8">
+        function getKey(ev) {
+            if ("key" in ev && typeof ev.key != "undefined") {
+                return ev.key;
+            }
+            return String.fromCharCode(ev.charCode || ev.keyCode);
+        }
+
+        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
+            var form = document.getElementsByClassName("landing-search-form");
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'i-am-feeling-lucky';
+            input.value = 1;
+            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+            return true;
+        };
+
+        function handleShortcut(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+            switch (getKey(ev)) {
+                case "s":
+                case "S":
+                    ev.preventDefault();
+                    document.getElementById("search").focus();
+                    break;
+            }
+        }
+
+        document.onkeypress = handleShortcut;
+        document.onkeydown = handleShortcut;
+    </script>
+{%- endblock javascript -%}
