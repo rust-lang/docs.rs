@@ -79,7 +79,7 @@ impl DocBuilder {
     ) -> Result<bool> {
         // This is in a nested scope to drop the connection before build_package is called,
         // otherwise the borrow checker will complain.
-        let (id, name, version) = {
+        let (id, name, version): (i64, String, String) = {
             let conn = self.db.get()?;
 
             let query = conn.query(
@@ -96,11 +96,8 @@ impl DocBuilder {
                 return Ok(false);
             }
 
-            let id: i32 = query.get(0).get(0);
-            let name: String = query.get(0).get(1);
-            let version: String = query.get(0).get(2);
-
-            (id, name, version)
+            let row = query.get(0);
+            (row.get("id"), row.get("name"), row.get("version"))
         };
 
         match builder.build_package(self, &name, &version, None) {
