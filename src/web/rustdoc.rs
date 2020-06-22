@@ -339,7 +339,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         body_class.push_str(" container-rustdoc");
     }
 
-    rendering_time.step("serve html");
+    rendering_time.step("find latest path");
 
     let latest_release = crate_details.latest_release();
 
@@ -366,6 +366,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     } else {
         format!("/crate/{}/{}", name, latest_version)
     };
+
+    rendering_time.step("serve html");
 
     // The path within this crate version's rustdoc output
     let inner_path = {
