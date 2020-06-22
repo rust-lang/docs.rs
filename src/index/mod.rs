@@ -41,6 +41,8 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 impl Index {
     pub(crate) fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_owned();
+        // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
+        // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
             .context("initialising registry index repository")?;
         let config = load_config(diff.repository()).context("loading registry config")?;
