@@ -20,7 +20,7 @@ impl Pool {
             config.database_url.as_str(),
             r2d2_postgres::TlsMode::None,
         )
-        .map_err(PoolError::PostgresManagerCreationFailed)?;
+        .map_err(PoolError::InvalidDatabaseUrl)?;
 
         let pool = r2d2::Pool::builder()
             .max_size(config.max_pool_size)
@@ -97,8 +97,8 @@ impl<'a> std::ops::Deref for DerefConnection<'a> {
 
 #[derive(Debug, failure::Fail)]
 pub enum PoolError {
-    #[fail(display = "failed to create the PostgreSQL connection manager")]
-    PostgresManagerCreationFailed(#[fail(cause)] postgres::Error),
+    #[fail(display = "the provided database URL was not valid")]
+    InvalidDatabaseUrl(#[fail(cause)] postgres::Error),
 
     #[fail(display = "failed to create the connection pool")]
     PoolCreationFailed(#[fail(cause)] r2d2::Error),
