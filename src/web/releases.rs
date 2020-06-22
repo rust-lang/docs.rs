@@ -363,114 +363,102 @@ pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     ReleaseFeed { recent_releases }.into_response(req)
 }
 
-fn releases_handler(
-    packages: Vec<Release>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ViewReleases {
+    releases: Vec<Release>,
+    description: String,
+    release_type: ReleaseType,
+    show_next_page: bool,
+    show_previous_page: bool,
     page_number: i64,
-    release_type: &str,
-    tab: &str,
-    title: &str,
-) -> IronResult<Response> {
-    if packages.is_empty() {
-        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
-    }
+    author: Option<String>,
+}
+
+impl_webpage! {
+    ViewReleases = "releases/releases.html",
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum ReleaseType {
+    Recent,
+    Stars,
+    RecentFailures,
+    Failures,
+    Author,
+    Search,
+}
+
+fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<Response> {
+    let page_number: i64 = extension!(req, Router)
+        .find("page")
+        .and_then(|page_num| page_num.parse().ok())
+        .unwrap_or(1);
+
+    let (description, number_releases, release_order) = match release_type {
+        ReleaseType::Recent => (
+            "Recently uploaded crates",
+            RELEASES_IN_RELEASES,
+            Order::ReleaseTime,
+        ),
+        ReleaseType::Stars => (
+            "Crates with most stars",
+            RELEASES_IN_RELEASES,
+            Order::GithubStars,
+        ),
+        ReleaseType::RecentFailures => (
+            "Recent crates failed to build",
+            RELEASES_IN_RELEASES,
+            Order::RecentFailures,
+        ),
+        ReleaseType::Failures => (
+            "Crates with most stars failed to build",
+            RELEASES_IN_RELEASES,
+            Order::FailuresByGithubStars,
+        ),
+
+        ReleaseType::Author | ReleaseType::Search => unreachable!(
+            "The authors and search page have special requirements and cannot use this handler",
+        ),
+    };
+
+    let releases = {
+        let conn = extension!(req, Pool).get()?;
+        get_releases(&conn, page_number, number_releases, release_order)
+    };
 
     // Show next and previous page buttons
-    // This is a temporary solution to avoid expensive COUNT(*)
     let (show_next_page, show_previous_page) = (
-        packages.len() == RELEASES_IN_RELEASES as usize,
+        releases.len() == RELEASES_IN_RELEASES as usize,
         page_number != 1,
     );
 
-    Page::new(packages)
-        .title("Releases")
-        .set("description", title)
-        .set("release_type", release_type)
-        .set_true("show_releases_navigation")
-        .set_true(tab)
-        .set_bool("show_next_page_button", show_next_page)
-        .set_int("next_page", page_number + 1)
-        .set_bool("show_previous_page_button", show_previous_page)
-        .set_int("previous_page", page_number - 1)
-        .to_resp("releases")
+    ViewReleases {
+        releases,
+        description: description.into(),
+        release_type,
+        show_next_page,
+        show_previous_page,
+        page_number,
+        author: None,
+    }
+    .into_response(req)
 }
 
-// Following functions caused a code repeat due to design of our /releases/ URL routes
 pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
-    let page_number: i64 = extension!(req, Router)
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
-    let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::ReleaseTime);
-    releases_handler(
-        packages,
-        page_number,
-        "recent",
-        "releases_navigation_recent_tab",
-        "Recently uploaded crates",
-    )
+    releases_handler(req, ReleaseType::Recent)
 }
 
 pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
-    let page_number: i64 = extension!(req, Router)
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
-    let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, page_number, RELEASES_IN_RELEASES, Order::GithubStars);
-    releases_handler(
-        packages,
-        page_number,
-        "stars",
-        "releases_navigation_stars_tab",
-        "Crates with most stars",
-    )
+    releases_handler(req, ReleaseType::Stars)
 }
 
 pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
-    let page_number: i64 = extension!(req, Router)
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
-    let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(
-        &conn,
-        page_number,
-        RELEASES_IN_RELEASES,
-        Order::RecentFailures,
-    );
-    releases_handler(
-        packages,
-        page_number,
-        "recent-failures",
-        "releases_navigation_recent_failures_tab",
-        "Recent crates failed to build",
-    )
+    releases_handler(req, ReleaseType::RecentFailures)
 }
 
 pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
-    let page_number: i64 = extension!(req, Router)
-        .find("page")
-        .unwrap_or("1")
-        .parse()
-        .unwrap_or(1);
-    let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(
-        &conn,
-        page_number,
-        RELEASES_IN_RELEASES,
-        Order::FailuresByGithubStars,
-    );
-    releases_handler(
-        packages,
-        page_number,
-        "failures",
-        "releases_navigation_failures_by_stars_tab",
-        "Crates with most stars failed to build",
-    )
+    releases_handler(req, ReleaseType::Failures)
 }
 
 pub fn author_handler(req: &mut Request) -> IronResult<Response> {
