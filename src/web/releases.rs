@@ -381,7 +381,7 @@ impl_webpage! {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
-enum ReleaseType {
+pub(super) enum ReleaseType {
     Recent,
     Stars,
     RecentFailures,
@@ -503,18 +503,18 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-struct Search {
-    title: String,
+pub(super) struct Search {
+    pub(super) title: String,
     #[serde(rename = "releases")]
-    results: Vec<Release>,
-    search_query: Option<String>,
-    previous_page_button: bool,
-    next_page_button: bool,
-    current_page: i64,
+    pub(super) results: Vec<Release>,
+    pub(super) search_query: Option<String>,
+    pub(super) previous_page_button: bool,
+    pub(super) next_page_button: bool,
+    pub(super) current_page: i64,
     /// This should always be `ReleaseType::Search`
-    release_type: ReleaseType,
+    pub(super) release_type: ReleaseType,
     #[serde(skip)]
-    status: iron::status::Status,
+    pub(super) status: iron::status::Status,
 }
 
 impl Default for Search {
@@ -695,7 +695,6 @@ mod tests {
     use crate::test::{assert_success, wrapper};
     use chrono::TimeZone;
     use kuchiki::traits::TendrilSink;
-    use serde_json::json;
 
     #[test]
     fn database_search() {
@@ -1026,62 +1025,6 @@ mod tests {
 
             Ok(())
         })
-    }
-
-    #[test]
-    fn serialize_releases() {
-        let now = Utc::now();
-
-        let mut release = Release {
-            name: "serde".to_string(),
-            version: "0.0.0".to_string(),
-            description: Some("serde makes things other things".to_string()),
-            target_name: Some("x86_64-pc-windows-msvc".to_string()),
-            rustdoc_status: true,
-            release_time: now,
-            stars: 100,
-        };
-
-        let correct_json = json!({
-            "name": "serde",
-            "version": "0.0.0",
-            "description": "serde makes things other things",
-            "target_name": "x86_64-pc-windows-msvc",
-            "rustdoc_status": true,
-            "release_time": duration_to_str(now),
-            "release_time_rfc3339": now.format("%+").to_string(),
-            "stars": 100
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
-
-        release.target_name = None;
-        let correct_json = json!({
-            "name": "serde",
-            "version": "0.0.0",
-            "description": "serde makes things other things",
-            "target_name": null,
-            "rustdoc_status": true,
-            "release_time": duration_to_str(now),
-            "release_time_rfc3339": now.format("%+").to_string(),
-            "stars": 100
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
-
-        release.description = None;
-        let correct_json = json!({
-            "name": "serde",
-            "version": "0.0.0",
-            "description": null,
-            "target_name": null,
-            "rustdoc_status": true,
-            "release_time": duration_to_str(now),
-            "release_time_rfc3339": now.format("%+").to_string(),
-            "stars": 100
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
     }
 
     #[test]

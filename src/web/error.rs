@@ -1,11 +1,14 @@
-use crate::db::PoolError;
-use crate::web::page::Page;
+use crate::{
+    db::PoolError,
+    web::{
+        page::{Page, WebPage},
+        releases::Search,
+    },
+};
 use failure::Fail;
-use iron::prelude::*;
-use iron::status;
-use iron::Handler;
-use std::error::Error;
-use std::fmt;
+use iron::{status, Handler, IronError, IronResult, Plugin, Request, Response};
+use params::{Params, Value};
+use std::{error::Error, fmt};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Nope {
@@ -38,6 +41,7 @@ impl Handler for Nope {
                     .title("The requested resource does not exist")
                     .to_resp("error")
             }
+
             Nope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
                 Page::new("no such crate".to_owned())
@@ -45,24 +49,30 @@ impl Handler for Nope {
                     .title("The requested crate does not exist")
                     .to_resp("error")
             }
+
             Nope::NoResults => {
-                use params::{Params, Value};
                 let params = req.get::<Params>().unwrap();
-                if let Some(&Value::String(ref query)) = params.find(&["query"]) {
+
+                if let Some(Value::String(ref query)) = params.find(&["query"]) {
                     // this used to be a search
-                    Page::new(Vec::<super::releases::Release>::new())
-                        .set_status(status::NotFound)
-                        .set("search_query", &query)
-                        .title(&format!("No crates found matching '{}'", query))
-                        .to_resp("releases")
+                    Search {
+                        title: format!("No crates found matching '{}'", query),
+                        search_query: Some(query.to_owned()),
+                        status: status::NotFound,
+                        ..Default::default()
+                    }
+                    .into_response(req)
                 } else {
                     // user did a search with no search terms
-                    Page::new(Vec::<super::releases::Release>::new())
-                        .set_status(status::NotFound)
-                        .title("No results given for empty search query")
-                        .to_resp("releases")
+                    Search {
+                        title: "No results given for empty search query".to_owned(),
+                        status: status::NotFound,
+                        ..Default::default()
+                    }
+                    .into_response(req)
                 }
             }
+
             Nope::InternalServerError => {
                 // something went wrong, details should have been logged
                 Page::new("internal server error".to_owned())
