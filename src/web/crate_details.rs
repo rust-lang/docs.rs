@@ -17,7 +17,7 @@ use serde_json::Value;
 
 // TODO: Add target name and versions
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CrateDetails {
     name: String,
     version: String,
@@ -42,6 +42,7 @@ pub struct CrateDetails {
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
+    // TODO: Is this even needed for rendering pages?
     pub(crate) metadata: MetaData,
     is_library: bool,
     yanked: bool,
@@ -106,7 +107,7 @@ impl Serialize for CrateDetails {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Release {
     pub version: String,
     pub build_status: bool,

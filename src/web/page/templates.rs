@@ -185,7 +185,7 @@ impl tera::Function for ReturnValue {
 // TODO: This can be replaced by chrono
 fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let fmt = if let Some(Value::Bool(true)) = args.get("relative") {
-        let value = DateTime::parse_from_str(value.as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%z")
+        let value = DateTime::parse_from_rfc3339(value.as_str().unwrap())
             .unwrap()
             .with_timezone(&Utc);
 
