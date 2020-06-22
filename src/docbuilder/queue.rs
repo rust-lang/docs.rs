@@ -12,7 +12,8 @@ impl DocBuilder {
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
         let conn = connect_db()?;
-        let (mut changes, oid) = self.index.diff().peek_changes()?;
+        let diff = self.index.diff()?;
+        let (mut changes, oid) = diff.peek_changes()?;
         let mut crates_added = 0;
 
         // I believe this will fix ordering of queue if we get more than one crate from changes
@@ -58,7 +59,7 @@ impl DocBuilder {
             }
         }
 
-        self.index.diff().set_last_seen_reference(oid)?;
+        diff.set_last_seen_reference(oid)?;
 
         Ok(crates_added)
     }
