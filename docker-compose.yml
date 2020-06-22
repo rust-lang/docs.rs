@@ -9,6 +9,8 @@ services:
             - s3
         ports:
             - "3000:3000"
+        # for metrics
+        expose: ["3000"]
         volumes:
             - "/var/run/docker.sock:/var/run/docker.sock"
             - ".rustwide-docker:/opt/docsrs/rustwide"
@@ -46,6 +48,12 @@ services:
         environment:
             MINIO_ACCESS_KEY: cratesfyi
             MINIO_SECRET_KEY: secret_key
+    prometheus:
+        build:
+            context: ./docker
+            dockerfile: ./Dockerfile-prometheus
+        ports:
+            - "9090:9090"
 volumes:
     postgres-data: {}
     minio-data: {}
