@@ -196,21 +196,29 @@ pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
 
     // update release activity everyday at 23:55
     let cloned_db = db.clone();
-    cron("release activity updater", 60, move || {
-        let now = Utc::now();
-        if now.hour() == 23 && now.minute() == 55 {
-            info!("Updating release activity");
-            update_release_activity(&*cloned_db.get()?)?;
-        }
-        Ok(())
-    })?;
+    cron(
+        "release activity updater",
+        Duration::from_secs(60),
+        move || {
+            let now = Utc::now();
+            if now.hour() == 23 && now.minute() == 55 {
+                info!("Updating release activity");
+                update_release_activity(&*cloned_db.get()?)?;
+            }
+            Ok(())
+        },
+    )?;
 
     // update github stats every 6 hours
     let cloned_db = db.clone();
-    cron("github stats updater", 60 * 60 * 6, move || {
-        github_updater(&*cloned_db.get()?)?;
-        Ok(())
-    })?;
+    cron(
+        "github stats updater",
+        Duration::from_secs(60 * 60 * 6),
+        move || {
+            github_updater(&*cloned_db.get()?)?;
+            Ok(())
+        },
+    )?;
 
     // TODO: update ssl certificate every 3 months
 
@@ -221,14 +229,14 @@ pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
     Ok(())
 }
 
-fn cron<F>(name: &'static str, interval: u64, exec: F) -> Result<(), Error>
+fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>
 where
     F: Fn() -> Result<(), Error> + Send + 'static,
 {
     thread::Builder::new()
         .name(name.into())
         .spawn(move || loop {
-            thread::sleep(Duration::from_secs(interval));
+            thread::sleep(interval);
             if let Err(err) = exec() {
                 error!("failed to run cron '{}': {:?}", name, err);
             }
