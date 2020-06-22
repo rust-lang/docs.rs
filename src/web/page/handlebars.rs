@@ -84,12 +84,6 @@ impl<T: Serialize> Page<T> {
         self
     }
 
-    /// Sets an integer variable
-    pub fn set_int(mut self, var: &str, val: i64) -> Page<T> {
-        self.varsi.insert(var.to_owned(), val);
-        self
-    }
-
     /// Sets title of page
     pub fn title(mut self, title: &str) -> Page<T> {
         self.title = Some(title.to_owned());

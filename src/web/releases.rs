@@ -395,25 +395,12 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         .and_then(|page_num| page_num.parse().ok())
         .unwrap_or(1);
 
-    let (description, number_releases, release_order) = match release_type {
-        ReleaseType::Recent => (
-            "Recently uploaded crates",
-            RELEASES_IN_RELEASES,
-            Order::ReleaseTime,
-        ),
-        ReleaseType::Stars => (
-            "Crates with most stars",
-            RELEASES_IN_RELEASES,
-            Order::GithubStars,
-        ),
-        ReleaseType::RecentFailures => (
-            "Recent crates failed to build",
-            RELEASES_IN_RELEASES,
-            Order::RecentFailures,
-        ),
+    let (description, release_order) = match release_type {
+        ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime),
+        ReleaseType::Stars => ("Crates with most stars", Order::GithubStars),
+        ReleaseType::RecentFailures => ("Recent crates failed to build", Order::RecentFailures),
         ReleaseType::Failures => (
             "Crates with most stars failed to build",
-            RELEASES_IN_RELEASES,
             Order::FailuresByGithubStars,
         ),
 
@@ -424,7 +411,7 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
 
     let releases = {
         let conn = extension!(req, Pool).get()?;
-        get_releases(&conn, page_number, number_releases, release_order)
+        get_releases(&conn, page_number, RELEASES_IN_RELEASES, release_order)
     };
 
     // Show next and previous page buttons
@@ -464,50 +451,54 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
 pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // page number of releases
-    let page_number: i64 = router.find("page").unwrap_or("1").parse().unwrap_or(1);
-
-    let conn = extension!(req, Pool).get()?;
-
-    #[allow(clippy::or_fun_call)]
+    let page_number: i64 = router
+        .find("page")
+        .and_then(|page_num| page_num.parse().ok())
+        .unwrap_or(1);
     let author = ctry!(router
         .find("author")
-        .ok_or(IronError::new(Nope::CrateNotFound, status::NotFound)));
+        // TODO: Accurate error here, the author wasn't provided
+        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound)));
 
-    let (author_name, packages) = if author.starts_with('@') {
-        let mut author = author.split('@');
+    let (author_name, releases) = {
+        let conn = extension!(req, Pool).get()?;
 
-        get_releases_by_owner(
-            &conn,
-            page_number,
-            RELEASES_IN_RELEASES,
-            cexpect!(author.nth(1)),
-        )
-    } else {
-        get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
+        if author.starts_with('@') {
+            let mut author = author.split('@');
+
+            get_releases_by_owner(
+                &conn,
+                page_number,
+                RELEASES_IN_RELEASES,
+                // TODO: Is this fallible?
+                cexpect!(author.nth(1)),
+            )
+        } else {
+            get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
+        }
     };
 
-    if packages.is_empty() {
+    if releases.is_empty() {
+        // TODO: Accurate error here, the author wasn't found
         return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
     }
 
     // Show next and previous page buttons
-    // This is a temporary solution to avoid expensive COUNT(*)
     let (show_next_page, show_previous_page) = (
-        packages.len() == RELEASES_IN_RELEASES as usize,
+        releases.len() == RELEASES_IN_RELEASES as usize,
         page_number != 1,
     );
-    Page::new(packages)
-        .title("Releases")
-        .set("description", &format!("Crates from {}", author_name))
-        .set("author", &author_name)
-        .set("release_type", author)
-        .set_true("show_releases_navigation")
-        .set_true("show_stars")
-        .set_bool("show_next_page_button", show_next_page)
-        .set_int("next_page", page_number + 1)
-        .set_bool("show_previous_page_button", show_previous_page)
-        .set_int("previous_page", page_number - 1)
-        .to_resp("releases")
+
+    ViewReleases {
+        releases,
+        description: format!("Crates from {}", author_name),
+        release_type: ReleaseType::Author,
+        show_next_page,
+        show_previous_page,
+        page_number,
+        author: Some(author_name),
+    }
+    .into_response(req)
 }
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
