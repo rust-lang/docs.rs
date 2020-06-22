@@ -238,7 +238,7 @@ where
         .spawn(move || loop {
             thread::sleep(interval);
             if let Err(err) = exec() {
-                error!("failed to run cron '{}': {:?}", name, err);
+                error!("failed to run scheduled task '{}': {:?}", name, err);
             }
         })?;
     Ok(())
