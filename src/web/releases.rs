@@ -13,9 +13,10 @@ use crate::{
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::{
-    headers::ContentType,
+    headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
-    status, IronError, IronResult, Plugin, Request, Response,
+    modifiers::Redirect,
+    status, IronError, IronResult, Plugin, Request, Response, Url,
 };
 use postgres::Connection;
 use router::Router;
@@ -501,23 +502,58 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     .into_response(req)
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct Search {
+    title: String,
+    #[serde(rename = "releases")]
+    results: Vec<Release>,
+    search_query: Option<String>,
+    previous_page_button: bool,
+    next_page_button: bool,
+    current_page: i64,
+    /// This should always be `ReleaseType::Search`
+    release_type: ReleaseType,
+    #[serde(skip)]
+    status: iron::status::Status,
+}
+
+impl Default for Search {
+    fn default() -> Self {
+        Self {
+            title: String::default(),
+            results: Vec::default(),
+            search_query: None,
+            previous_page_button: false,
+            next_page_button: false,
+            current_page: 0,
+            release_type: ReleaseType::Search,
+            status: iron::status::Ok,
+        }
+    }
+}
+
+impl_webpage! {
+    Search = "releases/releases.html",
+    status = |search| search.status,
+}
+
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     use params::{Params, Value};
 
     let params = ctry!(req.get::<Params>());
     let query = params.find(&["query"]);
-
     let conn = extension!(req, Pool).get()?;
-    if let Some(&Value::String(ref query)) = query {
+
+    if let Some(Value::String(query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
         // if there is a match
         // TODO: Redirecting to latest doc might be more useful
         if params.find(&["i-am-feeling-lucky"]).is_some() {
-            use iron::modifiers::Redirect;
-            use iron::Url;
-
             // redirect to a random crate if query is empty
             if query.is_empty() {
+                // FIXME: This is a fast query but using a constant
+                //        There are currently 280 crates with docs and 100+
+                //        starts. This should be fine for a while.
                 let rows = ctry!(conn.query(
                     "SELECT crates.name,
                             releases.version,
@@ -529,13 +565,11 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                      OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
                     &[]
                 ));
-                //                                        ~~~~~~^
-                // FIXME: This is a fast query but using a constant
-                //        There are currently 280 crates with docs and 100+
-                //        starts. This should be fine for a while.
-                let name: String = rows.get(0).get(0);
-                let version: String = rows.get(0).get(1);
-                let target_name: String = rows.get(0).get(2);
+                let row = rows.into_iter().next().unwrap(); // TODO: Is this really infallible?
+
+                let name: String = row.get("name");
+                let version: String = row.get("version");
+                let target_name: String = row.get("target_name");
                 let url = ctry!(Url::parse(&format!(
                     "{}/{}/{}/{}",
                     redirect_base(req),
@@ -545,8 +579,8 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 )));
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
-                use iron::headers::{Expires, HttpDate};
                 resp.headers.set(Expires(HttpDate(time::now())));
+
                 return Ok(resp);
             }
 
@@ -556,35 +590,43 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             if let Some(matchver) = match_version(&conn, &query, None) {
                 let (version, id) = matchver.version.into_parts();
                 let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
+
                 // FIXME: This is a super dirty way to check if crate have rustdocs generated.
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163
                 let rustdoc_status = {
                     let rows = ctry!(conn.query(
                         "SELECT rustdoc_status
-                                                 FROM releases
-                                                 WHERE releases.id = $1",
+                         FROM releases
+                         WHERE releases.id = $1",
                         &[&id]
                     ));
-                    if rows.is_empty() {
-                        false
-                    } else {
-                        rows.get(0).get(0)
-                    }
-                };
-                let url = if rustdoc_status {
-                    ctry!(Url::parse(
-                        &format!("{}/{}/{}", redirect_base(req), query, version)[..]
-                    ))
-                } else {
-                    ctry!(Url::parse(
-                        &format!("{}/crate/{}/{}", redirect_base(req), query, version)[..]
-                    ))
-                };
-                let mut resp = Response::with((status::Found, Redirect(url)));
 
-                use iron::headers::{Expires, HttpDate};
+                    rows.into_iter()
+                        .next()
+                        .map(|r| r.get("rustdoc_status"))
+                        .unwrap_or_default()
+                };
+
+                let url = if rustdoc_status {
+                    ctry!(Url::parse(&format!(
+                        "{}/{}/{}",
+                        redirect_base(req),
+                        query,
+                        version,
+                    )))
+                } else {
+                    ctry!(Url::parse(&format!(
+                        "{}/crate/{}/{}",
+                        redirect_base(req),
+                        query,
+                        version,
+                    )))
+                };
+
+                let mut resp = Response::with((status::Found, Redirect(url)));
                 resp.headers.set(Expires(HttpDate(time::now())));
+
                 return Ok(resp);
             }
         }
@@ -597,10 +639,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         };
 
         // FIXME: There is no pagination
-        Page::new(results)
-            .set("search_query", &query)
-            .title(&title)
-            .to_resp("releases")
+        Search {
+            title,
+            results,
+            search_query: Some(query.to_owned()),
+            ..Default::default()
+        }
+        .into_response(req)
     } else {
         Err(IronError::new(Nope::NoResults, status::NotFound))
     }

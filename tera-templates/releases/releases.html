@@ -5,7 +5,14 @@
 
 {%- block header -%}
     {# These all have defaults so searches work #}
-    {{ release_macros::header(title="Releases", description=description | default(value=""), tab=release_type, author=author | default(value=false)) }}
+    {{
+        release_macros::header(
+            title=title | default(value="Releases"),
+            description=description | default(value=""),
+            tab=release_type,
+            author=author | default(value=false)
+        )
+    }}
 {%- endblock header -%}
 
 {%- block body -%}

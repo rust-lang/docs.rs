@@ -3,6 +3,7 @@ use iron::{headers::ContentType, response::Response, status::Status, IronResult,
 use serde::Serialize;
 use tera::Context;
 
+/// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
 #[macro_export]
 macro_rules! impl_webpage {
     ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
@@ -11,7 +12,8 @@ macro_rules! impl_webpage {
 
             $(
                 fn get_status(&self) -> ::iron::status::Status {
-                    $status
+                    let status: fn(&Self) -> ::iron::status::Status = $status;
+                    (status)(self)
                 }
             )?
 
