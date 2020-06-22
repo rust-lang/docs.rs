@@ -4,11 +4,11 @@ use url::Url;
 
 use self::api::Api;
 use crate::error::Result;
+use failure::ResultExt;
 
 pub(crate) mod api;
 
 pub(crate) struct Index {
-    diff: crates_index_diff::Index,
     path: PathBuf,
     api: Api,
 }
@@ -41,14 +41,17 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 impl Index {
     pub(crate) fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_owned();
-        let diff = crates_index_diff::Index::from_path_or_cloned(&path)?;
-        let config = load_config(diff.repository())?;
-        let api = Api::new(config.api)?;
-        Ok(Self { diff, path, api })
+        let diff = crates_index_diff::Index::from_path_or_cloned(&path)
+            .context("initialising registry index repository")?;
+        let config = load_config(diff.repository()).context("loading registry config")?;
+        let api = Api::new(config.api).context("initialising registry api client")?;
+        Ok(Self { path, api })
     }
 
-    pub(crate) fn diff(&self) -> &crates_index_diff::Index {
-        &self.diff
+    pub(crate) fn diff(&self) -> Result<crates_index_diff::Index> {
+        let diff = crates_index_diff::Index::from_path_or_cloned(&self.path)
+            .context("re-opening registry index for diff")?;
+        Ok(diff)
     }
 
     pub(crate) fn api(&self) -> &Api {
