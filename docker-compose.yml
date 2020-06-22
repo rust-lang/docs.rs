@@ -1,7 +1,9 @@
 version: "3"
 services:
     web:
-        build: .
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile
         depends_on:
             - db
             - s3
@@ -21,8 +23,8 @@ services:
             - .env
     db:
         build:
-            context: .
-            dockerfile: ./postgres/Dockerfile
+            context: ./docker
+            dockerfile: ./Dockerfile-postgres
         volumes:
             - postgres-data:/var/lib/postgresql/data
         environment:
