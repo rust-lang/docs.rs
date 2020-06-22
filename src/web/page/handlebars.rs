@@ -158,55 +158,6 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn serialize_page() {
-        let time = Utc::now();
-
-        let mut release = Release::default();
-        release.name = "lasso".into();
-        release.version = "0.1.0".into();
-        release.release_time = time.clone();
-
-        let mut varss = BTreeMap::new();
-        varss.insert("test".into(), "works".into());
-        let mut varsb = BTreeMap::new();
-        varsb.insert("test2".into(), true);
-        let mut varsi = BTreeMap::new();
-        varsi.insert("test3".into(), 1337);
-
-        let page = Page {
-            title: None,
-            content: vec![release.clone()],
-            status: status::Status::Ok,
-            varss,
-            varsb,
-            varsi,
-            rustc_resource_suffix: &*RUSTC_RESOURCE_SUFFIX,
-        };
-
-        let correct_json = json!({
-            "content": [{
-                "name": "lasso",
-                "version": "0.1.0",
-                "description": null,
-                "target_name": null,
-                "rustdoc_status": false,
-                "release_time": super::super::super::duration_to_str(time),
-                "release_time_rfc3339": time.format("%+").to_string(),
-                "stars": 0
-            }],
-            "varss": { "test": "works" },
-            "varsb": { "test2": true },
-            "varsi": { "test3": 1337 },
-            "rustc_resource_suffix": &*RUSTC_RESOURCE_SUFFIX,
-            "cratesfyi_version": crate::BUILD_VERSION,
-            "cratesfyi_version_safe": build_version_safe(crate::BUILD_VERSION),
-            "has_global_alert": crate::GLOBAL_ALERT.is_some()
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&page).unwrap());
-    }
-
-    #[test]
     fn load_page_from_releases() {
         crate::test::wrapper(|env| {
             let db = env.db();
