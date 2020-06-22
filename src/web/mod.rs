@@ -76,9 +76,7 @@ use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
 use staticfile::Static;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::{env, fmt, path::PathBuf, time::Duration};
+use std::{env, fmt, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months

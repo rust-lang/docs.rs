@@ -18,7 +18,7 @@
             {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
         {%- else -%}
             {%- set link = "/crate/" ~ release.name ~ "/" ~ version -%}
-        {%- endif -%}
+        {%- endif %}
 
         <entry>
             <title>{{ name }}-{{ version }}</title>
@@ -35,5 +35,5 @@
                 <name>docs.rs</name>
             </author>
         </entry>
-    {%- endfor -%}
+    {%- endfor %}
 </feed>

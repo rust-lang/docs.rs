@@ -4,7 +4,6 @@ use crate::{
     db::Pool,
     impl_webpage,
     web::{
-        duration_to_str,
         error::Nope,
         match_version,
         page::{Page, WebPage},
@@ -20,10 +19,7 @@ use iron::{
 };
 use postgres::Connection;
 use router::Router;
-use serde::{
-    ser::{SerializeStruct, Serializer},
-    Serialize,
-};
+use serde::Serialize;
 use serde_json::Value;
 
 /// Number of release in home page
@@ -33,7 +29,7 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Release {
     pub(crate) name: String,
     pub(crate) version: String,
@@ -55,28 +51,6 @@ impl Default for Release {
             release_time: Utc::now(),
             stars: 0,
         }
-    }
-}
-
-impl Serialize for Release {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Release", 8)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("version", &self.version)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("target_name", &self.target_name)?;
-        state.serialize_field("rustdoc_status", &self.rustdoc_status)?;
-        state.serialize_field("release_time", &duration_to_str(self.release_time))?;
-        state.serialize_field(
-            "release_time_rfc3339",
-            &self.release_time.format("%+").to_string(),
-        )?;
-        state.serialize_field("stars", &self.stars)?;
-
-        state.end()
     }
 }
 
@@ -356,13 +330,20 @@ fn get_search_results(
     (total_results, packages)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct HomePage {
+    recent_releases: Vec<Release>,
+}
+
+impl_webpage! {
+    HomePage = "core/home.html",
+}
+
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let packages = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
-    Page::new(packages)
-        .set_true("show_search_form")
-        .set_true("hide_package_navigation")
-        .to_resp("releases")
+    let recent_releases = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+
+    HomePage { recent_releases }.into_response(req)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
