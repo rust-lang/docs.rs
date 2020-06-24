@@ -516,6 +516,9 @@ impl RustwideBuilder {
                         .unwrap_or_default(),
                 )
                 .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
+                // For docs.rs detection from build script:
+                // https://github.com/rust-lang/docs.rs/issues/147
+                .env("DOCS_RS", "1")
                 .args(&cargo_args)
                 .run()
                 .is_ok()
