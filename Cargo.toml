@@ -12,6 +12,7 @@ edition = "2018"
 log = "0.4"
 regex = "1"
 structopt = "0.3"
+crates-index = "0.15.0"
 crates-index-diff = "7"
 reqwest = { version = "0.10.6", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "0.9", features = ["serde"] }
