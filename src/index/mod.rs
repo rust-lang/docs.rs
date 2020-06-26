@@ -2,11 +2,12 @@ use std::path::{Path, PathBuf};
 
 use url::Url;
 
-use self::api::Api;
+use self::{api::Api, crates::Crates};
 use crate::error::Result;
 use failure::ResultExt;
 
 pub(crate) mod api;
+mod crates;
 
 pub struct Index {
     path: PathBuf,
@@ -54,6 +55,17 @@ impl Index {
         let diff = crates_index_diff::Index::from_path_or_cloned(&self.path)
             .context("re-opening registry index for diff")?;
         Ok(diff)
+    }
+
+    pub(crate) fn crates(&self) -> Result<Crates> {
+        // First ensure the index is up to date, peeking will pull the latest changes without
+        // affecting anything else.
+        log::debug!("Updating index");
+        self.diff()?.peek_changes()?;
+        // It'd be nice to use `crates_index` directly for interacting with the index, but it
+        // doesn't support bare repositories. So we use its `Crate` type but walk the index
+        // ourselves.
+        Ok(Crates::new(git2::Repository::open(&self.path)?))
     }
 
     pub fn api(&self) -> &Api {

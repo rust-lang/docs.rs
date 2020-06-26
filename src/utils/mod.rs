@@ -14,6 +14,7 @@ pub(crate) use self::rustc_version::parse_rustc_version;
 pub(crate) use self::cargo_metadata::{Dependency, Target};
 
 mod cargo_metadata;
+pub mod consistency;
 mod copy;
 mod daemon;
 mod github_updater;

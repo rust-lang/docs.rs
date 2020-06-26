@@ -443,6 +443,13 @@ enum DatabaseSubcommand {
         #[structopt(subcommand)]
         command: BlacklistSubcommand,
     },
+
+    /// Compares the database with the index and resolves inconsistencies
+    Synchronize {
+        /// Don't actually resolve the inconsistencies, just log them
+        #[structopt(long)]
+        dry_run: bool,
+    },
 }
 
 impl DatabaseSubcommand {
@@ -488,6 +495,14 @@ impl DatabaseSubcommand {
             } => db::delete_crate(&mut *ctx.conn()?, &*ctx.storage()?, &name)
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
+
+            Self::Synchronize { dry_run } => {
+                cratesfyi::utils::consistency::run_check(
+                    &*ctx.config()?,
+                    &mut *ctx.conn()?,
+                    dry_run,
+                )?;
+            }
         }
         Ok(())
     }
