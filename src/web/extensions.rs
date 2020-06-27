@@ -5,10 +5,10 @@ use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub(crate) struct InjectExtensions {
-    pub(crate) pool: Pool,
-    pub(crate) config: Arc<Config>,
-    pub(crate) template_data: Arc<TemplateData>,
+pub(super) struct InjectExtensions {
+    pub(super) pool: Pool,
+    pub(super) config: Arc<Config>,
+    pub(super) template_data: Arc<TemplateData>,
 }
 
 impl BeforeMiddleware for InjectExtensions {
