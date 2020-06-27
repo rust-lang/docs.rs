@@ -46,6 +46,7 @@ macro_rules! extension {
 mod builds;
 mod crate_details;
 mod error;
+mod extensions;
 mod file;
 pub(crate) mod metrics;
 mod releases;
@@ -53,10 +54,9 @@ mod routes;
 mod rustdoc;
 mod sitemap;
 mod source;
-mod utils;
 
+use self::extensions::InjectExtensions;
 use self::page::TemplateData;
-use self::utils::InjectExtensions;
 use crate::config::Config;
 use crate::db::Pool;
 use chrono::{DateTime, Utc};
