@@ -177,6 +177,10 @@ impl TestEnvironment {
     pub(crate) fn s3(&self) -> &TestS3 {
         self.s3.get_or_init(TestS3::new)
     }
+
+    pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
+        fakes::FakeRelease::new(self.db())
+    }
 }
 
 pub(crate) struct TestDatabase {
@@ -215,10 +219,6 @@ impl TestDatabase {
             .get()
             .expect("failed to get a connection out of the pool")
     }
-
-    pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
-        fakes::FakeRelease::new(self)
-    }
 }
 
 impl Drop for TestDatabase {
@@ -252,6 +252,7 @@ impl TestFrontend {
                 db.pool.clone(),
                 config,
                 build_queue,
+                storage,
             )
             .expect("failed to start the web server"),
             client: Client::new(),

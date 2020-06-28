@@ -75,7 +75,9 @@ pub(super) struct DatabaseConnection {
 }
 
 impl DatabaseConnection {
-    pub(super) fn start_storage_transaction(&self) -> Result<DatabaseStorageTransaction<'_>, Error> {
+    pub(super) fn start_storage_transaction(
+        &self,
+    ) -> Result<DatabaseStorageTransaction<'_>, Error> {
         Ok(DatabaseStorageTransaction {
             transaction: Some(self.conn.transaction()?),
         })

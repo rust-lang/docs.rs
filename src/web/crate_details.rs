@@ -340,19 +340,19 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.1").create()?;
-            db.fake_release().name("foo").version("0.0.2").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
+            env.fake_release()
                 .name("foo")
                 .version("0.0.3")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.4")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.5")
                 .build_result_successful(false)
@@ -373,17 +373,17 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.1")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.2")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.3")
                 .yanked(true)
@@ -401,18 +401,18 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.1").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release()
                 .name("foo")
                 .version("0.0.2")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.3")
                 .yanked(true)
                 .create()?;
-            db.fake_release().name("foo").version("0.0.4").create()?;
+            env.fake_release().name("foo").version("0.0.4").create()?;
 
             assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
             assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.4"))?;
@@ -428,25 +428,25 @@ mod tests {
             let db = env.db();
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
-            db.fake_release().name("foo").version("0.1.0").create()?;
-            db.fake_release().name("foo").version("0.1.1").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("0.1.0").create()?;
+            env.fake_release().name("foo").version("0.1.1").create()?;
+            env.fake_release()
                 .name("foo")
                 .version("0.3.0")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release().name("foo").version("1.0.0").create()?;
-            db.fake_release().name("foo").version("0.12.0").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("1.0.0").create()?;
+            env.fake_release().name("foo").version("0.12.0").create()?;
+            env.fake_release()
                 .name("foo")
                 .version("0.2.0")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.2.0-alpha")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.1")
                 .build_result_successful(false)
@@ -517,9 +517,9 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.1").create()?;
-            db.fake_release().name("foo").version("0.0.3").create()?;
-            db.fake_release().name("foo").version("0.0.2").create()?;
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release().name("foo").version("0.0.3").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
@@ -535,13 +535,13 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.1").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release()
                 .name("foo")
                 .version("0.0.3")
                 .yanked(true)
                 .create()?;
-            db.fake_release().name("foo").version("0.0.2").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
@@ -557,17 +557,17 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.1")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.3")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo")
                 .version("0.0.2")
                 .yanked(true)
@@ -585,9 +585,7 @@ mod tests {
     #[test]
     fn releases_dropdowns_is_correct() {
         wrapper(|env| {
-            let db = env.db();
-
-            db.fake_release()
+            env.fake_release()
                 .name("binary")
                 .version("0.1.0")
                 .binary(true)

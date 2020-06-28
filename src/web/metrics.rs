@@ -347,14 +347,12 @@ mod tests {
     #[test]
     fn releases() {
         wrapper(|env| {
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("rcc")
                 .version("0.0.0")
                 .repo("https://github.com/jyn514/rcc")
                 .create()?;
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("rcc")
                 .version("1.0.0")
                 .build_result_successful(false)
@@ -391,13 +389,8 @@ mod tests {
     #[test]
     fn crates() {
         wrapper(|env| {
-            env.db()
-                .fake_release()
-                .name("rcc")
-                .version("0.0.0")
-                .create()?;
-            env.db()
-                .fake_release()
+            env.fake_release().name("rcc").version("0.0.0").create()?;
+            env.fake_release()
                 .name("hexponent")
                 .version("0.2.0")
                 .create()?;

@@ -640,8 +640,8 @@ mod test {
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
 
-    fn release(version: &str, db: &TestDatabase) -> i32 {
-        db.fake_release()
+    fn release(version: &str, env: &TestEnvironment) -> i32 {
+        env.fake_release()
             .name("foo")
             .version(version)
             .create()
@@ -679,8 +679,7 @@ mod test {
     #[test]
     fn test_show_clipboard_for_crate_pages() {
         wrapper(|env| {
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("fake_crate")
                 .version("0.0.1")
                 .source_file("test.rs", &[])
@@ -702,8 +701,7 @@ mod test {
     #[test]
     fn test_hide_clipboard_for_non_crate_pages() {
         wrapper(|env| {
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("fake_crate")
                 .version("0.0.1")
                 .create()
@@ -739,8 +737,7 @@ mod test {
     #[test]
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("bat")
                 .version("0.2.0")
                 .binary(true)
@@ -760,8 +757,7 @@ mod test {
     #[test]
     fn can_view_source() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("regex")
                 .version("0.3.0")
                 .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
@@ -783,7 +779,7 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             let version = |v| version(v, db);
-            let release = |v| release(v, db);
+            let release = |v| release(v, env);
 
             release("0.3.1-pre");
             assert_eq!(version(Some("*")), semver("0.3.1-pre"));
@@ -809,14 +805,14 @@ mod test {
         wrapper(|env| {
             let db = env.db();
 
-            let release_id = release("0.3.0", db);
+            let release_id = release("0.3.0", env);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
 
             db.conn().query(query, &[&release_id]).unwrap();
             assert_eq!(version(None, db), None);
             assert_eq!(version(Some("0.3"), db), None);
 
-            release("0.1.0+4.1", db);
+            release("0.1.0+4.1", env);
             assert_eq!(version(Some("0.1.0+4.1"), db), exact("0.1.0+4.1"));
             assert_eq!(version(None, db), semver("0.1.0+4.1"));
 
@@ -830,10 +826,10 @@ mod test {
         wrapper(|env| {
             let db = env.db();
 
-            release("0.1.0+4.1", db);
-            release("0.1.1", db);
+            release("0.1.0+4.1", env);
+            release("0.1.1", env);
             assert_eq!(version(None, db), semver("0.1.1"));
-            release("0.5.1+zstd.1.4.4", db);
+            release("0.5.1+zstd.1.4.4", env);
             assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
             assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
             assert_eq!(

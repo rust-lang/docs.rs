@@ -1,6 +1,6 @@
 //! Database based file handler
 
-use crate::storage::{Storage, Blob};
+use crate::storage::{Blob, Storage};
 use crate::{error::Result, Config};
 use iron::{status, Handler, IronError, IronResult, Request, Response};
 
@@ -79,10 +79,9 @@ mod tests {
     #[test]
     fn file_roundtrip() {
         wrapper(|env| {
-            let db = env.db();
             let now = Utc::now();
 
-            db.fake_release().create()?;
+            env.fake_release().create()?;
 
             let mut file = File::from_path(
                 &env.storage(),
@@ -113,9 +112,7 @@ mod tests {
                 config.max_file_size_html = MAX_HTML_SIZE;
             });
 
-            let db = env.db();
-
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("small.html", &[b'A'; MAX_HTML_SIZE / 2] as &[u8])

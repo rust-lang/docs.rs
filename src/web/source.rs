@@ -232,8 +232,7 @@ mod tests {
     #[test]
     fn cargo_ok_not_skipped() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("fake")
                 .version("0.1.0")
                 .source_file(".cargo-ok", b"ok")

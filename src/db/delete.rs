@@ -190,17 +190,17 @@ mod tests {
             let db = env.db();
 
             // Create fake packages in the database
-            let pkg1_v1_id = db
+            let pkg1_v1_id = env
                 .fake_release()
                 .name("package-1")
                 .version("1.0.0")
                 .create()?;
-            let pkg1_v2_id = db
+            let pkg1_v2_id = env
                 .fake_release()
                 .name("package-1")
                 .version("2.0.0")
                 .create()?;
-            let pkg2_id = db.fake_release().name("package-2").create()?;
+            let pkg2_id = env.fake_release().name("package-2").create()?;
 
             assert!(crate_exists(&db.conn(), "package-1")?);
             assert!(crate_exists(&db.conn(), "package-2")?);
@@ -244,13 +244,13 @@ mod tests {
             }
 
             let db = env.db();
-            let v1 = db
+            let v1 = env
                 .fake_release()
                 .name("a")
                 .version("1.0.0")
                 .author("malicious actor")
                 .create()?;
-            let v2 = db
+            let v2 = env
                 .fake_release()
                 .name("a")
                 .version("2.0.0")
