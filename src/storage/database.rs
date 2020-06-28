@@ -1,19 +1,20 @@
 use super::Blob;
+use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::{Error, Fail};
-use postgres::{transaction::Transaction, Connection};
+use postgres::transaction::Transaction;
 
 #[derive(Debug, Fail)]
 #[fail(display = "the path is not present in the database")]
 struct PathNotFoundError;
 
-pub(crate) struct DatabaseBackend<'a> {
-    conn: &'a Connection,
+pub(crate) struct DatabaseBackend {
+    pool: Pool,
 }
 
-impl<'a> DatabaseBackend<'a> {
-    pub(crate) fn new(conn: &'a Connection) -> Self {
-        Self { conn }
+impl DatabaseBackend {
+    pub(crate) fn new(pool: Pool) -> Self {
+        Self { pool }
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -25,7 +26,7 @@ impl<'a> DatabaseBackend<'a> {
 
         // The size limit is checked at the database level, to avoid receiving data altogether if
         // the limit is exceeded.
-        let rows = self.conn.query(
+        let rows = self.pool.get()?.query(
             "SELECT
                  path, mime, date_updated, compression,
                  (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
@@ -85,8 +86,9 @@ mod tests {
     #[test]
     fn test_path_get() {
         crate::test::wrapper(|env| {
-            let conn = env.db().conn();
-            let backend = DatabaseBackend::new(&conn);
+            let db = env.db();
+            let conn = db.conn();
+            let backend = DatabaseBackend::new(db.pool());
             let now = Utc::now();
 
             // Add a test file to the database
@@ -133,8 +135,9 @@ mod tests {
         const MAX_SIZE: usize = 1024;
 
         crate::test::wrapper(|env| {
-            let conn = env.db().conn();
-            let backend = DatabaseBackend::new(&conn);
+            let db = env.db();
+            let conn = db.conn();
+            let backend = DatabaseBackend::new(db.pool());
 
             let small_blob = Blob {
                 path: "small-blob.bin".into(),

@@ -3,21 +3,20 @@
 use crate::db::Pool;
 use crate::{db, error::Result, Config};
 use iron::{status, Handler, IronError, IronResult, Request, Response};
-use postgres::Connection;
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) db::file::Blob);
 
 impl File {
     /// Gets file from database
-    pub fn from_path(conn: &Connection, path: &str, config: &Config) -> Result<File> {
+    pub fn from_path(pool: Pool, path: &str, config: &Config) -> Result<File> {
         let max_size = if path.ends_with(".html") {
             config.max_file_size_html
         } else {
             config.max_file_size
         };
 
-        Ok(File(db::file::get_path(conn, path, max_size)?))
+        Ok(File(db::file::get_path(pool, path, max_size)?))
     }
 
     /// Consumes File and creates a iron response
@@ -58,9 +57,9 @@ pub struct DatabaseFileHandler;
 impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path().join("/");
-        let conn = extension!(req, Pool).get()?;
+        let pool = extension!(req, Pool);
         let config = extension!(req, Config);
-        if let Ok(file) = File::from_path(&conn, &path, &config) {
+        if let Ok(file) = File::from_path(pool.clone(), &path, &config) {
             Ok(file.serve())
         } else {
             Err(IronError::new(
@@ -86,7 +85,7 @@ mod tests {
             db.fake_release().create()?;
 
             let mut file = File::from_path(
-                &*db.conn(),
+                db.pool(),
                 "rustdoc/fake-package/1.0.0/fake-package/index.html",
                 &env.config(),
             )
@@ -129,7 +128,7 @@ mod tests {
 
             let file = |path| {
                 File::from_path(
-                    &db.conn(),
+                    db.pool(),
                     &format!("rustdoc/dummy/0.1.0/{}", path),
                     &env.config(),
                 )
