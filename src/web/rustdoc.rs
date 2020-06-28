@@ -284,6 +284,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     rendering_time.step("crate details");
 
     // Get the crate's details from the database
+    // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
     let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
 
     // if visiting the full path to the default target, remove the target from the path
@@ -459,7 +460,10 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let config = extension!(req, Config);
     let base = redirect_base(req);
 
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    let crate_details = match CrateDetails::new(&conn, &name, &version) {
+        Some(krate) => krate,
+        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+    };
 
     //   [crate, :name, :version, target-redirect, :target, *path]
     // is transformed to
@@ -1370,6 +1374,20 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_target_redirect_not_found() {
+        crate::test::wrapper(|env| {
+            let web = env.frontend();
+            assert_eq!(
+                web.get("/crate/fdsafdsafdsafdsa/0.1.0/target-redirect/x86_64-apple-darwin/")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND,
+            );
+            Ok(())
+        })
     }
 
     #[test]
