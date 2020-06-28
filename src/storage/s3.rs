@@ -17,14 +17,17 @@ pub(crate) use test::TestS3;
 
 pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
 
-pub(crate) struct S3Backend<'a> {
+pub(crate) struct S3Backend {
     client: S3Client,
-    bucket: &'a str,
+    bucket: String,
 }
 
-impl<'a> S3Backend<'a> {
-    pub(crate) fn new(client: S3Client, bucket: &'a str) -> Self {
-        Self { client, bucket }
+impl S3Backend {
+    pub(crate) fn new(client: S3Client, bucket: &str) -> Self {
+        Self {
+            client,
+            bucket: bucket.into(),
+        }
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -68,7 +71,7 @@ impl<'a> S3Backend<'a> {
 }
 
 pub(super) struct S3StorageTransaction<'a> {
-    s3: &'a S3Backend<'a>,
+    s3: &'a S3Backend,
     runtime: Runtime,
 }
 

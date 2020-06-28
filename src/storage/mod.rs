@@ -117,15 +117,15 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     Ok(files)
 }
 
-pub(crate) enum Storage<'a> {
+pub(crate) enum Storage {
     Database(DatabaseBackend),
-    S3(S3Backend<'a>),
+    S3(S3Backend),
 }
 
-impl<'a> Storage<'a> {
+impl Storage {
     pub(crate) fn new(pool: Pool) -> Self {
         if let Some(c) = s3::s3_client() {
-            Storage::from(S3Backend::new(c, s3::S3_BUCKET_NAME))
+            Storage::S3(S3Backend::new(c, s3::S3_BUCKET_NAME))
         } else {
             Storage::Database(DatabaseBackend::new(pool))
         }
@@ -258,12 +258,6 @@ fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
         "image/svg" => "image/svg+xml",
         _ => mime,
     })
-}
-
-impl<'a> From<S3Backend<'a>> for Storage<'a> {
-    fn from(db: S3Backend<'a>) -> Self {
-        Self::S3(db)
-    }
 }
 
 #[cfg(test)]
