@@ -432,15 +432,10 @@ fn path_for_version(
     // this page doesn't exist in the latest version
     let search_item = if *req_path.last().unwrap() == "index.html" {
         // this is a module
-        req_path[req_path.len() - 2]
+        req_path.get(req_path.len() - 2).copied()
     } else {
         // this is an item
-        req_path
-            .last()
-            .unwrap()
-            .split('.')
-            .nth(1)
-            .expect("paths should be of the form <kind>.<name>.html")
+        req_path.last().unwrap().split('.').nth(1)
     };
     // check if req_path[3] is the platform choice or the name of the crate
     let platform = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 5 {
@@ -448,7 +443,11 @@ fn path_for_version(
     } else {
         ""
     };
-    format!("{}?search={}", platform, search_item)
+    if let Some(search) = search_item {
+        format!("{}?search={}", platform, search)
+    } else {
+        platform.to_owned()
+    }
 }
 
 pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
@@ -1412,6 +1411,20 @@ mod test {
             );
 
             Ok(())
+        })
+    }
+
+    #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/issues/856
+    fn test_no_trailing_slash() {
+        crate::test::wrapper(|env| {
+            let db = env.db();
+            db.fake_release().name("dummy").version("0.1.0").create()?;
+            assert_redirect(
+                "/crate/dummy/0.1.0/target-redirect/x86_64-apple-darwin",
+                "/dummy/0.1.0/dummy/",
+                env.frontend(),
+            )
         })
     }
 
