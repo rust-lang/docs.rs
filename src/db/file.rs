@@ -31,8 +31,8 @@ pub fn add_path_into_database<P: AsRef<Path>>(
     prefix: &str,
     path: P,
 ) -> Result<(Value, CompressionAlgorithms)> {
-    let mut backend = Storage::new(pool.clone());
-    let (file_list, algorithms) = backend.store_all(&*pool.get()?, prefix, path.as_ref())?;
+    let mut backend = Storage::new(pool);
+    let (file_list, algorithms) = backend.store_all(prefix, path.as_ref())?;
     Ok((
         file_list_to_json(file_list.into_iter().collect())?,
         algorithms,
