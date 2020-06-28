@@ -155,7 +155,7 @@ impl Storage {
     //
     // This returns (map<filename, mime type>, set<compression algorithms>).
     pub(crate) fn store_all(
-        &mut self,
+        &self,
         prefix: &str,
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
@@ -301,7 +301,7 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let mut backend = Storage {
+            let backend = Storage {
                 backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
             };
             let (stored_files, _algs) = backend.store_all("", dir.path()).unwrap();
@@ -335,7 +335,7 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let mut backend = Storage {
+            let backend = Storage {
                 backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
             };
             let (stored_files, _algs) = backend.store_all("rustdoc", dir.path()).unwrap();

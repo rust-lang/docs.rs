@@ -1,13 +1,16 @@
 use super::TestDatabase;
 use crate::docbuilder::BuildResult;
 use crate::index::api::RegistryCrateData;
+use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
 use failure::Error;
+use std::sync::Arc;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {
     db: &'a TestDatabase,
+    storage: Arc<Storage>,
     package: MetadataPackage,
     build_result: BuildResult,
     /// name, content
@@ -24,9 +27,10 @@ pub(crate) struct FakeRelease<'a> {
 }
 
 impl<'a> FakeRelease<'a> {
-    pub(super) fn new(db: &'a TestDatabase) -> Self {
+    pub(super) fn new(db: &'a TestDatabase, storage: Arc<Storage>) -> Self {
         FakeRelease {
             db,
+            storage,
             package: MetadataPackage {
                 id: "fake-package-id".into(),
                 name: "fake-package".into(),
@@ -175,6 +179,7 @@ impl<'a> FakeRelease<'a> {
         let mut source_meta = None;
         let mut algs = HashSet::new();
         if self.build_result.successful {
+            let storage = self.storage.clone();
             let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
                 let mut path_prefix = tempdir.path().join(prefix);
                 if let Some(target) = target {
@@ -200,7 +205,7 @@ impl<'a> FakeRelease<'a> {
                     target.unwrap_or("")
                 );
                 log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-                crate::db::add_path_into_database(db.pool(), &prefix, path_prefix)
+                crate::db::add_path_into_database(&storage, &prefix, path_prefix)
             };
 
             let index = [&package.name, "index.html"].join("/");
