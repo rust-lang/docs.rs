@@ -481,7 +481,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         if file_path[3] == crate_details.metadata.default_target {
             file_path.remove(3);
         }
-        if let Some(last @ &mut "index.html") = file_path.last_mut() {
+        if let Some(last @ &mut "") = file_path.last_mut() {
             *last = "index.html";
         }
         file_path
