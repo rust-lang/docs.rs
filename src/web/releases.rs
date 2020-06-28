@@ -690,26 +690,26 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("foo").version("0.0.0").create()?;
-            db.fake_release()
+            env.fake_release().name("foo").version("0.0.0").create()?;
+            env.fake_release()
                 .name("bar-foo")
                 .version("0.0.0")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("foo-bar")
                 .version("0.0.1")
                 .create()?;
-            db.fake_release().name("fo0").version("0.0.0").create()?;
-            db.fake_release()
+            env.fake_release().name("fo0").version("0.0.0").create()?;
+            env.fake_release()
                 .name("fool")
                 .version("0.0.0")
                 .build_result_successful(false)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("freakin")
                 .version("0.0.0")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("something unreleated")
                 .version("0.0.0")
                 .create()?;
@@ -736,7 +736,7 @@ mod tests {
 
             let releases = ["regex", "regex-", "regex-syntax"];
             for release in releases.iter() {
-                db.fake_release().name(release).version("0.0.0").create()?;
+                env.fake_release().name(release).version("0.0.0").create()?;
             }
 
             let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
@@ -760,7 +760,7 @@ mod tests {
     fn unsuccessful_not_shown() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("regex")
                 .version("0.0.0")
                 .build_result_successful(false)
@@ -780,7 +780,7 @@ mod tests {
     fn yanked_not_shown() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("regex")
                 .version("0.0.0")
                 .yanked(true)
@@ -800,7 +800,7 @@ mod tests {
     fn fuzzily_match() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("regex").version("0.0.0").create()?;
+            env.fake_release().name("regex").version("0.0.0").create()?;
 
             let (num_results, results) = get_search_results(&db.conn(), "redex", 1, 100);
             assert_eq!(num_results, 1);
@@ -818,7 +818,7 @@ mod tests {
     // fn search_descriptions() {
     //     wrapper(|env| {
     //         let db = env.db();
-    //         db.fake_release()
+    //         env.fake_release()
     //             .name("something_completely_unrelated")
     //             .description("Supercalifragilisticexpialidocious")
     //             .create()?;
@@ -843,10 +843,10 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            db.fake_release().name("something_magical").create()?;
-            db.fake_release().name("something_sinister").create()?;
-            db.fake_release().name("something_fantastical").create()?;
-            db.fake_release()
+            env.fake_release().name("something_magical").create()?;
+            env.fake_release().name("something_sinister").create()?;
+            env.fake_release().name("something_fantastical").create()?;
+            env.fake_release()
                 .name("something_completely_unrelated")
                 .create()?;
 
@@ -866,10 +866,10 @@ mod tests {
     fn search_offsets() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("something_magical").create()?;
-            db.fake_release().name("something_sinister").create()?;
-            db.fake_release().name("something_fantastical").create()?;
-            db.fake_release()
+            env.fake_release().name("something_magical").create()?;
+            env.fake_release().name("something_sinister").create()?;
+            env.fake_release().name("something_fantastical").create()?;
+            env.fake_release()
                 .name("something_completely_unrelated")
                 .create()?;
 
@@ -892,25 +892,25 @@ mod tests {
     fn release_dates() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("somethang")
                 .release_time(Utc.ymd(2021, 4, 16).and_hms(4, 33, 50))
                 .version("0.3.0")
                 .description("this is the correct choice")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("somethang")
                 .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
                 .description("second")
                 .version("0.2.0")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("somethang")
                 .release_time(Utc.ymd(2019, 4, 16).and_hms(4, 33, 50))
                 .description("third")
                 .version("0.1.0")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("somethang")
                 .release_time(Utc.ymd(2018, 4, 16).and_hms(4, 33, 50))
                 .description("fourth")
@@ -936,15 +936,15 @@ mod tests {
     // fn fuzzy_over_description() {
     //     wrapper(|env| {
     //         let db = env.db();
-    //         db.fake_release()
+    //         env.fake_release()
     //             .name("name_better_than_description")
     //             .description("this is the correct choice")
     //             .create()?;
-    //         db.fake_release()
+    //         env.fake_release()
     //             .name("im_completely_unrelated")
     //             .description("name_better_than_description")
     //             .create()?;
-    //         db.fake_release()
+    //         env.fake_release()
     //             .name("i_have_zero_relation_whatsoever")
     //             .create()?;
     //
@@ -975,10 +975,10 @@ mod tests {
     fn dont_return_unrelated() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("match").create()?;
-            db.fake_release().name("matcher").create()?;
-            db.fake_release().name("matchest").create()?;
-            db.fake_release()
+            env.fake_release().name("match").create()?;
+            env.fake_release().name("matcher").create()?;
+            env.fake_release().name("matchest").create()?;
+            env.fake_release()
                 .name("i_am_useless_and_mean_nothing")
                 .create()?;
 
@@ -999,9 +999,9 @@ mod tests {
     fn order_by_downloads() {
         wrapper(|env| {
             let db = env.db();
-            db.fake_release().name("matca").downloads(100).create()?;
-            db.fake_release().name("matcb").downloads(10).create()?;
-            db.fake_release().name("matcc").downloads(1).create()?;
+            env.fake_release().name("matca").downloads(100).create()?;
+            env.fake_release().name("matcb").downloads(10).create()?;
+            env.fake_release().name("matcc").downloads(1).create()?;
 
             let (num_results, results) = get_search_results(&db.conn(), "match", 1, 100);
             assert_eq!(num_results, 3);
@@ -1017,12 +1017,11 @@ mod tests {
     }
 
     fn releases_link_test(path: &str, env: &TestEnvironment) -> Result<(), Error> {
-        let db = env.db();
-        db.fake_release()
+        env.fake_release()
             .name("crate_that_succeeded")
             .version("0.1.0")
             .create()?;
-        db.fake_release()
+        env.fake_release()
             .name("crate_that_failed")
             .version("0.1.0")
             .build_result_successful(false)
@@ -1059,7 +1058,7 @@ mod tests {
     fn search() {
         wrapper(|env| {
             let web = env.frontend();
-            env.db().fake_release().name("some_random_crate").create()?;
+            env.fake_release().name("some_random_crate").create()?;
             assert_success("/releases/search?query=some_random_crate", web)
         })
     }
@@ -1097,9 +1096,8 @@ mod tests {
             let web = env.frontend();
             assert_success("/releases/feed", web)?;
 
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release()
                 .name("some_random_crate_that_failed")
                 .build_result_successful(false)
                 .create()?;
@@ -1155,8 +1153,7 @@ mod tests {
     fn authors_page() {
         wrapper(|env| {
             let web = env.frontend();
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("some_random_crate")
                 .author("frankenstein <frankie@stein.com>")
                 .create()?;

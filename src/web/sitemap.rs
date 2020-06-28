@@ -97,9 +97,8 @@ mod tests {
             let web = env.frontend();
             assert_success("/sitemap.xml", web)?;
 
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release()
                 .name("some_random_crate_that_failed")
                 .build_result_successful(false)
                 .create()?;

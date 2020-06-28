@@ -620,9 +620,8 @@ mod test {
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
     fn settings_html() {
         wrapper(|env| {
-            let db = env.db();
             // first release works, second fails
-            db.fake_release()
+            env.fake_release()
                 .name("buggy")
                 .version("0.1.0")
                 .build_result_successful(true)
@@ -633,7 +632,7 @@ mod test {
                 .rustdoc_file("directory_3/.gitignore", b"*.ext")
                 .rustdoc_file("directory_4/empty_file_no_ext", b"")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("buggy")
                 .version("0.2.0")
                 .build_result_successful(false)
@@ -654,8 +653,7 @@ mod test {
     #[test]
     fn default_target_redirects_to_base() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -669,7 +667,7 @@ mod test {
 
             // set an explicit target that requires cross-compile
             let target = "x86_64-pc-windows-msvc";
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -682,7 +680,7 @@ mod test {
             // set an explicit target without cross-compile
             // also check that /:crate/:version/:platform/all.html doesn't panic
             let target = "x86_64-unknown-linux-gnu";
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -706,15 +704,14 @@ mod test {
     #[test]
     fn go_to_latest_version() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/blah/index.html", b"lah")
                 .rustdoc_file("dummy/blah/blah.html", b"lah")
                 .rustdoc_file("dummy/struct.will-be-deleted.html", b"lah")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/blah/index.html", b"lah")
@@ -752,14 +749,13 @@ mod test {
     #[test]
     fn go_to_latest_version_keeps_platform() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .add_platform("x86_64-pc-windows-msvc")
                 .rustdoc_file("dummy/struct.Blah.html", b"lah")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .add_platform("x86_64-pc-windows-msvc")
@@ -800,13 +796,12 @@ mod test {
     #[test]
     fn redirect_latest_goes_to_crate_if_build_failed() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .build_result_successful(false)
@@ -823,18 +818,17 @@ mod test {
     #[test]
     fn redirect_latest_does_not_go_to_yanked_versions() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
@@ -855,20 +849,19 @@ mod test {
     #[test]
     fn redirect_latest_with_all_yanked() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
                 .yanked(true)
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
                 .rustdoc_file("dummy/index.html", b"lah")
@@ -899,9 +892,9 @@ mod test {
         }
 
         wrapper(|env| {
-            let (db, web) = (env.db(), env.frontend());
+            let web = env.frontend();
 
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"lah")
@@ -910,7 +903,7 @@ mod test {
 
             assert!(has_yanked_warning("/dummy/0.1.0/dummy/", web)?);
 
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"lah")
@@ -926,8 +919,7 @@ mod test {
     #[test]
     fn badges_are_urlencoded() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("zstd")
                 .version("0.5.1+zstd.1.4.4")
                 .create()?;
@@ -945,8 +937,7 @@ mod test {
     #[test]
     fn crate_name_percent_decoded_redirect() {
         wrapper(|env| {
-            env.db()
-                .fake_release()
+            env.fake_release()
                 .name("fake-crate")
                 .version("0.0.1")
                 .rustdoc_file("fake_crate/index.html", b"some content")
@@ -962,8 +953,6 @@ mod test {
     #[test]
     fn base_redirect_handles_mismatched_separators() {
         wrapper(|env| {
-            let db = env.db();
-
             let rels = [
                 ("dummy-dash", "0.1.0"),
                 ("dummy-dash", "0.2.0"),
@@ -974,7 +963,7 @@ mod test {
             ];
 
             for (name, version) in &rels {
-                db.fake_release()
+                env.fake_release()
                     .name(name)
                     .version(version)
                     .rustdoc_file(&(name.replace("-", "_") + "/index.html"), b"")
@@ -1024,15 +1013,13 @@ mod test {
     #[test]
     fn specific_pages_do_not_handle_mismatched_separators() {
         wrapper(|env| {
-            let db = env.db();
-
-            db.fake_release()
+            env.fake_release()
                 .name("dummy-dash")
                 .version("0.1.0")
                 .rustdoc_file("dummy_dash/index.html", b"")
                 .create()?;
 
-            db.fake_release()
+            env.fake_release()
                 .name("dummy_mixed-separators")
                 .version("0.1.0")
                 .rustdoc_file("dummy_mixed_separators/index.html", b"")
@@ -1135,10 +1122,10 @@ mod test {
         }
 
         wrapper(|env| {
-            let (db, web) = (env.db(), env.frontend());
+            let web = env.frontend();
 
             // no explicit default-target
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -1168,7 +1155,7 @@ mod test {
             )?;
 
             // set an explicit target that requires cross-compile
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -1198,7 +1185,7 @@ mod test {
             )?;
 
             // set an explicit target without cross-compile
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
                 .rustdoc_file("dummy/index.html", b"some content")
@@ -1228,7 +1215,7 @@ mod test {
             )?;
 
             // multiple targets
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.4.0")
                 .rustdoc_file("settings.html", b"top-level items")
@@ -1378,9 +1365,7 @@ mod test {
     #[test]
     fn test_fully_yanked_crate_404s() {
         wrapper(|env| {
-            let db = env.db();
-
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("1.0.0")
                 .yanked(true)
@@ -1404,15 +1389,14 @@ mod test {
     // regression test for https://github.com/rust-lang/docs.rs/issues/856
     fn test_no_trailing_slash() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release().name("dummy").version("0.1.0").create()?;
+            env.fake_release().name("dummy").version("0.1.0").create()?;
             let web = env.frontend();
             assert_redirect(
                 "/crate/dummy/0.1.0/target-redirect/x86_64-apple-darwin",
                 "/dummy/0.1.0/dummy/",
                 web,
             )?;
-            db.fake_release()
+            env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
                 .add_platform("x86_64-apple-darwin")
@@ -1436,7 +1420,11 @@ mod test {
     fn test_no_panic_on_missing_kind() {
         wrapper(|env| {
             let db = env.db();
-            let id = db.fake_release().name("strum").version("0.13.0").create()?;
+            let id = env
+                .fake_release()
+                .name("strum")
+                .version("0.13.0")
+                .create()?;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
             db.conn().query(
                 r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#,
@@ -1453,9 +1441,8 @@ mod test {
     // regression test for https://github.com/rust-lang/docs.rs/pull/885#issuecomment-655154405
     fn test_readme_rendered_as_html() {
         wrapper(|env| {
-            let db = env.db();
             let readme = "# Overview";
-            db.fake_release()
+            env.fake_release()
                 .name("strum")
                 .version("0.18.0")
                 .readme(readme)
@@ -1476,12 +1463,11 @@ mod test {
     // regression test for https://github.com/rust-lang/docs.rs/pull/885#issuecomment-655149288
     fn test_build_status_is_accurate() {
         wrapper(|env| {
-            let db = env.db();
-            db.fake_release()
+            env.fake_release()
                 .name("hexponent")
                 .version("0.3.0")
                 .create()?;
-            db.fake_release()
+            env.fake_release()
                 .name("hexponent")
                 .version("0.2.0")
                 .build_result_successful(false)
