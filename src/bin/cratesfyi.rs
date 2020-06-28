@@ -6,7 +6,7 @@ use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
 use cratesfyi::{Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
 use failure::Error;
-use postgres::Connection;
+use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 
 pub fn main() -> Result<(), Error> {
@@ -82,26 +82,30 @@ enum CommandLine {
 
 impl CommandLine {
     pub fn handle_args(self) -> Result<(), Error> {
-        let config = Arc::new(Config::from_env()?);
-        let pool = Pool::new(&config)?;
+        let ctx = Context::new();
 
         match self {
-            Self::Build(build) => build.handle_args(pool),
+            Self::Build(build) => build.handle_args(ctx)?,
             Self::StartWebServer {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload_templates, pool, config)?;
+                Server::start(
+                    Some(&socket_addr),
+                    reload_templates,
+                    ctx.pool()?,
+                    ctx.config()?,
+                )?;
             }
             Self::Daemon { foreground } => {
                 if foreground {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(config, pool)?;
+                cratesfyi::utils::start_daemon(ctx.config()?, ctx.pool()?)?;
             }
-            Self::Database { subcommand } => subcommand.handle_args(&*pool.get()?),
-            Self::Queue { subcommand } => subcommand.handle_args(&*pool.get()?),
+            Self::Database { subcommand } => subcommand.handle_args(ctx)?,
+            Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
         }
 
         Ok(())
@@ -136,19 +140,20 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self, conn: &Connection) {
+    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Add {
                 crate_name,
                 crate_version,
                 build_priority,
             } => {
-                add_crate_to_queue(&conn, &crate_name, &crate_version, build_priority)
+                add_crate_to_queue(&*ctx.conn()?, &crate_name, &crate_version, build_priority)
                     .expect("Could not add crate to queue");
             }
 
-            Self::DefaultPriority { subcommand } => subcommand.handle_args(conn),
+            Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
+        Ok(())
     }
 }
 
@@ -172,15 +177,15 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self, conn: &Connection) {
+    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Set { pattern, priority } => {
-                set_crate_priority(&conn, &pattern, priority)
+                set_crate_priority(&*ctx.conn()?, &pattern, priority)
                     .expect("Could not set pattern's priority");
             }
 
             Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(&conn, &pattern)
+                if let Some(priority) = remove_crate_priority(&*ctx.conn()?, &pattern)
                     .expect("Could not remove pattern's priority")
                 {
                     println!("Removed pattern with priority {}", priority);
@@ -189,6 +194,7 @@ impl PrioritySubcommand {
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -233,7 +239,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, pool: Pool) {
+    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         let docbuilder = {
             let mut doc_options = DocBuilderOptions::from_prefix(self.prefix);
 
@@ -249,10 +255,10 @@ impl Build {
                 .check_paths()
                 .expect("The given paths were invalid");
 
-            DocBuilder::new(doc_options, pool.clone())
+            DocBuilder::new(doc_options, ctx.pool()?)
         };
 
-        self.subcommand.handle_args(docbuilder, pool);
+        self.subcommand.handle_args(ctx, docbuilder)
     }
 }
 
@@ -300,12 +306,12 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, mut docbuilder: DocBuilder, pool: cratesfyi::db::Pool) {
+    pub fn handle_args(self, ctx: Context, mut docbuilder: DocBuilder) -> Result<(), Error> {
         match self {
             Self::World => {
                 docbuilder.load_cache().expect("Failed to load cache");
 
-                let mut builder = RustwideBuilder::init(pool).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
                 builder
                     .build_world(&mut docbuilder)
                     .expect("Failed to build world");
@@ -320,7 +326,7 @@ impl BuildSubcommand {
             } => {
                 docbuilder.load_cache().expect("Failed to load cache");
                 let mut builder =
-                    RustwideBuilder::init(pool).expect("failed to initialize rustwide");
+                    RustwideBuilder::init(ctx.pool()?).expect("failed to initialize rustwide");
 
                 if let Some(path) = local {
                     builder
@@ -342,25 +348,28 @@ impl BuildSubcommand {
 
             Self::UpdateToolchain { only_first_time } => {
                 if only_first_time {
-                    let conn = pool.get().expect("failed to get a database connection");
+                    let conn = ctx
+                        .pool()?
+                        .get()
+                        .expect("failed to get a database connection");
                     let res = conn
                         .query("SELECT * FROM config WHERE name = 'rustc_version';", &[])
                         .unwrap();
 
                     if !res.is_empty() {
                         println!("update-toolchain was already called in the past, exiting");
-                        return;
+                        return Ok(());
                     }
                 }
 
-                let mut builder = RustwideBuilder::init(pool).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
                 builder
                     .update_toolchain()
                     .expect("failed to update toolchain");
             }
 
             Self::AddEssentialFiles => {
-                let mut builder = RustwideBuilder::init(pool).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
                 builder
                     .add_essential_files()
                     .expect("failed to add essential files");
@@ -370,6 +379,8 @@ impl BuildSubcommand {
             Self::Unlock => docbuilder.unlock().expect("Failed to unlock"),
             Self::PrintOptions => println!("{:?}", docbuilder.options()),
         }
+
+        Ok(())
     }
 }
 
@@ -412,31 +423,33 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, conn: &Connection) {
+    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
-                db::migrate(version, &conn).expect("Failed to run database migrations");
+                db::migrate(version, &*ctx.conn()?).expect("Failed to run database migrations");
             }
 
             Self::UpdateGithubFields => {
-                cratesfyi::utils::github_updater(&conn).expect("Failed to update github fields");
+                cratesfyi::utils::github_updater(&*ctx.conn()?)
+                    .expect("Failed to update github fields");
             }
 
             Self::AddDirectory { directory, prefix } => {
-                add_path_into_database(&conn, &prefix, directory)
+                add_path_into_database(&*ctx.conn()?, &prefix, directory)
                     .expect("Failed to add directory into database");
             }
 
             // FIXME: This is actually util command not database
-            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&conn)
+            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&*ctx.conn()?)
                 .expect("Failed to update release activity"),
 
             Self::DeleteCrate { crate_name } => {
-                db::delete_crate(&conn, &crate_name).expect("failed to delete the crate");
+                db::delete_crate(&*ctx.conn()?, &crate_name).expect("failed to delete the crate");
             }
 
-            Self::Blacklist { command } => command.handle_args(&conn),
+            Self::Blacklist { command } => command.handle_args(ctx)?,
         }
+        Ok(())
     }
 }
 
@@ -461,7 +474,8 @@ enum BlacklistSubcommand {
 }
 
 impl BlacklistSubcommand {
-    fn handle_args(self, conn: &Connection) {
+    fn handle_args(self, ctx: Context) -> Result<(), Error> {
+        let conn = &*ctx.conn()?;
         match self {
             Self::List => {
                 let crates =
@@ -476,5 +490,40 @@ impl BlacklistSubcommand {
             Self::Remove { crate_name } => db::blacklist::remove_crate(&conn, &crate_name)
                 .expect("failed to remove crate from blacklist"),
         }
+        Ok(())
+    }
+}
+
+struct Context {
+    config: OnceCell<Arc<Config>>,
+    pool: OnceCell<Pool>,
+}
+
+impl Context {
+    fn new() -> Self {
+        Self {
+            config: OnceCell::new(),
+            pool: OnceCell::new(),
+        }
+    }
+
+    fn config(&self) -> Result<Arc<Config>, Error> {
+        Ok(self
+            .config
+            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Config::from_env()?)))?
+            .clone())
+    }
+
+    fn pool(&self) -> Result<Pool, Error> {
+        Ok(self
+            .pool
+            .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?)?))?
+            .clone())
+    }
+
+    fn conn(
+        &self,
+    ) -> Result<r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>, Error> {
+        Ok(self.pool()?.get()?)
     }
 }
