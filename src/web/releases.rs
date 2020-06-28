@@ -405,7 +405,7 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
             Order::FailuresByGithubStars,
         ),
 
-        ReleaseType::Author | ReleaseType::Search => unreachable!(
+        ReleaseType::Author | ReleaseType::Search => panic!(
             "The authors and search page have special requirements and cannot use this handler",
         ),
     };
@@ -657,8 +657,10 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
         "SELECT value FROM config WHERE name = 'release_activity'",
         &[]
     ))
-    .get(0)
-    .get(0);
+    .iter()
+    .next()
+    .map_or(Value::Null, |row| row.get("value"));
+
     Page::new(release_activity_data)
         .title("Releases")
         .set("description", "Monthly release activity")
@@ -1028,9 +1030,113 @@ mod tests {
     }
 
     #[test]
+    fn recent_releases() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases", web)
+        })
+    }
+
+    #[test]
+    fn recent_releases_by_stars() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/stars", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases/stars", web)
+        })
+    }
+
+    #[test]
+    fn recent_failures() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/recent-failures", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases/recent-failures", web)
+        })
+    }
+
+    #[test]
+    fn failures_by_stars() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/failures", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases/failures", web)
+        })
+    }
+
+    #[test]
+    fn release_activity() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/activity", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases/activity", web)
+        })
+    }
+
+    #[test]
+    fn recent_queue() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/releases/queue", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/releases/queue", web)
+        })
+    }
+
+    #[test]
     fn release_feed() {
         wrapper(|env| {
             let web = env.frontend();
+            assert_success("/releases/feed", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
             assert_success("/releases/feed", web)
         })
     }
@@ -1077,5 +1183,17 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    fn authors_page() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.db()
+                .fake_release()
+                .name("some_random_crate")
+                .author("frankenstein <frankie@stein.com>")
+                .create()?;
+            assert_success("/releases/frankenstein", web)
+        })
     }
 }

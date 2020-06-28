@@ -5,13 +5,15 @@ pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
+use path_slash::PathExt;
 use postgres::{transaction::Transaction, Connection};
-use std::collections::{HashMap, HashSet};
-use std::ffi::OsStr;
-use std::fmt;
-use std::fs;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    fmt, fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 const DEFAULT_COMPRESSION: CompressionAlgorithm = CompressionAlgorithm::Zstd;
@@ -171,12 +173,7 @@ impl<'a> Storage<'a> {
             .map(|(file_path, file)| -> Result<_, Error> {
                 let alg = DEFAULT_COMPRESSION;
                 let content = compress(file, alg)?;
-                let bucket_path = Path::new(prefix).join(&file_path);
-
-                #[cfg(windows)] // On windows, we need to normalize \\ to / so the route logic works
-                let bucket_path = path_slash::PathBufExt::to_slash(&bucket_path).unwrap();
-                #[cfg(not(windows))]
-                let bucket_path = bucket_path.into_os_string().into_string().unwrap();
+                let bucket_path = Path::new(prefix).join(&file_path).to_slash().unwrap();
 
                 let mime = detect_mime(&file_path)?;
                 file_paths_and_mimes.insert(file_path, mime.to_string());

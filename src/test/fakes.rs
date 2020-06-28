@@ -92,6 +92,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub fn author(mut self, author: &str) -> Self {
+        self.package.authors = vec![author.into()];
+        self
+    }
+
     pub(crate) fn repo(mut self, repo: impl Into<String>) -> Self {
         self.package.repository = Some(repo.into());
         self

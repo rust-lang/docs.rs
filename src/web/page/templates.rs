@@ -1,16 +1,18 @@
-use crate::db::Pool;
-use crate::error::Result;
+use crate::{db::Pool, error::Result};
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
+use path_slash::PathExt;
 use postgres::Connection;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::{mpsc::channel, Arc};
-use std::thread;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{mpsc::channel, Arc},
+    thread,
+    time::Duration,
+};
 use tera::{Result as TeraResult, Tera};
 use walkdir::WalkDir;
 
@@ -152,10 +154,8 @@ fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<Strin
         let name = path
             .strip_prefix(&root)
             .with_context(|_| format!("{} is not a child of {}", path.display(), root.display()))?
-            .to_str()
-            .ok_or_else(|| failure::format_err!("path {} is not UTF-8", path.display()))?
-            .to_string();
-
+            .to_slash()
+            .ok_or_else(|| failure::format_err!("failed to normalize {}", path.display()))?;
         files.push((path.to_path_buf(), Some(name)));
     }
 
