@@ -7,7 +7,7 @@ use crate::{
         crate_details::CrateDetails, error::Nope, file::File, match_version, metrics,
         page::WebPage, redirect_base, MatchSemver,
     },
-    Config,
+    Config, Storage,
 };
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
@@ -104,12 +104,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             // this URL is actually from a crate-internal path, serve it there instead
             return rustdoc_html_server_handler(req);
         } else {
-            let pool = extension!(req, Pool);
+            let storage = extension!(req, Storage);
             let config = extension!(req, Config);
 
             let path = req.url.path();
             let path = path.join("/");
-            match File::from_path(pool.clone(), &path, &config) {
+            match File::from_path(&storage, &path, &config) {
                 Ok(f) => return Ok(f.serve()),
                 Err(..) => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
             }
@@ -218,6 +218,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let pool = extension!(req, Pool);
     let conn = pool.get()?;
     let config = extension!(req, Config);
+    let storage = extension!(req, Storage);
     let mut req_path = req.url.path();
 
     // Remove the name and version from the path
@@ -297,14 +298,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Attempt to load the file from the database
-    let file = if let Ok(file) = File::from_path(pool.clone(), &path, &config) {
+    let file = if let Ok(file) = File::from_path(&storage, &path, &config) {
         file
     } else {
         // If it fails, we try again with /index.html at the end
         path.push_str("/index.html");
         req_path.push("index.html");
 
-        File::from_path(pool.clone(), &path, &config)
+        File::from_path(&storage, &path, &config)
             .map_err(|_| IronError::new(Nope::ResourceNotFound, status::NotFound))?
     };
 
@@ -351,7 +352,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             "/{}/{}/{}",
             name,
             latest_version,
-            path_for_version(&latest_path, &krate.doc_targets, pool.clone(), &config)
+            path_for_version(&latest_path, &krate.doc_targets, &storage, &config)
         )
     } else {
         format!("/crate/{}/{}", name, latest_version)
@@ -400,11 +401,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 fn path_for_version(
     req_path: &[&str],
     known_platforms: &[String],
-    pool: Pool,
+    storage: &Storage,
     config: &Config,
 ) -> String {
     // Simple case: page exists in the latest version, so just change the version number
-    if File::from_path(pool, &req_path.join("/"), config).is_ok() {
+    if File::from_path(storage, &req_path.join("/"), config).is_ok() {
         // NOTE: this adds 'index.html' if it wasn't there before
         return req_path[3..].join("/");
     }
@@ -442,6 +443,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let pool = extension!(req, Pool);
     let conn = pool.get()?;
+    let storage = extension!(req, Storage);
     let config = extension!(req, Config);
     let base = redirect_base(req);
 
@@ -467,12 +469,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         file_path
     };
 
-    let path = path_for_version(
-        &file_path,
-        &crate_details.doc_targets,
-        pool.clone(),
-        &config,
-    );
+    let path = path_for_version(&file_path, &crate_details.doc_targets, &storage, &config);
     let url = format!(
         "{base}/{name}/{version}/{path}",
         base = base,
@@ -572,10 +569,10 @@ impl Handler for SharedResourceHandler {
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
         let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
-            let pool = extension!(req, Pool);
+            let storage = extension!(req, Storage);
             let config = extension!(req, Config);
 
-            if let Ok(file) = File::from_path(pool.clone(), filename, &config) {
+            if let Ok(file) = File::from_path(&storage, filename, &config) {
                 return Ok(file.serve());
             }
         }

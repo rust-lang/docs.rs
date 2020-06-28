@@ -4,7 +4,7 @@ use crate::{
     db::Pool,
     impl_webpage,
     web::{error::Nope, file::File as DbFile, page::WebPage, MetaData},
-    Config,
+    Config, Storage,
 };
 use iron::{status::Status, IronError, IronResult, Request, Response};
 use postgres::Connection;
@@ -186,12 +186,13 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     let pool = extension!(req, Pool);
     let conn = pool.get()?;
+    let storage = extension!(req, Storage);
     let config = extension!(req, Config);
 
     // try to get actual file first
     // skip if request is a directory
     let file = if !file_path.ends_with('/') {
-        DbFile::from_path(pool.clone(), &file_path, &config).ok()
+        DbFile::from_path(&storage, &file_path, &config).ok()
     } else {
         None
     };

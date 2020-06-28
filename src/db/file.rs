@@ -11,12 +11,6 @@ use crate::storage::{CompressionAlgorithms, Storage};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub(crate) use crate::storage::Blob;
-
-pub(crate) fn get_path(pool: Pool, path: &str, max_size: usize) -> Result<Blob> {
-    Storage::new(pool).get(path, max_size)
-}
-
 /// Store all files in a directory and return [[mimetype, filename]] as Json
 ///
 /// If there is an S3 Client configured, store files into an S3 bucket;
