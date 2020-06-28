@@ -2,14 +2,19 @@ use crate::db::Pool;
 use crate::error::Result;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
+use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
 use postgres::Connection;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{mpsc::channel, Arc};
 use std::thread;
 use std::time::Duration;
 use tera::{Result as TeraResult, Tera};
+use walkdir::WalkDir;
+
+const TEMPLATES_DIRECTORY: &str = "tera-templates";
 
 /// Holds all data relevant to templating
 #[derive(Debug)]
@@ -84,7 +89,16 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
 }
 
 pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
-    let mut tera = Tera::new("tera-templates/**/*")?;
+    // This uses a custom function to find the templates in the filesystem instead of Tera's
+    // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
+    // application and running the tests.
+    //
+    // The problem with Tera's template loading code is, it walks all the files in the current
+    // directory and matches them against the provided glob expression. Unfortunately this means
+    // Tera will walk all the rustwide workspaces, the git repository and a bunch of other
+    // unrelated data, slowing down the search a lot.
+    let mut tera = Tera::default();
+    tera.add_template_files(find_templates_in_filesystem(TEMPLATES_DIRECTORY)?)?;
 
     // This function will return any global alert, if present.
     ReturnValue::add_function_to(
@@ -118,6 +132,32 @@ pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
     tera.register_filter("dedent", dedent);
 
     Ok(tera)
+}
+
+fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<String>)>> {
+    let root = std::fs::canonicalize(base)?;
+
+    let mut files = Vec::new();
+    for entry in WalkDir::new(&root) {
+        let entry = entry?;
+        let path = entry.path();
+
+        if !entry.metadata()?.is_file() {
+            continue;
+        }
+
+        // Strip the root directory from the path and use it as the template name.
+        let name = path
+            .strip_prefix(&root)
+            .with_context(|_| format!("{} is not a child of {}", path.display(), root.display()))?
+            .to_str()
+            .ok_or_else(|| failure::format_err!("path {} is not UTF-8", path.display()))?
+            .to_string();
+
+        files.push((path.to_path_buf(), Some(name)));
+    }
+
+    Ok(files)
 }
 
 /// Simple function that returns the pre-defined value.
