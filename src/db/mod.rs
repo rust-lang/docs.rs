@@ -7,6 +7,9 @@ pub use self::file::add_path_into_database;
 pub use self::migrate::migrate;
 pub use self::pool::{Pool, PoolError};
 
+#[cfg(test)]
+pub(crate) use self::pool::PoolConnection;
+
 mod add_package;
 pub mod blacklist;
 mod delete_crate;

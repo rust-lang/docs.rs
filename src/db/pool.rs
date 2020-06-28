@@ -1,22 +1,30 @@
 use crate::Config;
 use postgres::Connection;
-use std::marker::PhantomData;
+use r2d2_postgres::PostgresConnectionManager;
 
-#[cfg(test)]
-use std::sync::{Arc, Mutex, MutexGuard};
+pub(crate) type PoolConnection = r2d2::PooledConnection<PostgresConnectionManager>;
+
+const DEFAULT_SCHEMA: &str = "public";
 
 #[derive(Debug, Clone)]
-pub enum Pool {
-    R2D2(r2d2::Pool<r2d2_postgres::PostgresConnectionManager>),
-    #[cfg(test)]
-    Simple(Arc<Mutex<Connection>>),
+pub struct Pool {
+    pool: r2d2::Pool<PostgresConnectionManager>,
 }
 
 impl Pool {
     pub fn new(config: &Config) -> Result<Pool, PoolError> {
+        Self::new_inner(config, DEFAULT_SCHEMA)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_schema(config: &Config, schema: &str) -> Result<Pool, PoolError> {
+        Self::new_inner(config, schema)
+    }
+
+    fn new_inner(config: &Config, schema: &str) -> Result<Pool, PoolError> {
         crate::web::metrics::MAX_DB_CONNECTIONS.set(config.max_pool_size as i64);
 
-        let manager = r2d2_postgres::PostgresConnectionManager::new(
+        let manager = PostgresConnectionManager::new(
             config.database_url.as_str(),
             r2d2_postgres::TlsMode::None,
         )
@@ -25,73 +33,54 @@ impl Pool {
         let pool = r2d2::Pool::builder()
             .max_size(config.max_pool_size)
             .min_idle(Some(config.min_pool_idle))
+            .connection_customizer(Box::new(SetSchema::new(schema)))
             .build(manager)
             .map_err(PoolError::PoolCreationFailed)?;
 
-        Ok(Pool::R2D2(pool))
+        Ok(Pool { pool })
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_simple(conn: Arc<Mutex<Connection>>) -> Self {
-        Pool::Simple(conn)
-    }
-
-    pub fn get(&self) -> Result<DerefConnection<'_>, PoolError> {
-        match self {
-            Self::R2D2(r2d2) => match r2d2.get() {
-                Ok(conn) => Ok(DerefConnection::Connection(conn, PhantomData)),
-                Err(err) => {
-                    crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
-                    Err(PoolError::ConnectionError(err))
-                }
-            },
-
-            #[cfg(test)]
-            Self::Simple(mutex) => Ok(DerefConnection::Guard(
-                mutex.lock().expect("failed to lock the connection"),
-            )),
+    pub fn get(&self) -> Result<PoolConnection, PoolError> {
+        match self.pool.get() {
+            Ok(conn) => Ok(conn),
+            Err(err) => {
+                crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
+                Err(PoolError::ConnectionError(err))
+            }
         }
     }
 
     pub(crate) fn used_connections(&self) -> u32 {
-        match self {
-            Self::R2D2(conn) => conn.state().connections - conn.state().idle_connections,
-
-            #[cfg(test)]
-            Self::Simple(..) => 0,
-        }
+        self.pool.state().connections - self.pool.state().idle_connections
     }
 
     pub(crate) fn idle_connections(&self) -> u32 {
-        match self {
-            Self::R2D2(conn) => conn.state().idle_connections,
+        self.pool.state().idle_connections
+    }
+}
 
-            #[cfg(test)]
-            Self::Simple(..) => 0,
+#[derive(Debug)]
+struct SetSchema {
+    schema: String,
+}
+
+impl SetSchema {
+    fn new(schema: &str) -> Self {
+        Self {
+            schema: schema.into(),
         }
     }
 }
 
-pub enum DerefConnection<'a> {
-    Connection(
-        r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>,
-        PhantomData<&'a ()>,
-    ),
-
-    #[cfg(test)]
-    Guard(MutexGuard<'a, Connection>),
-}
-
-impl<'a> std::ops::Deref for DerefConnection<'a> {
-    type Target = Connection;
-
-    fn deref(&self) -> &Connection {
-        match self {
-            Self::Connection(conn, ..) => conn,
-
-            #[cfg(test)]
-            Self::Guard(guard) => &guard,
+impl r2d2::CustomizeConnection<Connection, postgres::Error> for SetSchema {
+    fn on_acquire(&self, conn: &mut Connection) -> Result<(), postgres::Error> {
+        if self.schema != DEFAULT_SCHEMA {
+            conn.execute(
+                &format!("SET search_path TO {}, {};", self.schema, DEFAULT_SCHEMA),
+                &[],
+            )?;
         }
+        Ok(())
     }
 }
 
