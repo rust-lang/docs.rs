@@ -117,24 +117,29 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     Ok(files)
 }
 
-pub(crate) enum Storage {
+enum StorageBackend {
     Database(DatabaseBackend),
     S3(S3Backend),
 }
 
+pub struct Storage {
+    backend: StorageBackend,
+}
+
 impl Storage {
     pub(crate) fn new(pool: Pool) -> Self {
-        if let Some(c) = s3::s3_client() {
-            Storage::S3(S3Backend::new(c, s3::S3_BUCKET_NAME))
+        let backend = if let Some(c) = s3::s3_client() {
+            StorageBackend::S3(S3Backend::new(c, s3::S3_BUCKET_NAME))
         } else {
-            Storage::Database(DatabaseBackend::new(pool))
-        }
+            StorageBackend::Database(DatabaseBackend::new(pool))
+        };
+        Storage { backend }
     }
 
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
-        let mut blob = match self {
-            Self::Database(db) => db.get(path, max_size),
-            Self::S3(s3) => s3.get(path, max_size),
+        let mut blob = match &self.backend {
+            StorageBackend::Database(db) => db.get(path, max_size),
+            StorageBackend::S3(s3) => s3.get(path, max_size),
         }?;
         if let Some(alg) = blob.compression {
             blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
@@ -155,12 +160,12 @@ impl Storage {
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
         let conn;
-        let mut trans: Box<dyn StorageTransaction> = match self {
-            Self::Database(db) => {
+        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
+            StorageBackend::Database(db) => {
                 conn = db.start_connection()?;
                 Box::new(conn.start_storage_transaction()?)
             }
-            Self::S3(s3) => Box::new(s3.start_storage_transaction()?),
+            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
         };
 
         let mut file_paths_and_mimes = HashMap::new();
@@ -287,7 +292,9 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
+            let mut backend = Storage {
+                backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
+            };
             let (stored_files, _algs) = backend.store_all("", dir.path()).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
             for blob in blobs {
@@ -319,7 +326,9 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
+            let mut backend = Storage {
+                backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
+            };
             let (stored_files, _algs) = backend.store_all("rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
