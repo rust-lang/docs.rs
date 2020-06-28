@@ -5,7 +5,7 @@ use rusoto_s3::{
 };
 use std::cell::RefCell;
 
-pub(crate) struct TestS3(RefCell<S3Backend<'static>>);
+pub(crate) struct TestS3(RefCell<S3Backend>);
 
 impl TestS3 {
     pub(crate) fn new() -> Self {
@@ -49,7 +49,7 @@ impl TestS3 {
         assert_blob_eq(blob, &actual);
     }
 
-    pub(crate) fn with_client(&self, f: impl FnOnce(&mut S3Backend<'static>)) {
+    pub(crate) fn with_client(&self, f: impl FnOnce(&mut S3Backend)) {
         f(&mut self.0.borrow_mut())
     }
 }
