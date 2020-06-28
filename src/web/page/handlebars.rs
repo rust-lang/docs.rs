@@ -152,10 +152,8 @@ fn build_version_safe(version: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::web::releases::{self, Release};
-    use chrono::Utc;
+    use crate::web::releases;
     use iron::Url;
-    use serde_json::json;
 
     #[test]
     fn load_page_from_releases() {

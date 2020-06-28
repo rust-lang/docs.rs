@@ -42,7 +42,6 @@ pub struct CrateDetails {
     github_stars: Option<i32>,
     github_forks: Option<i32>,
     github_issues: Option<i32>,
-    // TODO: Is this even needed for rendering pages?
     pub(crate) metadata: MetaData,
     is_library: bool,
     yanked: bool,

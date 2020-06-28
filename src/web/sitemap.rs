@@ -1,10 +1,9 @@
-use crate::db::Pool;
-use crate::{docbuilder::Limits, impl_webpage, web::page::WebPage};
+use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
-    IronResult, Request, Response,
+    status, IronResult, Request, Response,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -50,7 +49,7 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
-    let mut resp = Response::with("Sitemap: https://docs.rs/sitemap.xml");
+    let mut resp = Response::with((status::Ok, "Sitemap: https://docs.rs/sitemap.xml"));
     resp.headers.set(ContentType::plaintext());
 
     Ok(resp)
@@ -81,4 +80,41 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
         limits: Limits::default(),
     }
     .into_response(req)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test::{assert_success, wrapper};
+
+    #[test]
+    fn sitemap() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/sitemap.xml", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/sitemap.xml", web)
+        })
+    }
+
+    #[test]
+    fn about_page() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/about", web)
+        })
+    }
+
+    #[test]
+    fn robots_txt() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/robots.txt", web)
+        })
+    }
 }
