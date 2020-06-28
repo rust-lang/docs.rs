@@ -9,7 +9,6 @@ use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
-use postgres::Connection;
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
@@ -245,7 +244,7 @@ impl RustwideBuilder {
                     })?;
                 }
 
-                add_path_into_database(&conn, "", &dest)?;
+                add_path_into_database(self.db.clone(), "", &dest)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
@@ -350,7 +349,7 @@ impl RustwideBuilder {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
                     let (files, new_algs) =
-                        add_path_into_database(&conn, &prefix, build.host_source_dir())?;
+                        add_path_into_database(self.db.clone(), &prefix, build.host_source_dir())?;
                     files_list = Some(files);
                     algs.extend(new_algs);
 
@@ -379,7 +378,7 @@ impl RustwideBuilder {
                             &metadata,
                         )?;
                     }
-                    let new_algs = self.upload_docs(&conn, name, version, local_storage.path())?;
+                    let new_algs = self.upload_docs(name, version, local_storage.path())?;
                     algs.extend(new_algs);
                 };
 
@@ -576,14 +575,13 @@ impl RustwideBuilder {
 
     fn upload_docs(
         &self,
-        conn: &Connection,
         name: &str,
         version: &str,
         local_storage: &Path,
     ) -> Result<CompressionAlgorithms> {
         debug!("Adding documentation into database");
         add_path_into_database(
-            conn,
+            self.db.clone(),
             &format!("rustdoc/{}/{}", name, version),
             local_storage,
         )

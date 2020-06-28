@@ -184,13 +184,14 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (path, file_path)
     };
 
-    let conn = extension!(req, Pool).get()?;
+    let pool = extension!(req, Pool);
+    let conn = pool.get()?;
     let config = extension!(req, Config);
 
     // try to get actual file first
     // skip if request is a directory
     let file = if !file_path.ends_with('/') {
-        DbFile::from_path(&conn, &file_path, &config).ok()
+        DbFile::from_path(pool.clone(), &file_path, &config).ok()
     } else {
         None
     };

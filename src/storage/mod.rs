@@ -3,6 +3,7 @@ pub(crate) mod s3;
 
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
+use crate::db::Pool;
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use path_slash::PathExt;
@@ -118,18 +119,19 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
 }
 
 pub(crate) enum Storage<'a> {
-    Database(DatabaseBackend<'a>),
+    Database(DatabaseBackend),
     S3(S3Backend<'a>),
 }
 
 impl<'a> Storage<'a> {
-    pub(crate) fn new(conn: &'a Connection) -> Self {
+    pub(crate) fn new(pool: Pool) -> Self {
         if let Some(c) = s3::s3_client() {
             Storage::from(S3Backend::new(c, s3::S3_BUCKET_NAME))
         } else {
-            DatabaseBackend::new(conn).into()
+            Storage::Database(DatabaseBackend::new(pool))
         }
     }
+
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         let mut blob = match self {
             Self::Database(db) => db.get(path, max_size),
@@ -254,12 +256,6 @@ fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
     })
 }
 
-impl<'a> From<DatabaseBackend<'a>> for Storage<'a> {
-    fn from(db: DatabaseBackend<'a>) -> Self {
-        Self::Database(db)
-    }
-}
-
 impl<'a> From<S3Backend<'a>> for Storage<'a> {
     fn from(db: S3Backend<'a>) -> Self {
         Self::S3(db)
@@ -294,7 +290,7 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
-            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
+            let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
             let (stored_files, _algs) = backend.store_all(&conn, "", dir.path()).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
             for blob in blobs {
@@ -327,7 +323,7 @@ mod test {
         wrapper(|env| {
             let db = env.db();
             let conn = db.conn();
-            let mut backend = Storage::Database(DatabaseBackend::new(&conn));
+            let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
             let (stored_files, _algs) = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {

@@ -469,7 +469,7 @@ impl DatabaseSubcommand {
             }
 
             Self::AddDirectory { directory, prefix } => {
-                add_path_into_database(&*ctx.conn()?, &prefix, directory)
+                add_path_into_database(ctx.pool()?, &prefix, directory)
                     .context("Failed to add directory into database")?;
             }
 

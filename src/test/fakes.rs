@@ -200,7 +200,7 @@ impl<'a> FakeRelease<'a> {
                     target.unwrap_or("")
                 );
                 log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-                crate::db::add_path_into_database(&db.conn(), &prefix, path_prefix)
+                crate::db::add_path_into_database(db.pool(), &prefix, path_prefix)
             };
 
             let index = [&package.name, "index.html"].join("/");
