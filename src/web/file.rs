@@ -1,22 +1,22 @@
 //! Database based file handler
 
-use crate::db::Pool;
-use crate::{db, error::Result, Config};
+use crate::storage::{Storage, Blob};
+use crate::{error::Result, Config};
 use iron::{status, Handler, IronError, IronResult, Request, Response};
 
 #[derive(Debug)]
-pub(crate) struct File(pub(crate) db::file::Blob);
+pub(crate) struct File(pub(crate) Blob);
 
 impl File {
     /// Gets file from database
-    pub fn from_path(pool: Pool, path: &str, config: &Config) -> Result<File> {
+    pub fn from_path(storage: &Storage, path: &str, config: &Config) -> Result<File> {
         let max_size = if path.ends_with(".html") {
             config.max_file_size_html
         } else {
             config.max_file_size
         };
 
-        Ok(File(db::file::get_path(pool, path, max_size)?))
+        Ok(File(storage.get(path, max_size)?))
     }
 
     /// Consumes File and creates a iron response
@@ -57,9 +57,9 @@ pub struct DatabaseFileHandler;
 impl Handler for DatabaseFileHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path().join("/");
-        let pool = extension!(req, Pool);
+        let storage = extension!(req, Storage);
         let config = extension!(req, Config);
-        if let Ok(file) = File::from_path(pool.clone(), &path, &config) {
+        if let Ok(file) = File::from_path(&storage, &path, &config) {
             Ok(file.serve())
         } else {
             Err(IronError::new(
@@ -85,7 +85,7 @@ mod tests {
             db.fake_release().create()?;
 
             let mut file = File::from_path(
-                db.pool(),
+                &env.storage(),
                 "rustdoc/fake-package/1.0.0/fake-package/index.html",
                 &env.config(),
             )
@@ -128,7 +128,7 @@ mod tests {
 
             let file = |path| {
                 File::from_path(
-                    db.pool(),
+                    &env.storage(),
                     &format!("rustdoc/dummy/0.1.0/{}", path),
                     &env.config(),
                 )

@@ -2,6 +2,7 @@ mod fakes;
 
 use crate::db::{Pool, PoolConnection};
 use crate::storage::s3::TestS3;
+use crate::storage::Storage;
 use crate::web::Server;
 use crate::BuildQueue;
 use crate::Config;
@@ -96,6 +97,7 @@ pub(crate) struct TestEnvironment {
     build_queue: OnceCell<Arc<BuildQueue>>,
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
+    storage: OnceCell<Arc<Storage>>,
     frontend: OnceCell<TestFrontend>,
     s3: OnceCell<TestS3>,
 }
@@ -112,6 +114,7 @@ impl TestEnvironment {
             build_queue: OnceCell::new(),
             config: OnceCell::new(),
             db: OnceCell::new(),
+            storage: OnceCell::new(),
             frontend: OnceCell::new(),
             s3: OnceCell::new(),
         }
@@ -154,14 +157,21 @@ impl TestEnvironment {
             .clone()
     }
 
+    pub(crate) fn storage(&self) -> Arc<Storage> {
+        self.storage
+            .get_or_init(|| Arc::new(Storage::new(self.db().pool())))
+            .clone()
+    }
+
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db
             .get_or_init(|| TestDatabase::new(&self.config()).expect("failed to initialize the db"))
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend
-            .get_or_init(|| TestFrontend::new(self.db(), self.config(), self.build_queue()))
+        self.frontend.get_or_init(|| {
+            TestFrontend::new(self.db(), self.config(), self.build_queue(), self.storage())
+        })
     }
 
     pub(crate) fn s3(&self) -> &TestS3 {
@@ -229,7 +239,12 @@ pub(crate) struct TestFrontend {
 }
 
 impl TestFrontend {
-    fn new(db: &TestDatabase, config: Arc<Config>, build_queue: Arc<BuildQueue>) -> Self {
+    fn new(
+        db: &TestDatabase,
+        config: Arc<Config>,
+        build_queue: Arc<BuildQueue>,
+        storage: Arc<Storage>,
+    ) -> Self {
         Self {
             server: Server::start(
                 Some("127.0.0.1:0"),
