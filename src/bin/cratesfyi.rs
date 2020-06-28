@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
-use cratesfyi::{BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
+use cratesfyi::{
+    BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server, Storage,
+};
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
@@ -117,12 +119,14 @@ impl CommandLine {
                 socket_addr,
                 reload_templates,
             } => {
+                let storage = Storage::new(ctx.pool()?);
                 Server::start(
                     Some(&socket_addr),
                     reload_templates,
                     ctx.pool()?,
                     ctx.config()?,
                     ctx.build_queue()?,
+                    Arc::new(storage),
                 )?;
             }
             Self::Daemon {

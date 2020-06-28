@@ -127,7 +127,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub(crate) fn new(pool: Pool) -> Self {
+    pub fn new(pool: Pool) -> Self {
         let backend = if let Some(c) = s3::s3_client() {
             StorageBackend::S3(S3Backend::new(c, s3::S3_BUCKET_NAME))
         } else {
@@ -212,6 +212,15 @@ impl Storage {
 
         trans.complete()?;
         Ok((file_paths_and_mimes, algs))
+    }
+}
+
+impl std::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.backend {
+            StorageBackend::Database(_) => write!(f, "database-backed storage"),
+            StorageBackend::S3(_) => write!(f, "S3-backed storage"),
+        }
     }
 }
 
