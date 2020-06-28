@@ -6,6 +6,7 @@ use crate::db::{add_build_into_database, add_package_into_database, Pool};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::storage::CompressionAlgorithms;
+use crate::storage::Storage;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
@@ -17,6 +18,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
@@ -67,12 +69,13 @@ pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
     db: Pool,
+    storage: Arc<Storage>,
     rustc_version: String,
     cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
-    pub fn init(db: Pool) -> Result<Self> {
+    pub fn init(db: Pool, storage: Arc<Storage>) -> Result<Self> {
         use rustwide::cmd::SandboxImage;
         let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
         let workspace_path = env_workspace_path
@@ -107,6 +110,7 @@ impl RustwideBuilder {
             workspace,
             toolchain,
             db,
+            storage,
             rustc_version: String::new(),
             cpu_limit,
         })
@@ -244,7 +248,7 @@ impl RustwideBuilder {
                     })?;
                 }
 
-                add_path_into_database(self.db.clone(), "", &dest)?;
+                add_path_into_database(&self.storage, "", &dest)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
@@ -349,7 +353,7 @@ impl RustwideBuilder {
                     debug!("adding sources into database");
                     let prefix = format!("sources/{}/{}", name, version);
                     let (files, new_algs) =
-                        add_path_into_database(self.db.clone(), &prefix, build.host_source_dir())?;
+                        add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
                     files_list = Some(files);
                     algs.extend(new_algs);
 
@@ -581,7 +585,7 @@ impl RustwideBuilder {
     ) -> Result<CompressionAlgorithms> {
         debug!("Adding documentation into database");
         add_path_into_database(
-            self.db.clone(),
+            &self.storage,
             &format!("rustdoc/{}/{}", name, version),
             local_storage,
         )

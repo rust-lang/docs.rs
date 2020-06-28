@@ -119,14 +119,13 @@ impl CommandLine {
                 socket_addr,
                 reload_templates,
             } => {
-                let storage = Storage::new(ctx.pool()?);
                 Server::start(
                     Some(&socket_addr),
                     reload_templates,
                     ctx.pool()?,
                     ctx.config()?,
                     ctx.build_queue()?,
-                    Arc::new(storage),
+                    ctx.storage()?,
                 )?;
             }
             Self::Daemon {
@@ -141,6 +140,7 @@ impl CommandLine {
                     ctx.config()?,
                     ctx.pool()?,
                     ctx.build_queue()?,
+                    ctx.storage()?,
                     registry_watcher == Toggle::Enabled,
                 )?;
             }
@@ -350,7 +350,7 @@ impl BuildSubcommand {
             Self::World => {
                 docbuilder.load_cache().context("Failed to load cache")?;
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
+                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
                 builder
                     .build_world(&mut docbuilder)
                     .context("Failed to build world")?;
@@ -364,8 +364,8 @@ impl BuildSubcommand {
                 local,
             } => {
                 docbuilder.load_cache().context("Failed to load cache")?;
-                let mut builder =
-                    RustwideBuilder::init(ctx.pool()?).context("failed to initialize rustwide")?;
+                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)
+                    .context("failed to initialize rustwide")?;
 
                 if let Some(path) = local {
                     builder
@@ -401,14 +401,14 @@ impl BuildSubcommand {
                     }
                 }
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
+                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
                 builder
                     .update_toolchain()
                     .context("failed to update toolchain")?;
             }
 
             Self::AddEssentialFiles => {
-                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
+                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
                 builder
                     .add_essential_files()
                     .context("failed to add essential files")?;
@@ -473,8 +473,8 @@ impl DatabaseSubcommand {
             }
 
             Self::AddDirectory { directory, prefix } => {
-                add_path_into_database(ctx.pool()?, &prefix, directory)
-                    .context("Failed to add directory into database")?;
+                add_path_into_database(&*ctx.storage()?, &prefix, directory)
+                    .expect("Failed to add directory into database");
             }
 
             // FIXME: This is actually util command not database
@@ -557,6 +557,7 @@ enum DeleteSubcommand {
 
 struct Context {
     build_queue: OnceCell<Arc<BuildQueue>>,
+    storage: OnceCell<Arc<Storage>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
 }
@@ -565,6 +566,7 @@ impl Context {
     fn new() -> Self {
         Self {
             build_queue: OnceCell::new(),
+            storage: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
         }
@@ -576,6 +578,13 @@ impl Context {
             .get_or_try_init::<_, Error>(|| {
                 Ok(Arc::new(BuildQueue::new(self.pool()?, &*self.config()?)))
             })?
+            .clone())
+    }
+
+    fn storage(&self) -> Result<Arc<Storage>, Error> {
+        Ok(self
+            .storage
+            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Storage::new(self.pool()?))))?
             .clone())
     }
 

@@ -179,7 +179,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
-        fakes::FakeRelease::new(self.db())
+        fakes::FakeRelease::new(self.db(), self.storage())
     }
 }
 

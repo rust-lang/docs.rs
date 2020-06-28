@@ -47,6 +47,7 @@ pub fn start_daemon(
     config: Arc<Config>,
     db: Pool,
     build_queue: Arc<BuildQueue>,
+    storage: Arc<Storage>,
     enable_registry_watcher: bool,
 ) -> Result<(), Error> {
     const CRATE_VARIABLES: &[&str] = &["CRATESFYI_PREFIX"];
@@ -71,12 +72,13 @@ pub fn start_daemon(
     // build new crates every minute
     let cloned_db = db.clone();
     let cloned_build_queue = build_queue.clone();
+    let cloned_storage = storage.clone();
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
             let doc_builder =
                 DocBuilder::new(opts(), cloned_db.clone(), cloned_build_queue.clone());
-            queue_builder(doc_builder, cloned_db, cloned_build_queue).unwrap();
+            queue_builder(doc_builder, cloned_db, cloned_build_queue, cloned_storage).unwrap();
         })
         .unwrap();
 
@@ -110,8 +112,6 @@ pub fn start_daemon(
 
     // at least start web server
     info!("Starting web server");
-
-    let storage = Arc::new(Storage::new(db.clone()));
 
     crate::Server::start(None, false, db, config, build_queue, storage)?;
     Ok(())
