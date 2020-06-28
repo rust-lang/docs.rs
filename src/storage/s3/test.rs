@@ -24,7 +24,11 @@ impl TestS3 {
         TestS3(RefCell::new(S3Backend::new(client, bucket)))
     }
     pub(crate) fn upload(&self, blobs: &[Blob]) -> Result<(), Error> {
-        self.0.borrow_mut().store_batch(blobs)
+        let s3 = self.0.borrow();
+        let mut transaction = s3.start_storage_transaction()?;
+        transaction.store_batch(blobs)?;
+        transaction.complete()?;
+        Ok(())
     }
     pub(crate) fn assert_404(&self, path: &'static str) {
         use rusoto_core::RusotoError;

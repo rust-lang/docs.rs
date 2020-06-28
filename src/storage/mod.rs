@@ -7,7 +7,6 @@ use crate::db::Pool;
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use path_slash::PathExt;
-use postgres::{transaction::Transaction, Connection};
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -144,13 +143,6 @@ impl<'a> Storage<'a> {
         Ok(blob)
     }
 
-    fn store_batch(&mut self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
-        match self {
-            Self::Database(db) => db.store_batch(batch, trans),
-            Self::S3(s3) => s3.store_batch(batch),
-        }
-    }
-
     // Store all files in `root_dir` into the backend under `prefix`.
     //
     // If the environment is configured with S3 credentials, this will upload to S3;
@@ -159,11 +151,18 @@ impl<'a> Storage<'a> {
     // This returns (map<filename, mime type>, set<compression algorithms>).
     pub(crate) fn store_all(
         &mut self,
-        conn: &Connection,
         prefix: &str,
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
-        let trans = conn.transaction()?;
+        let conn;
+        let mut trans: Box<dyn StorageTransaction> = match self {
+            Self::Database(db) => {
+                conn = db.start_connection()?;
+                Box::new(conn.start_storage_transaction()?)
+            }
+            Self::S3(s3) => Box::new(s3.start_storage_transaction()?),
+        };
+
         let mut file_paths_and_mimes = HashMap::new();
         let mut algs = HashSet::with_capacity(1);
 
@@ -203,12 +202,17 @@ impl<'a> Storage<'a> {
             if batch.is_empty() {
                 break;
             }
-            self.store_batch(&batch, &trans)?;
+            trans.store_batch(&batch)?;
         }
 
-        trans.commit()?;
+        trans.complete()?;
         Ok((file_paths_and_mimes, algs))
     }
+}
+
+trait StorageTransaction {
+    fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error>;
+    fn complete(&mut self) -> Result<(), Error>;
 }
 
 // public for benchmarking
@@ -289,9 +293,8 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
-            let (stored_files, _algs) = backend.store_all(&conn, "", dir.path()).unwrap();
+            let (stored_files, _algs) = backend.store_all("", dir.path()).unwrap();
             assert_eq!(stored_files.len(), blobs.len());
             for blob in blobs {
                 let name = Path::new(&blob.path);
@@ -322,9 +325,8 @@ mod test {
         }
         wrapper(|env| {
             let db = env.db();
-            let conn = db.conn();
             let mut backend = Storage::Database(DatabaseBackend::new(db.pool()));
-            let (stored_files, _algs) = backend.store_all(&conn, "rustdoc", dir.path()).unwrap();
+            let (stored_files, _algs) = backend.store_all("rustdoc", dir.path()).unwrap();
             assert_eq!(stored_files.len(), files.len());
             for name in &files {
                 let name = Path::new(name);

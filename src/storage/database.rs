@@ -1,4 +1,4 @@
-use super::Blob;
+use super::{Blob, StorageTransaction};
 use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::{Error, Fail};
@@ -63,10 +63,39 @@ impl DatabaseBackend {
         }
     }
 
-    pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+    pub(super) fn start_connection(&self) -> Result<DatabaseConnection, Error> {
+        Ok(DatabaseConnection {
+            conn: self.pool.get()?,
+        })
+    }
+}
+
+pub(super) struct DatabaseConnection {
+    conn: crate::db::PoolConnection,
+}
+
+impl DatabaseConnection {
+    pub(super) fn start_storage_transaction(&self) -> Result<DatabaseStorageTransaction<'_>, Error> {
+        Ok(DatabaseStorageTransaction {
+            transaction: Some(self.conn.transaction()?),
+        })
+    }
+}
+
+pub(super) struct DatabaseStorageTransaction<'a> {
+    transaction: Option<Transaction<'a>>,
+}
+
+impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
+    fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
+        let transaction = self
+            .transaction
+            .as_ref()
+            .expect("called complete() before store_batch()");
+
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
-            trans.query(
+            transaction.query(
                 "INSERT INTO files (path, mime, content, compression)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
@@ -74,6 +103,14 @@ impl DatabaseBackend {
                 &[&blob.path, &blob.mime, &blob.content, &compression],
             )?;
         }
+        Ok(())
+    }
+
+    fn complete(&mut self) -> Result<(), Error> {
+        self.transaction
+            .take()
+            .expect("called complete() multiple times")
+            .commit()?;
         Ok(())
     }
 }
@@ -136,7 +173,6 @@ mod tests {
 
         crate::test::wrapper(|env| {
             let db = env.db();
-            let conn = db.conn();
             let backend = DatabaseBackend::new(db.pool());
 
             let small_blob = Blob {
@@ -154,14 +190,11 @@ mod tests {
                 compression: None,
             };
 
-            let transaction = conn.transaction()?;
-            backend
-                .store_batch(std::slice::from_ref(&small_blob), &transaction)
-                .unwrap();
-            backend
-                .store_batch(std::slice::from_ref(&big_blob), &transaction)
-                .unwrap();
-            transaction.commit()?;
+            let conn = backend.start_connection()?;
+            let mut transaction = conn.start_storage_transaction()?;
+            transaction.store_batch(std::slice::from_ref(&small_blob))?;
+            transaction.store_batch(std::slice::from_ref(&big_blob))?;
+            transaction.complete()?;
 
             let blob = backend.get("small-blob.bin", MAX_SIZE).unwrap();
             assert_eq!(blob.content.len(), small_blob.content.len());

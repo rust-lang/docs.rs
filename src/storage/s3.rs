@@ -1,6 +1,7 @@
-use super::Blob;
+use super::{Blob, StorageTransaction};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
+use futures::stream::{FuturesUnordered, Stream};
 use futures::Future;
 use log::{error, warn};
 use rusoto_core::region::Region;
@@ -19,16 +20,11 @@ pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
 pub(crate) struct S3Backend<'a> {
     client: S3Client,
     bucket: &'a str,
-    runtime: Runtime,
 }
 
 impl<'a> S3Backend<'a> {
     pub(crate) fn new(client: S3Client, bucket: &'a str) -> Self {
-        Self {
-            client,
-            bucket,
-            runtime: Runtime::new().unwrap(),
-        }
+        Self { client, bucket }
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -63,19 +59,31 @@ impl<'a> S3Backend<'a> {
         })
     }
 
-    pub(super) fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
-        use futures::stream::FuturesUnordered;
-        use futures::stream::Stream;
+    pub(super) fn start_storage_transaction(&self) -> Result<S3StorageTransaction, Error> {
+        Ok(S3StorageTransaction {
+            s3: self,
+            runtime: Runtime::new()?,
+        })
+    }
+}
 
+pub(super) struct S3StorageTransaction<'a> {
+    s3: &'a S3Backend<'a>,
+    runtime: Runtime,
+}
+
+impl<'a> StorageTransaction for S3StorageTransaction<'a> {
+    fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
         let mut attempts = 0;
 
         loop {
             let mut futures = FuturesUnordered::new();
             for blob in batch {
                 futures.push(
-                    self.client
+                    self.s3
+                        .client
                         .put_object(PutObjectRequest {
-                            bucket: self.bucket.to_string(),
+                            bucket: self.s3.bucket.to_string(),
                             key: blob.path.clone(),
                             body: Some(blob.content.clone().into()),
                             content_type: Some(blob.mime.clone()),
@@ -101,6 +109,10 @@ impl<'a> S3Backend<'a> {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn complete(&mut self) -> Result<(), Error> {
         Ok(())
     }
 }
