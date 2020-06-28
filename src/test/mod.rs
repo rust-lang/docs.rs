@@ -1,5 +1,6 @@
 mod fakes;
 
+use crate::db::{Pool, PoolConnection};
 use crate::storage::s3::TestS3;
 use crate::web::Server;
 use crate::Config;
@@ -11,10 +12,7 @@ use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
 };
-use std::{
-    panic,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::{panic, sync::Arc};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let _ = dotenv::dotenv();
@@ -123,7 +121,13 @@ impl TestEnvironment {
     }
 
     fn base_config(&self) -> Config {
-        Config::from_env().expect("failed to get base config")
+        let mut config = Config::from_env().expect("failed to get base config");
+
+        // Use less connections for each test compared to production.
+        config.max_pool_size = 2;
+        config.min_pool_idle = 0;
+
+        config
     }
 
     pub(crate) fn override_config(&self, f: impl FnOnce(&mut Config)) {
@@ -157,7 +161,7 @@ impl TestEnvironment {
 }
 
 pub(crate) struct TestDatabase {
-    conn: Arc<Mutex<Connection>>,
+    pool: Pool,
     schema: String,
 }
 
@@ -178,13 +182,15 @@ impl TestDatabase {
         crate::db::migrate(None, &conn)?;
 
         Ok(TestDatabase {
-            conn: Arc::new(Mutex::new(conn)),
+            pool: Pool::new_with_schema(config, &schema)?,
             schema,
         })
     }
 
-    pub(crate) fn conn(&self) -> MutexGuard<Connection> {
-        self.conn.lock().expect("failed to lock the connection")
+    pub(crate) fn conn(&self) -> PoolConnection {
+        self.pool
+            .get()
+            .expect("failed to get a connection out of the pool")
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
@@ -212,8 +218,8 @@ pub(crate) struct TestFrontend {
 impl TestFrontend {
     fn new(db: &TestDatabase, config: Arc<Config>) -> Self {
         Self {
-            server: Server::start_test(db.conn.clone(), config)
-                .expect("failed to start the server"),
+            server: Server::start(Some("127.0.0.1:0"), false, db.pool.clone(), config)
+                .expect("failed to start the web server"),
             client: Client::new(),
         }
     }

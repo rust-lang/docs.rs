@@ -79,9 +79,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{env, fmt, path::PathBuf, time::Duration};
 
-#[cfg(test)]
-use std::sync::Mutex;
-
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
@@ -395,21 +392,6 @@ impl Server {
         let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), db, config, template_data);
         info!("Running docs.rs web server on http://{}", server.addr());
         Ok(server)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn start_test(
-        conn: Arc<Mutex<Connection>>,
-        config: Arc<Config>,
-    ) -> Result<Self, Error> {
-        let templates = TemplateData::new(&conn.lock().unwrap())?;
-
-        Ok(Self::start_inner(
-            "127.0.0.1:0",
-            Pool::new_simple(conn.clone()),
-            config,
-            Arc::new(templates),
-        ))
     }
 
     fn start_inner(
