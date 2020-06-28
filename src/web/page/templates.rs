@@ -97,6 +97,8 @@ pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
     // directory and matches them against the provided glob expression. Unfortunately this means
     // Tera will walk all the rustwide workspaces, the git repository and a bunch of other
     // unrelated data, slowing down the search a lot.
+    //
+    // TODO: remove this when https://github.com/Gilnaa/globwalk/issues/29 is fixed
     let mut tera = Tera::default();
     tera.add_template_files(find_templates_in_filesystem(TEMPLATES_DIRECTORY)?)?;
 
