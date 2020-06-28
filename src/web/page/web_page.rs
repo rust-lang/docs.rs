@@ -4,7 +4,6 @@ use serde::Serialize;
 use tera::Context;
 
 /// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
-#[macro_export]
 macro_rules! impl_webpage {
     ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl $crate::web::page::WebPage for $page {
