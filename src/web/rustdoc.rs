@@ -429,20 +429,25 @@ fn path_for_version(
         // NOTE: this adds 'index.html' if it wasn't there before
         return req_path[3..].join("/");
     }
+    // check if req_path[3] is the platform choice or the name of the crate
+    // Note we don't require the platform to have a trailing slash.
+    let platform = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 4 {
+        req_path[3]
+    } else {
+        ""
+    };
     // this page doesn't exist in the latest version
     let last_component = *req_path.last().unwrap();
     let search_item = if last_component == "index.html" {
         // this is a module
         req_path.get(req_path.len() - 2).copied()
+    // no trailing slash; no one should be redirected here but we handle it gracefully anyway
+    } else if last_component == platform {
+        // nothing to search for
+        None
     } else {
         // this is an item
         last_component.split('.').nth(1)
-    };
-    // check if req_path[3] is the platform choice or the name of the crate
-    let platform = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 5 {
-        req_path[3]
-    } else {
-        ""
     };
     if let Some(search) = search_item {
         format!("{}?search={}", platform, search)
@@ -1434,10 +1439,7 @@ mod test {
                 .create()?;
             assert_redirect(
                 "/crate/dummy/0.2.0/target-redirect/x86_64-apple-darwin",
-                // NOTE: this does _not_ redirect to the platform in case it gives a 404.
-                // Any time we serve /target-redirect without a trailing slash,
-                // someone typed in the URL manually, so we want to avoid 404s.
-                "/dummy/0.2.0/dummy/",
+                "/dummy/0.2.0/x86_64-apple-darwin/dummy/",
                 web,
             )?;
             assert_redirect(
