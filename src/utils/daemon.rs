@@ -4,6 +4,7 @@
 
 use crate::{
     db::Pool,
+    storage::Storage,
     utils::{queue_builder, update_release_activity, GithubUpdater},
     BuildQueue, Config, DocBuilder, DocBuilderOptions,
 };
@@ -110,7 +111,9 @@ pub fn start_daemon(
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, db, config, build_queue)?;
+    let storage = Arc::new(Storage::new(db.clone()));
+
+    crate::Server::start(None, false, db, config, build_queue, storage)?;
     Ok(())
 }
 

@@ -77,7 +77,7 @@ mod rustdoc;
 mod sitemap;
 mod source;
 
-use crate::{config::Config, db::Pool, impl_webpage, BuildQueue};
+use crate::{config::Config, db::Pool, impl_webpage, BuildQueue, Storage};
 use chrono::{DateTime, Utc};
 use extensions::InjectExtensions;
 use failure::Error;
@@ -127,11 +127,13 @@ impl CratesfyiHandler {
         config: Arc<Config>,
         template_data: Arc<TemplateData>,
         build_queue: Arc<BuildQueue>,
+        storage: Arc<Storage>,
     ) -> CratesfyiHandler {
         let inject_extensions = InjectExtensions {
             build_queue,
             pool,
             config,
+            storage,
             template_data,
         };
 
@@ -394,6 +396,7 @@ impl Server {
         db: Pool,
         config: Arc<Config>,
         build_queue: Arc<BuildQueue>,
+        storage: Arc<Storage>,
     ) -> Result<Self, Error> {
         // Initialize templates
         let template_data = Arc::new(TemplateData::new(&*db.get()?)?);
@@ -407,6 +410,7 @@ impl Server {
             config,
             template_data,
             build_queue,
+            storage,
         );
         info!("Running docs.rs web server on http://{}", server.addr());
         Ok(server)
@@ -418,6 +422,7 @@ impl Server {
         config: Arc<Config>,
         template_data: Arc<TemplateData>,
         build_queue: Arc<BuildQueue>,
+        storage: Arc<Storage>,
     ) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
@@ -427,7 +432,7 @@ impl Server {
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
         metrics::FAILED_DB_CONNECTIONS.inc_by(0);
 
-        let cratesfyi = CratesfyiHandler::new(pool, config, template_data, build_queue);
+        let cratesfyi = CratesfyiHandler::new(pool, config, template_data, build_queue, storage);
         let inner = Iron::new(cratesfyi)
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
