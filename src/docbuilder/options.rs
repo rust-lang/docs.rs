@@ -1,8 +1,7 @@
-use crate::error::Result;
+use crate::{config::Config, error::Result};
 use std::path::PathBuf;
-use std::{env, fmt};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
     pub prefix: PathBuf,
@@ -14,15 +13,11 @@ pub struct DocBuilderOptions {
     pub debug: bool,
 }
 
-impl Default for DocBuilderOptions {
-    fn default() -> DocBuilderOptions {
-        let cwd = env::current_dir().unwrap();
-
-        let (prefix, registry_index_path) = generate_paths(cwd);
-
+impl DocBuilderOptions {
+    pub fn new(config: &Config) -> DocBuilderOptions {
         DocBuilderOptions {
-            prefix,
-            registry_index_path,
+            prefix: config.prefix.clone(),
+            registry_index_path: config.registry_index_path.clone(),
 
             keep_build_directory: false,
             skip_if_exists: false,
@@ -30,36 +25,6 @@ impl Default for DocBuilderOptions {
             skip_oldest_versions: false,
             build_only_latest_version: false,
             debug: false,
-        }
-    }
-}
-
-impl fmt::Debug for DocBuilderOptions {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "DocBuilderOptions {{ \
-                registry_index_path: {:?}, \
-                keep_build_directory: {:?}, skip_if_exists: {:?}, \
-                skip_if_log_exists: {:?}, debug: {:?} }}",
-            self.registry_index_path,
-            self.keep_build_directory,
-            self.skip_if_exists,
-            self.skip_if_log_exists,
-            self.debug
-        )
-    }
-}
-
-impl DocBuilderOptions {
-    /// Creates new DocBuilderOptions from prefix
-    pub fn from_prefix(prefix: PathBuf) -> DocBuilderOptions {
-        let (prefix, registry_index_path) = generate_paths(prefix);
-
-        DocBuilderOptions {
-            prefix,
-            registry_index_path,
-            ..Default::default()
         }
     }
 
@@ -73,10 +38,4 @@ impl DocBuilderOptions {
 
         Ok(())
     }
-}
-
-fn generate_paths(prefix: PathBuf) -> (PathBuf, PathBuf) {
-    let registry_index_path = PathBuf::from(&prefix).join("crates.io-index");
-
-    (prefix, registry_index_path)
 }

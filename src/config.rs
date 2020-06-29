@@ -1,11 +1,15 @@
 use failure::{bail, format_err, Error, Fail, ResultExt};
 use std::env::VarError;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Config {
     // Build params
     pub(crate) build_attempts: u16,
+
+    pub(crate) prefix: PathBuf,
+    pub(crate) registry_index_path: PathBuf,
 
     // Database connection params
     pub(crate) database_url: String,
@@ -23,8 +27,13 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
+        let prefix: PathBuf = require_env("CRATESFYI_PREFIX")?;
+
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
+
+            prefix: prefix.clone(),
+            registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
 
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
