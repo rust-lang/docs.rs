@@ -4,6 +4,7 @@ use super::error::Nope;
 use super::page::Page;
 use super::{duration_to_str, match_version, redirect_base};
 use crate::db::Pool;
+use crate::docbuilder::BuildQueue;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::status;
@@ -643,30 +644,15 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
-    let query = conn
-        .query(
-            "SELECT name, version, priority
-             FROM queue
-             WHERE attempt < 5
-             ORDER BY priority ASC, attempt ASC, id ASC",
-            &[],
-        )
-        .unwrap();
+    let queue = extension!(req, BuildQueue);
 
-    let crates: Vec<(String, String, i32)> = query
-        .into_iter()
-        .map(|krate| {
-            (
-                krate.get("name"),
-                krate.get("version"),
-                // The priority here is inverted: in the database if a crate has a higher priority it
-                // will be built after everything else, which is counter-intuitive for people not
-                // familiar with docs.rs's inner workings.
-                -krate.get::<_, i32>("priority"),
-            )
-        })
-        .collect();
+    let mut crates = ctry!(queue.queued_crates());
+    for krate in &mut crates {
+        // The priority here is inverted: in the database if a crate has a higher priority it
+        // will be built after everything else, which is counter-intuitive for people not
+        // familiar with docs.rs's inner workings.
+        krate.priority = -krate.priority;
+    }
 
     let is_empty = crates.is_empty();
     Page::new(crates)
