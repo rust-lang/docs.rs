@@ -7,13 +7,13 @@ mod rustwide_builder;
 
 pub(crate) use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
-pub use self::queue::BuildQueue;
 pub(crate) use self::rustwide_builder::BuildResult;
 pub use self::rustwide_builder::RustwideBuilder;
 
 use crate::db::Pool;
 use crate::error::Result;
 use crate::index::Index;
+use crate::queue::BuildQueue;
 use crate::DocBuilderOptions;
 use log::debug;
 use std::collections::BTreeSet;
