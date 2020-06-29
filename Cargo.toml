@@ -37,14 +37,13 @@ futures = "0.1"
 tokio = "0.1"
 systemstat = "0.1.4"
 prometheus = { version = "0.7.0", default-features = false }
-lazy_static = "1.0.0"
 rustwide = "0.7.1"
 mime_guess = "2"
 dotenv = "0.15"
 zstd = "0.5"
 git2 = { version = "0.13.6", default-features = false }
-once_cell = "1.4.0"
 path-slash = "0.1.3"
+once_cell = { version = "1.4.0", features = ["parking_lot"] }
 
 # Data serialization and deserialization
 serde = { version = "1.0", features = ["derive"] }
