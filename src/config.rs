@@ -4,6 +4,9 @@ use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Config {
+    // Build params
+    pub(crate) build_attempts: u16,
+
     // Database connection params
     pub(crate) database_url: String,
     pub(crate) max_pool_size: u32,
@@ -17,6 +20,8 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
         Ok(Self {
+            build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
+
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,

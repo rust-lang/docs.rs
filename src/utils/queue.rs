@@ -46,21 +46,6 @@ pub fn remove_crate_priority(conn: &Connection, pattern: &str) -> Result<Option<
     Ok(query.iter().next().map(|row| row.get(0)))
 }
 
-/// Adds a crate to the build queue to be built by rustdoc. `priority` should be gotten from `get_crate_priority`
-pub fn add_crate_to_queue(
-    conn: &Connection,
-    name: &str,
-    version: &str,
-    priority: i32,
-) -> Result<()> {
-    conn.execute(
-        "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3)",
-        &[&name, &version, &priority],
-    )?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,39 +145,6 @@ mod tests {
                 get_crate_priority(&db.conn(), "rust4lyfe")?,
                 DEFAULT_PRIORITY
             );
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn add_to_queue() {
-        wrapper(|env| {
-            let db = env.db();
-
-            let test_crates = [
-                ("rcc", "0.1.0", 2),
-                ("lasso", "0.1.0", -1),
-                ("hexponent", "0.1.0", 0),
-                ("destroy-all-humans", "0.0.0-alpha", -100000),
-                ("totally-not-destroying-humans", "0.0.1", 0),
-            ];
-
-            for (name, version, priority) in test_crates.iter() {
-                add_crate_to_queue(&db.conn(), name, version, *priority)?;
-
-                let query = db.conn().query(
-                    "SELECT name, version, priority FROM queue WHERE name = $1",
-                    &[&name],
-                )?;
-
-                assert!(query.len() == 1);
-                let row = query.iter().next().unwrap();
-
-                assert_eq!(&row.get::<_, String>(0), name);
-                assert_eq!(&row.get::<_, String>(1), version);
-                assert_eq!(row.get::<_, i32>(2), *priority);
-            }
 
             Ok(())
         })

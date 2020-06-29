@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cratesfyi::db::{self, add_path_into_database, Pool};
-use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
-use cratesfyi::{Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
+use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
+use cratesfyi::{BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
 use failure::Error;
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
@@ -102,7 +102,7 @@ impl CommandLine {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(ctx.config()?, ctx.pool()?)?;
+                cratesfyi::utils::start_daemon(ctx.config()?, ctx.pool()?, ctx.build_queue()?)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
@@ -146,10 +146,9 @@ impl QueueSubcommand {
                 crate_name,
                 crate_version,
                 build_priority,
-            } => {
-                add_crate_to_queue(&*ctx.conn()?, &crate_name, &crate_version, build_priority)
-                    .expect("Could not add crate to queue");
-            }
+            } => ctx
+                .build_queue()?
+                .add_crate(&crate_name, &crate_version, build_priority)?,
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
@@ -255,7 +254,7 @@ impl Build {
                 .check_paths()
                 .expect("The given paths were invalid");
 
-            DocBuilder::new(doc_options, ctx.pool()?)
+            DocBuilder::new(doc_options, ctx.pool()?, ctx.build_queue()?)
         };
 
         self.subcommand.handle_args(ctx, docbuilder)
@@ -495,6 +494,7 @@ impl BlacklistSubcommand {
 }
 
 struct Context {
+    build_queue: OnceCell<Arc<BuildQueue>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
 }
@@ -502,9 +502,19 @@ struct Context {
 impl Context {
     fn new() -> Self {
         Self {
+            build_queue: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
         }
+    }
+
+    fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
+        Ok(self
+            .build_queue
+            .get_or_try_init::<_, Error>(|| {
+                Ok(Arc::new(BuildQueue::new(self.pool()?, &*self.config()?)))
+            })?
+            .clone())
     }
 
     fn config(&self) -> Result<Arc<Config>, Error> {
