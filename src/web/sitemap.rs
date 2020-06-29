@@ -69,11 +69,13 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
     let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
 
-    let mut rustc_version = None;
-
-    if let Some(Ok(Value::String(version))) = res.iter().next().and_then(|row| row.get_opt(0)) {
-        rustc_version = Some(version);
-    }
+    let rustc_version = res.iter().next().and_then(|row| {
+        if let Some(Ok(Value::String(version))) = row.get_opt(0) {
+            Some(version)
+        } else {
+            None
+        }
+    });
 
     About {
         rustc_version,
