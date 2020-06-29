@@ -77,6 +77,7 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
         "SELECT value FROM config WHERE name = 'rustc_version';",
         &[],
     )?;
+
     if res.is_empty() {
         failure::bail!("missing rustc version");
     }

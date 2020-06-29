@@ -3,6 +3,7 @@ use crate::BuildQueue;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
+use once_cell::sync::Lazy;
 use prometheus::{
     opts, register_counter, register_int_counter, register_int_gauge, Encoder, IntCounter,
     IntGauge, TextEncoder, __register_gauge, register_int_counter_vec, IntCounterVec,
@@ -10,112 +11,141 @@ use prometheus::{
 };
 use std::time::{Duration, Instant};
 
-lazy_static::lazy_static! {
-    static ref QUEUED_CRATES_COUNT: IntGauge = register_int_gauge!(
+static QUEUED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_queued_crates_count",
         "Number of crates in the build queue"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref PRIORITIZED_CRATES_COUNT: IntGauge = register_int_gauge!(
+pub static PRIORITIZED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_prioritized_crates_count",
         "Number of crates in the build queue that have a positive priority"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    static ref FAILED_CRATES_COUNT: IntGauge = register_int_gauge!(
+static FAILED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_failed_crates_count",
         "Number of crates that failed to build"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref TOTAL_BUILDS: IntCounter = register_int_counter!(
-        "docsrs_total_builds",
-        "Number of crates built"
-    )
-    .unwrap();
+pub static TOTAL_BUILDS: Lazy<IntCounter> =
+    Lazy::new(|| register_int_counter!("docsrs_total_builds", "Number of crates built").unwrap());
 
-    pub static ref SUCCESSFUL_BUILDS: IntCounter = register_int_counter!(
+pub static SUCCESSFUL_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
         "docsrs_successful_builds",
         "Number of builds that successfully generated docs"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref FAILED_BUILDS: IntCounter = register_int_counter!(
+pub static FAILED_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
         "docsrs_failed_builds",
         "Number of builds that generated a compile error"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref NON_LIBRARY_BUILDS: IntCounter = register_int_counter!(
+pub static NON_LIBRARY_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
         "docsrs_non_library_builds",
         "Number of builds that did not complete due to not being a library"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref UPLOADED_FILES_TOTAL: IntCounter = register_int_counter!(
+pub static UPLOADED_FILES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
         "docsrs_uploaded_files_total",
         "Number of files uploaded to S3 or stored in the database"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref ROUTES_VISITED: IntCounterVec = register_int_counter_vec!(
+pub static ROUTES_VISITED: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
         "docsrs_routes_visited",
         "The traffic of various docs.rs routes",
         &["route"]
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref RESPONSE_TIMES: HistogramVec = register_histogram_vec!(
+pub static RESPONSE_TIMES: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
         "docsrs_response_time",
         "The response times of various docs.rs routes",
         &["route"]
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref RUSTDOC_RENDERING_TIMES: HistogramVec = register_histogram_vec!(
+pub static RUSTDOC_RENDERING_TIMES: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
         "docsrs_rustdoc_rendering_time",
         "The time it takes to render a rustdoc page",
         &["step"]
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref FAILED_DB_CONNECTIONS: IntCounter = register_int_counter!(
+pub static FAILED_DB_CONNECTIONS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
         "docsrs_failed_db_connections",
         "Number of attempted and failed connections to the database"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref USED_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+pub static USED_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_used_db_connections",
         "The number of used database connections"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref IDLE_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+pub static IDLE_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_idle_db_connections",
         "The number of idle database connections"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref MAX_DB_CONNECTIONS: IntGauge = register_int_gauge!(
+pub static MAX_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_max_db_connections",
         "The maximum database connections"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref OPEN_FILE_DESCRIPTORS: IntGauge = register_int_gauge!(
+#[cfg(not(windows))]
+pub static OPEN_FILE_DESCRIPTORS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_open_file_descriptors",
         "The number of currently opened file descriptors"
     )
-    .unwrap();
+    .unwrap()
+});
 
-    pub static ref CURRENTLY_RUNNING_THREADS: IntGauge = register_int_gauge!(
+#[cfg(not(windows))]
+pub static CURRENTLY_RUNNING_THREADS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
         "docsrs_running_threads",
         "The number of threads being used by docs.rs"
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     let pool = extension!(req, Pool);
@@ -231,6 +261,7 @@ impl Drop for RenderingTimesRecorder {
 #[cfg(test)]
 mod tests {
     use crate::test::{assert_success, wrapper};
+    use once_cell::sync::Lazy;
     use std::{
         collections::HashMap,
         sync::{
@@ -240,9 +271,8 @@ mod tests {
     };
 
     static ROUTES_VISITED: AtomicUsize = AtomicUsize::new(0);
-    lazy_static::lazy_static! {
-        static ref RESPONSE_TIMES: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
-    }
+    static RESPONSE_TIMES: Lazy<Mutex<HashMap<String, usize>>> =
+        Lazy::new(|| Mutex::new(HashMap::new()));
 
     pub fn record_tests(route: &str) {
         ROUTES_VISITED.fetch_add(1, Ordering::SeqCst);

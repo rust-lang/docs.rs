@@ -3,6 +3,7 @@
 use handlebars_iron::Template;
 use iron::response::Response;
 use iron::{status, IronResult, Set};
+use once_cell::sync::Lazy;
 use serde::{
     ser::{SerializeStruct, Serializer},
     Serialize,
@@ -10,10 +11,8 @@ use serde::{
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-lazy_static::lazy_static! {
-    static ref RUSTC_RESOURCE_SUFFIX: String = load_rustc_resource_suffix()
-        .unwrap_or_else(|_| "???".into());
-}
+static RUSTC_RESOURCE_SUFFIX: Lazy<String> =
+    Lazy::new(|| load_rustc_resource_suffix().unwrap_or_else(|_| "???".into()));
 
 fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
     // New instances of the configuration or the connection pool shouldn't be created inside the
