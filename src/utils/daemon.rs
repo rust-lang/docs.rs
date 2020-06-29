@@ -4,7 +4,7 @@
 
 use crate::{
     db::Pool,
-    docbuilder::RustwideBuilder,
+    docbuilder::{RustwideBuilder, BuildQueue},
     utils::{github_updater, pubsubhubbub, update_release_activity},
     Config, DocBuilder, DocBuilderOptions,
 };
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
 
-pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
+pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -38,6 +38,7 @@ pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
 
     // check new crates every minute
     let cloned_db = db.clone();
+    let cloned_build_queue = build_queue.clone();
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
@@ -45,7 +46,7 @@ pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
             thread::sleep(Duration::from_secs(30));
             loop {
                 let opts = opts();
-                let mut doc_builder = DocBuilder::new(opts, cloned_db.clone());
+                let mut doc_builder = DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
 
                 if doc_builder.is_locked() {
                     debug!("Lock file exists, skipping checking new crates");
@@ -67,7 +68,7 @@ pub fn start_daemon(config: Arc<Config>, db: Pool) -> Result<(), Error> {
     let cloned_db = db.clone();
     thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
         let opts = opts();
-        let mut doc_builder = DocBuilder::new(opts, cloned_db.clone());
+        let mut doc_builder = DocBuilder::new(opts, cloned_db.clone(), build_queue);
 
         /// Represents the current state of the builder thread.
         enum BuilderState {

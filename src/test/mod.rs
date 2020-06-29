@@ -1,6 +1,7 @@
 mod fakes;
 
 use crate::db::{Pool, PoolConnection};
+use crate::docbuilder::BuildQueue;
 use crate::storage::s3::TestS3;
 use crate::web::Server;
 use crate::Config;
@@ -92,6 +93,7 @@ pub(crate) fn assert_redirect(
 }
 
 pub(crate) struct TestEnvironment {
+    build_queue: OnceCell<Arc<BuildQueue>>,
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     frontend: OnceCell<TestFrontend>,
@@ -107,6 +109,7 @@ impl TestEnvironment {
     fn new() -> Self {
         init_logger();
         Self {
+            build_queue: OnceCell::new(),
             config: OnceCell::new(),
             db: OnceCell::new(),
             frontend: OnceCell::new(),
@@ -137,6 +140,12 @@ impl TestEnvironment {
         if self.config.set(Arc::new(config)).is_err() {
             panic!("can't call override_config after the configuration is accessed!");
         }
+    }
+
+    pub(crate) fn build_queue(&self) -> Arc<BuildQueue> {
+        self.build_queue
+            .get_or_init(|| Arc::new(BuildQueue::new(self.db().pool(), &self.config())))
+            .clone()
     }
 
     pub(crate) fn config(&self) -> Arc<Config> {
@@ -185,6 +194,10 @@ impl TestDatabase {
             pool: Pool::new_with_schema(config, &schema)?,
             schema,
         })
+    }
+
+    pub(crate) fn pool(&self) -> Pool {
+        self.pool.clone()
     }
 
     pub(crate) fn conn(&self) -> PoolConnection {

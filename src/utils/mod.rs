@@ -6,7 +6,7 @@ pub use self::daemon::start_daemon;
 pub use self::github_updater::github_updater;
 pub use self::html::extract_head_and_body;
 pub use self::queue::{
-    add_crate_to_queue, get_crate_priority, remove_crate_priority, set_crate_priority,
+    get_crate_priority, remove_crate_priority, set_crate_priority,
 };
 pub use self::release_activity_updater::update_release_activity;
 pub(crate) use self::rustc_version::parse_rustc_version;

@@ -7,6 +7,7 @@ mod rustwide_builder;
 
 pub(crate) use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
+pub use self::queue::BuildQueue;
 pub(crate) use self::rustwide_builder::BuildResult;
 pub use self::rustwide_builder::RustwideBuilder;
 
@@ -20,20 +21,23 @@ use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// chroot based documentation builder
 pub struct DocBuilder {
     options: DocBuilderOptions,
     index: Index,
     db: Pool,
+    build_queue: Arc<BuildQueue>,
     cache: BTreeSet<String>,
     db_cache: BTreeSet<String>,
 }
 
 impl DocBuilder {
-    pub fn new(options: DocBuilderOptions, db: Pool) -> DocBuilder {
+    pub fn new(options: DocBuilderOptions, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
         let index = Index::new(&options.registry_index_path).expect("valid index");
         DocBuilder {
+            build_queue,
             options,
             index,
             db,

@@ -1,8 +1,10 @@
 //! Updates registry index and builds new packages
 
 use super::{DocBuilder, RustwideBuilder};
+use crate::config::Config;
+use crate::db::Pool;
 use crate::error::Result;
-use crate::utils::{add_crate_to_queue, get_crate_priority};
+use crate::utils::get_crate_priority;
 use crates_index_diff::ChangeKind;
 use log::{debug, error};
 
@@ -44,7 +46,10 @@ impl DocBuilder {
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&conn, &krate.name)?;
 
-                    match add_crate_to_queue(&conn, &krate.name, &krate.version, priority) {
+                    match self
+                        .build_queue
+                        .add_crate(&krate.name, &krate.version, priority)
+                    {
                         Ok(()) => {
                             debug!("{}-{} added into build queue", krate.name, krate.version);
                             crates_added += 1;
@@ -79,58 +84,176 @@ impl DocBuilder {
         &mut self,
         builder: &mut RustwideBuilder,
     ) -> Result<bool> {
-        // This is in a nested scope to drop the connection before build_package is called,
-        // otherwise the borrow checker will complain.
-        let (id, name, version): (i32, String, String) = {
-            let conn = self.db.get()?;
+        let mut processed = false;
+        let queue = self.build_queue.clone();
+        queue.process_next_crate(|krate| {
+            processed = true;
 
-            let query = conn.query(
-                "SELECT id, name, version
-                 FROM queue
-                 WHERE attempt < 5
-                 ORDER BY priority ASC, attempt ASC, id ASC
-                 LIMIT 1",
-                &[],
-            )?;
+            builder.build_package(self, &krate.name, &krate.version, None)?;
+            Ok(())
+        })?;
 
-            if query.is_empty() {
-                // nothing in the queue; bail
-                return Ok(false);
-            }
+        Ok(processed)
+    }
+}
 
-            let row = query.get(0);
-            (row.get("id"), row.get("name"), row.get("version"))
+pub(crate) struct CrateToProcess {
+    name: String,
+    version: String,
+}
+
+pub struct BuildQueue {
+    db: Pool,
+    max_attempts: i32,
+}
+
+impl BuildQueue {
+    pub fn new(db: Pool, config: &Config) -> Self {
+        BuildQueue {
+            db,
+            max_attempts: config.build_attempts.into(),
+        }
+    }
+
+    pub fn add_crate(&self, name: &str, version: &str, priority: i32) -> Result<()> {
+        self.db.get()?.execute(
+            "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
+            &[&name, &version, &priority],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn process_next_crate(
+        &self,
+        f: impl FnOnce(&CrateToProcess) -> Result<()>,
+    ) -> Result<()> {
+        let conn = self.db.get()?;
+
+        let query = conn.query(
+            "SELECT id, name, version
+             FROM queue
+             WHERE attempt < $1
+             ORDER BY priority ASC, attempt ASC, id ASC
+             LIMIT 1",
+            &[&self.max_attempts],
+        )?;
+        if query.is_empty() {
+            return Ok(());
+        }
+
+        let row = query.get(0);
+        let id: i32 = row.get("id");
+        let to_process = CrateToProcess {
+            name: row.get("name"),
+            version: row.get("version"),
         };
 
-        match builder.build_package(self, &name, &version, None) {
-            Ok(_) => {
-                let conn = self.db.get()?;
-
-                let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
+        match f(&to_process) {
+            Ok(()) => {
+                conn.execute("DELETE FROM queue WHERE id = $1;", &[&id])?;
+                crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
-                let conn = self.db.get()?;
-
                 // Increase attempt count
                 let rows = conn.query(
-                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt",
+                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
                     &[&id],
                 )?;
                 let attempt: i32 = rows.get(0).get(0);
-                if attempt >= 5 {
+
+                if attempt >= self.max_attempts {
                     crate::web::metrics::FAILED_BUILDS.inc();
                 }
+
                 error!(
                     "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
-                    name,
-                    version,
+                    to_process.name,
+                    to_process.version,
                     e,
                     e.backtrace()
-                )
+                );
             }
         }
 
-        crate::web::metrics::TOTAL_BUILDS.inc();
-        Ok(true)
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_and_process_crates() {
+        const MAX_ATTEMPTS: u16 = 3;
+
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.build_attempts = MAX_ATTEMPTS;
+            });
+
+            let queue = env.build_queue();
+
+            let test_crates = [
+                ("low-priority", "1.0.0", 1000),
+                ("high-priority-foo", "1.0.0", -1000),
+                ("medium-priority", "1.0.0", -10),
+                ("high-priority-bar", "1.0.0", -1000),
+                ("standard-priority", "1.0.0", 0),
+                ("high-priority-baz", "1.0.0", -1000),
+            ];
+            for krate in &test_crates {
+                queue.add_crate(krate.0, krate.1, krate.2)?;
+            }
+
+            let assert_next = |name| -> Result<()> {
+                queue.process_next_crate(|krate| {
+                    assert_eq!(name, krate.name);
+                    Ok(())
+                })?;
+                Ok(())
+            };
+            let assert_next_and_fail = |name| -> Result<()> {
+                queue.process_next_crate(|krate| {
+                    assert_eq!(name, krate.name);
+                    failure::bail!("simulate a failure");
+                })?;
+                Ok(())
+            };
+
+            // The first processed item is the one with the highest priority added first.
+            assert_next("high-priority-foo")?;
+
+            // Simulate a failure in high-priority-bar.
+            assert_next_and_fail("high-priority-bar")?;
+
+            // Continue with the next high priority crate.
+            assert_next("high-priority-baz")?;
+
+            // After all the crates with the max priority are processed, before starting to process
+            // crates with a lower priority the failed crates with the max priority will be tried
+            // again.
+            assert_next("high-priority-bar")?;
+
+            // Continue processing according to the priority.
+            assert_next("medium-priority")?;
+            assert_next("standard-priority")?;
+
+            // Simulate the crate failing many times.
+            for _ in 0..MAX_ATTEMPTS {
+                assert_next_and_fail("low-priority")?;
+            }
+
+            // Since low-priority failed many times it will be removed from the queue. Because of
+            // that the queue should now be empty.
+            let mut called = false;
+            queue.process_next_crate(|_| {
+                called = true;
+                Ok(())
+            })?;
+            assert!(!called, "there were still items in the queue");
+
+            Ok(())
+        })
     }
 }
