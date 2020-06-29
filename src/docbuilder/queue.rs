@@ -68,15 +68,6 @@ impl DocBuilder {
         Ok(crates_added)
     }
 
-    pub fn get_queue_count(&self) -> Result<i64> {
-        let conn = self.db.get()?;
-
-        Ok(conn
-            .query("SELECT COUNT(*) FROM queue WHERE attempt < 5", &[])?
-            .get(0)
-            .get(0))
-    }
-
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
     ///
     /// Note that this will return `Ok(true)` even if the package failed to build.
@@ -102,6 +93,7 @@ pub(crate) struct CrateToProcess {
     version: String,
 }
 
+#[derive(Debug)]
 pub struct BuildQueue {
     db: Pool,
     max_attempts: i32,
@@ -121,6 +113,30 @@ impl BuildQueue {
             &[&name, &version, &priority],
         )?;
         Ok(())
+    }
+
+    pub(crate) fn pending_count(&self) -> Result<usize> {
+        let res = self.db.get()?.query(
+            "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
+            &[&self.max_attempts],
+        )?;
+        Ok(res.get(0).get::<_, i64>(0) as usize)
+    }
+
+    pub(crate) fn prioritized_count(&self) -> Result<usize> {
+        let res = self.db.get()?.query(
+            "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
+            &[&self.max_attempts],
+        )?;
+        Ok(res.get(0).get::<_, i64>(0) as usize)
+    }
+
+    pub(crate) fn failed_count(&self) -> Result<usize> {
+        let res = self.db.get()?.query(
+            "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",
+            &[&self.max_attempts],
+        )?;
+        Ok(res.get(0).get::<_, i64>(0) as usize)
     }
 
     pub(crate) fn process_next_crate(
@@ -255,5 +271,82 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_pending_count() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            assert_eq!(queue.pending_count()?, 0);
+            queue.add_crate("foo", "1.0.0", 0)?;
+            assert_eq!(queue.pending_count()?, 1);
+            queue.add_crate("bar", "1.0.0", 0)?;
+            assert_eq!(queue.pending_count()?, 2);
+
+            queue.process_next_crate(|krate| {
+                assert_eq!("foo", krate.name);
+                Ok(())
+            })?;
+            assert_eq!(queue.pending_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_prioritized_count() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            assert_eq!(queue.prioritized_count()?, 0);
+            queue.add_crate("foo", "1.0.0", 0)?;
+            assert_eq!(queue.prioritized_count()?, 1);
+            queue.add_crate("bar", "1.0.0", -100)?;
+            assert_eq!(queue.prioritized_count()?, 2);
+            queue.add_crate("baz", "1.0.0", 100)?;
+            assert_eq!(queue.prioritized_count()?, 2);
+
+            queue.process_next_crate(|krate| {
+                assert_eq!("bar", krate.name);
+                Ok(())
+            })?;
+            assert_eq!(queue.prioritized_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_failed_count() {
+        const MAX_ATTEMPTS: u16 = 3;
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.build_attempts = 3;
+            });
+            let queue = env.build_queue();
+
+            assert_eq!(queue.failed_count()?, 0);
+            queue.add_crate("foo", "1.0.0", -100)?;
+            assert_eq!(queue.failed_count()?, 0);
+            queue.add_crate("bar", "1.0.0", 0)?;
+
+            for _ in 0..MAX_ATTEMPTS {
+                assert_eq!(queue.failed_count()?, 0);
+                queue.process_next_crate(|krate| {
+                    assert_eq!("foo", krate.name);
+                    failure::bail!("this failed");
+                })?;
+            }
+            assert_eq!(queue.failed_count()?, 1);
+
+            queue.process_next_crate(|krate| {
+                assert_eq!("bar", krate.name);
+                Ok(())
+            })?;
+            assert_eq!(queue.failed_count()?, 1);
+
+            Ok(())
+        });
     }
 }

@@ -1,4 +1,5 @@
 use crate::db::Pool;
+use crate::docbuilder::BuildQueue;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
@@ -117,33 +118,15 @@ lazy_static::lazy_static! {
 }
 
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
-    // Database calls are scoped in order to minimize the time a db connection is locked
-    {
-        let pool = extension!(req, Pool);
-        let conn = pool.get()?;
+    let pool = extension!(req, Pool);
+    let queue = extension!(req, BuildQueue);
 
-        USED_DB_CONNECTIONS.set(pool.used_connections() as i64);
-        IDLE_DB_CONNECTIONS.set(pool.idle_connections() as i64);
+    USED_DB_CONNECTIONS.set(pool.used_connections() as i64);
+    IDLE_DB_CONNECTIONS.set(pool.idle_connections() as i64);
 
-        QUEUED_CRATES_COUNT.set(
-            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt < 5;", &[]))
-                .get(0)
-                .get(0),
-        );
-        PRIORITIZED_CRATES_COUNT.set(
-            ctry!(conn.query(
-                "SELECT COUNT(*) FROM queue WHERE attempt < 5 AND priority <= 0;",
-                &[]
-            ))
-            .get(0)
-            .get(0),
-        );
-        FAILED_CRATES_COUNT.set(
-            ctry!(conn.query("SELECT COUNT(*) FROM queue WHERE attempt >= 5;", &[]))
-                .get(0)
-                .get(0),
-        );
-    }
+    QUEUED_CRATES_COUNT.set(ctry!(queue.pending_count()) as i64);
+    PRIORITIZED_CRATES_COUNT.set(ctry!(queue.prioritized_count()) as i64);
+    FAILED_CRATES_COUNT.set(ctry!(queue.failed_count()) as i64);
 
     #[cfg(not(windows))]
     {

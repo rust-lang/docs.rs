@@ -4,7 +4,7 @@
 
 use crate::{
     db::Pool,
-    docbuilder::{RustwideBuilder, BuildQueue},
+    docbuilder::{BuildQueue, RustwideBuilder},
     utils::{github_updater, pubsubhubbub, update_release_activity},
     Config, DocBuilder, DocBuilderOptions,
 };
@@ -17,7 +17,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
 
-pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>) -> Result<(), Error> {
+pub fn start_daemon(
+    config: Arc<Config>,
+    db: Pool,
+    build_queue: Arc<BuildQueue>,
+) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
         "CRATESFYI_GITHUB_USERNAME",
@@ -46,7 +50,8 @@ pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>)
             thread::sleep(Duration::from_secs(30));
             loop {
                 let opts = opts();
-                let mut doc_builder = DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
+                let mut doc_builder =
+                    DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
 
                 if doc_builder.is_locked() {
                     debug!("Lock file exists, skipping checking new crates");
@@ -66,9 +71,10 @@ pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>)
     // build new crates every minute
     // REFACTOR: Break this into smaller functions
     let cloned_db = db.clone();
+    let cloned_build_queue = build_queue.clone();
     thread::Builder::new().name("build queue reader".to_string()).spawn(move || {
         let opts = opts();
-        let mut doc_builder = DocBuilder::new(opts, cloned_db.clone(), build_queue);
+        let mut doc_builder = DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
 
         /// Represents the current state of the builder thread.
         enum BuilderState {
@@ -120,7 +126,7 @@ pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>)
 
             // Only build crates if there are any to build
             debug!("Checking build queue");
-            match doc_builder.get_queue_count() {
+            match cloned_build_queue.pending_count() {
                 Err(e) => {
                     error!("Failed to read the number of crates in the queue: {}", e);
                     continue;
@@ -226,7 +232,7 @@ pub fn start_daemon(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>)
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, db, config)?;
+    crate::Server::start(None, false, db, config, build_queue)?;
     Ok(())
 }
 
