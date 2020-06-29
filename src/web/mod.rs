@@ -64,6 +64,7 @@ use self::extensions::InjectExtensions;
 use self::page::TemplateData;
 use crate::config::Config;
 use crate::db::Pool;
+use crate::docbuilder::BuildQueue;
 use chrono::{DateTime, Utc};
 use failure::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
@@ -117,8 +118,14 @@ impl CratesfyiHandler {
         chain
     }
 
-    fn new(pool: Pool, config: Arc<Config>, template_data: Arc<TemplateData>) -> CratesfyiHandler {
+    fn new(
+        pool: Pool,
+        config: Arc<Config>,
+        template_data: Arc<TemplateData>,
+        build_queue: Arc<BuildQueue>,
+    ) -> CratesfyiHandler {
         let inject_extensions = InjectExtensions {
+            build_queue,
             pool,
             config,
             template_data,
@@ -382,6 +389,7 @@ impl Server {
         reload_templates: bool,
         db: Pool,
         config: Arc<Config>,
+        build_queue: Arc<BuildQueue>,
     ) -> Result<Self, Error> {
         // Initialize templates
         let template_data = Arc::new(TemplateData::new(&*db.get()?)?);
@@ -389,7 +397,13 @@ impl Server {
             TemplateData::start_template_reloading(template_data.clone(), db.clone());
         }
 
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), db, config, template_data);
+        let server = Self::start_inner(
+            addr.unwrap_or(DEFAULT_BIND),
+            db,
+            config,
+            template_data,
+            build_queue,
+        );
         info!("Running docs.rs web server on http://{}", server.addr());
         Ok(server)
     }
@@ -399,6 +413,7 @@ impl Server {
         pool: Pool,
         config: Arc<Config>,
         template_data: Arc<TemplateData>,
+        build_queue: Arc<BuildQueue>,
     ) -> Self {
         // poke all the metrics counters to instantiate and register them
         metrics::TOTAL_BUILDS.inc_by(0);
@@ -408,7 +423,7 @@ impl Server {
         metrics::UPLOADED_FILES_TOTAL.inc_by(0);
         metrics::FAILED_DB_CONNECTIONS.inc_by(0);
 
-        let cratesfyi = CratesfyiHandler::new(pool, config, template_data);
+        let cratesfyi = CratesfyiHandler::new(pool, config, template_data, build_queue);
         let inner = Iron::new(cratesfyi)
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));

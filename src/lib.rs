@@ -4,9 +4,9 @@
 
 pub use self::config::Config;
 pub use self::docbuilder::options::DocBuilderOptions;
+pub use self::docbuilder::BuildQueue;
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::RustwideBuilder;
-pub use self::docbuilder::BuildQueue;
 pub use self::web::Server;
 
 mod config;

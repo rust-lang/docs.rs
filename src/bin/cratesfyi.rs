@@ -95,6 +95,7 @@ impl CommandLine {
                     reload_templates,
                     ctx.pool()?,
                     ctx.config()?,
+                    ctx.build_queue()?,
                 )?;
             }
             Self::Daemon { foreground } => {
