@@ -245,6 +245,7 @@ struct Build {
     )]
     prefix: PathBuf,
 
+    /// DEPRECATED
     /// Sets the registry index path, where on disk the registry index will be cloned to
     #[structopt(
         name = "REGISTRY_INDEX_PATH",
@@ -276,9 +277,10 @@ struct Build {
 impl Build {
     pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         let docbuilder = {
-            let mut doc_options = DocBuilderOptions::from_prefix(self.prefix);
+            let mut doc_options = DocBuilderOptions::new(&*ctx.config()?);
 
             if let Some(registry_index_path) = self.registry_index_path {
+                log::warn!("Use of deprecated cli flag --registry-index-path");
                 doc_options.registry_index_path = registry_index_path;
             }
 
