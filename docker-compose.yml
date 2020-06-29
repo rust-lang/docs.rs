@@ -3,7 +3,7 @@ services:
     web:
         build:
             context: .
-            dockerfile: ./docker/Dockerfile
+            dockerfile: ./dockerfiles/Dockerfile
         depends_on:
             - db
             - s3
@@ -25,7 +25,7 @@ services:
             - .env
     db:
         build:
-            context: ./docker
+            context: ./dockerfiles
             dockerfile: ./Dockerfile-postgres
         volumes:
             - postgres-data:/var/lib/postgresql/data
@@ -50,7 +50,7 @@ services:
             MINIO_SECRET_KEY: secret_key
     prometheus:
         build:
-            context: ./docker
+            context: ./dockerfiles
             dockerfile: ./Dockerfile-prometheus
         ports:
             - "9090:9090"
