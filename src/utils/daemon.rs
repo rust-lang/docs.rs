@@ -4,9 +4,9 @@
 
 use crate::{
     db::Pool,
-    docbuilder::{BuildQueue, RustwideBuilder},
+    docbuilder::RustwideBuilder,
     utils::{github_updater, pubsubhubbub, update_release_activity},
-    Config, DocBuilder, DocBuilderOptions,
+    BuildQueue, Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
 use failure::Error;

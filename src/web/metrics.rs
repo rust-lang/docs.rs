@@ -1,5 +1,5 @@
 use crate::db::Pool;
-use crate::docbuilder::BuildQueue;
+use crate::queue::BuildQueue;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;

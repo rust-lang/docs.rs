@@ -4,7 +4,7 @@ use super::error::Nope;
 use super::page::Page;
 use super::{duration_to_str, match_version, redirect_base};
 use crate::db::Pool;
-use crate::docbuilder::BuildQueue;
+use crate::queue::BuildQueue;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::status;
