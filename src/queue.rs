@@ -248,7 +248,7 @@ mod tests {
         const MAX_ATTEMPTS: u16 = 3;
         crate::test::wrapper(|env| {
             env.override_config(|config| {
-                config.build_attempts = 3;
+                config.build_attempts = MAX_ATTEMPTS;
             });
             let queue = env.build_queue();
 
