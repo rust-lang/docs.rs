@@ -76,7 +76,7 @@ jobs:
           fetch-depth: 2
 
       - name: Build the Docker image
-        run: docker build -t docs-rs -f docker/Dockerfile .
+        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
 
       - name: Upload the Docker image to ECR
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
