@@ -1095,12 +1095,12 @@ mod tests {
                 ("foo", "1.0.0", None),
                 ("baz", "0.0.1", Some(-10)),
             ];
-            for (i, li) in items.iter().enumerate() {
+            for (li, expected) in items.iter().zip(&expected) {
                 let a = li.as_node().select_first("a").expect("missing link");
-                assert!(a.text_contents().contains(expected[i].0));
-                assert!(a.text_contents().contains(expected[i].1));
+                assert!(a.text_contents().contains(expected.0));
+                assert!(a.text_contents().contains(expected.1));
 
-                if let Some(priority) = expected[i].2 {
+                if let Some(priority) = expected.2 {
                     assert!(li
                         .text_contents()
                         .contains(&format!("priority: {}", priority)));
