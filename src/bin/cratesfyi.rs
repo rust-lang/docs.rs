@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,11 +11,21 @@ use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 use strum::VariantNames;
 
-pub fn main() -> Result<(), Error> {
+pub fn main() {
     let _ = dotenv::dotenv();
     logger_init();
 
-    CommandLine::from_args().handle_args()
+    if let Err(err) = CommandLine::from_args().handle_args() {
+        let mut msg = format!("Error: {}", err);
+        for cause in err.iter_causes() {
+            write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
+        }
+        eprintln!("{}", msg);
+        if !err.backtrace().is_empty() {
+            eprintln!("\nStack backtrace:\n{}", err.backtrace());
+        }
+        std::process::exit(1);
+    }
 }
 
 fn logger_init() {
