@@ -72,7 +72,9 @@ impl DocBuilder {
             .get(0))
     }
 
-    /// Builds the top package from the queue. Returns whether the queue was empty.
+    /// Builds the top package from the queue. Returns whether there was a package in the queue.
+    ///
+    /// Note that this will return `Ok(true)` even if the package failed to build.
     pub(crate) fn build_next_queue_package(
         &mut self,
         builder: &mut RustwideBuilder,
@@ -84,10 +86,10 @@ impl DocBuilder {
 
             let query = conn.query(
                 "SELECT id, name, version
-                                         FROM queue
-                                         WHERE attempt < 5
-                                         ORDER BY priority ASC, attempt ASC, id ASC
-                                         LIMIT 1",
+                 FROM queue
+                 WHERE attempt < 5
+                 ORDER BY priority ASC, attempt ASC, id ASC
+                 LIMIT 1",
                 &[],
             )?;
 
@@ -105,7 +107,6 @@ impl DocBuilder {
                 let conn = self.db.get()?;
 
                 let _ = conn.execute("DELETE FROM queue WHERE id = $1", &[&id]);
-                crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
                 let conn = self.db.get()?;
@@ -118,7 +119,6 @@ impl DocBuilder {
                 let attempt: i32 = rows.get(0).get(0);
                 if attempt >= 5 {
                     crate::web::metrics::FAILED_BUILDS.inc();
-                    crate::web::metrics::TOTAL_BUILDS.inc();
                 }
                 error!(
                     "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
@@ -130,6 +130,7 @@ impl DocBuilder {
             }
         }
 
+        crate::web::metrics::TOTAL_BUILDS.inc();
         Ok(true)
     }
 }
