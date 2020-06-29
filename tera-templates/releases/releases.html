@@ -39,7 +39,8 @@
                                     {{ release.description }}
                                 </div>
 
-                                <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
+                                    title="{{ release.release_time | date(format='%FT%TZ') }}">
                                     {{ release.release_time | timeformat(relative=true) }}
                                 </div>
                             </div>

@@ -1030,6 +1030,31 @@ mod tests {
     }
 
     #[test]
+    fn home_page() {
+        wrapper(|env| {
+            let web = env.frontend();
+            assert_success("/", web)?;
+
+            env.db().fake_release().name("some_random_crate").create()?;
+            env.db()
+                .fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_successful(false)
+                .create()?;
+            assert_success("/", web)
+        })
+    }
+
+    #[test]
+    fn search() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.db().fake_release().name("some_random_crate").create()?;
+            assert_success("/releases/search?query=some_random_crate", web)
+        })
+    }
+
+    #[test]
     fn recent_releases() {
         wrapper(|env| {
             let web = env.frontend();
