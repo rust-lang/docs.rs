@@ -14,11 +14,11 @@
     <ol class="queue-list">
     {{#each content}}
     <li>
-        <a href="https://crates.io/crates/{{this.[0]}}">
-            {{this.[0]}} {{this.[1]}}
+        <a href="https://crates.io/crates/{{this.name}}">
+            {{this.name}} {{this.version}}
         </a>
-        {{#if this.[2]}}
-        (priority: {{this.[2]}})
+        {{#if this.priority}}
+        (priority: {{this.priority}})
         {{/if}}
     </li>
     {{/each}}

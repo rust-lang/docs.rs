@@ -669,6 +669,7 @@ mod tests {
     use super::*;
     use crate::test::{assert_success, wrapper};
     use chrono::TimeZone;
+    use kuchiki::traits::TendrilSink;
     use serde_json::json;
 
     #[test]
@@ -1064,5 +1065,49 @@ mod tests {
             let web = env.frontend();
             assert_success("/releases/feed", web)
         })
+    }
+
+    #[test]
+    fn test_releases_queue() {
+        wrapper(|env| {
+            let queue = env.build_queue();
+            let web = env.frontend();
+
+            let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            assert!(empty
+                .select(".release > strong")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("nothing")));
+
+            queue.add_crate("foo", "1.0.0", 0)?;
+            queue.add_crate("bar", "0.1.0", -10)?;
+            queue.add_crate("baz", "0.0.1", 10)?;
+
+            let full = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let items = full
+                .select(".queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            assert_eq!(items.len(), 3);
+            let expected = [
+                ("bar", "0.1.0", Some(10)),
+                ("foo", "1.0.0", None),
+                ("baz", "0.0.1", Some(-10)),
+            ];
+            for (i, li) in items.iter().enumerate() {
+                let a = li.as_node().select_first("a").expect("missing link");
+                assert!(a.text_contents().contains(expected[i].0));
+                assert!(a.text_contents().contains(expected[i].1));
+
+                if let Some(priority) = expected[i].2 {
+                    assert!(li
+                        .text_contents()
+                        .contains(&format!("priority: {}", priority)));
+                }
+            }
+
+            Ok(())
+        });
     }
 }
