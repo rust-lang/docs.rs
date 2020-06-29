@@ -88,9 +88,13 @@ impl DocBuilder {
     }
 }
 
-pub(crate) struct CrateToProcess {
-    name: String,
-    version: String,
+#[derive(Debug, Eq, PartialEq, serde::Serialize)]
+pub(crate) struct QueuedCrate {
+    #[serde(skip)]
+    id: i32,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) priority: i32,
 }
 
 #[derive(Debug)]
@@ -139,41 +143,48 @@ impl BuildQueue {
         Ok(res.get(0).get::<_, i64>(0) as usize)
     }
 
+    pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
+        let query = self.db.get()?.query(
+            "SELECT id, name, version, priority
+             FROM queue
+             WHERE attempt < $1
+             ORDER BY priority ASC, attempt ASC, id ASC",
+            &[&self.max_attempts],
+        )?;
+
+        Ok(query
+            .into_iter()
+            .map(|row| QueuedCrate {
+                id: row.get("id"),
+                name: row.get("name"),
+                version: row.get("version"),
+                priority: row.get("priority"),
+            })
+            .collect())
+    }
+
     pub(crate) fn process_next_crate(
         &self,
-        f: impl FnOnce(&CrateToProcess) -> Result<()>,
+        f: impl FnOnce(&QueuedCrate) -> Result<()>,
     ) -> Result<()> {
         let conn = self.db.get()?;
 
-        let query = conn.query(
-            "SELECT id, name, version
-             FROM queue
-             WHERE attempt < $1
-             ORDER BY priority ASC, attempt ASC, id ASC
-             LIMIT 1",
-            &[&self.max_attempts],
-        )?;
-        if query.is_empty() {
-            return Ok(());
-        }
-
-        let row = query.get(0);
-        let id: i32 = row.get("id");
-        let to_process = CrateToProcess {
-            name: row.get("name"),
-            version: row.get("version"),
+        let queued = self.queued_crates()?;
+        let to_process = match queued.get(0) {
+            Some(krate) => krate,
+            None => return Ok(()),
         };
 
         match f(&to_process) {
             Ok(()) => {
-                conn.execute("DELETE FROM queue WHERE id = $1;", &[&id])?;
+                conn.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
                 crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
                 // Increase attempt count
                 let rows = conn.query(
                     "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
-                    &[&id],
+                    &[&to_process.id],
                 )?;
                 let attempt: i32 = rows.get(0).get(0);
 
@@ -345,6 +356,48 @@ mod tests {
                 Ok(())
             })?;
             assert_eq!(queue.failed_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_queued_crates() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            let test_crates = [
+                ("foo", "1.0.0", -10),
+                ("bar", "1.0.0", 0),
+                ("baz", "1.0.0", 10),
+            ];
+            for krate in &test_crates {
+                queue.add_crate(krate.0, krate.1, krate.2)?;
+            }
+
+            assert_eq!(
+                vec![
+                    QueuedCrate {
+                        id: 1,
+                        name: "foo".into(),
+                        version: "1.0.0".into(),
+                        priority: -10,
+                    },
+                    QueuedCrate {
+                        id: 2,
+                        name: "bar".into(),
+                        version: "1.0.0".into(),
+                        priority: 0,
+                    },
+                    QueuedCrate {
+                        id: 3,
+                        name: "baz".into(),
+                        version: "1.0.0".into(),
+                        priority: 10,
+                    },
+                ],
+                queue.queued_crates()?
+            );
 
             Ok(())
         });
