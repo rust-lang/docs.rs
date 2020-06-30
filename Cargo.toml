@@ -85,7 +85,7 @@ criterion = "0.3"
 rand = "0.7.3"
 
 [[bench]]
-name = "html5ever"
+name = "html_parsing"
 harness = false
 
 [[bench]]
