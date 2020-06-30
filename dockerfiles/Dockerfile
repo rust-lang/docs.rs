@@ -13,8 +13,8 @@ FROM ubuntu:bionic AS build
 
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-  libssl-dev zlib1g-dev ca-certificates
+    build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
+    libssl-dev zlib1g-dev ca-certificates
 
 # Install the stable toolchain with rustup
 RUN curl https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init >/tmp/rustup-init && \
@@ -74,7 +74,7 @@ RUN mkdir -p /opt/docsrs/prefix
 COPY --from=build /build/target/release/cratesfyi /usr/local/bin
 COPY static /opt/docsrs/prefix/public_html
 COPY templates /opt/docsrs/templates
-COPY docker/entrypoint.sh /opt/docsrs/
+COPY dockerfiles/entrypoint.sh /opt/docsrs/
 
 WORKDIR /opt/docsrs
 ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
