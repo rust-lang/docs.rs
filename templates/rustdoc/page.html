@@ -31,20 +31,34 @@
     </body>
 
     <script>
-        var doc_body = document.getElementById("rustdoc_body_wrapper");
+      // Reset the scroll offset on browsers that don't support
+      // scroll-padding-top (Desktop & Mobile Safari):
+      const maybeFixupViewPortPosition = function() {
         if (window.location.hash) {
-            var notFirefox = typeof InstallTrigger === 'undefined';
-            if (notFirefox) {
-                var hash = window.location.hash;
-                window.location.hash = "";
-                setTimeout(function () {
-                    window.location.hash = hash;
-                    doc_body.focus();
-                }, 1);
-            }
-        } else {
-            doc_body.focus();
+          const anchorElement = document.getElementById(window.location.hash.substr(1));
+          const navBarHeight = document.getElementsByClassName("nav-container-rustdoc")[0].offsetHeight;
+          if (anchorElement &&
+              anchorElement.getBoundingClientRect().top <= navBarHeight &&
+              Math.abs(anchorElement.getBoundingClientRect().top) >= 0) {
+            // It's just overlapped by the nav bar. This can't be a coincidence, scroll it into view:
+            requestAnimationFrame(function() {
+              scrollBy(0, -navBarHeight);
+            });
+          }
         }
+      };
+      window.addEventListener("hashchange", maybeFixupViewPortPosition, false);
+      // Fix up the scroll position if this was a direct visit to the page
+      // (not back/forward navigation):
+      if (window.performance) {
+        const navEntries = window.performance.getEntriesByType('navigation');
+        const usedBack = navEntries.length > 0 && navEntries[0].type === 'back_forward' ||
+              (window.performance.navigation &&
+               window.performance.navigation.type == window.performance.navigation.TYPE_BACK_FORWARD);
+        if (!usedBack && window.location.hash) {
+          window.addEventListener("scroll", maybeFixupViewPortPosition, {"once": true});
+        }
+      }
     </script>
 
 </html>

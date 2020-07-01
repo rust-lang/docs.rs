@@ -92,6 +92,18 @@ body {
     margin: 0;
     // Since top navbar is fixed, we need to add padding to the body content.
     padding-top: $top-navbar-height;
+    // The scroll padding on the <body> is necessary for Chrome
+    // browsers for now (see
+    // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
+    // for an explanation)
+    scroll-padding-top: $top-navbar-height;
+}
+
+html {
+    // Offset anchor jump targets down by this much, so they don't
+    // overlap the top navigation bar (not supported on Desktop/Mobile
+    // Safari yet):
+    scroll-padding-top: $top-navbar-height;
 }
 
 // this is a super nasty override for help dialog in rustdocs
