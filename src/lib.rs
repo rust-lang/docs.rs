@@ -2,19 +2,19 @@
 //! documentation of crates for the Rust Programming Language.
 #![allow(clippy::cognitive_complexity)]
 
+pub use self::build_queue::BuildQueue;
 pub use self::config::Config;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::RustwideBuilder;
-pub use self::queue::BuildQueue;
 pub use self::web::Server;
 
+mod build_queue;
 mod config;
 pub mod db;
 mod docbuilder;
 mod error;
 mod index;
-mod queue;
 pub mod storage;
 #[cfg(test)]
 mod test;
