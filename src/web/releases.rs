@@ -565,7 +565,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                      OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
                     &[]
                 ));
-                let row = rows.into_iter().next().unwrap(); // TODO: Is this really infallible?
+                let row = rows.into_iter().next().unwrap();
 
                 let name: String = row.get("name");
                 let version: String = row.get("version");
@@ -1131,22 +1131,6 @@ mod tests {
                 .build_result_successful(false)
                 .create()?;
             assert_success("/releases/activity", web)
-        })
-    }
-
-    #[test]
-    fn recent_queue() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/releases/queue", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases/queue", web)
         })
     }
 
