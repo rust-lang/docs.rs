@@ -100,7 +100,18 @@ pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
     //
     // TODO: remove this when https://github.com/Gilnaa/globwalk/issues/29 is fixed
     let mut tera = Tera::default();
-    tera.add_template_files(find_templates_in_filesystem(TEMPLATES_DIRECTORY)?)?;
+    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY).with_context(|_| {
+        format!(
+            "failed to search {:?} for tera templates",
+            TEMPLATES_DIRECTORY
+        )
+    })?;
+    tera.add_template_files(template_files).with_context(|_| {
+        format!(
+            "failed while loading tera templates in {:?}",
+            TEMPLATES_DIRECTORY
+        )
+    })?;
 
     // This function will return any global alert, if present.
     ReturnValue::add_function_to(
