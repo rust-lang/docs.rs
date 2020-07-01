@@ -1,7 +1,8 @@
 //! Simple badge generator
 
 use base64::display::Base64Display;
-use rusttype::{point, Font, FontCollection, Point, PositionedGlyph, Scale};
+use rusttype::{point, Font, Point, PositionedGlyph, Scale};
+use once_cell::sync::OnceCell;
 
 const FONT_DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/DejaVuSans.ttf"));
 const FONT_SIZE: f32 = 11.0;
@@ -34,12 +35,11 @@ pub struct Badge {
 
 impl Badge {
     pub fn new(options: BadgeOptions) -> Result<Badge, String> {
-        let collection = FontCollection::from_bytes(FONT_DATA).expect("Failed to parse FONT_DATA");
-
-        // this should never fail in practice
-        let font = collection
-            .into_font()
-            .map_err(|_| "Failed to load font data".to_owned())?;
+        static FONT: OnceCell<Font> = OnceCell::new();
+        // Font is an `Arc` and therefore cheap to clone
+        let font = FONT.get_or_init(|| {
+            Font::try_from_bytes(FONT_DATA).expect("Failed to parse FONT_DATA")
+        }).clone();
 
         let scale = Scale {
             x: FONT_SIZE,
