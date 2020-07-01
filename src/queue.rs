@@ -90,10 +90,11 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        match f(&to_process) {
+        let res = f(&to_process);
+        crate::web::metrics::TOTAL_BUILDS.inc();
+        match res {
             Ok(()) => {
                 conn.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
-                crate::web::metrics::TOTAL_BUILDS.inc();
             }
             Err(e) => {
                 // Increase attempt count
