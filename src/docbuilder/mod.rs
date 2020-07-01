@@ -13,7 +13,7 @@ pub use self::rustwide_builder::RustwideBuilder;
 use crate::db::Pool;
 use crate::error::Result;
 use crate::index::Index;
-use crate::queue::BuildQueue;
+use crate::BuildQueue;
 use crate::DocBuilderOptions;
 use log::debug;
 use std::collections::BTreeSet;

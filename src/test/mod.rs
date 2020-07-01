@@ -1,9 +1,9 @@
 mod fakes;
 
 use crate::db::{Pool, PoolConnection};
-use crate::queue::BuildQueue;
 use crate::storage::s3::TestS3;
 use crate::web::Server;
+use crate::BuildQueue;
 use crate::Config;
 use failure::Error;
 use log::error;

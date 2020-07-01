@@ -64,7 +64,7 @@ use self::extensions::InjectExtensions;
 use self::page::TemplateData;
 use crate::config::Config;
 use crate::db::Pool;
-use crate::queue::BuildQueue;
+use crate::BuildQueue;
 use chrono::{DateTime, Utc};
 use failure::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};

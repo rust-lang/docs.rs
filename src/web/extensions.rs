@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::db::Pool;
-use crate::queue::BuildQueue;
 use crate::web::page::TemplateData;
+use crate::BuildQueue;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 
