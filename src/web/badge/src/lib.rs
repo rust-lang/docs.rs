@@ -2,7 +2,7 @@
 
 use base64::display::Base64Display;
 use rusttype::{point, Font, Point, PositionedGlyph, Scale};
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 
 const FONT_DATA: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/DejaVuSans.ttf"));
 const FONT_SIZE: f32 = 11.0;
@@ -35,12 +35,11 @@ pub struct Badge {
 
 impl Badge {
     pub fn new(options: BadgeOptions) -> Result<Badge, String> {
-        static FONT: OnceCell<Font> = OnceCell::new();
-        // Font is an `Arc` and therefore cheap to clone
-        let font = FONT.get_or_init(|| {
+        static FONT: Lazy<Font> = Lazy::new(|| {
             Font::try_from_bytes(FONT_DATA).expect("Failed to parse FONT_DATA")
-        }).clone();
+        });
 
+        let font = &*FONT;
         let scale = Scale {
             x: FONT_SIZE,
             y: FONT_SIZE,
@@ -55,7 +54,8 @@ impl Badge {
 
         Ok(Badge {
             options,
-            font,
+            // This clone is cheap since Font is an Arc
+            font: font.clone(),
             scale,
             offset,
         })
