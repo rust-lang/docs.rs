@@ -1194,6 +1194,7 @@ mod tests {
         });
     }
 
+    #[test]
     fn authors_page() {
         wrapper(|env| {
             let web = env.frontend();
