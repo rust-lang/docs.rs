@@ -128,7 +128,7 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     PRIORITIZED_CRATES_COUNT.set(ctry!(queue.prioritized_count()) as i64);
     FAILED_CRATES_COUNT.set(ctry!(queue.failed_count()) as i64);
 
-    #[cfg(linux)]
+    #[cfg(target_os = "linux")]
     {
         use procfs::process::Process;
 

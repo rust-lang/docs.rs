@@ -74,7 +74,7 @@ time = "0.1" # TODO: Remove once `iron` is removed
 version = "0.15"
 features = ["with-chrono", "with-serde_json"]
 
-[target.'cfg(linux)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 # Process information
 procfs = "0.7"
 
