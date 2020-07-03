@@ -16,7 +16,7 @@ use std::{
 use tera::{Result as TeraResult, Tera};
 use walkdir::WalkDir;
 
-const TEMPLATES_DIRECTORY: &str = "tera-templates";
+const TEMPLATES_DIRECTORY: &str = "templates";
 
 /// Holds all data relevant to templating
 #[derive(Debug)]
@@ -45,7 +45,7 @@ impl TemplateData {
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
 
         watcher
-            .watch("tera-templates", RecursiveMode::Recursive)
+            .watch(TEMPLATES_DIRECTORY, RecursiveMode::Recursive)
             .unwrap();
 
         thread::spawn(move || {

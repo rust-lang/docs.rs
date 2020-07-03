@@ -74,7 +74,6 @@ RUN mkdir -p /opt/docsrs/prefix
 COPY --from=build /build/target/release/cratesfyi /usr/local/bin
 COPY static /opt/docsrs/prefix/public_html
 COPY templates /opt/docsrs/templates
-COPY tera-templates /opt/docsrs/tera-templates
 COPY dockerfiles/entrypoint.sh /opt/docsrs/
 
 WORKDIR /opt/docsrs
