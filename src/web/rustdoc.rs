@@ -101,7 +101,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push('?');
             url_str.push_str(query);
         }
-        let url = ctry!(Url::parse(&url_str[..]));
+        let url = ctry!(req, Url::parse(&url_str));
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
@@ -109,9 +109,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     fn redirect_to_crate(req: &Request, name: &str, vers: &str) -> IronResult<Response> {
-        let url = ctry!(Url::parse(
-            &format!("{}/crate/{}/{}", redirect_base(req), name, vers)[..]
-        ));
+        let url = ctry!(
+            req,
+            Url::parse(&format!("{}/crate/{}/{}", redirect_base(req), name, vers)),
+        );
 
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
@@ -163,7 +164,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
 
     // this handler should never called without crate pattern
-    let crate_name = cexpect!(router.find("crate"));
+    let crate_name = cexpect!(req, router.find("crate"));
     let mut crate_name = percent_decode(crate_name.as_bytes())
         .decode_utf8()
         .unwrap_or_else(|_| crate_name.into())
@@ -190,12 +191,15 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(conn.query(
-            "SELECT target_name, rustdoc_status
-             FROM releases
-             WHERE releases.id = $1",
-            &[&id]
-        ));
+        let rows = ctry!(
+            req,
+            conn.query(
+                "SELECT target_name, rustdoc_status
+                 FROM releases
+                 WHERE releases.id = $1",
+                &[&id]
+            ),
+        );
 
         (rows.get(0).get(0), rows.get(0).get(1))
     };
@@ -245,7 +249,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             vers,
             path.join("/")
         );
-        let url = ctry!(Url::parse(&redirect_path));
+        let url = ctry!(req, Url::parse(&redirect_path));
 
         Ok(super::redirect(url))
     };
@@ -285,7 +289,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let crate_details = cexpect!(CrateDetails::new(&conn, &name, &version));
+    let crate_details = cexpect!(req, CrateDetails::new(&conn, &name, &version));
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
@@ -328,9 +332,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     rendering_time.step("parse html");
 
-    let file_content = ctry!(String::from_utf8(file.0.content));
+    let file_content = ctry!(req, String::from_utf8(file.0.content));
     // Extract the head and body of the rustdoc file so that we can insert it into our own html
-    let (head, body, mut body_class) = ctry!(utils::extract_head_and_body(&file_content));
+    let (head, body, mut body_class) = ctry!(req, utils::extract_head_and_body(&file_content));
 
     // Add the `rustdoc` classes to the html body
     if body_class.is_empty() {
@@ -458,8 +462,8 @@ fn path_for_version(
 
 pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let name = cexpect!(router.find("name"));
-    let version = cexpect!(router.find("version"));
+    let name = cexpect!(req, router.find("name"));
+    let version = cexpect!(req, router.find("version"));
 
     let conn = extension!(req, Pool).get()?;
     let config = extension!(req, Config);
@@ -496,7 +500,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         path = path
     );
 
-    let url = ctry!(Url::parse(&url));
+    let url = ctry!(req, Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.headers.set(Expires(HttpDate(time::now())));
 
@@ -509,24 +513,27 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     use params::{Params, Value};
 
     let version = {
-        let params = ctry!(req.get_ref::<Params>());
+        let params = ctry!(req, req.get_ref::<Params>());
         match params.find(&["version"]) {
             Some(&Value::String(ref version)) => version.clone(),
             _ => "*".to_owned(),
         }
     };
 
-    let name = cexpect!(extension!(req, Router).find("crate"));
+    let name = cexpect!(req, extension!(req, Router).find("crate"));
     let conn = extension!(req, Pool).get()?;
 
     let options = match match_version(&conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
         Some(MatchSemver::Exact((version, id))) => {
-            let rows = ctry!(conn.query(
-                "SELECT rustdoc_status
-                 FROM releases
-                 WHERE releases.id = $1",
-                &[&id]
-            ));
+            let rows = ctry!(
+                req,
+                conn.query(
+                    "SELECT rustdoc_status
+                     FROM releases
+                     WHERE releases.id = $1",
+                    &[&id]
+                ),
+            );
             if !rows.is_empty() && rows.get(0).get(0) {
                 BadgeOptions {
                     subject: "docs".to_owned(),
@@ -544,11 +551,11 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 
         Some(MatchSemver::Semver((version, _))) => {
             let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
-            let url = ctry!(iron::url::Url::parse_with_params(
-                &base_url,
-                &[("version", version)]
-            ));
-            let iron_url = ctry!(Url::from_generic_url(url));
+            let url = ctry!(
+                req,
+                iron::url::Url::parse_with_params(&base_url, &[("version", version)]),
+            );
+            let iron_url = ctry!(req, Url::from_generic_url(url));
             return Ok(super::redirect(iron_url));
         }
 
@@ -559,7 +566,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
         },
     };
 
-    let mut resp = Response::with((status::Ok, ctry!(Badge::new(options)).to_svg()));
+    let mut resp = Response::with((status::Ok, ctry!(req, Badge::new(options)).to_svg()));
     resp.headers
         .set(ContentType("image/svg+xml".parse().unwrap()));
     resp.headers.set(Expires(HttpDate(time::now())));

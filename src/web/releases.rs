@@ -456,10 +456,10 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         .find("page")
         .and_then(|page_num| page_num.parse().ok())
         .unwrap_or(1);
-    let author = ctry!(router
+    let author = router
         .find("author")
         // TODO: Accurate error here, the author wasn't provided
-        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound)));
+        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound))?;
 
     let (author_name, releases) = {
         let conn = extension!(req, Pool).get()?;
@@ -472,7 +472,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
                 page_number,
                 RELEASES_IN_RELEASES,
                 // TODO: Is this fallible?
-                cexpect!(author.nth(1)),
+                cexpect!(req, author.nth(1)),
             )
         } else {
             get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
@@ -540,7 +540,7 @@ impl_webpage! {
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     use params::{Params, Value};
 
-    let params = ctry!(req.get::<Params>());
+    let params = ctry!(req, req.get::<Params>());
     let query = params.find(&["query"]);
     let conn = extension!(req, Pool).get()?;
 
@@ -554,8 +554,10 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 // FIXME: This is a fast query but using a constant
                 //        There are currently 280 crates with docs and 100+
                 //        starts. This should be fine for a while.
-                let rows = ctry!(conn.query(
-                    "SELECT crates.name,
+                let rows = ctry!(
+                    req,
+                    conn.query(
+                        "SELECT crates.name,
                             releases.version,
                             releases.target_name
                      FROM crates
@@ -563,20 +565,24 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                          ON crates.latest_version_id = releases.id
                      WHERE github_stars >= 100 AND rustdoc_status = true
                      OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
-                    &[]
-                ));
+                        &[]
+                    ),
+                );
                 let row = rows.into_iter().next().unwrap();
 
                 let name: String = row.get("name");
                 let version: String = row.get("version");
                 let target_name: String = row.get("target_name");
-                let url = ctry!(Url::parse(&format!(
-                    "{}/{}/{}/{}",
-                    redirect_base(req),
-                    name,
-                    version,
-                    target_name
-                )));
+                let url = ctry!(
+                    req,
+                    Url::parse(&format!(
+                        "{}/{}/{}/{}",
+                        redirect_base(req),
+                        name,
+                        version,
+                        target_name
+                    )),
+                );
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
                 resp.headers.set(Expires(HttpDate(time::now())));
@@ -595,12 +601,15 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163
                 let rustdoc_status = {
-                    let rows = ctry!(conn.query(
-                        "SELECT rustdoc_status
+                    let rows = ctry!(
+                        req,
+                        conn.query(
+                            "SELECT rustdoc_status
                          FROM releases
                          WHERE releases.id = $1",
-                        &[&id]
-                    ));
+                            &[&id]
+                        ),
+                    );
 
                     rows.into_iter()
                         .next()
@@ -609,19 +618,20 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 };
 
                 let url = if rustdoc_status {
-                    ctry!(Url::parse(&format!(
-                        "{}/{}/{}",
-                        redirect_base(req),
-                        query,
-                        version,
-                    )))
+                    ctry!(
+                        req,
+                        Url::parse(&format!("{}/{}/{}", redirect_base(req), query, version)),
+                    )
                 } else {
-                    ctry!(Url::parse(&format!(
-                        "{}/crate/{}/{}",
-                        redirect_base(req),
-                        query,
-                        version,
-                    )))
+                    ctry!(
+                        req,
+                        Url::parse(&format!(
+                            "{}/crate/{}/{}",
+                            redirect_base(req),
+                            query,
+                            version,
+                        )),
+                    )
                 };
 
                 let mut resp = Response::with((status::Found, Redirect(url)));
@@ -653,10 +663,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let release_activity_data: Value = ctry!(conn.query(
-        "SELECT value FROM config WHERE name = 'release_activity'",
-        &[]
-    ))
+    let release_activity_data: Value = ctry!(
+        req,
+        conn.query(
+            "SELECT value FROM config WHERE name = 'release_activity'",
+            &[]
+        ),
+    )
     .iter()
     .next()
     .map_or(Value::Null, |row| row.get("value"));
@@ -673,7 +686,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     let queue = extension!(req, BuildQueue);
 
-    let mut crates = ctry!(queue.queued_crates());
+    let mut crates = ctry!(req, queue.queued_crates());
     for krate in &mut crates {
         // The priority here is inverted: in the database if a crate has a higher priority it
         // will be built after everything else, which is counter-intuitive for people not
