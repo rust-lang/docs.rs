@@ -1,62 +1,39 @@
-use super::duration_to_str;
-use super::page::Page;
-use super::MetaData;
-use crate::db::Pool;
-use crate::docbuilder::Limits;
+use crate::{
+    db::Pool,
+    docbuilder::Limits,
+    impl_webpage,
+    web::{page::WebPage, MetaData},
+};
 use chrono::{DateTime, NaiveDateTime, Utc};
-use iron::prelude::*;
+use iron::{
+    headers::{
+        AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
+    },
+    status, IronResult, Request, Response,
+};
 use router::Router;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Build {
     id: i32,
     rustc_version: String,
-    cratesfyi_version: String,
+    docsrs_version: String,
     build_status: bool,
     build_time: DateTime<Utc>,
     output: Option<String>,
 }
 
-impl Serialize for Build {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Build", 7)?;
-        state.serialize_field("id", &self.id)?;
-        state.serialize_field("rustc_version", &self.rustc_version)?;
-        state.serialize_field("cratesfyi_version", &self.cratesfyi_version)?;
-        state.serialize_field("build_status", &self.build_status)?;
-        state.serialize_field("build_time", &self.build_time.format("%+").to_string())?; // RFC 3339
-        state.serialize_field("build_time_relative", &duration_to_str(self.build_time))?;
-        state.serialize_field("output", &self.output)?;
-
-        state.end()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BuildsPage {
     metadata: Option<MetaData>,
     builds: Vec<Build>,
-    build_details: Option<Build>,
+    build_log: Option<Build>,
     limits: Limits,
 }
 
-impl Serialize for BuildsPage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("Buildspage", 4)?;
-        state.serialize_field("metadata", &self.metadata)?;
-        state.serialize_field("builds", &self.builds)?;
-        state.serialize_field("build_details", &self.build_details)?;
-        state.serialize_field("limits", &self.limits.for_website())?;
-
-        state.end()
-    }
+impl_webpage! {
+    BuildsPage = "crate/builds.html",
 }
 
 pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
@@ -88,24 +65,24 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         &[&name, &version]
     ));
 
-    let mut build_details = None;
+    let mut build_log = None;
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    let mut build_list = query
+    let mut builds = query
         .into_iter()
         .map(|row| {
-            let id: i32 = row.get(5);
+            let id: i32 = row.get("id");
 
             let build = Build {
                 id,
-                rustc_version: row.get(6),
-                cratesfyi_version: row.get(7),
-                build_status: row.get(8),
-                build_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(9), Utc),
-                output: row.get(10),
+                rustc_version: row.get("rustc_version"),
+                docsrs_version: row.get("cratesfyi_version"),
+                build_status: row.get("build_status"),
+                build_time: DateTime::from_utc(row.get::<_, NaiveDateTime>("build_time"), Utc),
+                output: row.get("output"),
             };
 
             if id == req_build_id {
-                build_details = Some(build.clone());
+                build_log = Some(build.clone());
             }
 
             build
@@ -113,19 +90,13 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         .collect::<Vec<Build>>();
 
     if req.url.path().join("/").ends_with(".json") {
-        use iron::headers::{
-            AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
-        };
-        use iron::status;
-
         // Remove build output from build list for json output
-        for build in build_list.as_mut_slice() {
+        for build in builds.iter_mut() {
             build.output = None;
         }
 
-        let mut resp = Response::with((status::Ok, serde_json::to_string(&build_list).unwrap()));
-        resp.headers
-            .set(ContentType("application/json".parse().unwrap()));
+        let mut resp = Response::with((status::Ok, serde_json::to_string(&builds).unwrap()));
+        resp.headers.set(ContentType::json());
         resp.headers.set(Expires(HttpDate(time::now())));
         resp.headers.set(CacheControl(vec![
             CacheDirective::NoCache,
@@ -133,175 +104,15 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             CacheDirective::MustRevalidate,
         ]));
         resp.headers.set(AccessControlAllowOrigin::Any);
+
         Ok(resp)
     } else {
-        let builds_page = BuildsPage {
+        BuildsPage {
             metadata: MetaData::from_crate(&conn, &name, &version),
-            builds: build_list,
-            build_details,
+            builds,
+            build_log,
             limits,
-        };
-        Page::new(builds_page)
-            .set_true("show_package_navigation")
-            .set_true("package_navigation_builds_tab")
-            .to_resp("builds")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-    use serde_json::json;
-
-    #[test]
-    fn serialize_build() {
-        let time = Utc::now();
-        let mut build = Build {
-            id: 22,
-            rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
-            cratesfyi_version: "docsrs 0.6.0 (3dd32ec 2020-05-01)".to_string(),
-            build_status: true,
-            build_time: time,
-            output: None,
-        };
-
-        let correct_json = json!({
-            "id": 22,
-            "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-            "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-            "build_time": time.format("%+").to_string(),
-            "build_time_relative": duration_to_str(time),
-            "output": null,
-            "build_status": true
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&build).unwrap());
-
-        build.output = Some("some random stuff".to_string());
-        let correct_json = json!({
-            "id": 22,
-            "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-            "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-            "build_time": time.format("%+").to_string(),
-            "build_time_relative": duration_to_str(time),
-            "output": "some random stuff",
-            "build_status": true
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&build).unwrap());
-    }
-
-    #[test]
-    fn serialize_build_page() {
-        let time = Utc::now();
-        let build = Build {
-            id: 22,
-            rustc_version: "rustc 1.43.0 (4fb7144ed 2020-04-20)".to_string(),
-            cratesfyi_version: "docsrs 0.6.0 (3dd32ec 2020-05-01)".to_string(),
-            build_status: true,
-            build_time: time,
-            output: None,
-        };
-        let limits = Limits::default();
-        let mut builds = BuildsPage {
-            metadata: Some(MetaData {
-                name: "serde".to_string(),
-                version: "1.0.0".to_string(),
-                description: Some("serde does stuff".to_string()),
-                target_name: None,
-                rustdoc_status: true,
-                default_target: "x86_64-unknown-linux-gnu".to_string(),
-            }),
-            builds: vec![build.clone()],
-            build_details: Some(build.clone()),
-            limits: limits.clone(),
-        };
-
-        let correct_json = json!({
-            "metadata": {
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            },
-            "builds": [{
-                "id": 22,
-                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time.format("%+").to_string(),
-                "build_time_relative": duration_to_str(time),
-                "output": null,
-                "build_status": true
-            }],
-            "build_details": {
-                "id": 22,
-                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time.format("%+").to_string(),
-                "build_time_relative": duration_to_str(time),
-                "output": null,
-                "build_status": true
-            },
-            "limits": limits.for_website(),
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&builds).unwrap());
-
-        builds.metadata = None;
-        let correct_json = json!({
-            "metadata": null,
-            "builds": [{
-                "id": 22,
-                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time.format("%+").to_string(),
-                "build_time_relative": duration_to_str(time),
-                "output": null,
-                "build_status": true
-            }],
-            "build_details": {
-                "id": 22,
-                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time.format("%+").to_string(),
-                "build_time_relative": duration_to_str(time),
-                "output": null,
-                "build_status": true
-            },
-            "limits": limits.for_website(),
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&builds).unwrap());
-
-        builds.builds = Vec::new();
-        let correct_json = json!({
-            "metadata": null,
-            "builds": [],
-            "build_details": {
-                "id": 22,
-                "rustc_version": "rustc 1.43.0 (4fb7144ed 2020-04-20)",
-                "cratesfyi_version": "docsrs 0.6.0 (3dd32ec 2020-05-01)",
-                "build_time": time.format("%+").to_string(),
-                "build_time_relative": duration_to_str(time),
-                "output": null,
-                "build_status": true
-            },
-            "limits": limits.for_website()
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&builds).unwrap());
-
-        builds.build_details = None;
-        let correct_json = json!({
-            "metadata": null,
-            "builds": [],
-            "build_details": null,
-            "limits": limits.for_website(),
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&builds).unwrap());
+        }
+        .into_response(req)
     }
 }
