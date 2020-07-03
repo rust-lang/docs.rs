@@ -183,8 +183,8 @@ impl FileList {
 
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let name = cexpect!(router.find("name"));
-    let version = cexpect!(router.find("version"));
+    let name = cexpect!(req, router.find("name"));
+    let version = cexpect!(req, router.find("version"));
 
     // get path (req_path) for FileList::from_path and actual path for super::file::File::from_path
     let (req_path, file_path) = {

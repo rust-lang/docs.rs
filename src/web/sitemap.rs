@@ -67,7 +67,10 @@ impl_webpage!(About = "core/about.html");
 
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let res = ctry!(conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]));
+    let res = ctry!(
+        req,
+        conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]),
+    );
 
     let rustc_version = res.iter().next().and_then(|row| {
         if let Some(Ok(Value::String(version))) = row.get_opt(0) {

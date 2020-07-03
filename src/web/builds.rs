@@ -38,15 +38,17 @@ impl_webpage! {
 
 pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let name = cexpect!(router.find("name"));
-    let version = cexpect!(router.find("version"));
+    let name = cexpect!(req, router.find("name"));
+    let version = cexpect!(req, router.find("version"));
     let req_build_id: i32 = router.find("id").unwrap_or("0").parse().unwrap_or(0);
 
     let conn = extension!(req, Pool).get()?;
-    let limits = ctry!(Limits::for_crate(&conn, name));
+    let limits = ctry!(req, Limits::for_crate(&conn, name));
 
-    let query = ctry!(conn.query(
-        "SELECT crates.name,
+    let query = ctry!(
+        req,
+        conn.query(
+            "SELECT crates.name,
                 releases.version,
                 releases.description,
                 releases.rustdoc_status,
@@ -62,8 +64,9 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE crates.name = $1 AND releases.version = $2
          ORDER BY id DESC",
-        &[&name, &version]
-    ));
+            &[&name, &version]
+        )
+    );
 
     let mut build_log = None;
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
