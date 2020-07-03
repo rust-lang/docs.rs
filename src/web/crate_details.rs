@@ -1,23 +1,17 @@
 use super::error::Nope;
-use super::page::Page;
-use super::{
-    duration_to_str, match_version, redirect_base, render_markdown, MatchSemver, MetaData,
-};
-use crate::db::Pool;
+use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
+use crate::{db::Pool, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::{status, Url};
 use postgres::Connection;
 use router::Router;
-use serde::{
-    ser::{SerializeStruct, Serializer},
-    Serialize,
-};
+use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
 
 // TODO: Add target name and versions
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CrateDetails {
     name: String,
     version: String,
@@ -26,7 +20,9 @@ pub struct CrateDetails {
     owners: Vec<(String, String)>,
     authors_json: Option<Value>,
     dependencies: Option<Value>,
+    #[serde(serialize_with = "optional_markdown")]
     readme: Option<String>,
+    #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
     release_time: DateTime<Utc>,
     build_status: bool,
@@ -50,60 +46,16 @@ pub struct CrateDetails {
     documentation_url: Option<String>,
 }
 
-impl Serialize for CrateDetails {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // Make sure that the length parameter passed to serde is correct by
-        // adding the someness of `readme` and `rustdoc` to the total. `true`
-        // is 1 and `false` is 0, so it increments if the value is some (and therefore
-        // needs to be serialized)
-        let mut state = serializer.serialize_struct(
-            "CrateDetails",
-            26 + self.readme.is_some() as usize + self.rustdoc.is_some() as usize,
-        )?;
-
-        state.serialize_field("metadata", &self.metadata)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("version", &self.version)?;
-        state.serialize_field("description", &self.description)?;
-        state.serialize_field("authors", &self.authors)?;
-        state.serialize_field("owners", &self.owners)?;
-        state.serialize_field("authors_json", &self.authors_json)?;
-        state.serialize_field("dependencies", &self.dependencies)?;
-
-        if let Some(ref readme) = self.readme {
-            state.serialize_field("readme", &render_markdown(&readme))?;
-        }
-
-        if let Some(ref rustdoc) = self.rustdoc {
-            state.serialize_field("rustdoc", &render_markdown(&rustdoc))?;
-        }
-
-        state.serialize_field("release_time", &duration_to_str(self.release_time))?;
-        state.serialize_field("build_status", &self.build_status)?;
-        state.serialize_field("last_successful_build", &self.last_successful_build)?;
-        state.serialize_field("rustdoc_status", &self.rustdoc_status)?;
-        state.serialize_field("repository_url", &self.repository_url)?;
-        state.serialize_field("homepage_url", &self.homepage_url)?;
-        state.serialize_field("keywords", &self.keywords)?;
-        state.serialize_field("have_examples", &self.have_examples)?;
-        state.serialize_field("target_name", &self.target_name)?;
-        state.serialize_field("releases", &self.releases)?;
-        state.serialize_field("github", &self.github)?;
-        state.serialize_field("github_stars", &self.github_stars)?;
-        state.serialize_field("github_forks", &self.github_forks)?;
-        state.serialize_field("github_issues", &self.github_issues)?;
-        state.serialize_field("metadata", &self.metadata)?;
-        state.serialize_field("is_library", &self.is_library)?;
-        state.serialize_field("doc_targets", &self.doc_targets)?;
-        state.serialize_field("yanked", &self.yanked)?;
-        state.serialize_field("license", &self.license)?;
-        state.serialize_field("documentation_url", &self.documentation_url)?;
-
-        state.end()
+fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if let Some(ref markdown) = markdown {
+        Some(render_markdown(&markdown))
+    } else {
+        None
     }
+    .serialize(serializer)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -353,6 +305,15 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct CrateDetailsPage {
+    details: Option<CrateDetails>,
+}
+
+impl_webpage! {
+    CrateDetailsPage = "crate/details.html",
+}
+
 pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler must always called with a crate name
@@ -365,12 +326,9 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
         Some(MatchSemver::Exact((version, _))) => {
             let details = CrateDetails::new(&conn, &name, &version);
 
-            Page::new(details)
-                .set_true("show_package_navigation")
-                .set_true("javascript_highlightjs")
-                .set_true("package_navigation_crate_tab")
-                .to_resp("crate_details")
+            CrateDetailsPage { details }.into_response(req)
         }
+
         Some(MatchSemver::Semver((version, _))) => {
             let url = ctry!(
                 req,
@@ -384,6 +342,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
             Ok(super::redirect(url))
         }
+
         None => Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
     }
 }
