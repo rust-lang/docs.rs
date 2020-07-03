@@ -1,12 +1,9 @@
 use crate::{
     db::PoolError,
-    web::{
-        page::{Page, WebPage},
-        releases::Search,
-    },
+    web::{page::WebPage, releases::Search, ErrorPage},
 };
 use failure::Fail;
-use iron::{status, Handler, IronError, IronResult, Plugin, Request, Response};
+use iron::{status::Status, Handler, IronError, IronResult, Plugin, Request, Response};
 use params::{Params, Value};
 use std::{error::Error, fmt};
 
@@ -36,18 +33,24 @@ impl Handler for Nope {
         match *self {
             Nope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
-                Page::new("no such resource".to_owned())
-                    .set_status(status::NotFound)
-                    .title("The requested resource does not exist")
-                    .to_resp("error")
+                // TODO: Display the attempted page
+                ErrorPage {
+                    title: "The requested resource does not exist".into(),
+                    message: Some("no such resource".into()),
+                    status: Status::NotFound,
+                }
+                .into_response(req)
             }
 
             Nope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
-                Page::new("no such crate".to_owned())
-                    .set_status(status::NotFound)
-                    .title("The requested crate does not exist")
-                    .to_resp("error")
+                // TODO: Display the attempted crate and a link to a search for said crate
+                ErrorPage {
+                    title: "The requested crate does not exist".into(),
+                    message: Some("no such crate".into()),
+                    status: Status::NotFound,
+                }
+                .into_response(req)
             }
 
             Nope::NoResults => {
@@ -58,7 +61,7 @@ impl Handler for Nope {
                     Search {
                         title: format!("No crates found matching '{}'", query),
                         search_query: Some(query.to_owned()),
-                        status: status::NotFound,
+                        status: Status::NotFound,
                         ..Default::default()
                     }
                     .into_response(req)
@@ -66,7 +69,7 @@ impl Handler for Nope {
                     // user did a search with no search terms
                     Search {
                         title: "No results given for empty search query".to_owned(),
-                        status: status::NotFound,
+                        status: Status::NotFound,
                         ..Default::default()
                     }
                     .into_response(req)
@@ -75,10 +78,12 @@ impl Handler for Nope {
 
             Nope::InternalServerError => {
                 // something went wrong, details should have been logged
-                Page::new("internal server error".to_owned())
-                    .set_status(status::InternalServerError)
-                    .title("Internal server error")
-                    .to_resp("error")
+                ErrorPage {
+                    title: "Internal server error".into(),
+                    message: Some("internal server error".into()),
+                    status: Status::InternalServerError,
+                }
+                .into_response(req)
             }
         }
     }
@@ -86,6 +91,6 @@ impl Handler for Nope {
 
 impl From<PoolError> for IronError {
     fn from(err: PoolError) -> IronError {
-        IronError::new(err.compat(), status::InternalServerError)
+        IronError::new(err.compat(), Status::InternalServerError)
     }
 }

@@ -1,0 +1,12 @@
+{%- extends "base.html" -%}
+
+{%- block header -%}
+    <div class="cratesfyi-package-container">
+        <div class="container">
+            <h1 id="crate-title">{{ title }}</h1>
+            <div class="description">
+                {{ message | default(value="") }}
+            </div>
+        </div>
+    </div>
+{%- endblock header -%}

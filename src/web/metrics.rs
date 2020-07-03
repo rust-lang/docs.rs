@@ -154,9 +154,9 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     USED_DB_CONNECTIONS.set(pool.used_connections() as i64);
     IDLE_DB_CONNECTIONS.set(pool.idle_connections() as i64);
 
-    QUEUED_CRATES_COUNT.set(ctry!(queue.pending_count()) as i64);
-    PRIORITIZED_CRATES_COUNT.set(ctry!(queue.prioritized_count()) as i64);
-    FAILED_CRATES_COUNT.set(ctry!(queue.failed_count()) as i64);
+    QUEUED_CRATES_COUNT.set(ctry!(req, queue.pending_count()) as i64);
+    PRIORITIZED_CRATES_COUNT.set(ctry!(req, queue.prioritized_count()) as i64);
+    FAILED_CRATES_COUNT.set(ctry!(req, queue.failed_count()) as i64);
 
     #[cfg(target_os = "linux")]
     {
@@ -169,12 +169,12 @@ pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut buffer = Vec::new();
     let families = prometheus::gather();
-    ctry!(TextEncoder::new().encode(&families, &mut buffer));
+    ctry!(req, TextEncoder::new().encode(&families, &mut buffer));
 
     let mut resp = Response::with(buffer);
     resp.status = Some(Status::Ok);
-    resp.headers
-        .set(ContentType("text/plain; version=0.0.4".parse().unwrap()));
+    resp.headers.set(ContentType::plaintext());
+
     Ok(resp)
 }
 

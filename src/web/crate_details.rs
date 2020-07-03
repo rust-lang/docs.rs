@@ -356,7 +356,7 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
 pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // this handler must always called with a crate name
-    let name = cexpect!(router.find("name"));
+    let name = cexpect!(req, router.find("name"));
     let req_version = router.find("version");
 
     let conn = extension!(req, Pool).get()?;
@@ -372,9 +372,15 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 .to_resp("crate_details")
         }
         Some(MatchSemver::Semver((version, _))) => {
-            let url = ctry!(Url::parse(
-                &format!("{}/crate/{}/{}", redirect_base(req), name, version)[..]
-            ));
+            let url = ctry!(
+                req,
+                Url::parse(&format!(
+                    "{}/crate/{}/{}",
+                    redirect_base(req),
+                    name,
+                    version
+                )),
+            );
 
             Ok(super::redirect(url))
         }
