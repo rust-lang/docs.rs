@@ -1,0 +1,57 @@
+{%- extends "base.html" -%}
+{%- import "releases/header.html" as release_macros -%}
+
+{%- block title -%}Releases - Docs.rs{%- endblock title -%}
+
+{%- block header -%}
+    {{ release_macros::header(title="Releases", description=description, tab="activity") }}
+{%- endblock header -%}
+
+{%- block body -%}
+    <div class="container">
+        <div id="releases-activity-chart"></div>
+    </div>
+{%- endblock body -%}
+
+{# TODO: Do this with tera alone #}
+{%- block javascript -%}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/4.2.5/highcharts.js" type="text/javascript"
+        charset="utf-8"></script>
+
+    <script type="text/javascript" charset="utf-8">
+        new Highcharts.Chart({
+            chart: {
+                renderTo: 'releases-activity-chart',
+                type: 'line'
+            },
+            title: {
+                text: 'Monthly release activity',
+                x: -20 //center
+            },
+            xAxis: {
+                categories: [
+                    {% for date in activity_data.dates %}
+                        {{ "'" ~ date ~ "'," }}
+                    {% endfor %}
+                ]
+            },
+            yAxis: {
+                title: {
+                    text: 'Crates'
+                },
+                plotLines: [{
+                    value: 0,
+                    width: 1,
+                    color: '#808080'
+                }]
+            },
+            series: [{
+                name: 'Releases',
+                data: [{{ activity_data.counts | join(sep=", ") }}]
+            }, {
+                name: 'Build Failures',
+                data: [{{ activity_data.failures | join(sep=", ") }}]
+            }]
+        });
+    </script>
+{%- endblock javascript -%}

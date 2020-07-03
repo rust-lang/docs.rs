@@ -22,6 +22,7 @@ use postgres::Connection;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
+use std::borrow::Cow;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -661,9 +662,19 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct ReleaseActivity {
+    description: Cow<'static, str>,
+    activity_data: Value,
+}
+
+impl_webpage! {
+    ReleaseActivity = "releases/activity.html",
+}
+
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let conn = extension!(req, Pool).get()?;
-    let release_activity_data: Value = ctry!(
+    let activity_data: Value = ctry!(
         req,
         conn.query(
             "SELECT value FROM config WHERE name = 'release_activity'",
@@ -674,13 +685,11 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     .next()
     .map_or(Value::Null, |row| row.get("value"));
 
-    Page::new(release_activity_data)
-        .title("Releases")
-        .set("description", "Monthly release activity")
-        .set_true("show_releases_navigation")
-        .set_true("releases_navigation_activity_tab")
-        .set_true("javascript_highchartjs")
-        .to_resp("releases_activity")
+    ReleaseActivity {
+        description: Cow::Borrowed("Monthly release activity"),
+        activity_data,
+    }
+    .into_response(req)
 }
 
 pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
