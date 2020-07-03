@@ -1,14 +1,10 @@
 //! Releases web handlers
 
 use crate::{
+    build_queue::QueuedCrate,
     db::Pool,
     impl_webpage,
-    web::{
-        error::Nope,
-        match_version,
-        page::{Page, WebPage},
-        redirect_base,
-    },
+    web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -692,25 +688,30 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     .into_response(req)
 }
 
-pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
-    let queue = extension!(req, BuildQueue);
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct BuildQueuePage {
+    description: Cow<'static, str>,
+    queue: Vec<QueuedCrate>,
+}
 
-    let mut crates = ctry!(req, queue.queued_crates());
-    for krate in &mut crates {
+impl_webpage! {
+    BuildQueuePage = "releases/build_queue.html",
+}
+
+pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
+    let mut queue = ctry!(req, extension!(req, BuildQueue).queued_crates());
+    for krate in queue.iter_mut() {
         // The priority here is inverted: in the database if a crate has a higher priority it
         // will be built after everything else, which is counter-intuitive for people not
         // familiar with docs.rs's inner workings.
         krate.priority = -krate.priority;
     }
 
-    let is_empty = crates.is_empty();
-    Page::new(crates)
-        .title("Build queue")
-        .set("description", "List of crates scheduled to build")
-        .set_bool("queue_empty", is_empty)
-        .set_true("show_releases_navigation")
-        .set_true("releases_queue_tab")
-        .to_resp("releases_queue")
+    BuildQueuePage {
+        description: Cow::Borrowed("List of crates scheduled to build"),
+        queue,
+    }
+    .into_response(req)
 }
 
 #[cfg(test)]
