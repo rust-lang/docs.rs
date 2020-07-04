@@ -694,8 +694,9 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_success, wrapper};
+    use crate::test::{assert_success, wrapper, TestEnvironment};
     use chrono::TimeZone;
+    use failure::Error;
     use kuchiki::traits::TendrilSink;
 
     #[test]
@@ -1029,40 +1030,43 @@ mod tests {
         })
     }
 
-    #[test]
-    fn home_page() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/", web)?;
-
-            env.db()
-                .fake_release()
-                .name("crate_that_succeeded")
-                .version("0.1.0")
-                .create()?;
-            env.db()
-                .fake_release()
-                .name("crate_that_failed")
-                .version("0.1.0")
-                .build_result_successful(false)
-                .create()?;
-            let home_page = kuchiki::parse_html().one(web.get("/").send()?.text()?);
-            let releases: Vec<_> = home_page
-                .select("a.release")
-                .expect("missing heading")
-                .collect();
-            assert_eq!(2, releases.len(), "expected 2 releases");
-            for release in releases {
-                let attributes = release.attributes.borrow();
-                let url = attributes.get("href").unwrap();
-                if url.contains("crate_that_succeeded") {
-                    assert_eq!(url, "/crate_that_succeeded/0.1.0/crate_that_succeeded");
-                } else {
-                    assert_eq!(url, "/crate/crate_that_failed/0.1.0");
-                }
+    fn releases_link_test(path: &str, env: &TestEnvironment) -> Result<(), Error> {
+        let db = env.db();
+        db.fake_release()
+            .name("crate_that_succeeded")
+            .version("0.1.0")
+            .create()?;
+        db.fake_release()
+            .name("crate_that_failed")
+            .version("0.1.0")
+            .build_result_successful(false)
+            .create()?;
+        let page = kuchiki::parse_html().one(env.frontend().get(path).send()?.text()?);
+        let releases: Vec<_> = page.select("a.release").expect("missing heading").collect();
+        if path.contains("failures") {
+            assert_eq!(
+                1,
+                releases.len(),
+                "expected one failed release for path {}",
+                path
+            );
+        } else {
+            assert_eq!(2, releases.len(), "expected 2 releases for path {}", path);
+        }
+        for release in releases {
+            let attributes = release.attributes.borrow();
+            let url = attributes.get("href").unwrap();
+            if url.contains("crate_that_succeeded") {
+                assert_eq!(
+                    url, "/crate_that_succeeded/0.1.0/crate_that_succeeded",
+                    "for path {}",
+                    path
+                );
+            } else {
+                assert_eq!(url, "/crate/crate_that_failed/0.1.0", "for path {}", path);
             }
-            Ok(())
-        })
+        }
+        Ok(())
     }
 
     #[test]
@@ -1075,66 +1079,20 @@ mod tests {
     }
 
     #[test]
-    fn recent_releases() {
+    fn releases() {
         wrapper(|env| {
             let web = env.frontend();
-            assert_success("/releases", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases", web)
-        })
-    }
-
-    #[test]
-    fn recent_releases_by_stars() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/releases/stars", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases/stars", web)
-        })
-    }
-
-    #[test]
-    fn recent_failures() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/releases/recent-failures", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases/recent-failures", web)
-        })
-    }
-
-    #[test]
-    fn failures_by_stars() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/releases/failures", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases/failures", web)
+            for page in &[
+                "/",
+                "/releases",
+                "/releases/stars",
+                "/releases/recent-failures",
+                "/releases/failures",
+            ] {
+                assert_success(page, web)?;
+                releases_link_test(page, env)?;
+            }
+            Ok(())
         })
     }
 
@@ -1143,14 +1101,7 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
             assert_success("/releases/activity", web)?;
-
-            env.db().fake_release().name("some_random_crate").create()?;
-            env.db()
-                .fake_release()
-                .name("some_random_crate_that_failed")
-                .build_result_successful(false)
-                .create()?;
-            assert_success("/releases/activity", web)
+            Ok(())
         })
     }
 
