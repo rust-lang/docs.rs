@@ -4,7 +4,7 @@
 
 use crate::{
     db::Pool,
-    utils::{github_updater, queue_builder, update_release_activity},
+    utils::{queue_builder, update_release_activity, GithubUpdater},
     BuildQueue, Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
@@ -21,11 +21,7 @@ pub fn start_daemon(
     build_queue: Arc<BuildQueue>,
     enable_registry_watcher: bool,
 ) -> Result<(), Error> {
-    const CRATE_VARIABLES: [&str; 3] = [
-        "CRATESFYI_PREFIX",
-        "CRATESFYI_GITHUB_USERNAME",
-        "CRATESFYI_GITHUB_ACCESSTOKEN",
-    ];
+    const CRATE_VARIABLES: &[&str] = &["CRATESFYI_PREFIX"];
 
     // first check required environment variables
     for v in CRATE_VARIABLES.iter() {
@@ -96,13 +92,13 @@ pub fn start_daemon(
         },
     )?;
 
-    // update github stats every 6 hours
-    let cloned_db = db.clone();
+    // update github stats every hour
+    let github_updater = GithubUpdater::new(&config, db.clone())?;
     cron(
         "github stats updater",
-        Duration::from_secs(60 * 60 * 6),
+        Duration::from_secs(60 * 60),
         move || {
-            github_updater(&*cloned_db.get()?)?;
+            github_updater.update_all_crates()?;
             Ok(())
         },
     )?;

@@ -364,6 +364,7 @@ dependencies = [
  "arc-swap 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "backtrace 0.3.48 (registry+https://github.com/rust-lang/crates.io-index)",
  "badge 0.2.0",
+ "base64 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "comrak 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "crates-index-diff 7.0.1 (registry+https://github.com/rust-lang/crates.io-index)",

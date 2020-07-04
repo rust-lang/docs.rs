@@ -1,10 +1,18 @@
 use crate::error::Result;
+use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
-use log::debug;
+use log::{debug, warn};
 use postgres::Connection;
 use regex::Regex;
-use std::str::FromStr;
+use reqwest::header::{HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
+use serde::Deserialize;
+
+const APP_USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    " ",
+    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+);
 
 /// Fields we need use in cratesfyi
 #[derive(Debug)]
@@ -16,115 +24,153 @@ struct GitHubFields {
     last_commit: DateTime<Utc>,
 }
 
-/// Updates github fields in crates table
-pub fn github_updater(conn: &Connection) -> Result<()> {
-    // TODO: This query assumes repository field in Cargo.toml is
-    //       always the same across all versions of a crate
-    for row in &conn.query(
-        "SELECT DISTINCT ON (crates.name)
-                crates.name,
-                crates.id,
-                releases.repository_url
-         FROM crates
-         INNER JOIN releases ON releases.crate_id = crates.id
-         WHERE releases.repository_url ~ '^https?://github.com' AND
-               (crates.github_last_update < NOW() - INTERVAL '1 day' OR
-                crates.github_last_update IS NULL)
-         ORDER BY crates.name, releases.release_time DESC",
-        &[],
-    )? {
-        let crate_name: String = row.get(0);
-        let crate_id: i32 = row.get(1);
-        let repository_url: String = row.get(2);
-
-        if let Err(err) = get_github_path(&repository_url[..])
-            .ok_or_else(|| err_msg("Failed to get github path"))
-            .and_then(|path| get_github_fields(&path[..]))
-            .and_then(|fields| {
-                conn.execute(
-                    "UPDATE crates
-                     SET github_description = $1,
-                         github_stars = $2, github_forks = $3,
-                         github_issues = $4, github_last_commit = $5,
-                         github_last_update = NOW()
-                     WHERE id = $6",
-                    &[
-                        &fields.description,
-                        &(fields.stars as i32),
-                        &(fields.forks as i32),
-                        &(fields.issues as i32),
-                        &fields.last_commit.naive_utc(),
-                        &crate_id,
-                    ],
-                )
-                .or_else(|e| Err(e.into()))
-            })
-        {
-            debug!("Failed to update github fields of: {} {}", crate_name, err);
-        }
-
-        // sleep for rate limits
-        use std::thread;
-        use std::time::Duration;
-        thread::sleep(Duration::from_secs(2));
-    }
-
-    Ok(())
+pub struct GithubUpdater {
+    client: reqwest::blocking::Client,
+    pool: Pool,
 }
 
-fn get_github_fields(path: &str) -> Result<GitHubFields> {
-    use serde_json::Value;
+impl GithubUpdater {
+    pub fn new(config: &Config, pool: Pool) -> Result<Self> {
+        let mut headers = vec![
+            (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
+            (ACCEPT, HeaderValue::from_static("application/json")),
+        ];
 
-    let body = {
-        use reqwest::{blocking::Client, header::USER_AGENT, StatusCode};
-        use std::{env, io::Read};
-
-        let client = Client::new();
-        let mut body = String::new();
-
-        let mut resp = client
-            .get(&format!("https://api.github.com/repos/{}", path)[..])
-            .header(
-                USER_AGENT,
-                format!("cratesfyi/{}", env!("CARGO_PKG_VERSION")),
-            )
-            .basic_auth(
-                env::var("CRATESFYI_GITHUB_USERNAME")
-                    .ok()
-                    .unwrap_or_default(),
-                env::var("CRATESFYI_GITHUB_ACCESSTOKEN").ok(),
-            )
-            .send()?;
-
-        if resp.status() != StatusCode::OK {
-            return Err(err_msg("Failed to get github data"));
+        if let Some((username, accesstoken)) = config.github_auth() {
+            let basicauth = format!(
+                "Basic {}",
+                base64::encode(format!("{}:{}", username, accesstoken))
+            );
+            headers.push((AUTHORIZATION, HeaderValue::from_str(&basicauth).unwrap()));
+        } else {
+            warn!("No GitHub authorization specified, will be working with very low rate limits");
         }
 
-        resp.read_to_string(&mut body)?;
-        body
-    };
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(headers.into_iter().collect())
+            .build()?;
 
-    let json = Value::from_str(&body[..])?;
-    let obj = json.as_object().unwrap();
+        Ok(GithubUpdater { client, pool })
+    }
 
-    Ok(GitHubFields {
-        description: obj
-            .get("description")
-            .and_then(|d| d.as_str())
-            .unwrap_or("")
-            .to_string(),
-        stars: obj
-            .get("stargazers_count")
-            .and_then(|d| d.as_i64())
-            .unwrap_or(0),
-        forks: obj.get("forks_count").and_then(|d| d.as_i64()).unwrap_or(0),
-        issues: obj.get("open_issues").and_then(|d| d.as_i64()).unwrap_or(0),
-        last_commit: DateTime::parse_from_rfc3339(
-            obj.get("pushed_at").and_then(|d| d.as_str()).unwrap_or(""),
-        )
-        .map(|datetime| datetime.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now()),
-    })
+    /// Updates github fields in crates table
+    pub fn update_all_crates(&self) -> Result<()> {
+        debug!("Starting update of all crates");
+
+        if self.is_rate_limited()? {
+            warn!("Skipping update because of rate limit");
+            return Ok(());
+        }
+
+        let conn = self.pool.get()?;
+        // TODO: This query assumes repository field in Cargo.toml is
+        //       always the same across all versions of a crate
+        let rows = conn.query(
+            "SELECT DISTINCT ON (crates.name)
+                    crates.name,
+                    crates.id,
+                    releases.repository_url
+             FROM crates
+             INNER JOIN releases ON releases.crate_id = crates.id
+             WHERE releases.repository_url ~ '^https?://github.com' AND
+                   (crates.github_last_update < NOW() - INTERVAL '1 day' OR
+                    crates.github_last_update IS NULL)
+             ORDER BY crates.name, releases.release_time DESC",
+            &[],
+        )?;
+
+        for row in &rows {
+            let crate_name: String = row.get(0);
+            let crate_id: i32 = row.get(1);
+            let repository_url: String = row.get(2);
+
+            debug!("Updating {}", crate_name);
+            if let Err(err) = self.update_crate(&conn, crate_id, &repository_url) {
+                if self.is_rate_limited()? {
+                    warn!("Skipping remaining updates because of rate limit");
+                    return Ok(());
+                }
+                warn!("Failed to update {}: {}", crate_name, err);
+            }
+        }
+
+        debug!("Completed all updates");
+        Ok(())
+    }
+
+    fn is_rate_limited(&self) -> Result<bool> {
+        #[derive(Deserialize)]
+        struct Response {
+            resources: Resources,
+        }
+
+        #[derive(Deserialize)]
+        struct Resources {
+            core: Resource,
+        }
+
+        #[derive(Deserialize)]
+        struct Resource {
+            remaining: u64,
+        }
+
+        let url = "https://api.github.com/rate_limit";
+        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+
+        Ok(response.resources.core.remaining == 0)
+    }
+
+    fn update_crate(&self, conn: &Connection, crate_id: i32, repository_url: &str) -> Result<()> {
+        let path =
+            get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
+        let fields = self.get_github_fields(&path)?;
+
+        conn.execute(
+            "UPDATE crates
+             SET github_description = $1,
+                 github_stars = $2, github_forks = $3,
+                 github_issues = $4, github_last_commit = $5,
+                 github_last_update = NOW()
+             WHERE id = $6",
+            &[
+                &fields.description,
+                &(fields.stars as i32),
+                &(fields.forks as i32),
+                &(fields.issues as i32),
+                &fields.last_commit.naive_utc(),
+                &crate_id,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    fn get_github_fields(&self, path: &str) -> Result<GitHubFields> {
+        #[derive(Deserialize)]
+        struct Response {
+            #[serde(default)]
+            description: Option<String>,
+            #[serde(default)]
+            stargazers_count: i64,
+            #[serde(default)]
+            forks_count: i64,
+            #[serde(default)]
+            open_issues: i64,
+            #[serde(default = "Utc::now")]
+            pushed_at: DateTime<Utc>,
+        }
+
+        let url = format!("https://api.github.com/repos/{}", path);
+        let response: Response = self.client.get(&url).send()?.error_for_status()?.json()?;
+
+        Ok(GitHubFields {
+            description: response.description.unwrap_or_default(),
+            stars: response.stargazers_count,
+            forks: response.forks_count,
+            issues: response.open_issues,
+            last_commit: response.pushed_at,
+        })
+    }
 }
 
 fn get_github_path(url: &str) -> Option<String> {
