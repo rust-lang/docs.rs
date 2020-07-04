@@ -19,6 +19,7 @@ pub fn start_daemon(
     config: Arc<Config>,
     db: Pool,
     build_queue: Arc<BuildQueue>,
+    enable_registry_watcher: bool,
 ) -> Result<(), Error> {
     const CRATE_VARIABLES: [&str; 3] = [
         "CRATESFYI_PREFIX",
@@ -38,33 +39,35 @@ pub fn start_daemon(
     // check paths once
     dbopts.check_paths().unwrap();
 
-    // check new crates every minute
-    let cloned_db = db.clone();
-    let cloned_build_queue = build_queue.clone();
-    thread::Builder::new()
-        .name("registry index reader".to_string())
-        .spawn(move || {
-            // space this out to prevent it from clashing against the queue-builder thread on launch
-            thread::sleep(Duration::from_secs(30));
-            loop {
-                let opts = opts();
-                let mut doc_builder =
-                    DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
+    if enable_registry_watcher {
+        // check new crates every minute
+        let cloned_db = db.clone();
+        let cloned_build_queue = build_queue.clone();
+        thread::Builder::new()
+            .name("registry index reader".to_string())
+            .spawn(move || {
+                // space this out to prevent it from clashing against the queue-builder thread on launch
+                thread::sleep(Duration::from_secs(30));
+                loop {
+                    let opts = opts();
+                    let mut doc_builder =
+                        DocBuilder::new(opts, cloned_db.clone(), cloned_build_queue.clone());
 
-                if doc_builder.is_locked() {
-                    debug!("Lock file exists, skipping checking new crates");
-                } else {
-                    debug!("Checking new crates");
-                    match doc_builder.get_new_crates() {
-                        Ok(n) => debug!("{} crates added to queue", n),
-                        Err(e) => error!("Failed to get new crates: {}", e),
+                    if doc_builder.is_locked() {
+                        debug!("Lock file exists, skipping checking new crates");
+                    } else {
+                        debug!("Checking new crates");
+                        match doc_builder.get_new_crates() {
+                            Ok(n) => debug!("{} crates added to queue", n),
+                            Err(e) => error!("Failed to get new crates: {}", e),
+                        }
                     }
-                }
 
-                thread::sleep(Duration::from_secs(60));
-            }
-        })
-        .unwrap();
+                    thread::sleep(Duration::from_secs(60));
+                }
+            })
+            .unwrap();
+    }
 
     // build new crates every minute
     let cloned_db = db.clone();

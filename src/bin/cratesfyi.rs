@@ -65,6 +65,9 @@ enum CommandLine {
         /// Deprecated. Run the server in the foreground instead of detaching a child
         #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
         foreground: bool,
+
+        #[structopt(long = "disable-registry-watcher")]
+        disable_registry_watcher: bool,
     },
 
     /// Database operations
@@ -98,12 +101,20 @@ impl CommandLine {
                     ctx.build_queue()?,
                 )?;
             }
-            Self::Daemon { foreground } => {
+            Self::Daemon {
+                foreground,
+                disable_registry_watcher,
+            } => {
                 if foreground {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(ctx.config()?, ctx.pool()?, ctx.build_queue()?)?;
+                cratesfyi::utils::start_daemon(
+                    ctx.config()?,
+                    ctx.pool()?,
+                    ctx.build_queue()?,
+                    !disable_registry_watcher,
+                )?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
