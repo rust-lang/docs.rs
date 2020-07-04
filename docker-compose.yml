@@ -23,6 +23,12 @@ services:
             AWS_SECRET_ACCESS_KEY: secret_key
         env_file:
             - .env
+        healthcheck:
+            test: ["CMD", "curl", "--silent", "--fail", "localhost:3000"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
     db:
         build:
             context: ./dockerfiles
@@ -35,6 +41,12 @@ services:
         ports:
             # Use a non-standard port on the host to avoid conflicting with existing postgres servers
             - "15432:5432"
+        healthcheck:
+            test: ["CMD", "pg_isready"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
     s3:
         image: minio/minio
         entrypoint: >
@@ -49,12 +61,32 @@ services:
         environment:
             MINIO_ACCESS_KEY: cratesfyi
             MINIO_SECRET_KEY: secret_key
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "curl",
+                    "--silent",
+                    "--fail",
+                    "localhost:9000/minio/health/ready",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
     prometheus:
         build:
             context: ./dockerfiles
             dockerfile: ./Dockerfile-prometheus
         ports:
             - "9090:9090"
+        healthcheck:
+            test:
+                ["CMD", "curl", "--silent", "--fail", "localhost:9090/-/ready"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
 volumes:
     postgres-data: {}
     minio-data: {}
