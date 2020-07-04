@@ -238,48 +238,6 @@ impl CrateDetails {
             .find(|release| !release.yanked)
             .unwrap_or(&self.releases[0])
     }
-
-    #[cfg(test)]
-    pub fn default_tester(release_time: DateTime<Utc>) -> Self {
-        Self {
-            name: "rcc".to_string(),
-            version: "100.0.0".to_string(),
-            description: None,
-            authors: vec![],
-            owners: vec![],
-            authors_json: None,
-            dependencies: None,
-            readme: None,
-            rustdoc: None,
-            release_time,
-            build_status: true,
-            last_successful_build: None,
-            rustdoc_status: true,
-            repository_url: None,
-            homepage_url: None,
-            keywords: None,
-            yanked: false,
-            have_examples: true,
-            target_name: "x86_64-unknown-linux-gnu".to_string(),
-            releases: vec![],
-            github: true,
-            github_stars: None,
-            github_forks: None,
-            github_issues: None,
-            metadata: MetaData {
-                name: "serde".to_string(),
-                version: "1.0.0".to_string(),
-                description: Some("serde does stuff".to_string()),
-                target_name: None,
-                rustdoc_status: true,
-                default_target: "x86_64-unknown-linux-gnu".to_string(),
-            },
-            is_library: true,
-            doc_targets: vec![],
-            license: None,
-            documentation_url: None,
-        }
-    }
 }
 
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
@@ -351,9 +309,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::TestDatabase;
-    use chrono::Utc;
     use failure::Error;
-    use serde_json::json;
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -597,83 +553,5 @@ mod tests {
 
             Ok(())
         })
-    }
-
-    #[test]
-    fn serialize_crate_details() {
-        let time = Utc::now();
-        let mut details = CrateDetails::default_tester(time);
-
-        let mut correct_json = json!({
-            "name": "rcc",
-            "version": "100.0.0",
-            "description": null,
-            "authors": [],
-            "owners": [],
-            "authors_json": null,
-            "dependencies": null,
-            "release_time": super::super::duration_to_str(time),
-            "build_status": true,
-            "last_successful_build": null,
-            "rustdoc_status": true,
-            "repository_url": null,
-            "homepage_url": null,
-            "keywords": null,
-            "have_examples": true,
-            "target_name": "x86_64-unknown-linux-gnu",
-            "releases": [],
-            "github": true,
-            "yanked": false,
-            "github_stars": null,
-            "github_forks": null,
-            "github_issues": null,
-            "metadata": {
-                "name": "serde",
-                "version": "1.0.0",
-                "description": "serde does stuff",
-                "target_name": null,
-                "rustdoc_status": true,
-                "default_target": "x86_64-unknown-linux-gnu"
-            },
-            "is_library": true,
-            "doc_targets": [],
-            "license": null,
-            "documentation_url": null
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
-
-        let authors = vec![("Somebody".to_string(), "somebody@somebody.com".to_string())];
-        let owners = vec![("Owner".to_string(), "owner@ownsstuff.com".to_string())];
-        let description = "serde does stuff".to_string();
-
-        correct_json["description"] = Value::String(description.clone());
-        correct_json["owners"] = serde_json::to_value(&owners).unwrap();
-        correct_json["authors_json"] = serde_json::to_value(&authors).unwrap();
-        correct_json["authors"] = serde_json::to_value(&authors).unwrap();
-
-        details.description = Some(description);
-        details.owners = owners;
-        details.authors_json = Some(serde_json::to_value(&authors).unwrap());
-        details.authors = authors;
-
-        assert_eq!(correct_json, serde_json::to_value(&details).unwrap());
-    }
-
-    #[test]
-    fn serialize_releases() {
-        let release = Release {
-            version: "idkman".to_string(),
-            build_status: true,
-            yanked: true,
-        };
-
-        let correct_json = json!({
-            "version": "idkman",
-            "build_status": true,
-            "yanked": true,
-        });
-
-        assert_eq!(correct_json, serde_json::to_value(&release).unwrap());
     }
 }
