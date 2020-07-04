@@ -1,0 +1,23 @@
+name: Docker
+
+on: [push, pull_request]
+
+jobs:
+  docker:
+    name: Build and upload docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Build the Docker image
+        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
+
+      - name: Upload the Docker image to ECR
+        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
+        with:
+          image: docs-rs
+          repository: staging-docs-rs
+          region: us-west-1
+          aws_access_key_id: "${{ secrets.aws_access_key_id }}"
+          aws_secret_access_key: "${{ secrets.aws_secret_access_key }}"
+        if: github.ref == 'refs/heads/master'

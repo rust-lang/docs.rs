@@ -1,6 +1,6 @@
----
-on: [push, pull_request]
 name: CI
+
+on: [push, pull_request]
 
 env:
   RUST_BACKTRACE: 1
@@ -10,38 +10,43 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-
     steps:
       - uses: actions/checkout@master
+      - id: install
+        uses: actions-rs/toolchain@v1
         with:
-          fetch-depth: 2
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-sweep
 
-      - name: Install stable Rust
-        run: rustup update stable && rustup default stable
-
-      - name: Set rustc version
-        run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
-
-      # Caching
-      - name: Cache Cargo directories
-        uses: actions/cache@v2
+      - name: Cache directories
+        uses: actions/cache@v1
         with:
           path: |
+            ~/.cargo/registry
             ~/.cargo/bin
             ~/.cargo/git
-            ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache Cargo Build
-        uses: actions/cache@v2
+          key: cargo-dirs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-dirs-
+      - name: Cache build
+        uses: actions/cache@v1
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-build-${{ steps.install.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
+            cargo-build-${{ steps.install.outputs.rustc_hash }}-
+            cargo-build-
 
-      - name: Launch the postgres and min.io images
+      - name: Register artifacts
+        uses: actions-rs/cargo@v1
+        with:
+          command: sweep
+          args: --stamp
+
+      - name: Launch postgres and min.io
         run: |
           cp .env.sample .env
           . .env
@@ -52,38 +57,87 @@ jobs:
           # Make sure the database is actually working
           psql "${CRATESFYI_DATABASE_URL}"
 
-      - name: Run rustfmt
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        run: cargo clippy --locked -- -D warnings
-
-      - name: Build docs.rs
+      - name: Build
         run: cargo build --locked
 
-      - name: Test docs.rs
+      - name: Test
         run: cargo test --locked -- --test-threads=1
 
       - name: Clean up the database
         run: docker-compose down --volumes
 
-  docker:
-    name: Docker
+      - name: Clean unused artifacts
+        uses: actions-rs/cargo@v1
+        with:
+          command: sweep
+          args: --file
+
+  fmt:
+    name: Rustfmt
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@master
+      - id: install
+        uses: actions-rs/toolchain@v1
         with:
-          fetch-depth: 2
+          toolchain: stable
+          override: true
+          components: rustfmt
 
-      - name: Build the Docker image
-        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
-
-      - name: Upload the Docker image to ECR
-        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
+      - uses: actions-rs/cargo@v1
         with:
-          image: docs-rs
-          repository: staging-docs-rs
-          region: us-west-1
-          aws_access_key_id: "${{ secrets.aws_access_key_id }}"
-          aws_secret_access_key: "${{ secrets.aws_secret_access_key }}"
-        if: github.ref == 'refs/heads/master'
+          command: fmt
+          args: -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@master
+      - id: install
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-sweep
+
+      - name: Cache directories
+        uses: actions/cache@v1
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/bin
+            ~/.cargo/git
+          key: cargo-dirs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-dirs-
+      - name: Cache build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: cargo-build-${{ steps.install.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-${{ steps.install.outputs.rustc_hash }}-
+            cargo-build-
+
+      - name: Register artifacts
+        uses: actions-rs/cargo@v1
+        with:
+          command: sweep
+          args: --stamp
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --locked -- -D warnings
+
+      - name: Clean unused artifacts
+        uses: actions-rs/cargo@v1
+        with:
+          command: sweep
+          args: --file
