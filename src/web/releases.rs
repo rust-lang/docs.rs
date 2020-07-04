@@ -1035,13 +1035,33 @@ mod tests {
             let web = env.frontend();
             assert_success("/", web)?;
 
-            env.db().fake_release().name("some_random_crate").create()?;
             env.db()
                 .fake_release()
-                .name("some_random_crate_that_failed")
+                .name("crate_that_succeeded")
+                .version("0.1.0")
+                .create()?;
+            env.db()
+                .fake_release()
+                .name("crate_that_failed")
+                .version("0.1.0")
                 .build_result_successful(false)
                 .create()?;
-            assert_success("/", web)
+            let home_page = kuchiki::parse_html().one(web.get("/").send()?.text()?);
+            let releases: Vec<_> = home_page
+                .select("a.release")
+                .expect("missing heading")
+                .collect();
+            assert_eq!(2, releases.len(), "expected 2 releases");
+            for release in releases {
+                let attributes = release.attributes.borrow();
+                let url = attributes.get("href").unwrap();
+                if url.contains("crate_that_succeeded") {
+                    assert_eq!(url, "/crate_that_succeeded/0.1.0/crate_that_succeeded");
+                } else {
+                    assert_eq!(url, "/crate/crate_that_failed/0.1.0");
+                }
+            }
+            Ok(())
         })
     }
 
