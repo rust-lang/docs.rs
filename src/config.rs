@@ -12,6 +12,10 @@ pub struct Config {
     pub(crate) max_pool_size: u32,
     pub(crate) min_pool_idle: u32,
 
+    // Github authentication
+    pub(crate) github_username: Option<String>,
+    pub(crate) github_accesstoken: Option<String>,
+
     // Max size of the files served by the docs.rs frontend
     pub(crate) max_file_size: usize,
     pub(crate) max_file_size_html: usize,
@@ -26,9 +30,19 @@ impl Config {
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
+            github_username: maybe_env("CRATESFYI_GITHUB_USERNAME")?,
+            github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
+
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 5 * 1024 * 1024)?,
         })
+    }
+
+    pub fn github_auth(&self) -> Option<(&str, &str)> {
+        Some((
+            self.github_username.as_deref()?,
+            self.github_accesstoken.as_deref()?,
+        ))
     }
 }
 
@@ -58,7 +72,10 @@ where
             .parse::<T>()
             .map(Some)
             .with_context(|_| format!("failed to parse configuration variable {}", var))?),
-        Err(VarError::NotPresent) => Ok(None),
+        Err(VarError::NotPresent) => {
+            log::debug!("optional configuration variable {} is not set", var);
+            Ok(None)
+        }
         Err(VarError::NotUnicode(_)) => bail!("configuration variable {} is not UTF-8", var),
     }
 }

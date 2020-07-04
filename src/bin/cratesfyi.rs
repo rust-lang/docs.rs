@@ -441,8 +441,8 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateGithubFields => {
-                cratesfyi::utils::github_updater(&*ctx.conn()?)
-                    .expect("Failed to update github fields");
+                cratesfyi::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
+                    .update_all_crates()?;
             }
 
             Self::AddDirectory { directory, prefix } => {

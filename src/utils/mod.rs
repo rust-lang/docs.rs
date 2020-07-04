@@ -3,7 +3,7 @@
 pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
 pub(crate) use self::copy::copy_doc_dir;
 pub use self::daemon::start_daemon;
-pub use self::github_updater::github_updater;
+pub use self::github_updater::GithubUpdater;
 pub use self::html::extract_head_and_body;
 pub use self::queue::{get_crate_priority, remove_crate_priority, set_crate_priority};
 pub use self::queue_builder::queue_builder;
