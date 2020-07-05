@@ -690,7 +690,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct BuildQueuePage {
-    description: Cow<'static, str>,
+    description: &'static str,
     queue: Vec<QueuedCrate>,
 }
 
@@ -708,7 +708,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     BuildQueuePage {
-        description: Cow::Borrowed("List of crates scheduled to build"),
+        description: "List of crates scheduled to build",
         queue,
     }
     .into_response(req)
