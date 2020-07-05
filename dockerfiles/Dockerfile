@@ -79,4 +79,4 @@ COPY dockerfiles/entrypoint.sh /opt/docsrs/
 
 WORKDIR /opt/docsrs
 ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
-CMD ["daemon", "--disable-registry-watcher"]
+CMD ["daemon", "--registry-watcher=disabled"]

@@ -8,6 +8,7 @@ use cratesfyi::{BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuild
 use failure::Error;
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
+use strum::VariantNames;
 
 pub fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
@@ -40,6 +41,13 @@ fn logger_init() {
     rustwide::logging::init_with(builder.build());
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::EnumVariantNames)]
+#[strum(serialize_all = "snake_case")]
+enum Toggle {
+    Enabled,
+    Disabled,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
 #[structopt(
     name = "cratesfyi",
@@ -66,8 +74,13 @@ enum CommandLine {
         #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
         foreground: bool,
 
-        #[structopt(long = "disable-registry-watcher")]
-        disable_registry_watcher: bool,
+        /// Enable or disable the registry watcher to automatically enqueue newly published crates
+        #[structopt(
+            long = "registry-watcher",
+            default_value = "enabled",
+            possible_values(Toggle::VARIANTS)
+        )]
+        registry_watcher: Toggle,
     },
 
     /// Database operations
@@ -103,7 +116,7 @@ impl CommandLine {
             }
             Self::Daemon {
                 foreground,
-                disable_registry_watcher,
+                registry_watcher,
             } => {
                 if foreground {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
@@ -113,7 +126,7 @@ impl CommandLine {
                     ctx.config()?,
                     ctx.pool()?,
                     ctx.build_queue()?,
-                    !disable_registry_watcher,
+                    registry_watcher == Toggle::Enabled,
                 )?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
