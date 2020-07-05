@@ -57,9 +57,12 @@ macro_rules! cexpect {
 
 /// Gets an extension from Request
 macro_rules! extension {
-    ($req:expr, $ext:ty) => {
-        cexpect!($req, $req.extensions.get::<$ext>())
-    };
+    ($req:expr, $ext:ty) => {{
+        // Bind $req so we can have good type errors and avoid re-evaluation
+        let request: &::iron::Request = $req;
+
+        cexpect!(request, request.extensions.get::<$ext>())
+    }};
 }
 
 mod builds;
