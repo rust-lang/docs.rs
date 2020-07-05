@@ -168,9 +168,9 @@
                     {%- if details.readme -%}
                         {{ details.readme | safe }}
 
-                    {# If there's not a readme then attempt to display docs #}
+                    {# If there's not a readme then attempt to display the long description #}
                     {%- elif details.rustdoc -%}
-                        {{ details.rustdoc | safe }}
+                        {{ details.rustdoc }}
                     {%- endif -%}
 
                 {# If the build failed, the release isn't yanked and the release is a library #}
