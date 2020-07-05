@@ -18,6 +18,10 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-sweep
 
       - name: Cache directories
         uses: actions/cache@v1
@@ -36,10 +40,6 @@ jobs:
           restore-keys: |
             cargo-deps-build-${{ steps.install.outputs.rustc_hash }}-
             cargo-deps-build-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-sweep
 
       - name: Register artifacts
         uses: actions-rs/cargo@v1
