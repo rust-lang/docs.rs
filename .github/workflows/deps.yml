@@ -18,10 +18,6 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-sweep
 
       - name: Cache directories
         uses: actions/cache@v1
@@ -30,16 +26,20 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/bin
             ~/.cargo/git
-          key: cargo-dirs-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: cargo-dirs-
+          key: cargo-deps-dirs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-deps-dirs-
       - name: Cache build
         uses: actions/cache@v1
         with:
           path: target
           key: cargo-build-${{ steps.install.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-build-${{ steps.install.outputs.rustc_hash }}-
-            cargo-build-
+            cargo-deps-build-${{ steps.install.outputs.rustc_hash }}-
+            cargo-deps-build-
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-sweep
 
       - name: Register artifacts
         uses: actions-rs/cargo@v1
