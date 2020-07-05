@@ -7,7 +7,6 @@ use std::thread;
 use std::time::Duration;
 
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
-// REFACTOR: Break this into smaller functions
 pub fn queue_builder(
     mut doc_builder: DocBuilder,
     db: Pool,
