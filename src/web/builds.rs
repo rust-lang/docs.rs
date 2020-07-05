@@ -28,7 +28,7 @@ pub(crate) struct Build {
 struct BuildsPage {
     metadata: Option<MetaData>,
     builds: Vec<Build>,
-    build_log: Option<Build>,
+    build_details: Option<Build>,
     limits: Limits,
 }
 
@@ -68,7 +68,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         )
     );
 
-    let mut build_log = None;
+    let mut build_details = None;
     // FIXME: getting builds.output may cause performance issues when release have tons of builds
     let mut builds = query
         .into_iter()
@@ -85,7 +85,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             };
 
             if id == req_build_id {
-                build_log = Some(build.clone());
+                build_details = Some(build.clone());
             }
 
             build
@@ -113,7 +113,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         BuildsPage {
             metadata: MetaData::from_crate(&conn, &name, &version),
             builds,
-            build_log,
+            build_details,
             limits,
         }
         .into_response(req)
