@@ -228,7 +228,7 @@
                             <span class="title"> Platform</span>
                         </a>
 
-                        {# Build the dropdown list showing avaliable targets #}
+                        {# Build the dropdown list showing available targets #}
                         <ul class="pure-menu-children">
                             {%- for target in krate.doc_targets -%}
                                 {%- set target_url = "/crate/" ~ krate.name ~ "/" ~ krate.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
