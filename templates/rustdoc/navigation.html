@@ -135,45 +135,12 @@
                                 <div class="pure-u-1-2">
                                     <ul class="pure-menu-list">
                                         <li class="pure-menu-heading">Versions</li>
-
-                                        {# Build the list of every release this crate has #}
+                            
                                         <li class="pure-menu-item">
                                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                                 <ul class="pure-menu-list">
-                                                    {%- for release in krate.releases -%}
-                                                        {# The url for the release, `/crate/:name/:version` #}
-                                                        {%- set release_url = "/crate/" ~ krate.name ~ "/" ~ release.version -%}
-                                                        {# The release's name and version, `{name}-{version}` #}
-                                                        {%- set release_name = krate.name ~ "-" ~ release.version -%}
-
-                                                        <li class="pure-menu-item">
-                                                            {# If the release has been yanked and failed to build, display a warning #}
-                                                            {%- if release.yanked and release.build_status -%}
-                                                                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
-                                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
-                                                                </a>
-
-                                                            {# If the release is yanked but built, display an warning #}
-                                                            {%- elif release.yanked and not release.build_status -%}
-                                                                <a href="{{ release_url }}" class="pure-menu-link warn"
-                                                                    title="{{ release_name }} is yanked and docs.rs failed to build it">
-                                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
-                                                                </a>
-
-                                                            {# If the release failed to build, display a warning #}
-                                                            {%- elif release.build_status -%}
-                                                                <a href="{{ release_url }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
-                                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
-                                                                </a>
-
-                                                            {# Otherwise just display the version #}
-                                                            {%- else -%}
-                                                                <a href="{{ release_url }}" class="pure-menu-link">
-                                                                    {{ release.version }}
-                                                                </a>
-                                                            {%- endif -%}
-                                                        </li>
-                                                    {%- endfor -%}
+                                                    {# Display all releases of this crate #}
+                                                    {{ macros::releases_list(name=krate.name, releases=krate.releases) }}
                                                 </ul>
                                             </div>
                                         </li>
