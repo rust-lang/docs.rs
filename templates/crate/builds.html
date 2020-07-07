@@ -14,20 +14,19 @@
         <div class="recent-releases-container">
             {# If there is a build log then show it #}
             {# TODO: When viewing a build log, show a back button or a hide button #}
-            {%- if build_details -%}
+            {%- if build_log -%}
                 <div class="release">
-                    <strong>Build #{{ build_details.id }} {{ build_details.build_time | date(format="%+") }}</strong>
+                    <strong>Build #{{ build_log.id }} {{ build_log.build_time | date(format="%+") }}</strong>
                 </div>
 
                 {%- filter dedent -%}
                     <pre>
-                        # rustc version
-                        {{ build_details.rustc_version }}
-                        # docs.rs version
-                        {{ build_details.docsrs_version }}
-
-                        # build log
-                        {{ build_details.output }}
+                        $ rustc --version
+                        {{ build_log.rustc_version }}
+                        $ docsrs --version
+                        {{ build_log.docsrs_version }}
+                        $ docsrs ...
+                        {{ build_log.output }}
                     </pre>
                 {%- endfilter -%}
             {%- endif -%}
