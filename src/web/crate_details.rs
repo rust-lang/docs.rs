@@ -244,8 +244,8 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
     let rows = conn
         .query(
             "SELECT build_status, yanked
-         FROM releases
-         WHERE releases.crate_id = $1 and releases.version = $2;",
+             FROM releases
+             WHERE releases.crate_id = $1 and releases.version = $2;",
             &[&crate_id, &version],
         )
         .unwrap();
@@ -265,7 +265,7 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct CrateDetailsPage {
-    details: Option<CrateDetails>,
+    details: CrateDetails,
 }
 
 impl_webpage! {
@@ -282,7 +282,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     match match_version(&conn, &name, req_version).and_then(|m| m.assume_exact()) {
         Some(MatchSemver::Exact((version, _))) => {
-            let details = CrateDetails::new(&conn, &name, &version);
+            let details = cexpect!(req, CrateDetails::new(&conn, &name, &version));
 
             CrateDetailsPage { details }.into_response(req)
         }

@@ -106,7 +106,7 @@
                 </a>
 
             {# If the release failed to build, display a warning #}
-            {%- elif release.build_status -%}
+            {%- elif not release.build_status -%}
                 <a href="{{ release_url }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
