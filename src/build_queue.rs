@@ -3,7 +3,7 @@ use crate::db::Pool;
 use crate::error::Result;
 use log::error;
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
     #[serde(skip)]
     id: i32,
