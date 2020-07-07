@@ -35,7 +35,7 @@ impl Handler for Nope {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
                 // TODO: Display the attempted page
                 ErrorPage {
-                    title: "The requested resource does not exist".into(),
+                    title: "The requested resource does not exist",
                     message: Some("no such resource".into()),
                     status: Status::NotFound,
                 }
@@ -46,7 +46,7 @@ impl Handler for Nope {
                 // user tried to navigate to a crate that doesn't exist
                 // TODO: Display the attempted crate and a link to a search for said crate
                 ErrorPage {
-                    title: "The requested crate does not exist".into(),
+                    title: "The requested crate does not exist",
                     message: Some("no such crate".into()),
                     status: Status::NotFound,
                 }
@@ -79,7 +79,7 @@ impl Handler for Nope {
             Nope::InternalServerError => {
                 // something went wrong, details should have been logged
                 ErrorPage {
-                    title: "Internal server error".into(),
+                    title: "Internal server error",
                     message: Some("internal server error".into()),
                     status: Status::InternalServerError,
                 }
