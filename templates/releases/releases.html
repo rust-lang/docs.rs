@@ -87,59 +87,30 @@
             return String.fromCharCode(ev.charCode || ev.keyCode);
         }
 
-        var active = null;
-        function handleKey(ev) {
+        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
+            var form = document.getElementsByClassName("landing-search-form");
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'i-am-feeling-lucky';
+            input.value = 1;
+            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+            return true;
+        };
+
+        function handleShortcut(ev) {
             if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
                 return;
             }
-
-            if (ev.which === 40) { // Down arrow
-                ev.preventDefault();
-                if (active === null) {
-                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
-                } else if (active.nextElementSibling) {
-                    active.classList.remove("selected");
-                    active = active.nextElementSibling;
-                }
-                active.classList.add("selected");
-            } else if (ev.which === 38) { // Up arrow
-                ev.preventDefault();
-                if (active === null) {
-                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
-                } else if (active.previousElementSibling) {
-                    active.classList.remove("selected");
-                    active = active.previousElementSibling;
-                }
-                active.classList.add("selected");
-                active.focus();
-            } else if (ev.which === 13) { // Return
-                if (active !== null) {
-                    document.location.href = active.getElementsByTagName("a")[0].href;
-                }
-            } else {
-                switch (getKey(ev)) {
-                    case "s":
-                    case "S":
-                        ev.preventDefault();
-                        document.getElementsByClassName("search-input-nav")[0].focus();
-                        break;
-                }
+            switch (getKey(ev)) {
+                case "s":
+                case "S":
+                    ev.preventDefault();
+                    document.getElementById("search").focus();
+                    break;
             }
         }
 
-        document.onkeypress = handleKey;
-        document.onkeydown = handleKey;
-
-        var crates = Array.prototype.slice.call(document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li"));
-        for (var i = 0; i < crates.length; ++i) {
-            crates[i].addEventListener("mouseover", function (event) {
-                this.classList.remove("selected");
-                active = null;
-            });
-            crates[i].addEventListener("mouseout", function (event) {
-                this.classList.remove("selected");
-                active = null;
-            });
-        }
+        document.onkeypress = handleShortcut;
+        document.onkeydown = handleShortcut;
     </script>
 {%- endblock javascript -%}
