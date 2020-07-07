@@ -66,12 +66,3 @@
         </tbody>
     </table>
 {% endmacro crate_limits %}
-
-{# Constructs a title based on the given crate name and version #}
-{% macro doc_title(name, version) %}
-    {%- if name -%}
-        {{ name }} {{ version | default(value="") }} - Docs.rs
-    {%- else -%}
-        Docs.rs
-    {%- endif -%}
-{% endmacro doc_title %}
