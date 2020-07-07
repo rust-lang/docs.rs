@@ -1,7 +1,7 @@
 use crate::error::Result;
 use postgres::Connection;
 use serde::Serialize;
-use std::time::Duration;
+use std::{time::Duration};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Limits {
