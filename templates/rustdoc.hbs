@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{{content.rustdoc_head}}}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/menus-min.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/grids-min.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="/style.css?{{cratesfyi_version_safe}}" type="text/css" media="all" />
+    <link rel="search" href="/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs">
+</head>
+<body>
+{{> navigation_rustdoc}}
+<div id="rustdoc_body_wrapper" class="{{content.rustdoc_body_class}}" tabindex="-1">
+    {{{content.rustdoc_body}}}
+</div>
+<script type="text/javascript" src="/menu.js?{{cratesfyi_version_safe}}"></script>
+</body>
+<script>
+    var doc_body = document.getElementById("rustdoc_body_wrapper");
+    if(window.location.hash) {
+        var notFirefox = typeof InstallTrigger === 'undefined';
+        if(notFirefox) {
+            var hash = window.location.hash;
+            window.location.hash = "";
+            setTimeout(function () {
+                window.location.hash = hash;
+                doc_body.focus();
+            }, 1);
+        }
+    } else {
+        doc_body.focus();
+    }
+</script>
+</html>
