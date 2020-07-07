@@ -1,3 +1,5 @@
+{%- import "macros.html" as macros -%}
+
 {# The url of the current release, `/crate/:name/:version` #}
 {%- set crate_url = "/crate/" ~ krate.name ~ "/" ~ krate.version -%}
 
@@ -6,7 +8,10 @@
         <div class="pure-menu pure-menu-horizontal">
             <form action="/releases/search" method="GET" class="landing-search-form-nav">
                 <div id="search-input-nav">
-                    <label for="nav-search"><i class="fa fa-fw fa-search"></i></label>
+                    <label for="nav-search">
+                        <i class="fa fa-fw fa-search"></i>
+                    </label>
+
                     <input id="nav-search" name="query" tabindex="-1" type="text"
                         aria-label="Find crate by search query" placeholder="Find crate">
                 </div>
