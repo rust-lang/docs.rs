@@ -78,6 +78,7 @@ use crate::{config::Config, db::Pool, impl_webpage, BuildQueue};
 use chrono::{DateTime, Utc};
 use extensions::InjectExtensions;
 use failure::Error;
+use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::{
     self,
     headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate},
@@ -103,6 +104,17 @@ const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
+fn handlebars_engine() -> Result<HandlebarsEngine, SourceError> {
+    // TODO: Use DocBuilderOptions for paths
+    let mut hbse = HandlebarsEngine::new();
+    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+
+    // load templates
+    hbse.reload()?;
+
+    Ok(hbse)
+}
+
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
@@ -113,9 +125,11 @@ struct CratesfyiHandler {
 
 impl CratesfyiHandler {
     fn chain<H: Handler>(inject_extensions: InjectExtensions, base: H) -> Chain {
+        let hbse = handlebars_engine().expect("Failed to load handlebar templates");
+
         let mut chain = Chain::new(base);
         chain.link_before(inject_extensions);
-
+        chain.link_after(hbse);
         chain
     }
 
@@ -570,7 +584,7 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 /// MetaData used in header
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct MetaData {
     pub(crate) name: String,
     pub(crate) version: String,
@@ -638,7 +652,10 @@ impl_webpage! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test::*, web::match_version};
+    use crate::{
+        test::*,
+        web::{handlebars_engine, match_version},
+    };
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
 
@@ -845,6 +862,11 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_templates_are_valid() {
+        handlebars_engine().expect("Failed to load handlebar templates");
     }
 
     #[test]
