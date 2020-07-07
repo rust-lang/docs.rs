@@ -7,23 +7,15 @@ use log::{debug, info};
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
 macro_rules! ctry {
-    ($req:expr, $result:expr $(,)?) => {
+    ($result:expr) => {
         match $result {
-            Ok(success) => success,
-            Err(error) => {
-                ::log::error!("{}\n{:?}", error, ::backtrace::Backtrace::new());
-
-                // This is very ugly, but it makes it impossible to get a type inference error
-                // from this macro
-                let error = $crate::web::ErrorPage {
-                    title: ::std::borrow::Cow::Borrowed("Internal Server Error"),
-                    message: ::std::option::Option::Some(::std::borrow::Cow::Owned(
-                        ::std::format!("{}", error),
-                    )),
-                    status: ::iron::status::BadRequest,
-                };
-
-                return $crate::web::page::WebPage::into_response(error, $req);
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("{}\n{:?}", e, backtrace::Backtrace::new());
+                return $crate::web::page::Page::new(format!("{}", e))
+                    .title("Internal Server Error")
+                    .set_status(::iron::status::BadRequest)
+                    .to_resp("error");
             }
         }
     };
@@ -32,24 +24,18 @@ macro_rules! ctry {
 /// cexpect will check an option and if it's not Some
 /// it will return an error page response
 macro_rules! cexpect {
-    ($req:expr, $option:expr $(,)?) => {
+    ($option:expr) => {
         match $option {
-            Some(success) => success,
+            Some(v) => v,
             None => {
-                ::log::error!(
+                log::error!(
                     "called cexpect!() on a `None` value\n{:?}",
-                    ::backtrace::Backtrace::new(),
+                    backtrace::Backtrace::new()
                 );
-
-                // This is very ugly, but it makes it impossible to get a type inference error
-                // from this macro
-                let error = $crate::web::ErrorPage {
-                    title: ::std::borrow::Cow::Borrowed("Internal Server Error"),
-                    message: None,
-                    status: ::iron::status::BadRequest,
-                };
-
-                return $crate::web::page::WebPage::into_response(error, $req);
+                return $crate::web::page::Page::new("Internal Server Error".to_owned())
+                    .title("Internal Server Error")
+                    .set_status(::iron::status::BadRequest)
+                    .to_resp("error");
             }
         }
     };
@@ -58,7 +44,7 @@ macro_rules! cexpect {
 /// Gets an extension from Request
 macro_rules! extension {
     ($req:expr, $ext:ty) => {
-        cexpect!($req, $req.extensions.get::<$ext>())
+        cexpect!($req.extensions.get::<$ext>())
     };
 }
 
@@ -74,26 +60,23 @@ mod rustdoc;
 mod sitemap;
 mod source;
 
-use crate::{config::Config, db::Pool, impl_webpage, BuildQueue};
+use self::extensions::InjectExtensions;
+use self::page::TemplateData;
+use crate::config::Config;
+use crate::db::Pool;
+use crate::BuildQueue;
 use chrono::{DateTime, Utc};
-use extensions::InjectExtensions;
 use failure::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
-use iron::{
-    self,
-    headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate},
-    modifiers::Redirect,
-    status,
-    status::Status,
-    Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
-};
-use page::TemplateData;
+use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
+use iron::modifiers::Redirect;
+use iron::prelude::*;
+use iron::{self, status, Handler, Listening, Url};
 use postgres::Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
-use serde::Serialize;
 use staticfile::Static;
-use std::{borrow::Cow, env, fmt, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{env, fmt, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
@@ -574,10 +557,9 @@ fn ico_handler(req: &mut Request) -> IronResult<Response> {
     } else {
         // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
         // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/favicon.ico", redirect_base(req))),
-        );
+        let url = ctry!(Url::parse(
+            &format!("{}/favicon.ico", redirect_base(req))[..]
+        ));
 
         Ok(redirect(url))
     }
@@ -622,31 +604,6 @@ impl MetaData {
             default_target: row.get(5),
         })
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) struct ErrorPage {
-    /// The title of the page
-    pub title: Cow<'static, str>,
-    /// The error message, displayed as a description
-    pub message: Option<Cow<'static, str>>,
-    #[serde(skip)]
-    pub status: Status,
-}
-
-impl Default for ErrorPage {
-    fn default() -> Self {
-        Self {
-            title: Cow::Borrowed(""),
-            message: None,
-            status: Status::NotFound,
-        }
-    }
-}
-
-impl_webpage! {
-    ErrorPage = "error.html",
-    status = |err| err.status,
 }
 
 #[cfg(test)]

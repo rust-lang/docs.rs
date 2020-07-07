@@ -89,6 +89,12 @@ impl<T: Serialize> Page<T> {
         self
     }
 
+    /// Sets status code for response
+    pub fn set_status(mut self, s: status::Status) -> Page<T> {
+        self.status = s;
+        self
+    }
+
     #[allow(clippy::wrong_self_convention)]
     pub fn to_resp(self, template: &str) -> IronResult<Response> {
         let mut resp = Response::new();
