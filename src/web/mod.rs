@@ -623,6 +623,16 @@ pub(crate) struct ErrorPage {
     pub status: Status,
 }
 
+impl Default for ErrorPage {
+    fn default() -> Self {
+        Self {
+            title: Cow::Borrowed(""),
+            message: None,
+            status: Status::NotFound,
+        }
+    }
+}
+
 impl_webpage! {
     ErrorPage = "error.html",
     status = |err| err.status,
