@@ -96,7 +96,37 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {{ macros::releases_list(name=details.name, releases=details.releases) }}
+                                    {%- for release in details.releases -%}
+                                        <li class="pure-menu-item">
+                                            {# If the release was yanked but built, show a warning #}
+                                            {%- if release.yanked and release.build_status -%}
+                                                <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                    title="{{ details.name }}-{{ release.version }} is yanked">
+                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                </a>
+
+                                            {# If the release was yanked and failed to build, show a warning #}
+                                            {%- elif release.yanked -%}
+                                                <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                    title="{{ details.name }}-{{ release.version }} is yanked and docs.rs failed to build it">
+                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                </a>
+
+                                            {# If the release wasn't yanked and built correctly, display it normally #}
+                                            {%- elif release.build_status -%}
+                                                <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link">
+                                                    {{ release.version }}
+                                                </a>
+
+                                            {# If the release wasn't yanked but failed to build, show a warning #}
+                                            {%- else -%}
+                                                <a href="/crate/{{ details.name }}/{{ release.version }}" class="pure-menu-link warn"
+                                                    title="docs.rs failed to build {{ details.name }}-{{ release.version }}">
+                                                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                                                </a>
+                                            {%- endif -%}
+                                        </li>
+                                    {%- endfor -%}
                                 </ul>
                             </div>
                         </li>
@@ -174,4 +204,101 @@
 {%- block javascript -%}
     {# Enable and load Rust and TOML syntax highlighting #}
     {{ macros::highlight_js(languages=["rust", "ini"]) }}
+
+    <script type="text/javascript" charset="utf-8">
+        function getKey(ev) {
+            if ("key" in ev && typeof ev.key != "undefined") {
+                return ev.key;
+            }
+
+            return String.fromCharCode(ev.charCode || ev.keyCode);
+        }
+
+        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
+            var form = document.getElementsByClassName("landing-search-form");
+            var input = document.createElement('input');
+
+            input.type = 'hidden';
+            input.name = 'i-am-feeling-lucky';
+            input.value = 1;
+            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
+
+            return true;
+        };
+
+        function handleShortcut(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+
+            switch (getKey(ev)) {
+                case "s":
+                case "S":
+                    ev.preventDefault();
+                    document.getElementById("search").focus();
+                    break;
+            }
+        }
+
+        document.onkeypress = handleShortcut;
+        document.onkeydown = handleShortcut;
+
+        var active = null;
+
+        function handleKey(ev) {
+            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+                return;
+            }
+
+            if (ev.which === 40) { // Down arrow
+                ev.preventDefault();
+                if (active === null) {
+                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+                } else if (active.nextElementSibling) {
+                    active.classList.remove("selected");
+                    active = active.nextElementSibling;
+                }
+
+                active.classList.add("selected");
+            } else if (ev.which === 38) { // Up arrow
+                ev.preventDefault();
+
+                if (active === null) {
+                    active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
+                } else if (active.previousElementSibling) {
+                    active.classList.remove("selected");
+                    active = active.previousElementSibling;
+                }
+
+                active.classList.add("selected");
+                active.focus();
+            } else if (ev.which === 13) { // Return
+                if (active !== null) {
+                    document.location.href = active.getElementsByTagName("a")[0].href;
+                }
+            } else {
+                switch (getKey(ev)) {
+                    case "s":
+                    case "S":
+                        ev.preventDefault();
+                        document.getElementsByClassName("search-input-nav")[0].focus();
+                        break;
+                }
+            }
+        }
+
+        document.onkeypress = handleKey;
+        document.onkeydown = handleKey;
+
+        var crates =
+            Array.prototype.slice.call(document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li"));
+
+        for (var i = 0; i < crates.length; ++i) {
+            crates[i].addEventListener("mouseover", function (event) {
+                this.classList.remove("selected"); active = null;
+            }); crates[i].addEventListener("mouseout", function (event) {
+                this.classList.remove("selected"); active = null;
+            });
+        }
+    </script>
 {% endblock javascript -%}

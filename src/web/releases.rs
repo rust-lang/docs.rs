@@ -18,6 +18,7 @@ use postgres::Connection;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
+use std::borrow::Cow;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -659,7 +660,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseActivity {
-    description: &'static str,
+    description: Cow<'static, str>,
     activity_data: Value,
 }
 
@@ -681,7 +682,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     .map_or(Value::Null, |row| row.get("value"));
 
     ReleaseActivity {
-        description: "Monthly release activity",
+        description: Cow::Borrowed("Monthly release activity"),
         activity_data,
     }
     .into_response(req)

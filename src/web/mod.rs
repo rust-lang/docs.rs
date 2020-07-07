@@ -16,7 +16,7 @@ macro_rules! ctry {
                 // This is very ugly, but it makes it impossible to get a type inference error
                 // from this macro
                 let error = $crate::web::ErrorPage {
-                    title: "Internal Server Error",
+                    title: ::std::borrow::Cow::Borrowed("Internal Server Error"),
                     message: ::std::option::Option::Some(::std::borrow::Cow::Owned(
                         ::std::format!("{}", error),
                     )),
@@ -44,7 +44,7 @@ macro_rules! cexpect {
                 // This is very ugly, but it makes it impossible to get a type inference error
                 // from this macro
                 let error = $crate::web::ErrorPage {
-                    title: "Internal Server Error",
+                    title: ::std::borrow::Cow::Borrowed("Internal Server Error"),
                     message: None,
                     status: ::iron::status::BadRequest,
                 };
@@ -616,7 +616,7 @@ impl MetaData {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct ErrorPage {
     /// The title of the page
-    pub title: &'static str,
+    pub title: Cow<'static, str>,
     /// The error message, displayed as a description
     pub message: Option<Cow<'static, str>>,
     #[serde(skip)]
