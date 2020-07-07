@@ -75,3 +75,48 @@
         Docs.rs
     {%- endif -%}
 {% endmacro doc_title %}
+
+{#
+    Constructs a list of a crate's releases
+    * `name` The crate's name as a string
+    * `releases` A list of crate releases where each release has the following fields:
+        * `version` A string of the release's version
+        * `yanked` A boolean of the release's yanked status
+        * `build_status` A boolean of the crate's build status (true for built, false for failed build)
+#}
+{% macro releases_list(name, releases) %}
+    {%- for release in releases -%}
+        {# The url for the release, `/crate/:name/:version` #}
+        {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
+        {# The release's name and version, `:name-:version` #}
+        {%- set release_name = name ~ "-" ~ release.version -%}
+
+        <li class="pure-menu-item">
+            {# If the release has been yanked and failed to build, display a warning #}
+            {%- if release.yanked and release.build_status -%}
+                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
+                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                </a>
+
+            {# If the release is yanked but built, display an warning #}
+            {%- elif release.yanked and not release.build_status -%}
+                <a href="{{ release_url }}" class="pure-menu-link warn"
+                    title="{{ release_name }} is yanked and docs.rs failed to build it">
+                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                </a>
+
+            {# If the release failed to build, display a warning #}
+            {%- elif release.build_status -%}
+                <a href="{{ release_url }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
+                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                </a>
+
+            {# Otherwise just display the version #}
+            {%- else -%}
+                <a href="{{ release_url }}" class="pure-menu-link">
+                    {{ release.version }}
+                </a>
+            {%- endif -%}
+        </li>
+    {%- endfor -%}
+{% endmacro releases_list %}
