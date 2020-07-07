@@ -77,7 +77,6 @@
             if ("key" in ev && typeof ev.key != "undefined") {
                 return ev.key;
             }
-
             return String.fromCharCode(ev.charCode || ev.keyCode);
         }
 
@@ -95,7 +94,6 @@
             if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
                 return;
             }
-
             switch (getKey(ev)) {
                 case "s":
                 case "S":
