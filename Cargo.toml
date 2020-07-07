@@ -54,6 +54,7 @@ serde_json = "1.0"
 # iron dependencies
 iron = "0.5"
 router = "0.5"
+handlebars-iron = "0.25"
 params = "0.8"
 staticfile = { version = "0.4", features = [ "cache" ] }
 tempfile = "3.1.0"
