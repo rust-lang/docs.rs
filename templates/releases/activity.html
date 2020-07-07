@@ -30,11 +30,9 @@
             },
             xAxis: {
                 categories: [
-                    {% if activity_data.dates -%}
-                        {%- for date in activity_data.dates -%}
-                            {{ "'" ~ date ~ "'," }}
-                        {%- endfor -%}
-                    {%- endif %}
+                    {% for date in activity_data.dates %}
+                        {{ "'" ~ date ~ "'," }}
+                    {% endfor %}
                 ]
             },
             yAxis: {
@@ -49,10 +47,10 @@
             },
             series: [{
                 name: 'Releases',
-                data: [{{ activity_data.counts | default(value=[]) | join(sep=", ") }}]
+                data: [{{ activity_data.counts | join(sep=", ") }}]
             }, {
                 name: 'Build Failures',
-                data: [{{ activity_data.failures | default(value=[]) | join(sep=", ") }}]
+                data: [{{ activity_data.failures | join(sep=", ") }}]
             }]
         });
     </script>
