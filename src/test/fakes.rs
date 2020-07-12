@@ -153,6 +153,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    /// Returns the release_id
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::collections::HashSet;
         use std::fs;

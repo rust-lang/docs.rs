@@ -1360,7 +1360,7 @@ mod test {
 
     #[test]
     fn test_target_redirect_not_found() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let web = env.frontend();
             assert_eq!(
                 web.get("/crate/fdsafdsafdsafdsa/0.1.0/target-redirect/x86_64-apple-darwin/")
@@ -1374,7 +1374,7 @@ mod test {
 
     #[test]
     fn test_fully_yanked_crate_404s() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release()
@@ -1400,7 +1400,7 @@ mod test {
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/856
     fn test_no_trailing_slash() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
             db.fake_release().name("dummy").version("0.1.0").create()?;
             let web = env.frontend();
@@ -1424,6 +1424,24 @@ mod test {
                 "/dummy/0.2.0/dummy/",
                 web,
             )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/pull/885#issuecomment-655147643
+    fn test_no_panic_on_missing_kind() {
+        wrapper(|env| {
+            let db = env.db();
+            let id = db.fake_release().name("strum").version("0.13.0").create()?;
+            // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
+            db.conn().query(
+                r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#,
+                &[&id],
+            )?;
+            let web = env.frontend();
+            assert_success("/strum/0.13.0/strum/", web)?;
+            assert_success("/crate/strum/0.13.0/", web)?;
             Ok(())
         })
     }
