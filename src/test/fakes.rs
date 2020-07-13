@@ -19,6 +19,8 @@ pub(crate) struct FakeRelease<'a> {
     registry_crate_data: RegistryCrateData,
     has_docs: bool,
     has_examples: bool,
+    /// This stores the content, while `package.readme` stores the filename
+    readme: Option<&'a str>,
 }
 
 impl<'a> FakeRelease<'a> {
@@ -62,6 +64,7 @@ impl<'a> FakeRelease<'a> {
             },
             has_docs: true,
             has_examples: false,
+            readme: None,
         }
     }
 
@@ -92,7 +95,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub fn author(mut self, author: &str) -> Self {
+    pub(crate) fn author(mut self, author: &str) -> Self {
         self.package.authors = vec![author.into()];
         self
     }
@@ -151,6 +154,12 @@ impl<'a> FakeRelease<'a> {
         self.package.targets.push(target);
         self.doc_targets.push(platform);
         self
+    }
+
+    /// NOTE: this should be markdown. It will be rendered as HTML when served.
+    pub(crate) fn readme(mut self, content: &'a str) -> Self {
+        self.readme = Some(content);
+        self.source_file("README.md", content.as_bytes())
     }
 
     /// Returns the release_id
@@ -223,10 +232,14 @@ impl<'a> FakeRelease<'a> {
             }
         }
 
+        let crate_dir = tempdir.path();
+        if let Some(markdown) = self.readme {
+            fs::write(crate_dir.join("README.md"), markdown)?;
+        }
         let release_id = crate::db::add_package_into_database(
             &db.conn(),
             &package,
-            tempdir.path(),
+            crate_dir,
             &self.build_result,
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             source_meta,

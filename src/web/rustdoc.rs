@@ -1445,4 +1445,26 @@ mod test {
             Ok(())
         })
     }
+
+    #[test]
+    fn test_readme_rendered_as_html() {
+        wrapper(|env| {
+            let db = env.db();
+            let readme = "# Overview";
+            db.fake_release()
+                .name("strum")
+                .version("0.18.0")
+                .readme(readme)
+                .create()?;
+            let page = kuchiki::parse_html()
+                .one(env.frontend().get("/crate/strum/0.18.0").send()?.text()?);
+            let rendered = page.select_first("#main").expect("missing readme");
+            println!("{}", rendered.text_contents());
+            rendered
+                .as_node()
+                .select_first("h1")
+                .expect("`# Overview` was not rendered as HTML");
+            Ok(())
+        })
+    }
 }
