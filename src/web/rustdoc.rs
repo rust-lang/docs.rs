@@ -1447,6 +1447,7 @@ mod test {
     }
 
     #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/pull/885#issuecomment-655154405
     fn test_readme_rendered_as_html() {
         wrapper(|env| {
             let db = env.db();
@@ -1464,6 +1465,42 @@ mod test {
                 .as_node()
                 .select_first("h1")
                 .expect("`# Overview` was not rendered as HTML");
+            Ok(())
+        })
+    }
+
+    #[test]
+    // regression test for https://github.com/rust-lang/docs.rs/pull/885#issuecomment-655149288
+    fn test_build_status_is_accurate() {
+        wrapper(|env| {
+            let db = env.db();
+            db.fake_release()
+                .name("hexponent")
+                .version("0.3.0")
+                .create()?;
+            db.fake_release()
+                .name("hexponent")
+                .version("0.2.0")
+                .build_result_successful(false)
+                .create()?;
+            let web = env.frontend();
+
+            let status = |version| -> Result<_, failure::Error> {
+                let page =
+                    kuchiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
+                let selector = format!(r#"ul > li a[href="/crate/hexponent/{}""#, version);
+                let anchor = page
+                    .select(&selector)
+                    .unwrap()
+                    .find(|a| a.text_contents().trim() == version)
+                    .unwrap();
+                let attributes = anchor.as_node().as_element().unwrap().attributes.borrow();
+                let classes = attributes.get("class").unwrap();
+                Ok(classes.split(' ').all(|c| c != "warn"))
+            };
+
+            assert!(status("0.3.0")?);
+            assert!(!status("0.2.0")?);
             Ok(())
         })
     }
