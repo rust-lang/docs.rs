@@ -63,6 +63,7 @@ pub struct Release {
     pub version: String,
     pub build_status: bool,
     pub yanked: bool,
+    pub is_library: bool,
 }
 
 impl CrateDetails {
@@ -243,23 +244,29 @@ impl CrateDetails {
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
     let rows = conn
         .query(
-            "SELECT build_status, yanked
+            "SELECT build_status,
+                    yanked,
+                    is_library
              FROM releases
              WHERE releases.crate_id = $1 and releases.version = $2;",
             &[&crate_id, &version],
         )
         .unwrap();
 
-    let (build_status, yanked) = if !rows.is_empty() {
-        (rows.get(0).get(0), rows.get(0).get(1))
-    } else {
-        Default::default()
-    };
+    let (build_status, yanked, is_library) =
+        rows.iter().next().map_or_else(Default::default, |row| {
+            (
+                row.get("build_status"),
+                row.get("yanked"),
+                row.get("is_library"),
+            )
+        });
 
     Release {
         version,
         build_status,
         yanked,
+        is_library,
     }
 }
 
@@ -308,8 +315,9 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::TestDatabase;
+    use crate::test::{wrapper, TestDatabase};
     use failure::Error;
+    use kuchiki::traits::TendrilSink;
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -329,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_last_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -362,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_all_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release()
@@ -390,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_with_intermittent_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -416,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_releases_should_be_sorted() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
@@ -438,6 +446,12 @@ mod tests {
                 .name("foo")
                 .version("0.2.0-alpha")
                 .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .build_result_successful(false)
+                .binary(true)
+                .create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(
@@ -446,37 +460,50 @@ mod tests {
                     Release {
                         version: "1.0.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.12.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.3.0".to_string(),
                         build_status: false,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.2.0".to_string(),
                         build_status: true,
-                        yanked: true
+                        yanked: true,
+                        is_library: true,
                     },
                     Release {
                         version: "0.2.0-alpha".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.1.1".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.1.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
+                    },
+                    Release {
+                        version: "0.0.1".to_string(),
+                        build_status: false,
+                        yanked: false,
+                        is_library: false,
                     },
                 ]
             );
@@ -487,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_latest_version() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -505,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_latest_version_ignores_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -527,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_latest_version_only_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release()
@@ -553,5 +580,36 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn releases_dropdowns_is_correct() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("binary")
+                .version("0.1.0")
+                .binary(true)
+                .create()?;
+
+            let page = kuchiki::parse_html()
+                .one(env.frontend().get("/crate/binary/0.1.0").send()?.text()?);
+            let warning = page.select_first("a.pure-menu-link.warn").unwrap();
+
+            assert_eq!(
+                warning
+                    .as_node()
+                    .as_element()
+                    .unwrap()
+                    .attributes
+                    .borrow()
+                    .get("title")
+                    .unwrap(),
+                "binary-0.1.0 is not a library"
+            );
+
+            Ok(())
+        });
     }
 }
