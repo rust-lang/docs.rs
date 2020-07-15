@@ -253,16 +253,14 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
         )
         .unwrap();
 
-    let (build_status, yanked, is_library) = rows.iter().next().map_or_else(
-        || Default::default(),
-        |row| {
+    let (build_status, yanked, is_library) =
+        rows.iter().next().map_or_else(Default::default, |row| {
             (
                 row.get("build_status"),
                 row.get("yanked"),
                 row.get("is_library"),
             )
-        },
-    );
+        });
 
     Release {
         version,
