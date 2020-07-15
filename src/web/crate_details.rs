@@ -63,6 +63,7 @@ pub struct Release {
     pub version: String,
     pub build_status: bool,
     pub yanked: bool,
+    pub is_library: bool,
 }
 
 impl CrateDetails {
@@ -243,15 +244,23 @@ impl CrateDetails {
 fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
     let rows = conn
         .query(
-            "SELECT build_status, yanked
+            "SELECT build_status,
+                    yanked,
+                    is_library
              FROM releases
              WHERE releases.crate_id = $1 and releases.version = $2;",
             &[&crate_id, &version],
         )
         .unwrap();
 
-    let (build_status, yanked) = if !rows.is_empty() {
-        (rows.get(0).get(0), rows.get(0).get(1))
+    let (build_status, yanked, is_library) = if !rows.is_empty() {
+        let row = rows.get(0);
+
+        (
+            row.get("build_status"),
+            row.get("yanked"),
+            row.get("is_library"),
+        )
     } else {
         Default::default()
     };
@@ -260,6 +269,7 @@ fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release 
         version,
         build_status,
         yanked,
+        is_library,
     }
 }
 
@@ -438,6 +448,12 @@ mod tests {
                 .name("foo")
                 .version("0.2.0-alpha")
                 .create()?;
+            db.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .build_result_successful(false)
+                .binary(true)
+                .create()?;
 
             let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(
@@ -446,37 +462,50 @@ mod tests {
                     Release {
                         version: "1.0.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.12.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.3.0".to_string(),
                         build_status: false,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.2.0".to_string(),
                         build_status: true,
-                        yanked: true
+                        yanked: true,
+                        is_library: true,
                     },
                     Release {
                         version: "0.2.0-alpha".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.1.1".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
                     },
                     Release {
                         version: "0.1.0".to_string(),
                         build_status: true,
-                        yanked: false
+                        yanked: false,
+                        is_library: true,
+                    },
+                    Release {
+                        version: "0.0.1".to_string(),
+                        build_status: false,
+                        yanked: false,
+                        is_library: false,
                     },
                 ]
             );

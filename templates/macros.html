@@ -83,6 +83,7 @@
         * `version` A string of the release's version
         * `yanked` A boolean of the release's yanked status
         * `build_status` A boolean of the crate's build status (true for built, false for failed build)
+        * `is_library` A boolean that's true if the crate is a library and false if it's a binary
 #}
 {% macro releases_list(name, releases) %}
     {%- for release in releases -%}
@@ -92,8 +93,14 @@
         {%- set release_name = name ~ "-" ~ release.version -%}
 
         <li class="pure-menu-item">
-            {# If the release is yanked but built, display an warning #}
-            {%- if release.yanked and release.build_status -%}
+            {# If the release isn't a library, then display that warning #}
+            {% if not release.is_library -%}
+                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is not a library">
+                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                </a>
+
+            {# If the release has been yanked and failed to build, display a warning #}
+            {%- elif release.yanked and release.build_status -%}
                 <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
@@ -116,7 +123,7 @@
                 <a href="{{ release_url }}" class="pure-menu-link">
                     {{ release.version }}
                 </a>
-            {%- endif -%}
+            {%- endif %}
         </li>
     {%- endfor -%}
 {% endmacro releases_list %}
