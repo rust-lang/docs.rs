@@ -317,8 +317,9 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::TestDatabase;
+    use crate::test::{wrapper, TestDatabase};
     use failure::Error;
+    use kuchiki::traits::TendrilSink;
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -338,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_last_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -371,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_when_all_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release()
@@ -399,7 +400,7 @@ mod tests {
 
     #[test]
     fn test_last_successful_build_with_intermittent_releases_failed_or_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -425,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_releases_should_be_sorted() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
@@ -515,7 +516,7 @@ mod tests {
 
     #[test]
     fn test_latest_version() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -533,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_latest_version_ignores_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release().name("foo").version("0.0.1").create()?;
@@ -555,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_latest_version_only_yanked() {
-        crate::test::wrapper(|env| {
+        wrapper(|env| {
             let db = env.db();
 
             db.fake_release()
@@ -581,5 +582,36 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn releases_dropdowns_is_correct() {
+        wrapper(|env| {
+            let db = env.db();
+
+            db.fake_release()
+                .name("binary")
+                .version("0.1.0")
+                .binary(true)
+                .create()?;
+
+            let page = kuchiki::parse_html()
+                .one(env.frontend().get("/crate/binary/0.1.0").send()?.text()?);
+            let warning = page.select_first("a.pure-menu-link.warn").unwrap();
+
+            assert_eq!(
+                warning
+                    .as_node()
+                    .as_element()
+                    .unwrap()
+                    .attributes
+                    .borrow()
+                    .get("title")
+                    .unwrap(),
+                "binary-0.1.0 is not a library"
+            );
+
+            Ok(())
+        });
     }
 }
