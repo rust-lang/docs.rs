@@ -1,6 +1,6 @@
 use crate::storage::s3::{s3_client, S3_BUCKET_NAME};
 use failure::{Error, Fail};
-use postgres::{transaction::Transaction, Connection};
+use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
@@ -45,33 +45,22 @@ fn get_id(conn: &Connection, name: &str) -> Result<i32, Error> {
     }
 }
 
-// metaprogramming!
-// NOTE: it is _crucial_ that table_name and column_name be hard-coded, i.e. NOT user input
-fn delete_metadata(
-    transaction: &Transaction,
-    crate_id: i32,
-    version: &str,
-    table_name: &'static str,
-    column_name: &'static str,
-) -> Result<(), Error> {
-    transaction.execute(
-        &format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table_name, column_name),
-        &[&crate_id, &version],
-    )?;
-    Ok(())
-}
-
 fn delete_version_from_database(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     let transaction = conn.transaction()?;
-    let metadata = [
+    // metaprogramming!
+    // WARNING: these must be hard-coded and NEVER user input.
+    let metadata: [(&'static str, &'static str); 4] = [
         ("author_rels", "rid"),
         ("owner_rels", "cid"),
         ("keyword_rels", "rid"),
         ("builds", "rid"),
     ];
     for &(table, column) in &metadata {
-        delete_metadata(&transaction, crate_id, version, table, column)?;
+        transaction.execute(
+            &format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table, column),
+            &[&crate_id, &version],
+        )?;
     }
     transaction.execute(
         "DELETE FROM releases WHERE crate_id = $1 AND version = $2",
