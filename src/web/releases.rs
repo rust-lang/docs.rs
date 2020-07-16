@@ -69,18 +69,12 @@ pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Orde
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
-    let (ordering, failed): (&'static str, _) = match order {
+    let (ordering, filter_failed): (&'static str, _) = match order {
         Order::ReleaseTime => ("releases.release_time", false),
         Order::GithubStars => ("crates.github_stars", false),
         Order::RecentFailures => ("releases.release_time", true),
         Order::FailuresByGithubStars => ("crates.github_stars", true),
     };
-    let where_clause = if failed {
-        "WHERE releases.build_status = FALSE AND releases.is_library = TRUE"
-    } else {
-        ""
-    };
-
     let query = format!(
         "SELECT crates.name,
             releases.version,
@@ -91,13 +85,13 @@ pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Orde
             crates.github_stars
         FROM crates
         INNER JOIN releases ON crates.id = releases.crate_id
-        {}
+        WHERE (NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)
         ORDER BY {} DESC
         LIMIT $1 OFFSET $2",
-        where_clause, ordering,
+        ordering,
     );
 
-    conn.query(&query, &[&limit, &offset])
+    conn.query(&query, &[&limit, &offset, &filter_failed])
         .unwrap()
         .into_iter()
         .map(|row| Release {
