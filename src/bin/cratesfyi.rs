@@ -432,11 +432,10 @@ enum DatabaseSubcommand {
     /// Updates monthly release activity chart
     UpdateReleaseActivity,
 
-    /// Removes a whole crate from the database
-    DeleteCrate {
-        /// Name of the crate to delete
-        #[structopt(name = "CRATE_NAME")]
-        crate_name: String,
+    /// Remove documentation from the database
+    Delete {
+        #[structopt(subcommand)]
+        command: DeleteSubcommand,
     },
 
     /// Blacklist operations
@@ -467,10 +466,13 @@ impl DatabaseSubcommand {
             Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&*ctx.conn()?)
                 .expect("Failed to update release activity"),
 
-            Self::DeleteCrate { crate_name } => {
-                db::delete_crate(&*ctx.conn()?, &crate_name).expect("failed to delete the crate");
-            }
-
+            Self::Delete {
+                command: DeleteSubcommand::Version { name, version },
+            } => db::delete_version(&*ctx.conn()?, &name, &version)
+                .expect("failed to delete the crate"),
+            Self::Delete {
+                command: DeleteSubcommand::Crate { name },
+            } => db::delete_crate(&*ctx.conn()?, &name).expect("failed to delete the crate"),
             Self::Blacklist { command } => command.handle_args(ctx)?,
         }
         Ok(())
@@ -516,6 +518,26 @@ impl BlacklistSubcommand {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+enum DeleteSubcommand {
+    /// Delete a whole crate
+    Crate {
+        /// Name of the crate to delete
+        #[structopt(name = "CRATE_NAME")]
+        name: String,
+    },
+    /// Delete a single version of a crate (which may include multiple builds)
+    Version {
+        /// Name of the crate to delete
+        #[structopt(name = "CRATE_NAME")]
+        name: String,
+
+        /// The version of the crate to delete
+        #[structopt(name = "VERSION")]
+        version: String,
+    },
 }
 
 struct Context {
