@@ -29,7 +29,7 @@ pub fn delete_version(conn: &Connection, name: &str, version: &str) -> Result<()
 
     if let Some(s3) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&s3, &format!("{}/{}/", prefix, name))?;
+            delete_prefix_from_s3(&s3, &format!("{}/{}/{}/", prefix, name, version))?;
         }
     }
 
@@ -184,7 +184,7 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::test::{assert_success, wrapper};
     use failure::Error;
     use postgres::Connection;
 
@@ -293,6 +293,10 @@ mod tests {
                 authors(&db.conn(), crate_id)?,
                 vec!["Peter Rabbit".to_string()]
             );
+
+            let web = env.frontend();
+            assert_success("/a/2.0.0/a/", web)?;
+            assert_eq!(web.get("/a/1.0.0/a/").send()?.status(), 404);
 
             Ok(())
         })
