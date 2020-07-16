@@ -7,7 +7,7 @@ use std::{fs, path::PathBuf, str::FromStr};
 
 fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
 where
-    F: FnMut(&str, &str) -> (),
+    F: FnMut(&str, &str),
 {
     let reader = fs::File::open(path).map(BufReader::new)?;
 
@@ -54,7 +54,7 @@ where
     if !name.is_empty() {
         versions.reverse();
         for version in versions {
-            func(&name[..], &version[..]);
+            func(&name, &version);
         }
     }
 
@@ -63,7 +63,7 @@ where
 
 pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
 where
-    F: FnMut(&str, &str) -> (),
+    F: FnMut(&str, &str),
 {
     if !path.is_dir() {
         return Err(err_msg("Not a directory"));
