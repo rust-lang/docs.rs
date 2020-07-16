@@ -45,18 +45,20 @@ fn get_id(conn: &Connection, name: &str) -> Result<i32, Error> {
     }
 }
 
+// metaprogramming!
+// WARNING: these must be hard-coded and NEVER user input.
+const METADATA: [(&str, &str); 5] = [
+    ("author_rels", "rid"),
+    ("owner_rels", "cid"),
+    ("keyword_rels", "rid"),
+    ("builds", "rid"),
+    ("compression_rels", "release"),
+];
+
 fn delete_version_from_database(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     let transaction = conn.transaction()?;
-    // metaprogramming!
-    // WARNING: these must be hard-coded and NEVER user input.
-    let metadata: [(&'static str, &'static str); 4] = [
-        ("author_rels", "rid"),
-        ("owner_rels", "cid"),
-        ("keyword_rels", "rid"),
-        ("builds", "rid"),
-    ];
-    for &(table, column) in &metadata {
+    for &(table, column) in &METADATA {
         transaction.execute(
             &format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table, column),
             &[&crate_id, &version],
@@ -92,22 +94,15 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
         "DELETE FROM sandbox_overrides WHERE crate_name = $1",
         &[&name],
     )?;
-    transaction.execute(
-        "DELETE FROM author_rels WHERE rid IN (SELECT id FROM releases WHERE crate_id = $1);",
-        &[&crate_id],
-    )?;
-    transaction.execute(
-        "DELETE FROM owner_rels WHERE cid IN (SELECT id FROM releases WHERE crate_id = $1);",
-        &[&crate_id],
-    )?;
-    transaction.execute(
-        "DELETE FROM keyword_rels WHERE rid IN (SELECT id FROM releases WHERE crate_id = $1);",
-        &[&crate_id],
-    )?;
-    transaction.execute(
-        "DELETE FROM builds WHERE rid IN (SELECT id FROM releases WHERE crate_id = $1);",
-        &[&crate_id],
-    )?;
+    for &(table, column) in &METADATA {
+        transaction.execute(
+            &format!(
+                "DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1)",
+                table, column
+            ),
+            &[&crate_id],
+        )?;
+    }
     transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
     transaction.execute("DELETE FROM crates WHERE id = $1;", &[&crate_id])?;
 
