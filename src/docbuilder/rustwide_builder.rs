@@ -39,6 +39,7 @@ const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "down-arrow.svg",
     "dark.css",
     "light.css",
+    "ayu.css",
     "main.js",
     "normalize.css",
     "rustdoc.css",
