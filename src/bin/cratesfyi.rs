@@ -6,7 +6,7 @@ use std::sync::Arc;
 use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
-use failure::Error;
+use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 use strum::VariantNames;
@@ -216,12 +216,12 @@ impl PrioritySubcommand {
         match self {
             Self::Set { pattern, priority } => {
                 set_crate_priority(&*ctx.conn()?, &pattern, priority)
-                    .expect("Could not set pattern's priority");
+                    .context("Could not set pattern's priority")?;
             }
 
             Self::Remove { pattern } => {
                 if let Some(priority) = remove_crate_priority(&*ctx.conn()?, &pattern)
-                    .expect("Could not remove pattern's priority")
+                    .context("Could not remove pattern's priority")?
                 {
                     println!("Removed pattern with priority {}", priority);
                 } else {
@@ -288,7 +288,7 @@ impl Build {
 
             doc_options
                 .check_paths()
-                .expect("The given paths were invalid");
+                .context("The given paths were invalid")?;
 
             DocBuilder::new(doc_options, ctx.pool()?, ctx.build_queue()?)
         };
@@ -344,14 +344,14 @@ impl BuildSubcommand {
     pub fn handle_args(self, ctx: Context, mut docbuilder: DocBuilder) -> Result<(), Error> {
         match self {
             Self::World => {
-                docbuilder.load_cache().expect("Failed to load cache");
+                docbuilder.load_cache().context("Failed to load cache")?;
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
                 builder
                     .build_world(&mut docbuilder)
-                    .expect("Failed to build world");
+                    .context("Failed to build world")?;
 
-                docbuilder.save_cache().expect("Failed to save cache");
+                docbuilder.save_cache().context("Failed to save cache")?;
             }
 
             Self::Crate {
@@ -359,26 +359,27 @@ impl BuildSubcommand {
                 crate_version,
                 local,
             } => {
-                docbuilder.load_cache().expect("Failed to load cache");
+                docbuilder.load_cache().context("Failed to load cache")?;
                 let mut builder =
-                    RustwideBuilder::init(ctx.pool()?).expect("failed to initialize rustwide");
+                    RustwideBuilder::init(ctx.pool()?).context("failed to initialize rustwide")?;
 
                 if let Some(path) = local {
                     builder
                         .build_local_package(&mut docbuilder, &path)
-                        .expect("Building documentation failed");
+                        .context("Building documentation failed")?;
                 } else {
                     builder
                         .build_package(
                             &mut docbuilder,
-                            &crate_name.unwrap(),
-                            &crate_version.unwrap(),
+                            &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
+                            &crate_version
+                                .ok_or_else(|| err_msg("must specify version if not local"))?,
                             None,
                         )
-                        .expect("Building documentation failed");
+                        .context("Building documentation failed")?;
                 }
 
-                docbuilder.save_cache().expect("Failed to save cache");
+                docbuilder.save_cache().context("Failed to save cache")?;
             }
 
             Self::UpdateToolchain { only_first_time } => {
@@ -386,10 +387,9 @@ impl BuildSubcommand {
                     let conn = ctx
                         .pool()?
                         .get()
-                        .expect("failed to get a database connection");
-                    let res = conn
-                        .query("SELECT * FROM config WHERE name = 'rustc_version';", &[])
-                        .unwrap();
+                        .context("failed to get a database connection")?;
+                    let res =
+                        conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[])?;
 
                     if !res.is_empty() {
                         println!("update-toolchain was already called in the past, exiting");
@@ -397,21 +397,21 @@ impl BuildSubcommand {
                     }
                 }
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
                 builder
                     .update_toolchain()
-                    .expect("failed to update toolchain");
+                    .context("failed to update toolchain")?;
             }
 
             Self::AddEssentialFiles => {
-                let mut builder = RustwideBuilder::init(ctx.pool()?).unwrap();
+                let mut builder = RustwideBuilder::init(ctx.pool()?)?;
                 builder
                     .add_essential_files()
-                    .expect("failed to add essential files");
+                    .context("failed to add essential files")?;
             }
 
-            Self::Lock => docbuilder.lock().expect("Failed to lock"),
-            Self::Unlock => docbuilder.unlock().expect("Failed to unlock"),
+            Self::Lock => docbuilder.lock().context("Failed to lock")?,
+            Self::Unlock => docbuilder.unlock().context("Failed to unlock")?,
             Self::PrintOptions => println!("{:?}", docbuilder.options()),
         }
 
@@ -460,7 +460,7 @@ impl DatabaseSubcommand {
     pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
-                db::migrate(version, &*ctx.conn()?).expect("Failed to run database migrations");
+                db::migrate(version, &*ctx.conn()?).context("Failed to run database migrations")?;
             }
 
             Self::UpdateGithubFields => {
@@ -470,20 +470,20 @@ impl DatabaseSubcommand {
 
             Self::AddDirectory { directory, prefix } => {
                 add_path_into_database(&*ctx.conn()?, &prefix, directory)
-                    .expect("Failed to add directory into database");
+                    .context("Failed to add directory into database")?;
             }
 
             // FIXME: This is actually util command not database
             Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&*ctx.conn()?)
-                .expect("Failed to update release activity"),
+                .context("Failed to update release activity")?,
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
             } => db::delete_version(&*ctx.conn()?, &name, &version)
-                .expect("failed to delete the crate"),
+                .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&*ctx.conn()?, &name).expect("failed to delete the crate"),
+            } => db::delete_crate(&*ctx.conn()?, &name).context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
         }
         Ok(())
@@ -515,17 +515,17 @@ impl BlacklistSubcommand {
         let conn = &*ctx.conn()?;
         match self {
             Self::List => {
-                let crates =
-                    db::blacklist::list_crates(&conn).expect("failed to list crates on blacklist");
+                let crates = db::blacklist::list_crates(&conn)
+                    .context("failed to list crates on blacklist")?;
 
                 println!("{}", crates.join("\n"));
             }
 
             Self::Add { crate_name } => db::blacklist::add_crate(&conn, &crate_name)
-                .expect("failed to add crate to blacklist"),
+                .context("failed to add crate to blacklist")?,
 
             Self::Remove { crate_name } => db::blacklist::remove_crate(&conn, &crate_name)
-                .expect("failed to remove crate from blacklist"),
+                .context("failed to remove crate from blacklist")?,
         }
         Ok(())
     }
