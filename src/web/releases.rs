@@ -72,67 +72,37 @@ impl Default for Order {
 pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
-    // TODO: This function changed so much during development and current version have code
-    //       repeats for queries. There is definitely room for improvements.
-    let query = match order {
-        Order::ReleaseTime => {
-            "SELECT crates.name,
-                    releases.version,
-                    releases.description,
-                    releases.target_name,
-                    releases.release_time,
-                    releases.rustdoc_status,
-                    crates.github_stars
-             FROM crates
-             INNER JOIN releases ON crates.id = releases.crate_id
-             ORDER BY releases.release_time DESC
-             LIMIT $1 OFFSET $2"
-        }
-        Order::GithubStars => {
-            "SELECT crates.name,
-                    releases.version,
-                    releases.description,
-                    releases.target_name,
-                    releases.release_time,
-                    releases.rustdoc_status,
-                    crates.github_stars
-             FROM crates
-             INNER JOIN releases ON releases.id = crates.latest_version_id
-             ORDER BY crates.github_stars DESC
-             LIMIT $1 OFFSET $2"
-        }
-        Order::RecentFailures => {
-            "SELECT crates.name,
-                    releases.version,
-                    releases.description,
-                    releases.target_name,
-                    releases.release_time,
-                    releases.rustdoc_status,
-                    crates.github_stars
-             FROM crates
-             INNER JOIN releases ON crates.id = releases.crate_id
-             WHERE releases.build_status = FALSE AND releases.is_library = TRUE
-             ORDER BY releases.release_time DESC
-             LIMIT $1 OFFSET $2"
-        }
-        Order::FailuresByGithubStars => {
-            "SELECT crates.name,
-                    releases.version,
-                    releases.description,
-                    releases.target_name,
-                    releases.release_time,
-                    releases.rustdoc_status,
-                    crates.github_stars
-             FROM crates
-             INNER JOIN releases ON releases.id = crates.latest_version_id
-             WHERE releases.build_status = FALSE AND releases.is_library = TRUE
-             ORDER BY crates.github_stars DESC
-             LIMIT $1 OFFSET $2"
-        }
+    // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
+    let (ordering, failed): (&'static str, _) = match order {
+        Order::ReleaseTime => ("releases.release_time", false),
+        Order::GithubStars => ("crates.github_stars", false),
+        Order::RecentFailures => ("releases.release_time", true),
+        Order::FailuresByGithubStars => ("crates.github_stars", true),
     };
-    let query = conn.query(&query, &[&limit, &offset]).unwrap();
+    let where_clause = if failed {
+        "WHERE releases.build_status = FALSE AND releases.is_library = TRUE"
+    } else {
+        ""
+    };
 
-    query
+    let query = format!(
+        "SELECT crates.name,
+            releases.version,
+            releases.description,
+            releases.target_name,
+            releases.release_time,
+            releases.rustdoc_status,
+            crates.github_stars
+        FROM crates
+        INNER JOIN releases ON crates.id = releases.crate_id
+        {}
+        ORDER BY {} DESC
+        LIMIT $1 OFFSET $2",
+        where_clause, ordering,
+    );
+
+    conn.query(&query, &[&limit, &offset])
+        .unwrap()
         .into_iter()
         .map(|row| Release {
             name: row.get(0),
