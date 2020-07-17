@@ -247,7 +247,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
             self.has_docs,
             self.has_examples,
-            HashSet::new(),
+            algs,
         )?;
         crate::db::add_build_into_database(&db.conn(), release_id, &self.build_result)?;
 

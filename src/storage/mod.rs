@@ -16,7 +16,6 @@ use std::{
 };
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
-const DEFAULT_COMPRESSION: CompressionAlgorithm = CompressionAlgorithm::Zstd;
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
@@ -65,6 +64,12 @@ macro_rules! enum_id {
 enum_id! {
     pub enum CompressionAlgorithm {
         Zstd = 0,
+    }
+}
+
+impl Default for CompressionAlgorithm {
+    fn default() -> Self {
+        CompressionAlgorithm::Zstd
     }
 }
 
@@ -171,7 +176,7 @@ impl<'a> Storage<'a> {
                     .map(|file| (file_path, file))
             })
             .map(|(file_path, file)| -> Result<_, Error> {
-                let alg = DEFAULT_COMPRESSION;
+                let alg = CompressionAlgorithm::default();
                 let content = compress(file, alg)?;
                 let bucket_path = Path::new(prefix).join(&file_path).to_slash().unwrap();
 
@@ -355,7 +360,7 @@ mod test {
     fn test_batched_uploads() {
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| {
-                let alg = DEFAULT_COMPRESSION;
+                let alg = CompressionAlgorithm::default();
                 let content = compress("fn main() {}".as_bytes(), alg).unwrap();
                 Blob {
                     mime: "text/rust".into(),
