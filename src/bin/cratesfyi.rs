@@ -33,25 +33,21 @@ pub fn main() {
 fn logger_init() {
     use std::io::Write;
 
-    let mut builder = env_logger::Builder::new();
-    builder.format(|buf, record| {
-        writeln!(
-            buf,
-            "{} [{}] {}: {}",
-            time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
-            record.level(),
-            record.target(),
-            record.args()
-        )
-    });
-    builder.parse_filters(
-        env::var("RUST_LOG")
-            .ok()
-            .as_deref()
-            .unwrap_or("cratesfyi=info"),
-    );
+    let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "cratesfyi=info");
+    let logger = env_logger::from_env(env)
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] {}: {}",
+                time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
+                record.level(),
+                record.target(),
+                record.args()
+            )
+        })
+        .build();
 
-    rustwide::logging::init_with(builder.build());
+    rustwide::logging::init_with(logger);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::EnumVariantNames)]
