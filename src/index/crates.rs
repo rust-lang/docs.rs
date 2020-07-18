@@ -31,7 +31,7 @@ impl Crates {
                     if let Ok(krate) = Crate::new(tmp.path()) {
                         f(krate);
                     } else {
-                        log::warn!("Not a crate {}", entry.name().unwrap());
+                        log::warn!("Not a crate '{}'", entry.name().unwrap());
                     }
                     tmp.as_file().set_len(0)?;
                     tmp.seek(SeekFrom::Start(0))?;
@@ -40,8 +40,8 @@ impl Crates {
             })()
             .with_context(|_| {
                 format!(
-                    "Loading crate details from {}",
-                    entry.name().unwrap_or_default()
+                    "Loading crate details from '{}'",
+                    entry.name().unwrap_or("<unknown>")
                 )
             });
             match result {
