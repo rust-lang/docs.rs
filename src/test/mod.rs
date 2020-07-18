@@ -104,7 +104,9 @@ pub(crate) struct TestEnvironment {
 
 pub(crate) fn init_logger() {
     // If this fails it's probably already initialized
-    let _ = env_logger::builder().is_test(true).try_init();
+    let _ = env_logger::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
+        .is_test(true)
+        .try_init();
 }
 
 impl TestEnvironment {
