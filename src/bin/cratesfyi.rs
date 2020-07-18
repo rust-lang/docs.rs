@@ -237,23 +237,6 @@ impl PrioritySubcommand {
 #[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 struct Build {
-    #[structopt(
-        name = "PREFIX",
-        short = "P",
-        long = "prefix",
-        env = "CRATESFYI_PREFIX"
-    )]
-    prefix: PathBuf,
-
-    /// DEPRECATED
-    /// Sets the registry index path, where on disk the registry index will be cloned to
-    #[structopt(
-        name = "REGISTRY_INDEX_PATH",
-        long = "registry-index-path",
-        alias = "crates-io-index-path"
-    )]
-    registry_index_path: Option<PathBuf>,
-
     /// Skips building documentation if documentation exists
     #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
     skip_if_exists: bool,
@@ -280,11 +263,6 @@ impl Build {
             let config = ctx.config()?;
             let mut doc_options =
                 DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
-
-            if let Some(registry_index_path) = self.registry_index_path {
-                log::warn!("Use of deprecated cli flag --registry-index-path");
-                doc_options.registry_index_path = registry_index_path;
-            }
 
             doc_options.skip_if_exists = self.skip_if_exists;
             doc_options.skip_if_log_exists = self.skip_if_log_exists;
