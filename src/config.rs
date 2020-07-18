@@ -8,8 +8,8 @@ pub struct Config {
     // Build params
     pub(crate) build_attempts: u16,
 
-    pub(crate) prefix: PathBuf,
-    pub(crate) registry_index_path: PathBuf,
+    pub prefix: PathBuf,
+    pub registry_index_path: PathBuf,
 
     // Database connection params
     pub(crate) database_url: String,

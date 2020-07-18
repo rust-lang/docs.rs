@@ -281,7 +281,9 @@ struct Build {
 impl Build {
     pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         let docbuilder = {
-            let mut doc_options = DocBuilderOptions::new(&*ctx.config()?);
+            let config = ctx.config()?;
+            let mut doc_options =
+                DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
 
             if let Some(registry_index_path) = self.registry_index_path {
                 log::warn!("Use of deprecated cli flag --registry-index-path");

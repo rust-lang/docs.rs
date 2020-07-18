@@ -53,7 +53,7 @@ pub fn start_daemon(
     storage: Arc<Storage>,
     enable_registry_watcher: bool,
 ) -> Result<(), Error> {
-    let dbopts = DocBuilderOptions::new(&config);
+    let dbopts = DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
 
     // check paths once
     dbopts.check_paths().unwrap();
