@@ -32,24 +32,24 @@ pub fn run_check(
 
     for krate in diff.crates {
         match krate {
-            Diff::Both(id, diff) => {
+            Diff::Both(name, diff) => {
                 for release in diff.releases {
                     match release {
                         Diff::Both(_, _) => {}
                         Diff::Left(version, _) => {
-                            log::info!("Release in db not in index: {} {}", id, version);
+                            log::info!("Release in db not in index: {} {}", name, version);
                         }
                         Diff::Right(version, _) => {
-                            log::info!("Release in index not in db: {} {}", id, version);
+                            log::info!("Release in index not in db: {} {}", name, version);
                         }
                     }
                 }
             }
-            Diff::Left(id, _) => {
-                log::info!("Crate in db not in index: {}", id);
+            Diff::Left(name, _) => {
+                log::info!("Crate in db not in index: {}", name);
             }
-            Diff::Right(id, _) => {
-                log::info!("Crate in index not in db: {}", id);
+            Diff::Right(name, _) => {
+                log::info!("Crate in index not in db: {}", name);
             }
         }
     }

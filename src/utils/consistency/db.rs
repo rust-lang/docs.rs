@@ -1,4 +1,4 @@
-use super::data::{Crate, CrateId, Data, Release, Version};
+use super::data::{Crate, CrateName, Data, Release, Version};
 use std::collections::BTreeMap;
 
 pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> {
@@ -21,13 +21,13 @@ pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> 
     let mut rows = rows.iter();
 
     struct Current {
-        id: CrateId,
+        name: CrateName,
         krate: Crate,
     }
 
     let mut current = if let Some(row) = rows.next() {
         Current {
-            id: CrateId(row.get("name")),
+            name: CrateName(row.get("name")),
             krate: Crate {
                 releases: {
                     let mut releases = BTreeMap::new();
@@ -41,9 +41,9 @@ pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> 
     };
 
     for row in rows {
-        if row.get::<_, String>("name") != current.id.0 {
+        if row.get::<_, String>("name") != current.name.0 {
             data.crates.insert(
-                std::mem::replace(&mut current.id, CrateId(row.get("name"))),
+                std::mem::replace(&mut current.name, CrateName(row.get("name"))),
                 std::mem::take(&mut current.krate),
             );
         }
@@ -53,7 +53,7 @@ pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> 
             .insert(Version(row.get("version")), Release::default());
     }
 
-    data.crates.insert(current.id, current.krate);
+    data.crates.insert(current.name, current.krate);
 
     Ok(data)
 }

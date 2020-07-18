@@ -1,4 +1,4 @@
-use super::data::{Crate, CrateId, Data, Release, Version};
+use super::data::{Crate, CrateName, Data, Release, Version};
 use std::{collections::BTreeMap, fmt::Debug};
 
 #[derive(Debug)]
@@ -6,7 +6,7 @@ pub(crate) struct DataDiff {
     pub(crate) crates: CratesDiff,
 }
 
-pub(crate) type CratesDiff = impl Iterator<Item = Diff<CrateId, Crate>> + Debug;
+pub(crate) type CratesDiff = impl Iterator<Item = Diff<CrateName, Crate>> + Debug;
 
 #[derive(Debug)]
 pub(crate) struct CrateDiff {
@@ -86,8 +86,8 @@ impl Diffable for Data {
 
     fn diff(self, other: Self) -> Self::Diff {
         fn diff_crates(
-            left: BTreeMap<CrateId, Crate>,
-            right: BTreeMap<CrateId, Crate>,
+            left: BTreeMap<CrateName, Crate>,
+            right: BTreeMap<CrateName, Crate>,
         ) -> CratesDiff {
             diff_map(left, right)
         }
