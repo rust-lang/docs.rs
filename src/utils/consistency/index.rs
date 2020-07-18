@@ -1,4 +1,4 @@
-use super::data::{Crate, CrateId, Data, Release, Version};
+use super::data::{Crate, CrateName, Data, Release, Version};
 use crate::{config::Config, index::Index};
 
 pub(crate) fn load(config: &Config) -> Result<Data, failure::Error> {
@@ -8,7 +8,7 @@ pub(crate) fn load(config: &Config) -> Result<Data, failure::Error> {
 
     index.crates()?.walk(|krate| {
         data.crates.insert(
-            CrateId(krate.name().into()),
+            CrateName(krate.name().into()),
             Crate {
                 releases: krate
                     .versions()
