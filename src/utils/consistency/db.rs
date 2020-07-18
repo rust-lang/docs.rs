@@ -41,9 +41,10 @@ pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> 
     };
 
     for row in rows {
-        if row.get::<_, String>("name") != current.name.0 {
+        let name = row.get("name");
+        if current.name != name {
             data.crates.insert(
-                std::mem::replace(&mut current.name, CrateName(row.get("name"))),
+                std::mem::replace(&mut current.name, CrateName(name)),
                 std::mem::take(&mut current.krate),
             );
         }
