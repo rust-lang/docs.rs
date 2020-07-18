@@ -1,4 +1,4 @@
-use crate::{config::Config, error::Result};
+use crate::error::Result;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -14,10 +14,10 @@ pub struct DocBuilderOptions {
 }
 
 impl DocBuilderOptions {
-    pub fn new(config: &Config) -> DocBuilderOptions {
+    pub fn new(prefix: PathBuf, registry_index_path: PathBuf) -> DocBuilderOptions {
         DocBuilderOptions {
-            prefix: config.prefix.clone(),
-            registry_index_path: config.registry_index_path.clone(),
+            prefix,
+            registry_index_path,
 
             keep_build_directory: false,
             skip_if_exists: false,
