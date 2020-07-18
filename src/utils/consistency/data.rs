@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{
+    cmp::PartialEq,
+    collections::BTreeMap,
+    fmt::{self, Debug, Display, Formatter},
+};
 
 #[derive(Default, Debug)]
 pub(crate) struct Data {
@@ -19,14 +23,26 @@ pub(crate) struct Version(pub(crate) String);
 #[derive(Default, Debug)]
 pub(crate) struct Release {}
 
-impl std::fmt::Display for CrateName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+impl PartialEq<String> for CrateName {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
     }
 }
 
-impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+impl PartialEq<String> for Version {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+impl Display for CrateName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
     }
 }
