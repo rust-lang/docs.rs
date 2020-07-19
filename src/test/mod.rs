@@ -1,7 +1,6 @@
 mod fakes;
 
 use crate::db::{Pool, PoolConnection};
-use crate::storage::s3::TestS3;
 use crate::storage::Storage;
 use crate::web::Server;
 use crate::BuildQueue;
@@ -99,7 +98,7 @@ pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     frontend: OnceCell<TestFrontend>,
-    s3: OnceCell<TestS3>,
+    s3: OnceCell<Arc<Storage>>,
 }
 
 pub(crate) fn init_logger() {
@@ -124,6 +123,11 @@ impl TestEnvironment {
         if let Some(frontend) = self.frontend.into_inner() {
             frontend.server.leak();
         }
+        if let Some(storage) = self.storage.get() {
+            storage
+                .cleanup_after_test()
+                .expect("failed to cleanup after tests");
+        }
     }
 
     fn base_config(&self) -> Config {
@@ -132,6 +136,10 @@ impl TestEnvironment {
         // Use less connections for each test compared to production.
         config.max_pool_size = 2;
         config.min_pool_idle = 0;
+
+        // Use a temporary S3 bucket.
+        config.s3_bucket = format!("docsrs-test-bucket-{}", rand::random::<u64>());
+        config.s3_bucket_is_temporary = true;
 
         config
     }
@@ -159,7 +167,12 @@ impl TestEnvironment {
 
     pub(crate) fn storage(&self) -> Arc<Storage> {
         self.storage
-            .get_or_init(|| Arc::new(Storage::new(self.db().pool(), &*self.config())))
+            .get_or_init(|| {
+                Arc::new(
+                    Storage::new(self.db().pool(), &*self.config())
+                        .expect("failed to initialize the storage"),
+                )
+            })
             .clone()
     }
 
@@ -174,8 +187,15 @@ impl TestEnvironment {
         })
     }
 
-    pub(crate) fn s3(&self) -> &TestS3 {
-        self.s3.get_or_init(TestS3::new)
+    pub(crate) fn s3(&self) -> Arc<Storage> {
+        self.s3
+            .get_or_init(|| {
+                Arc::new(
+                    Storage::temp_new_s3(&*self.config())
+                        .expect("failed to initialize the storage"),
+                )
+            })
+            .clone()
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {

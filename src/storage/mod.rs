@@ -72,13 +72,20 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool, config: &Config) -> Self {
+    pub fn new(pool: Pool, config: &Config) -> Result<Self, Error> {
         let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(S3Backend::new(c, config))
+            StorageBackend::S3(S3Backend::new(c, config)?)
         } else {
             StorageBackend::Database(DatabaseBackend::new(pool))
         };
-        Storage { backend }
+        Ok(Storage { backend })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn temp_new_s3(config: &Config) -> Result<Self, Error> {
+        Ok(Storage {
+            backend: StorageBackend::S3(S3Backend::new(s3::s3_client().unwrap(), config)?),
+        })
     }
 
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -104,19 +111,10 @@ impl Storage {
         prefix: &str,
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
-        let conn;
-        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
-            StorageBackend::Database(db) => {
-                conn = db.start_connection()?;
-                Box::new(conn.start_storage_transaction()?)
-            }
-            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
-        };
-
         let mut file_paths_and_mimes = HashMap::new();
         let mut algs = HashSet::with_capacity(1);
 
-        let mut blobs = get_file_list(root_dir)?
+        let blobs = get_file_list(root_dir)?
             .into_iter()
             .filter_map(|file_path| {
                 // Some files have insufficient permissions
@@ -144,6 +142,29 @@ impl Storage {
                     date_updated: Utc::now(),
                 })
             });
+
+        self.store_inner(blobs)?;
+        Ok((file_paths_and_mimes, algs))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<(), Error> {
+        self.store_inner(blobs.into_iter().map(|blob| Ok(blob)))
+    }
+
+    fn store_inner(
+        &self,
+        mut blobs: impl Iterator<Item = Result<Blob, Error>>,
+    ) -> Result<(), Error> {
+        let conn;
+        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
+            StorageBackend::Database(db) => {
+                conn = db.start_connection()?;
+                Box::new(conn.start_storage_transaction()?)
+            }
+            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
+        };
+
         loop {
             let batch: Vec<_> = blobs
                 .by_ref()
@@ -158,7 +179,18 @@ impl Storage {
         }
 
         trans.complete()?;
-        Ok((file_paths_and_mimes, algs))
+        Ok(())
+    }
+
+    // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
+    // we leak the web server, and Drop isn't executed in that case (since the leaked web server
+    // still holds a reference to the storage).
+    #[cfg(test)]
+    pub(crate) fn cleanup_after_test(&self) -> Result<(), Error> {
+        if let StorageBackend::S3(s3) = &self.backend {
+            s3.cleanup_after_test()?;
+        }
+        Ok(())
     }
 }
 

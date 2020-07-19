@@ -586,7 +586,7 @@ impl Context {
         Ok(self
             .storage
             .get_or_try_init::<_, Error>(|| {
-                Ok(Arc::new(Storage::new(self.pool()?, &*self.config()?)))
+                Ok(Arc::new(Storage::new(self.pool()?, &*self.config()?)?))
             })?
             .clone())
     }

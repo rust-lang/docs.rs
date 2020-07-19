@@ -14,6 +14,7 @@ pub struct Config {
 
     // S3 params
     pub(crate) s3_bucket: String,
+    pub(crate) s3_bucket_is_temporary: bool,
 
     // Github authentication
     pub(crate) github_username: Option<String>,
@@ -34,6 +35,10 @@ impl Config {
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
+            // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
+            // Accidentally turning this on outside of the test suite might cause data loss in the
+            // production environment.
+            s3_bucket_is_temporary: false,
 
             github_username: maybe_env("CRATESFYI_GITHUB_USERNAME")?,
             github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
