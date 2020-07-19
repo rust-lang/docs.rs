@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 
 /// Store all files in a directory and return [[mimetype, filename]] as Json
 ///
+/// If there is an S3 Client configured, store files into an S3 bucket;
+/// otherwise, stores files into the 'files' table of the local database.
+///
 /// The mimetype is detected using `magic`.
 ///
 /// Note that this function is used for uploading both sources
