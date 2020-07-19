@@ -115,7 +115,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Error> {
+    fn complete(self: Box<Self>) -> Result<(), Error> {
         Ok(())
     }
 }

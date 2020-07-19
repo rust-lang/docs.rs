@@ -79,25 +79,20 @@ impl DatabaseConnection {
         &self,
     ) -> Result<DatabaseStorageTransaction<'_>, Error> {
         Ok(DatabaseStorageTransaction {
-            transaction: Some(self.conn.transaction()?),
+            transaction: self.conn.transaction()?,
         })
     }
 }
 
 pub(super) struct DatabaseStorageTransaction<'a> {
-    transaction: Option<Transaction<'a>>,
+    transaction: Transaction<'a>,
 }
 
 impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
     fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
-        let transaction = self
-            .transaction
-            .as_ref()
-            .expect("called complete() before store_batch()");
-
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
-            transaction.query(
+            self.transaction.query(
                 "INSERT INTO files (path, mime, content, compression)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (path) DO UPDATE
@@ -108,11 +103,8 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Error> {
-        self.transaction
-            .take()
-            .expect("called complete() multiple times")
-            .commit()?;
+    fn complete(self: Box<Self>) -> Result<(), Error> {
+        self.transaction.commit()?;
         Ok(())
     }
 }
@@ -193,7 +185,7 @@ mod tests {
             };
 
             let conn = backend.start_connection()?;
-            let mut transaction = conn.start_storage_transaction()?;
+            let mut transaction = Box::new(conn.start_storage_transaction()?);
             transaction.store_batch(std::slice::from_ref(&small_blob))?;
             transaction.store_batch(std::slice::from_ref(&big_blob))?;
             transaction.complete()?;
