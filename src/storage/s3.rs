@@ -238,8 +238,6 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::storage::Storage;
-    use crate::test::*;
     use chrono::TimeZone;
 
     #[test]
@@ -258,42 +256,8 @@ pub(crate) mod tests {
         assert!(parse_timespec("foo").is_err());
     }
 
-    #[test]
-    fn test_store() {
-        wrapper(|env| {
-            let s3 = env.s3();
-            let names = [
-                "a",
-                "b",
-                "a_very_long_file_name_that_has_an.extension",
-                "parent/child",
-                "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
-            ];
-
-            let blobs: Vec<_> = names
-                .iter()
-                .map(|&path| Blob {
-                    path: path.into(),
-                    mime: "text/plain".into(),
-                    date_updated: Utc::now(),
-                    content: "Hello world!".into(),
-                    compression: None,
-                })
-                .collect();
-
-            s3.store_blobs(blobs.clone()).unwrap();
-            for blob in &blobs {
-                assert_blob(&s3, blob, &blob.path);
-            }
-
-            Ok(())
-        })
-    }
-
-    fn assert_blob(storage: &Storage, blob: &Blob, path: &str) {
-        let actual = storage.get(path, std::usize::MAX).unwrap();
-        crate::storage::test::assert_blob_eq(blob, &actual);
-    }
+    // The tests for this module are in src/storage/mod.rs, as part of the backend tests. Please
+    // add any test checking the public interface there.
 
     // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
     // NOTE: On s3, it will succeed and create a file called `/`.

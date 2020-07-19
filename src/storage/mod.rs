@@ -457,6 +457,37 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_store_blobs(storage: &Storage) -> Result<(), Error> {
+        const NAMES: &[&str] = &[
+            "a",
+            "b",
+            "a_very_long_file_name_that_has_an.extension",
+            "parent/child",
+            "h/i/g/h/l/y/_/n/e/s/t/e/d/_/d/i/r/e/c/t/o/r/i/e/s",
+        ];
+
+        let blobs = NAMES
+            .iter()
+            .map(|&path| Blob {
+                path: path.into(),
+                mime: "text/plain".into(),
+                date_updated: Utc::now(),
+                compression: None,
+                content: b"Hello world!\n".to_vec(),
+            })
+            .collect::<Vec<_>>();
+
+        storage.store_blobs(blobs.clone()).unwrap();
+
+        for blob in &blobs {
+            let actual = storage.get(&blob.path, std::usize::MAX)?;
+            assert_eq!(blob.path, actual.path);
+            assert_eq!(blob.mime, actual.mime);
+        }
+
+        Ok(())
+    }
+
     // Remember to add the test name to the macro below when adding a new one.
 
     macro_rules! backend_tests {
@@ -496,6 +527,7 @@ mod backend_tests {
         tests {
             test_get_object,
             test_get_too_big,
+            test_store_blobs,
         }
     }
 }
