@@ -14,25 +14,38 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
 
-#[cfg(test)]
-mod test;
-#[cfg(test)]
-pub(crate) use test::TestS3;
-
 pub(crate) static S3_RUNTIME: Lazy<Runtime> =
     Lazy::new(|| Runtime::new().expect("Failed to create S3 runtime"));
 
 pub(crate) struct S3Backend {
     pub client: S3Client,
     bucket: String,
+    #[cfg(test)]
+    temporary: bool,
 }
 
 impl S3Backend {
-    pub(crate) fn new(client: S3Client, config: &Config) -> Self {
-        Self {
+    pub(crate) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
+        // Create the temporary S3 bucket during tests.
+        if config.s3_bucket_is_temporary {
+            if cfg!(not(test)) {
+                panic!("safeguard to prevent creating temporary buckets outside of tests");
+            }
+
+            S3_RUNTIME
+                .handle()
+                .block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
+                    bucket: config.s3_bucket.clone(),
+                    ..Default::default()
+                }))?;
+        }
+
+        Ok(Self {
             client,
             bucket: config.s3_bucket.clone(),
-        }
+            #[cfg(test)]
+            temporary: config.s3_bucket_is_temporary,
+        })
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -76,6 +89,43 @@ impl S3Backend {
 
     pub(super) fn start_storage_transaction(&self) -> Result<S3StorageTransaction, Error> {
         Ok(S3StorageTransaction { s3: self })
+    }
+
+    #[cfg(test)]
+    pub(super) fn cleanup_after_test(&self) -> Result<(), Error> {
+        if !self.temporary {
+            return Ok(());
+        }
+
+        // TODO: the following code was copy/pasted from the old TestS3, it will be replaced with
+        // better, more resilient and tested code in a later commit.
+
+        // delete the bucket when the test ends
+        // this has to delete all the objects in the bucket first or min.io will give an error
+        S3_RUNTIME.handle().block_on(async {
+            let list_req = rusoto_s3::ListObjectsRequest {
+                bucket: self.bucket.to_owned(),
+                ..Default::default()
+            };
+            let objects = self.client.list_objects(list_req).await?;
+            assert!(!objects.is_truncated.unwrap_or(false));
+            for path in objects.contents.unwrap_or_else(Vec::new) {
+                let delete_req = rusoto_s3::DeleteObjectRequest {
+                    bucket: self.bucket.clone(),
+                    key: path.key.unwrap(),
+                    ..Default::default()
+                };
+                self.client.delete_object(delete_req).await?;
+            }
+            let delete_req = rusoto_s3::DeleteBucketRequest {
+                bucket: self.bucket.clone(),
+            };
+            self.client.delete_bucket(delete_req).await?;
+
+            Ok::<(), Error>(())
+        })?;
+
+        Ok(())
     }
 }
 
@@ -177,6 +227,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::storage::Storage;
     use crate::test::*;
     use chrono::TimeZone;
 
@@ -209,14 +260,14 @@ pub(crate) mod tests {
 
             // Add a test file to the database
             let s3 = env.s3();
-            s3.upload(vec![blob.clone()]).unwrap();
+            s3.store_blobs(vec![blob.clone()]).unwrap();
 
             // Test that the proper file was returned
-            s3.assert_blob(&blob, "dir/foo.txt");
+            assert_blob(&s3, &blob, "dir/foo.txt");
 
             // Test that other files are not returned
-            s3.assert_404("dir/bar.txt");
-            s3.assert_404("foo.txt");
+            assert_404(&s3, "dir/bar.txt");
+            assert_404(&s3, "foo.txt");
 
             Ok(())
         });
@@ -243,21 +294,19 @@ pub(crate) mod tests {
             };
 
             let s3 = env.s3();
-            s3.upload(vec![small_blob.clone()]).unwrap();
-            s3.upload(vec![big_blob]).unwrap();
+            s3.store_blobs(vec![small_blob.clone()]).unwrap();
+            s3.store_blobs(vec![big_blob.clone()]).unwrap();
 
-            s3.with_client(|client| {
-                let blob = client.get("small-blob.bin", MAX_SIZE).unwrap();
-                assert_eq!(blob.content.len(), small_blob.content.len());
+            let blob = s3.get("small-blob.bin", MAX_SIZE).unwrap();
+            assert_eq!(blob.content.len(), small_blob.content.len());
 
-                assert!(client
-                    .get("big-blob.bin", MAX_SIZE)
-                    .unwrap_err()
-                    .downcast_ref::<std::io::Error>()
-                    .and_then(|io| io.get_ref())
-                    .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
-                    .is_some());
-            });
+            assert!(s3
+                .get("big-blob.bin", MAX_SIZE)
+                .unwrap_err()
+                .downcast_ref::<std::io::Error>()
+                .and_then(|io| io.get_ref())
+                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                .is_some());
 
             Ok(())
         })
@@ -286,13 +335,33 @@ pub(crate) mod tests {
                 })
                 .collect();
 
-            s3.upload(blobs.clone()).unwrap();
+            s3.store_blobs(blobs.clone()).unwrap();
             for blob in &blobs {
-                s3.assert_blob(blob, &blob.path);
+                assert_blob(&s3, blob, &blob.path);
             }
 
             Ok(())
         })
+    }
+
+    fn assert_blob(storage: &Storage, blob: &Blob, path: &str) {
+        let actual = storage.get(path, std::usize::MAX).unwrap();
+        crate::storage::test::assert_blob_eq(blob, &actual);
+    }
+
+    fn assert_404(storage: &Storage, path: &str) {
+        use rusoto_core::RusotoError;
+        use rusoto_s3::GetObjectError;
+
+        let err = storage.get(path, std::usize::MAX).unwrap_err();
+        match err
+            .downcast_ref::<RusotoError<GetObjectError>>()
+            .expect("wanted GetObject")
+        {
+            RusotoError::Unknown(http) => assert_eq!(http.status, 404),
+            RusotoError::Service(GetObjectError::NoSuchKey(_)) => {}
+            x => panic!("wrong error: {:?}", x),
+        };
     }
 
     // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
