@@ -8,9 +8,9 @@ use futures_util::{
 };
 use log::warn;
 use once_cell::sync::Lazy;
-use rusoto_core::region::Region;
+use rusoto_core::{region::Region, RusotoError};
 use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{GetObjectError, GetObjectRequest, PutObjectRequest, S3Client, S3};
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
 
@@ -50,14 +50,25 @@ impl S3Backend {
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         S3_RUNTIME.handle().block_on(async {
-            let res = self
+            let response = self
                 .client
                 .get_object(GetObjectRequest {
                     bucket: self.bucket.to_string(),
                     key: path.into(),
                     ..Default::default()
                 })
-                .await?;
+                .await;
+
+            let res = match response {
+                Ok(res) => res,
+                Err(RusotoError::Service(GetObjectError::NoSuchKey(_))) => {
+                    return Err(super::PathNotFoundError.into());
+                }
+                Err(RusotoError::Unknown(http)) if http.status == 404 => {
+                    return Err(super::PathNotFoundError.into());
+                }
+                Err(err) => return Err(err.into()),
+            };
 
             let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
             content.reserve(
@@ -248,32 +259,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_get() {
-        wrapper(|env| {
-            let blob = Blob {
-                path: "dir/foo.txt".into(),
-                mime: "text/plain".into(),
-                date_updated: Utc::now(),
-                content: "Hello world!".into(),
-                compression: None,
-            };
-
-            // Add a test file to the database
-            let s3 = env.s3();
-            s3.store_blobs(vec![blob.clone()]).unwrap();
-
-            // Test that the proper file was returned
-            assert_blob(&s3, &blob, "dir/foo.txt");
-
-            // Test that other files are not returned
-            assert_404(&s3, "dir/bar.txt");
-            assert_404(&s3, "foo.txt");
-
-            Ok(())
-        });
-    }
-
-    #[test]
     fn test_get_too_big() {
         const MAX_SIZE: usize = 1024;
 
@@ -347,21 +332,6 @@ pub(crate) mod tests {
     fn assert_blob(storage: &Storage, blob: &Blob, path: &str) {
         let actual = storage.get(path, std::usize::MAX).unwrap();
         crate::storage::test::assert_blob_eq(blob, &actual);
-    }
-
-    fn assert_404(storage: &Storage, path: &str) {
-        use rusoto_core::RusotoError;
-        use rusoto_s3::GetObjectError;
-
-        let err = storage.get(path, std::usize::MAX).unwrap_err();
-        match err
-            .downcast_ref::<RusotoError<GetObjectError>>()
-            .expect("wanted GetObject")
-        {
-            RusotoError::Unknown(http) => assert_eq!(http.status, 404),
-            RusotoError::Service(GetObjectError::NoSuchKey(_)) => {}
-            x => panic!("wrong error: {:?}", x),
-        };
     }
 
     // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.

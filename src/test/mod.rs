@@ -99,6 +99,7 @@ pub(crate) struct TestEnvironment {
     storage: OnceCell<Arc<Storage>>,
     frontend: OnceCell<TestFrontend>,
     s3: OnceCell<Arc<Storage>>,
+    storage_db: OnceCell<Arc<Storage>>,
 }
 
 pub(crate) fn init_logger() {
@@ -116,6 +117,7 @@ impl TestEnvironment {
             storage: OnceCell::new(),
             frontend: OnceCell::new(),
             s3: OnceCell::new(),
+            storage_db: OnceCell::new(),
         }
     }
 
@@ -192,6 +194,17 @@ impl TestEnvironment {
             .get_or_init(|| {
                 Arc::new(
                     Storage::temp_new_s3(&*self.config())
+                        .expect("failed to initialize the storage"),
+                )
+            })
+            .clone()
+    }
+
+    pub(crate) fn temp_storage_db(&self) -> Arc<Storage> {
+        self.storage_db
+            .get_or_init(|| {
+                Arc::new(
+                    Storage::temp_new_db(self.db().pool())
                         .expect("failed to initialize the storage"),
                 )
             })

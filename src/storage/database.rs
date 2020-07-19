@@ -1,12 +1,8 @@
 use super::{Blob, StorageTransaction};
 use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use failure::{Error, Fail};
+use failure::Error;
 use postgres::transaction::Transaction;
-
-#[derive(Debug, Fail)]
-#[fail(display = "the path is not present in the database")]
-struct PathNotFoundError;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
@@ -37,7 +33,7 @@ impl DatabaseBackend {
         )?;
 
         if rows.is_empty() {
-            Err(PathNotFoundError.into())
+            Err(super::PathNotFoundError.into())
         } else {
             let row = rows.get(0);
 
@@ -112,54 +108,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{SubsecRound, Utc};
-
-    #[test]
-    fn test_path_get() {
-        crate::test::wrapper(|env| {
-            let db = env.db();
-            let conn = db.conn();
-            let backend = DatabaseBackend::new(db.pool());
-            let now = Utc::now();
-
-            // Add a test file to the database
-            conn.execute(
-                "INSERT INTO files (path, mime, date_updated, content) VALUES ($1, $2, $3, $4);",
-                &[
-                    &"dir/foo.txt",
-                    &"text/plain",
-                    &now.naive_utc(),
-                    &"Hello world!".as_bytes(),
-                ],
-            )?;
-
-            // Test that the proper file was returned
-            assert_eq!(
-                Blob {
-                    path: "dir/foo.txt".into(),
-                    mime: "text/plain".into(),
-                    date_updated: now.trunc_subsecs(6),
-                    content: "Hello world!".bytes().collect(),
-                    compression: None,
-                },
-                backend.get("dir/foo.txt", std::usize::MAX)?
-            );
-
-            // Test that other files are not returned
-            assert!(backend
-                .get("dir/bar.txt", std::usize::MAX)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
-            assert!(backend
-                .get("foo.txt", std::usize::MAX)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
-
-            Ok(())
-        });
-    }
+    use chrono::Utc;
 
     #[test]
     fn test_get_too_big() {
