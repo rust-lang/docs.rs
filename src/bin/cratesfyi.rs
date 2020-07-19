@@ -483,11 +483,12 @@ impl DatabaseSubcommand {
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&*ctx.conn()?, &name, &version)
+            } => db::delete_version(&*ctx.config()?, &*ctx.conn()?, &name, &version)
                 .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&*ctx.conn()?, &name).context("failed to delete the crate")?,
+            } => db::delete_crate(&*ctx.config()?, &*ctx.conn()?, &name)
+                .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
         }
         Ok(())
@@ -584,7 +585,9 @@ impl Context {
     fn storage(&self) -> Result<Arc<Storage>, Error> {
         Ok(self
             .storage
-            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Storage::new(self.pool()?))))?
+            .get_or_try_init::<_, Error>(|| {
+                Ok(Arc::new(Storage::new(self.pool()?, &*self.config()?)))
+            })?
             .clone())
     }
 

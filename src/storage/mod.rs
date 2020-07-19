@@ -5,7 +5,7 @@ pub(crate) mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
-use crate::db::Pool;
+use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use path_slash::PathExt;
@@ -72,9 +72,9 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool) -> Self {
+    pub fn new(pool: Pool, config: &Config) -> Self {
         let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(S3Backend::new(c, s3::S3_BUCKET_NAME))
+            StorageBackend::S3(S3Backend::new(c, config))
         } else {
             StorageBackend::Database(DatabaseBackend::new(pool))
         };

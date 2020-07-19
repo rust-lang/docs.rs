@@ -1,4 +1,7 @@
-use crate::storage::s3::{s3_client, S3_BUCKET_NAME, S3_RUNTIME};
+use crate::{
+    storage::s3::{s3_client, S3_RUNTIME},
+    Config,
+};
 use failure::{Error, Fail};
 use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
@@ -13,25 +16,34 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
-pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
+pub fn delete_crate(config: &Config, conn: &Connection, name: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
     if let Some(client) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&client, &format!("{}/{}/", prefix, name))?;
+            delete_prefix_from_s3(config, &client, &format!("{}/{}/", prefix, name))?;
         }
     }
 
     Ok(())
 }
 
-pub fn delete_version(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
+pub fn delete_version(
+    config: &Config,
+    conn: &Connection,
+    name: &str,
+    version: &str,
+) -> Result<(), Error> {
     delete_version_from_database(conn, name, version)?;
 
     if let Some(client) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&client, &format!("{}/{}/{}/", prefix, name, version))?;
+            delete_prefix_from_s3(
+                config,
+                &client,
+                &format!("{}/{}/{}/", prefix, name, version),
+            )?;
         }
     }
 
@@ -121,13 +133,13 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
     Ok(())
 }
 
-fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
+fn delete_prefix_from_s3(config: &Config, s3: &S3Client, name: &str) -> Result<(), Error> {
     S3_RUNTIME.handle().block_on(async {
         let mut continuation_token = None;
         loop {
             let list = s3
                 .list_objects_v2(ListObjectsV2Request {
-                    bucket: S3_BUCKET_NAME.into(),
+                    bucket: config.s3_bucket.clone(),
                     prefix: Some(name.into()),
                     continuation_token,
                     ..ListObjectsV2Request::default()
@@ -147,7 +159,7 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
 
             let resp = s3
                 .delete_objects(DeleteObjectsRequest {
-                    bucket: S3_BUCKET_NAME.into(),
+                    bucket: config.s3_bucket.clone(),
                     delete: rusoto_s3::Delete {
                         objects: to_delete,
                         quiet: None,
@@ -277,7 +289,7 @@ mod tests {
                 vec!["malicious actor".to_string(), "Peter Rabbit".to_string()]
             );
 
-            delete_version(&db.conn(), "a", "1.0.0")?;
+            delete_version(&*env.config(), &db.conn(), "a", "1.0.0")?;
             assert!(!release_exists(&db.conn(), v1)?);
             assert!(release_exists(&db.conn(), v2)?);
             assert_eq!(
