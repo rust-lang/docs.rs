@@ -18,6 +18,10 @@ use std::{
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
+#[derive(Debug, failure::Fail)]
+#[fail(display = "path not found")]
+pub(crate) struct PathNotFoundError;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
     pub(crate) path: String,
@@ -85,6 +89,13 @@ impl Storage {
     pub(crate) fn temp_new_s3(config: &Config) -> Result<Self, Error> {
         Ok(Storage {
             backend: StorageBackend::S3(S3Backend::new(s3::s3_client().unwrap(), config)?),
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn temp_new_db(pool: Pool) -> Result<Self, Error> {
+        Ok(Storage {
+            backend: StorageBackend::Database(DatabaseBackend::new(pool)),
         })
     }
 
@@ -372,5 +383,82 @@ mod test {
         let detected_mime = detect_mime(Path::new(&path));
         let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
+    }
+}
+
+/// Backend tests are a set of tests executed on all the supported storage backends. They ensure
+/// docs.rs behaves the same no matter the storage backend currently used.
+///
+/// To add a new test create the function without adding the `#[test]` attribute, and add the
+/// function name to the `backend_tests!` macro at the bottom of the module.
+///
+/// This is the preferred way to test whether backends work.
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+
+    fn test_get_object(storage: &Storage) -> Result<(), Error> {
+        let blob = Blob {
+            path: "foo/bar.txt".into(),
+            mime: "text/plain".into(),
+            date_updated: Utc::now(),
+            compression: None,
+            content: b"test content\n".to_vec(),
+        };
+
+        storage.store_blobs(vec![blob.clone()])?;
+
+        let found = storage.get("foo/bar.txt", std::usize::MAX)?;
+        assert_eq!(blob.mime, found.mime);
+        assert_eq!(blob.content, found.content);
+
+        for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
+            assert!(storage
+                .get(path, std::usize::MAX)
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+        }
+
+        Ok(())
+    }
+
+    macro_rules! backend_tests {
+        (backends($env:ident) { $($backend:ident => $create:expr,)* } tests $tests:tt ) => {
+            $(
+                mod $backend {
+                    use crate::test::TestEnvironment;
+                    use crate::storage::Storage;
+                    use std::sync::Arc;
+
+                    fn get_storage($env: &TestEnvironment) -> Arc<Storage> {
+                        $create
+                    }
+
+                    backend_tests!(@tests $tests);
+                }
+            )*
+        };
+        (@tests { $($test:ident,)* }) => {
+            $(
+                #[test]
+                fn $test() {
+                    crate::test::wrapper(|env| {
+                        super::$test(&*get_storage(env))
+                    });
+                }
+            )*
+        };
+    }
+
+    backend_tests! {
+        backends(env) {
+            s3 => env.s3(),
+            database => env.temp_storage_db(),
+        }
+
+        tests {
+            test_get_object,
+        }
     }
 }
