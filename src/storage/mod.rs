@@ -226,7 +226,7 @@ impl std::fmt::Debug for Storage {
 
 trait StorageTransaction {
     fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error>;
-    fn complete(&mut self) -> Result<(), Error>;
+    fn complete(self: Box<Self>) -> Result<(), Error>;
 }
 
 // public for benchmarking

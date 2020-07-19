@@ -25,7 +25,7 @@ impl TestS3 {
     }
     pub(crate) fn upload(&self, blobs: &[Blob]) -> Result<(), Error> {
         let s3 = self.0.borrow();
-        let mut transaction = s3.start_storage_transaction()?;
+        let mut transaction = Box::new(s3.start_storage_transaction()?);
         transaction.store_batch(blobs)?;
         transaction.complete()?;
         Ok(())
