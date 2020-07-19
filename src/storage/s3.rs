@@ -1,4 +1,5 @@
 use super::{Blob, StorageTransaction};
+use crate::Config;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
 use futures_util::{
@@ -18,7 +19,6 @@ mod test;
 #[cfg(test)]
 pub(crate) use test::TestS3;
 
-pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
 pub(crate) static S3_RUNTIME: Lazy<Runtime> =
     Lazy::new(|| Runtime::new().expect("Failed to create S3 runtime"));
 
@@ -28,10 +28,10 @@ pub(crate) struct S3Backend {
 }
 
 impl S3Backend {
-    pub(crate) fn new(client: S3Client, bucket: &str) -> Self {
+    pub(crate) fn new(client: S3Client, config: &Config) -> Self {
         Self {
             client,
-            bucket: bucket.into(),
+            bucket: config.s3_bucket.clone(),
         }
     }
 

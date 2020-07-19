@@ -12,6 +12,9 @@ pub struct Config {
     pub(crate) max_pool_size: u32,
     pub(crate) min_pool_idle: u32,
 
+    // S3 params
+    pub(crate) s3_bucket: String,
+
     // Github authentication
     pub(crate) github_username: Option<String>,
     pub(crate) github_accesstoken: Option<String>,
@@ -29,6 +32,8 @@ impl Config {
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
+
+            s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
 
             github_username: maybe_env("CRATESFYI_GITHUB_USERNAME")?,
             github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,

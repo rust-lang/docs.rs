@@ -159,7 +159,7 @@ impl TestEnvironment {
 
     pub(crate) fn storage(&self) -> Arc<Storage> {
         self.storage
-            .get_or_init(|| Arc::new(Storage::new(self.db().pool())))
+            .get_or_init(|| Arc::new(Storage::new(self.db().pool(), &*self.config())))
             .clone()
     }
 

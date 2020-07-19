@@ -1,5 +1,5 @@
 use super::*;
-use crate::storage::test::assert_blob_eq;
+use crate::{storage::test::assert_blob_eq, Config};
 use rusoto_s3::{
     CreateBucketRequest, DeleteBucketRequest, DeleteObjectRequest, ListObjectsRequest, S3,
 };
@@ -11,14 +11,15 @@ impl TestS3 {
     pub(crate) fn new() -> Self {
         // A random bucket name is generated and used for the current connection.
         // This allows each test to create a fresh bucket to test with.
-        let bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
+        let mut config = Config::from_env().unwrap(); // TODO: this is temporary
+        config.s3_bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
 
-        let backend = S3Backend::new(s3_client().unwrap(), &bucket);
+        let backend = S3Backend::new(s3_client().unwrap(), &config);
         S3_RUNTIME.handle().block_on(async {
             backend
                 .client
                 .create_bucket(CreateBucketRequest {
-                    bucket: bucket.clone(),
+                    bucket: config.s3_bucket.clone(),
                     ..Default::default()
                 })
                 .await
