@@ -474,7 +474,7 @@ impl DatabaseSubcommand {
 
             Self::AddDirectory { directory, prefix } => {
                 add_path_into_database(&*ctx.storage()?, &prefix, directory)
-                    .expect("Failed to add directory into database");
+                    .context("Failed to add directory into database")?;
             }
 
             // FIXME: This is actually util command not database
