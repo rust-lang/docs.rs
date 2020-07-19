@@ -105,52 +105,5 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-
-    #[test]
-    fn test_get_too_big() {
-        const MAX_SIZE: usize = 1024;
-
-        crate::test::wrapper(|env| {
-            let db = env.db();
-            let backend = DatabaseBackend::new(db.pool());
-
-            let small_blob = Blob {
-                path: "small-blob.bin".into(),
-                mime: "text/plain".into(),
-                date_updated: Utc::now(),
-                content: vec![0; MAX_SIZE],
-                compression: None,
-            };
-            let big_blob = Blob {
-                path: "big-blob.bin".into(),
-                mime: "text/plain".into(),
-                date_updated: Utc::now(),
-                content: vec![0; MAX_SIZE * 2],
-                compression: None,
-            };
-
-            let conn = backend.start_connection()?;
-            let mut transaction = Box::new(conn.start_storage_transaction()?);
-            transaction.store_batch(vec![small_blob.clone()])?;
-            transaction.store_batch(vec![big_blob])?;
-            transaction.complete()?;
-
-            let blob = backend.get("small-blob.bin", MAX_SIZE).unwrap();
-            assert_eq!(blob.content.len(), small_blob.content.len());
-
-            assert!(backend
-                .get("big-blob.bin", MAX_SIZE)
-                .unwrap_err()
-                .downcast_ref::<std::io::Error>()
-                .and_then(|io| io.get_ref())
-                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
-                .is_some());
-
-            Ok(())
-        });
-    }
-}
+// The tests for this module are in src/storage/mod.rs, as part of the backend tests. Please add
+// any test checking the public interface there.
