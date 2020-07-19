@@ -259,45 +259,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_get_too_big() {
-        const MAX_SIZE: usize = 1024;
-
-        wrapper(|env| {
-            let small_blob = Blob {
-                path: "small-blob.bin".into(),
-                mime: "text/plain".into(),
-                date_updated: Utc::now(),
-                content: vec![0; MAX_SIZE],
-                compression: None,
-            };
-            let big_blob = Blob {
-                path: "big-blob.bin".into(),
-                mime: "text/plain".into(),
-                date_updated: Utc::now(),
-                content: vec![0; MAX_SIZE * 2],
-                compression: None,
-            };
-
-            let s3 = env.s3();
-            s3.store_blobs(vec![small_blob.clone()]).unwrap();
-            s3.store_blobs(vec![big_blob.clone()]).unwrap();
-
-            let blob = s3.get("small-blob.bin", MAX_SIZE).unwrap();
-            assert_eq!(blob.content.len(), small_blob.content.len());
-
-            assert!(s3
-                .get("big-blob.bin", MAX_SIZE)
-                .unwrap_err()
-                .downcast_ref::<std::io::Error>()
-                .and_then(|io| io.get_ref())
-                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
-                .is_some());
-
-            Ok(())
-        })
-    }
-
-    #[test]
     fn test_store() {
         wrapper(|env| {
             let s3 = env.s3();

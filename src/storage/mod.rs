@@ -423,6 +423,42 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_get_too_big(storage: &Storage) -> Result<(), Error> {
+        const MAX_SIZE: usize = 1024;
+
+        let small_blob = Blob {
+            path: "small-blob.bin".into(),
+            mime: "text/plain".into(),
+            date_updated: Utc::now(),
+            content: vec![0; MAX_SIZE],
+            compression: None,
+        };
+        let big_blob = Blob {
+            path: "big-blob.bin".into(),
+            mime: "text/plain".into(),
+            date_updated: Utc::now(),
+            content: vec![0; MAX_SIZE * 2],
+            compression: None,
+        };
+
+        storage.store_blobs(vec![small_blob.clone(), big_blob.clone()])?;
+
+        let blob = storage.get("small-blob.bin", MAX_SIZE)?;
+        assert_eq!(blob.content.len(), small_blob.content.len());
+
+        assert!(storage
+            .get("big-blob.bin", MAX_SIZE)
+            .unwrap_err()
+            .downcast_ref::<std::io::Error>()
+            .and_then(|io| io.get_ref())
+            .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+            .is_some());
+
+        Ok(())
+    }
+
+    // Remember to add the test name to the macro below when adding a new one.
+
     macro_rules! backend_tests {
         (backends($env:ident) { $($backend:ident => $create:expr,)* } tests $tests:tt ) => {
             $(
@@ -459,6 +495,7 @@ mod backend_tests {
 
         tests {
             test_get_object,
+            test_get_too_big,
         }
     }
 }
