@@ -22,7 +22,7 @@
 
                 <ul class="pure-menu-list">
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                        <a href="{{ crate_url }}" class="pure-menu-link" title="{{ krate.description }}">
+                        <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ krate.description }}">
                             <i class="fa fa-fw fa-cube"></i>
                             <span class="title"> {{ krate.name }}-{{ krate.version }}</span>
                         </a>
@@ -34,14 +34,14 @@
                                 <li class="pure-menu-heading">{{ krate.name }}</li>
 
                                 <li class="pure-menu-item">
-                                    <a href="{{ crate_url }}" class="pure-menu-link"
+                                    <a href="{{ crate_url | safe }}" class="pure-menu-link"
                                         class="description">
                                         <i class="fa fa-fw fa-cube"></i> {{ krate.description }}
                                     </a>
                                 </li>
 
                                 <li class="pure-menu-item">
-                                    <a href="{{ crate_url }}" class="pure-menu-link">
+                                    <a href="{{ crate_url | safe }}" class="pure-menu-link">
                                         <i class="fa fa-fw fa-balance-scale"></i> {{ krate.license }}
                                     </a>
                                 </li>
@@ -55,7 +55,7 @@
                                         {# If the crate has a homepage, show a link to it #}
                                         {%- if krate.homepage_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.homepage_url }}" class="pure-menu-link">
+                                                <a href="{{ krate.homepage_url | safe }}" class="pure-menu-link">
                                                     <i class="fa fa-home fa-fw"></i> Homepage
                                                 </a>
                                             </li>
@@ -64,7 +64,7 @@
                                         {# If the crate has external docs, show a link #}
                                         {%- if krate.documentation_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
+                                                <a href="{{ krate.documentation_url | safe }}" title="Canonical documentation" class="pure-menu-link">
                                                     <i class="fa fa-fw fa-file-text"></i> Documentation
                                                 </a>
                                             </li>
@@ -73,7 +73,7 @@
                                         {# If the crate is hosted on GitHub, show some stats #}
                                         {%- if krate.github -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.repository_url }}" class="pure-menu-link">
+                                                <a href="{{ krate.repository_url | safe }}" class="pure-menu-link">
                                                     <i class="fa fa-github fa-fw"></i>
                                                     <i class="fa fa-star-o fa-fw"></i> {{ krate.github_stars }}
                                                     <i class="fa fa-code-fork fa-fw"></i> {{ krate.github_forks }}
@@ -84,14 +84,14 @@
                                         {# If all the crate has is a repo url, show it #}
                                         {%- elif repository_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.repository_url }}" class="pure-menu-link">
+                                                <a href="{{ krate.repository_url | safe }}" class="pure-menu-link">
                                                     <i class="fa fa-code-fork fa-fw"></i> Repository
                                                 </a>
                                             </li>
                                         {%- endif -%}
 
                                         <li class="pure-menu-item">
-                                            <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
+                                            <a href="https://crates.io/crates/{{ krate.name | urlencode }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
                                                 <i class="fa fa-cube fa-fw"></i> Crates.io
                                             </a>
                                         </li>
@@ -105,7 +105,7 @@
 
                                         {%- for author in krate.authors -%}
                                             <li class="pure-menu-item">
-                                                <a href="/releases/{{ author[1] }}" class="pure-menu-link">
+                                                <a href="/releases/{{ author[1] | urlencode }}" class="pure-menu-link">
                                                     <i class="fa fa-fw fa-user"></i> {{ author[0] }}
                                                 </a>
                                             </li>
@@ -125,7 +125,7 @@
                                                 <ul class="pure-menu-list">
                                                     {%- for dep in krate.dependencies -%}
                                                         <li class="pure-menu-item">
-                                                            <a href="/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
+                                                            <a href="/{{ dep[0] | urlencode }}/{{ dep[1] | urlencode }}" class="pure-menu-link">
                                                                 {{ dep[0] }} {{ dep[1] }}
                                                                 <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
                                                             </a>
@@ -167,7 +167,7 @@
                     {# If the crate isn't the latest & is yanked, display a warning and offer a link to the latest release #}
                     {%- elif not is_latest_version and krate.yanked -%}
                         <li class="pure-menu-item">
-                            <a href="{{ latest_path }}" class="pure-menu-link warn"
+                            <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
                                 title="You are seeing a yanked version of {{ krate.name }} crate. Click here to go to latest version.">
                                 <i class="fa fa-fw fa-warning"></i>
                                 <span class="title"> This release has been yanked, go to latest version</span>
@@ -177,7 +177,7 @@
                     {# If this isn't the most recent release, offer a link to the latest #}
                     {%- elif not is_latest_version -%}
                         <li class="pure-menu-item">
-                            <a href="{{ latest_path }}" class="pure-menu-link warn"
+                            <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
                                 title="You are seeing an outdated version of {{ krate.name }} crate. Click here to go to latest version.">
                                 <i class="fa fa-fw fa-warning"></i>
                                 <span class="title"> Go to latest version</span>
@@ -187,7 +187,7 @@
 
                     {# A link to the release's source view #}
                     <li class="pure-menu-item">
-                        <a href="{{ crate_url }}/source/" title="Browse source of {{ krate.name }}-{{ krate.version }}" class="pure-menu-link">
+                        <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ krate.name }}-{{ krate.version }}" class="pure-menu-link">
                             <i class="fa fa-fw fa-folder-open-o"></i>
                             <span class="title"> Source</span>
                         </a>
@@ -206,7 +206,7 @@
                                 {%- set target_url = "/crate/" ~ krate.name ~ "/" ~ krate.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
 
                                 <li class="pure-menu-item">
-                                    <a href="{{ target_url }}" class="pure-menu-link">{{ target }}</a>
+                                    <a href="{{ target_url | safe }}" class="pure-menu-link">{{ target }}</a>
                                 </li>
                             {%- endfor -%}
                         </ul>

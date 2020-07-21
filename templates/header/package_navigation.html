@@ -41,7 +41,7 @@
                             <ul class="pure-menu-children">
                                 {%- for platform in platforms -%}
                                     <li class="pure-menu-item">
-                                        <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
+                                        <a href="/{{ metadata.name | urlencode }}/{{ metadata.version | urlencode }}/{{ platform }}/{{ metadata.target_name }}/"
                                             class="pure-menu-link">
                                             {{ platform }}
                                         </a>
@@ -60,7 +60,7 @@
                     {%- if metadata.rustdoc_status -%}
                         <li class="pure-menu-item">
                             {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
-                            <a href="/{{ crate_path }}/{{ metadata.target_name }}/" class="pure-menu-link">
+                            <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="pure-menu-link">
                                 <i class="fa fa-fw fa-book"></i>
                                 <span class="title"> Documentation</span>
                             </a>
@@ -68,7 +68,7 @@
                     {%- endif -%}
 
                     {# The crate information tab #}
-                    <li class="pure-menu-item"><a href="/crate/{{ crate_path }}"
+                    <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
                             class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
                             <i class="fa fa-fw fa-cube"></i>
                             <span class="title"> Crate</span>
@@ -77,7 +77,7 @@
 
                     {# The source view tab #}
                     <li class="pure-menu-item">
-                        <a href="/crate/{{ crate_path }}/source/"
+                        <a href="/crate/{{ crate_path | safe }}/source/"
                             class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
                             <i class="fa fa-fw fa-folder-open-o"></i>
                             <span class="title"> Source</span>
@@ -86,7 +86,7 @@
 
                     {# The builds tab #}
                     <li class="pure-menu-item">
-                        <a href="/crate/{{ crate_path }}/builds"
+                        <a href="/crate/{{ crate_path | safe }}/builds"
                             class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
                             <i class="fa fa-cogs"></i>
                             <span class="title"> Builds</span>
