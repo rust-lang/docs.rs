@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     {% for release in releases -%}
         <url>
-            <loc>https://docs.rs/{{ release[0] }}</loc>
+            <loc>https://docs.rs/{{ release[0] | urlencode }}</loc>
             <lastmod>{{ release[1] | escape_xml }}</lastmod>
         </url>
     {%- endfor %}

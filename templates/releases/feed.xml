@@ -23,7 +23,7 @@
         <entry>
             <title>{{ name }}-{{ version }}</title>
 
-            <link href="{{ link }}" />
+            <link href="{{ link | safe }}" />
             <id>urn:docs-rs:{{ name }}:{{ version }}</id>
             <updated>{{ release.release_time | date(format="%+") }}</updated>
 

@@ -95,32 +95,32 @@
         <li class="pure-menu-item">
             {# If the release isn't a library, then display that warning #}
             {% if not release.is_library -%}
-                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is not a library">
+                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is not a library">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
 
             {# If the release has been yanked and failed to build, display a warning #}
             {%- elif release.yanked and release.build_status -%}
-                <a href="{{ release_url }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
+                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
 
             {# If the release has been yanked and failed to build, display a warning #}
             {%- elif release.yanked and not release.build_status -%}
-                <a href="{{ release_url }}" class="pure-menu-link warn"
+                <a href="{{ release_url | safe }}" class="pure-menu-link warn"
                     title="{{ release_name }} is yanked and docs.rs failed to build it">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
 
             {# If the release failed to build, display a warning #}
             {%- elif not release.build_status -%}
-                <a href="{{ release_url }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
+                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
                     <i class="fa fa-fw fa-warning"></i> {{ release.version }}
                 </a>
 
             {# Otherwise just display the version #}
             {%- else -%}
-                <a href="{{ release_url }}" class="pure-menu-link">
+                <a href="{{ release_url | safe }}" class="pure-menu-link">
                     {{ release.version }}
                 </a>
             {%- endif %}

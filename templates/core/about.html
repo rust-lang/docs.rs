@@ -9,7 +9,7 @@
     <div class="container about">
         <p>
             Docs.rs (formerly cratesfyi) is an
-            <a href="{{ docsrs_repo }}">open source</a>
+            <a href="{{ docsrs_repo | safe }}">open source</a>
             documentation host for crates of the
             <a href="https://www.rust-lang.org/">Rust Programming Language</a>.
         </p>
@@ -23,7 +23,7 @@
             The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
             Builds can take a while depending how many crates are in <a href="/releases/queue">the queue</a>.
             If you need a newer version of this compiler, check the
-            <a href="{{ docsrs_repo }}/issues">issues page</a>
+            <a href="{{ docsrs_repo | safe }}/issues">issues page</a>
             and file a new issue if you don't see an existing request.
             {%- endif -%}
         </p>
@@ -36,7 +36,7 @@
 
         <p>
             The source code of Docs.rs is available on
-            <a href="{{ docsrs_repo }}">GitHub</a>. If
+            <a href="{{ docsrs_repo | safe }}">GitHub</a>. If
             you ever encounter an issue, don't hesitate to report it! (And
             thanks in advance!)
         </p>
@@ -58,7 +58,7 @@
 
         <p>
             If a build fails because it hit one of those limits please
-            <a href="{{ docsrs_repo }}/issues/new/choose">open an issue</a>
+            <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
             to get them increased for your crate.
         </p>
 
@@ -141,22 +141,22 @@
             <tbody>
                 {%- set mio_badge = "https://docs.rs/mio/badge.svg" -%}
                 <tr>
-                    <td>Latest version: <a href="{{ mio_badge }}">{{ mio_badge }}</a></td>
-                    <td><img src="{{ mio_badge }}" alt="mio" /></td>
+                    <td>Latest version: <a href="{{ mio_badge | safe }}">{{ mio_badge }}</a></td>
+                    <td><img src="{{ mio_badge | safe }}" alt="mio" /></td>
                 </tr>
 
                 <tr>
                     <td>
-                        Version 0.4.4: <a href="{{ mio_badge }}?version=0.4.4">{{ mio_badge }}?version=0.4.4</a>
+                        Version 0.4.4: <a href="{{ mio_badge | safe }}?version=0.4.4">{{ mio_badge }}?version=0.4.4</a>
                     </td>
-                    <td><img src="{{ mio_badge }}?version=0.4.4" alt="mio" /></td>
+                    <td><img src="{{ mio_badge | safe }}?version=0.4.4" alt="mio" /></td>
                 </tr>
 
                 <tr>
                     <td>
-                        Version 0.1.0: <a href="{{ mio_badge }}?version=0.1.0">{{ mio_badge }}?version=0.1.0</a>
+                        Version 0.1.0: <a href="{{ mio_badge | safe }}?version=0.1.0">{{ mio_badge }}?version=0.1.0</a>
                     </td>
-                    <td><img src="{{ mio_badge }}?version=0.1.0" alt="mio" /></td>
+                    <td><img src="{{ mio_badge | safe }}?version=0.1.0" alt="mio" /></td>
                 </tr>
             </tbody>
         </table>
@@ -175,7 +175,7 @@
         <h4>Test crate documentation build locally</h4>
         {%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
         <p>
-            The <a href="{{ build_subcommand }}">docs.rs README</a> describes how to build an
+            The <a href="{{ build_subcommand | safe }}">docs.rs README</a> describes how to build an
             unpublished crate's documentation locally using the same build environment as the build agent.
         </p>
 
@@ -185,7 +185,7 @@
         <h4>Contact</h4>
         {%- set governance_link = "https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" -%}
         <p>
-            Docs.rs is run and maintained by the <a href="{{ governance_link }}">Docs.rs team</a>.
+            Docs.rs is run and maintained by the <a href="{{ governance_link | safe }}">Docs.rs team</a>.
             You can find us in #docs-rs on <a href="https://discordapp.com/invite/f7mTXPW/">Discord</a>.
         </p>
 
