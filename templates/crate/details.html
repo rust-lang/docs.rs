@@ -31,7 +31,7 @@
                         {# If the crate has a homepage, show it #}
                         {%- if details.homepage_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.homepage_url | safe }}" class="pure-menu-link">
+                                <a href="{{ details.homepage_url }}" class="pure-menu-link">
                                     <i class="fa fa-home fa-fw"></i> Homepage
                                 </a>
                             </li>
@@ -40,7 +40,7 @@
                         {# If the crate has a custom doc url, show it #}
                         {%- if details.documentation_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.documentation_url | safe }}" title="Canonical documentation" class="pure-menu-link">
+                                <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
                                     <i class="fa fa-fw fa-file-text"></i> Documentation
                                 </a>
                             </li>
@@ -49,7 +49,7 @@
                         {# If the release has a repository, show it #}
                         {%- if details.repository_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.repository_url | safe }}" class="pure-menu-link">
+                                <a href="{{ details.repository_url }}" class="pure-menu-link">
                                     {# If the repo link is for github, show some github stats #}
                                     {# TODO: add support for hosts besides github (#35) #}
                                     {%- if details.github -%}
@@ -148,7 +148,7 @@
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
                         docs.rs failed to build {{ details.name }}-{{ details.version }}<br>Please check the
-                        <a href="/crate/{{ details.name }}/{{ details.version | urlencode }}/builds">build logs</a> and, if you believe this is
+                        <a href="/crate/{{ details.name | urlencode }}/{{ details.version | urlencode }}/builds">build logs</a> and, if you believe this is
                         docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.
                     </div>
 

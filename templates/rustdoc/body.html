@@ -55,7 +55,7 @@
                                         {# If the crate has a homepage, show a link to it #}
                                         {%- if krate.homepage_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.homepage_url | safe }}" class="pure-menu-link">
+                                                <a href="{{ krate.homepage_url }}" class="pure-menu-link">
                                                     <i class="fa fa-home fa-fw"></i> Homepage
                                                 </a>
                                             </li>
@@ -64,7 +64,7 @@
                                         {# If the crate has external docs, show a link #}
                                         {%- if krate.documentation_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.documentation_url | safe }}" title="Canonical documentation" class="pure-menu-link">
+                                                <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
                                                     <i class="fa fa-fw fa-file-text"></i> Documentation
                                                 </a>
                                             </li>
@@ -73,7 +73,7 @@
                                         {# If the crate is hosted on GitHub, show some stats #}
                                         {%- if krate.github -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.repository_url | safe }}" class="pure-menu-link">
+                                                <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                                     <i class="fa fa-github fa-fw"></i>
                                                     <i class="fa fa-star-o fa-fw"></i> {{ krate.github_stars }}
                                                     <i class="fa fa-code-fork fa-fw"></i> {{ krate.github_forks }}
@@ -84,7 +84,7 @@
                                         {# If all the crate has is a repo url, show it #}
                                         {%- elif repository_url -%}
                                             <li class="pure-menu-item">
-                                                <a href="{{ krate.repository_url | safe }}" class="pure-menu-link">
+                                                <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                                     <i class="fa fa-code-fork fa-fw"></i> Repository
                                                 </a>
                                             </li>
