@@ -33,7 +33,8 @@ services:
             POSTGRES_USER: cratesfyi
             POSTGRES_PASSWORD: password
         ports:
-            - "5432:5432"
+            # Use a non-standard port on the host to avoid conflicting with existing postgres servers
+            - "15432:5432"
     s3:
         image: minio/minio
         entrypoint: >
