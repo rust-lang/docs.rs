@@ -41,7 +41,7 @@
                             <ul class="pure-menu-children">
                                 {%- for platform in platforms -%}
                                     <li class="pure-menu-item">
-                                        <a href="/{{ metadata.name | urlencode }}/{{ metadata.version | urlencode }}/{{ platform }}/{{ metadata.target_name }}/"
+                                        <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
                                             class="pure-menu-link">
                                             {{ platform }}
                                         </a>

@@ -23,7 +23,7 @@
             <ol class="queue-list">
                 {% for crate in queue -%}
                     <li>
-                        <a href="https://crates.io/crates/{{ crate.name | urlencode }}">
+                        <a href="https://crates.io/crates/{{ crate.name }}">
                             {{ crate.name }} {{ crate.version }}
                         </a>
 
