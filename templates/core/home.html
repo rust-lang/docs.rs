@@ -34,10 +34,13 @@
 
             <ul>
                 {%- for release in recent_releases -%}
+                    {# FIXME: https://github.com/Keats/tera/issues/539 #}
+                    {%- set name = release.name | escape -%}
+                    {%- set version = release.version | escape -%}
                     {%- if release.rustdoc_status -%}
-                        {%- set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+                        {%- set release_url = "/" ~ name ~ "/" ~ version ~ "/" ~ release.target_name -%}
                     {%- else -%}
-                        {%- set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+                        {%- set release_url = "/crate/" ~ name ~ "/" ~ version -%}
                     {%- endif -%}
 
                     <li>
