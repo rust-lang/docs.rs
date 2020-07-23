@@ -1,7 +1,10 @@
 {%- import "macros.html" as macros -%}
 
 {# The url of the current release, `/crate/:name/:version` #}
-{%- set crate_url = "/crate/" ~ krate.name ~ "/" ~ krate.version -%}
+{# FIXME: https://github.com/Keats/tera/issues/539 #}
+{%- set name = krate.name | escape -%}
+{%- set version = krate.version | escape -%}
+{%- set crate_url = "/crate/" ~ name ~ "/" ~ version -%}
 
 <div class="nav-container nav-container-rustdoc">
     <div class="container-rustdoc rustdoc-navigation">
