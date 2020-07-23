@@ -29,7 +29,7 @@
                                     Show a link to the file with a fancy icon. If the file is a directory,
                                     `/` is appended to show the contents of the folder
                                 #}
-                                <a href="./{{ file.name | urlencode }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
+                                <a href="./{{ file.name }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
                                     {# Directories #}
                                     {%- if file.mime == "dir" -%}
                                         <i class="fa fa-fw fa-folder-open-o"></i>

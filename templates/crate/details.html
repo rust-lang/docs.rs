@@ -20,7 +20,7 @@
                         <li class="pure-menu-heading">Authors</li>
                         {%- for author in details.authors -%}
                             <li class="pure-menu-item">
-                                <a href="/releases/{{ author[1] | urlencode }}" class="pure-menu-link">
+                                <a href="/releases/{{ author[1] }}" class="pure-menu-link">
                                     {{ author[0] }}
                                 </a>
                             </li>
@@ -68,7 +68,7 @@
 
                         {# Show a link to the crate's Crates.io page #}
                         <li class="pure-menu-item">
-                            <a href="https://crates.io/crates/{{ details.name | urlencode }}" class="pure-menu-link"
+                            <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
                                 title="See {{ details.name }} on crates.io">
                                 <i class="fa fa-cube fa-fw"></i> Crates.io
                             </a>
@@ -81,7 +81,7 @@
                                     {# List all dependencies that the current release has #}
                                     {%- for dep in details.dependencies -%}
                                         <li class="pure-menu-item">
-                                            <a href="/crate/{{ dep[0] | urlencode }}/{{ dep[1] | urlencode }}" class="pure-menu-link">
+                                            <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
                                                 {{ dep[0] }} {{ dep[1] }}
                                                 <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
                                             </a>
@@ -105,7 +105,7 @@
                         <li class="pure-menu-heading">Owners</li>
                         <li class="pure-menu-item">
                             {%- for owner in details.owners -%}
-                                <a href="/releases/@{{ owner[0] | urlencode }}">
+                                <a href="/releases/@{{ owner[0] }}">
                                     <img src="{{ owner[1] }}" alt="{{ owner[0] }}" class="owner">
                                 </a>
                             {%- endfor -%}
@@ -148,7 +148,7 @@
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
                         docs.rs failed to build {{ details.name }}-{{ details.version }}<br>Please check the
-                        <a href="/crate/{{ details.name | urlencode }}/{{ details.version | urlencode }}/builds">build logs</a> and, if you believe this is
+                        <a href="/crate/{{ details.name }}/{{ details.version }}/builds">build logs</a> and, if you believe this is
                         docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.
                     </div>
 
@@ -156,7 +156,7 @@
                     {%- if details.last_successful_build -%}
                         <div class="info">
                             Visit the last successful build:
-                            <a href="/crate/{{ details.name | urlencode }}/{{ details.last_successful_build }}">
+                            <a href="/crate/{{ details.name }}/{{ details.last_successful_build }}">
                                 {{ details.name }}-{{ details.last_successful_build }}
                             </a>
                         </div>
