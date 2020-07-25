@@ -89,7 +89,7 @@ pub(super) struct DatabaseStorageTransaction<'a> {
 }
 
 impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
-    fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error> {
+    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error> {
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
             self.transaction.query(
@@ -186,8 +186,8 @@ mod tests {
 
             let conn = backend.start_connection()?;
             let mut transaction = Box::new(conn.start_storage_transaction()?);
-            transaction.store_batch(std::slice::from_ref(&small_blob))?;
-            transaction.store_batch(std::slice::from_ref(&big_blob))?;
+            transaction.store_batch(vec![small_blob.clone()])?;
+            transaction.store_batch(vec![big_blob])?;
             transaction.complete()?;
 
             let blob = backend.get("small-blob.bin", MAX_SIZE).unwrap();

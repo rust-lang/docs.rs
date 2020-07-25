@@ -12,24 +12,32 @@ impl TestS3 {
         // A random bucket name is generated and used for the current connection.
         // This allows each test to create a fresh bucket to test with.
         let bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
-        let client = s3_client().unwrap();
-        client
-            .create_bucket(CreateBucketRequest {
-                bucket: bucket.clone(),
-                ..Default::default()
-            })
-            .sync()
-            .expect("failed to create test bucket");
-        let bucket = Box::leak(bucket.into_boxed_str());
-        TestS3(RefCell::new(S3Backend::new(client, bucket)))
+
+        let backend = S3Backend::new(s3_client().unwrap(), &bucket);
+        backend.runtime.handle().block_on(async {
+            backend
+                .client
+                .create_bucket(CreateBucketRequest {
+                    bucket: bucket.clone(),
+                    ..Default::default()
+                })
+                .await
+                .expect("failed to create test bucket")
+        });
+
+        TestS3(RefCell::new(backend))
     }
-    pub(crate) fn upload(&self, blobs: &[Blob]) -> Result<(), Error> {
+
+    pub(crate) fn upload(&self, blobs: Vec<Blob>) -> Result<(), Error> {
         let s3 = self.0.borrow();
+
         let mut transaction = Box::new(s3.start_storage_transaction()?);
         transaction.store_batch(blobs)?;
         transaction.complete()?;
+
         Ok(())
     }
+
     pub(crate) fn assert_404(&self, path: &'static str) {
         use rusoto_core::RusotoError;
         use rusoto_s3::GetObjectError;
@@ -44,6 +52,7 @@ impl TestS3 {
             x => panic!("wrong error: {:?}", x),
         };
     }
+
     pub(crate) fn assert_blob(&self, blob: &Blob, path: &str) {
         let actual = self.0.borrow().get(path, std::usize::MAX).unwrap();
         assert_blob_eq(blob, &actual);
@@ -63,23 +72,36 @@ impl Drop for TestS3 {
             bucket: inner.bucket.to_owned(),
             ..Default::default()
         };
-        let objects = inner.client.list_objects(list_req).sync().unwrap();
+
+        let objects = inner
+            .runtime
+            .handle()
+            .block_on(async { inner.client.list_objects(list_req).await.unwrap() });
         assert!(!objects.is_truncated.unwrap_or(false));
+
         for path in objects.contents.unwrap() {
             let delete_req = DeleteObjectRequest {
                 bucket: inner.bucket.to_owned(),
                 key: path.key.unwrap(),
                 ..Default::default()
             };
-            inner.client.delete_object(delete_req).sync().unwrap();
+
+            inner
+                .runtime
+                .handle()
+                .block_on(async { inner.client.delete_object(delete_req).await.unwrap() });
         }
+
         let delete_req = DeleteBucketRequest {
             bucket: inner.bucket.to_owned(),
         };
-        inner
-            .client
-            .delete_bucket(delete_req)
-            .sync()
-            .expect("failed to delete test bucket");
+
+        inner.runtime.handle().block_on(async {
+            inner
+                .client
+                .delete_bucket(delete_req)
+                .await
+                .expect("failed to delete test bucket")
+        });
     }
 }
