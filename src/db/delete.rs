@@ -1,7 +1,7 @@
-use crate::storage::s3::{s3_client, S3_BUCKET_NAME};
+use crate::storage::s3::{s3_client, S3Backend, S3_BUCKET_NAME};
 use failure::{Error, Fail};
 use postgres::Connection;
-use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
+use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -16,20 +16,22 @@ enum CrateDeletionError {
 pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
-    if let Some(s3) = s3_client() {
+
+    if let Some(backend) = s3_client().map(|client| S3Backend::new(client, S3_BUCKET_NAME)) {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&s3, &format!("{}/{}/", prefix, name))?;
+            delete_prefix_from_s3(&backend, &format!("{}/{}/", prefix, name))?;
         }
     }
+
     Ok(())
 }
 
 pub fn delete_version(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
     delete_version_from_database(conn, name, version)?;
 
-    if let Some(s3) = s3_client() {
+    if let Some(backend) = s3_client().map(|client| S3Backend::new(client, S3_BUCKET_NAME)) {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&s3, &format!("{}/{}/{}/", prefix, name, version))?;
+            delete_prefix_from_s3(&backend, &format!("{}/{}/{}/", prefix, name, version))?;
         }
     }
 
@@ -119,50 +121,57 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
     Ok(())
 }
 
-fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
-    let mut continuation_token = None;
-    loop {
-        let list = s3
-            .list_objects_v2(ListObjectsV2Request {
-                bucket: S3_BUCKET_NAME.into(),
-                prefix: Some(name.into()),
-                continuation_token,
-                ..ListObjectsV2Request::default()
-            })
-            .sync()?;
+fn delete_prefix_from_s3(s3: &S3Backend, name: &str) -> Result<(), Error> {
+    s3.runtime.handle().block_on(async {
+        let mut continuation_token = None;
+        loop {
+            let list = s3
+                .client
+                .list_objects_v2(ListObjectsV2Request {
+                    bucket: S3_BUCKET_NAME.into(),
+                    prefix: Some(name.into()),
+                    continuation_token,
+                    ..ListObjectsV2Request::default()
+                })
+                .await?;
 
-        let to_delete = list
-            .contents
-            .unwrap_or_else(Vec::new)
-            .into_iter()
-            .filter_map(|o| o.key)
-            .map(|key| ObjectIdentifier {
-                key,
-                version_id: None,
-            })
-            .collect::<Vec<_>>();
-        let resp = s3
-            .delete_objects(DeleteObjectsRequest {
-                bucket: S3_BUCKET_NAME.into(),
-                delete: rusoto_s3::Delete {
-                    objects: to_delete,
-                    quiet: None,
-                },
-                ..DeleteObjectsRequest::default()
-            })
-            .sync()?;
-        if let Some(errs) = resp.errors {
-            for err in &errs {
-                log::error!("error deleting file from s3: {:?}", err);
+            let to_delete = list
+                .contents
+                .unwrap_or_else(Vec::new)
+                .into_iter()
+                .filter_map(|o| o.key)
+                .map(|key| ObjectIdentifier {
+                    key,
+                    version_id: None,
+                })
+                .collect::<Vec<_>>();
+
+            let resp = s3
+                .client
+                .delete_objects(DeleteObjectsRequest {
+                    bucket: S3_BUCKET_NAME.into(),
+                    delete: rusoto_s3::Delete {
+                        objects: to_delete,
+                        quiet: None,
+                    },
+                    ..DeleteObjectsRequest::default()
+                })
+                .await?;
+
+            if let Some(errs) = resp.errors {
+                for err in &errs {
+                    log::error!("error deleting file from s3: {:?}", err);
+                }
+
+                failure::bail!("uploading to s3 failed");
             }
-            failure::bail!("uploading to s3 failed");
-        }
 
-        continuation_token = list.continuation_token;
-        if continuation_token.is_none() {
-            return Ok(());
+            continuation_token = list.continuation_token;
+            if continuation_token.is_none() {
+                return Ok(());
+            }
         }
-    }
+    })
 }
 
 #[cfg(test)]

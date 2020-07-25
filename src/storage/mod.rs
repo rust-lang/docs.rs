@@ -204,10 +204,12 @@ impl Storage {
                 .by_ref()
                 .take(MAX_CONCURRENT_UPLOADS)
                 .collect::<Result<_, Error>>()?;
+
             if batch.is_empty() {
                 break;
             }
-            trans.store_batch(&batch)?;
+
+            trans.store_batch(batch)?;
         }
 
         trans.complete()?;
@@ -225,7 +227,7 @@ impl std::fmt::Debug for Storage {
 }
 
 trait StorageTransaction {
-    fn store_batch(&mut self, batch: &[Blob]) -> Result<(), Error>;
+    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error>;
     fn complete(self: Box<Self>) -> Result<(), Error>;
 }
 
