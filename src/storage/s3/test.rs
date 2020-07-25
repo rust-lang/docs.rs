@@ -14,7 +14,7 @@ impl TestS3 {
         let bucket = format!("docs-rs-test-bucket-{}", rand::random::<u64>());
 
         let backend = S3Backend::new(s3_client().unwrap(), &bucket);
-        backend.runtime.handle().block_on(async {
+        S3_RUNTIME.handle().block_on(async {
             backend
                 .client
                 .create_bucket(CreateBucketRequest {
@@ -73,8 +73,7 @@ impl Drop for TestS3 {
             ..Default::default()
         };
 
-        let objects = inner
-            .runtime
+        let objects = S3_RUNTIME
             .handle()
             .block_on(async { inner.client.list_objects(list_req).await.unwrap() });
         assert!(!objects.is_truncated.unwrap_or(false));
@@ -86,8 +85,7 @@ impl Drop for TestS3 {
                 ..Default::default()
             };
 
-            inner
-                .runtime
+            S3_RUNTIME
                 .handle()
                 .block_on(async { inner.client.delete_object(delete_req).await.unwrap() });
         }
@@ -96,7 +94,7 @@ impl Drop for TestS3 {
             bucket: inner.bucket.to_owned(),
         };
 
-        inner.runtime.handle().block_on(async {
+        S3_RUNTIME.handle().block_on(async {
             inner
                 .client
                 .delete_bucket(delete_req)

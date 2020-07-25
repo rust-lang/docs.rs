@@ -19,13 +19,12 @@ mod test;
 pub(crate) use test::TestS3;
 
 pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
-static S3_RUNTIME: Lazy<Runtime> =
+pub(crate) static S3_RUNTIME: Lazy<Runtime> =
     Lazy::new(|| Runtime::new().expect("Failed to create S3 runtime"));
 
 pub(crate) struct S3Backend {
     pub client: S3Client,
     bucket: String,
-    pub runtime: &'static Runtime,
 }
 
 impl S3Backend {
@@ -33,12 +32,11 @@ impl S3Backend {
         Self {
             client,
             bucket: bucket.into(),
-            runtime: &*S3_RUNTIME,
         }
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
-        self.runtime.handle().block_on(async {
+        S3_RUNTIME.handle().block_on(async {
             let res = self
                 .client
                 .get_object(GetObjectRequest {
@@ -87,7 +85,7 @@ pub(super) struct S3StorageTransaction<'a> {
 
 impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     fn store_batch(&mut self, mut batch: Vec<Blob>) -> Result<(), Error> {
-        self.s3.runtime.handle().block_on(async {
+        S3_RUNTIME.handle().block_on(async {
             // Attempt to upload the batch 3 times
             for _ in 0..3 {
                 let mut futures = FuturesUnordered::new();
@@ -124,13 +122,12 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     }
                 }
 
-                // If the batch is empty, we can exit
+                // If we uploaded everything in the batch, we're done
                 if batch.is_empty() {
                     return Ok(());
                 }
             }
 
-            // If uploading failed 3 times, explode
             panic!("failed to upload 3 times, exiting");
         })
     }
