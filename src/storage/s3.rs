@@ -60,7 +60,7 @@ impl S3Backend {
                 .ok_or_else(|| failure::err_msg("Received a response from S3 with no body"))?;
 
             while let Some(data) = body.next().await.transpose()? {
-                content.write(data.as_ref())?;
+                content.write_all(data.as_ref())?;
             }
 
             let date_updated = parse_timespec(&res.last_modified.unwrap())?;
