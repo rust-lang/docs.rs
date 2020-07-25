@@ -1,4 +1,4 @@
-use crate::storage::s3::{s3_client, S3Backend, S3_BUCKET_NAME};
+use crate::storage::s3::{s3_client, S3Backend, S3_BUCKET_NAME, S3_RUNTIME};
 use failure::{Error, Fail};
 use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3};
@@ -122,7 +122,7 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
 }
 
 fn delete_prefix_from_s3(s3: &S3Backend, name: &str) -> Result<(), Error> {
-    s3.runtime.handle().block_on(async {
+    S3_RUNTIME.handle().block_on(async {
         let mut continuation_token = None;
         loop {
             let list = s3
