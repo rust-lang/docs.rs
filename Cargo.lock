@@ -373,6 +373,7 @@ dependencies = [
  "notify 4.0.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "params 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parking_lot 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "path-slash 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "postgres 0.15.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "procfs 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
