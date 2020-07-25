@@ -24,7 +24,6 @@ static S3_RUNTIME: Lazy<Mutex<Runtime>> =
 pub(crate) struct S3Backend {
     client: S3Client,
     bucket: String,
-    runtime: &'static Mutex<Runtime>,
 }
 
 impl S3Backend {
@@ -32,7 +31,6 @@ impl S3Backend {
         Self {
             client,
             bucket: bucket.into(),
-            runtime: &*S3_RUNTIME,
         }
     }
 
@@ -102,7 +100,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
             }
             attempts += 1;
 
-            match self.s3.runtime.lock().block_on(futures.map(drop).collect()) {
+            match S3_RUNTIME.lock().block_on(futures.map(drop).collect()) {
                 // this batch was successful, start another batch if there are still more files
                 Ok(_) => break,
                 Err(err) => {
@@ -114,6 +112,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                 }
             }
         }
+
         Ok(())
     }
 
