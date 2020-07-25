@@ -104,7 +104,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                     .map(|alg| alg.to_string()),
                                 ..Default::default()
                             })
-                            .map_ok(|_ok| {
+                            .map_ok(|_| {
                                 crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
                             })
                             .map_err(|err| {
