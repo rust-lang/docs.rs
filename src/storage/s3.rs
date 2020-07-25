@@ -4,6 +4,8 @@ use failure::Error;
 use futures::stream::{FuturesUnordered, Stream};
 use futures::Future;
 use log::{error, warn};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use rusoto_core::region::Region;
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, S3Client, S3};
@@ -16,10 +18,13 @@ mod test;
 pub(crate) use test::TestS3;
 
 pub(crate) static S3_BUCKET_NAME: &str = "rust-docs-rs";
+static S3_RUNTIME: Lazy<Mutex<Runtime>> =
+    Lazy::new(|| Mutex::new(Runtime::new().expect("Failed to create S3 runtime")));
 
 pub(crate) struct S3Backend {
     client: S3Client,
     bucket: String,
+    runtime: &'static Mutex<Runtime>,
 }
 
 impl S3Backend {
@@ -27,6 +32,7 @@ impl S3Backend {
         Self {
             client,
             bucket: bucket.into(),
+            runtime: &*S3_RUNTIME,
         }
     }
 
@@ -63,16 +69,12 @@ impl S3Backend {
     }
 
     pub(super) fn start_storage_transaction(&self) -> Result<S3StorageTransaction, Error> {
-        Ok(S3StorageTransaction {
-            s3: self,
-            runtime: Runtime::new()?,
-        })
+        Ok(S3StorageTransaction { s3: self })
     }
 }
 
 pub(super) struct S3StorageTransaction<'a> {
     s3: &'a S3Backend,
-    runtime: Runtime,
 }
 
 impl<'a> StorageTransaction for S3StorageTransaction<'a> {
@@ -100,7 +102,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
             }
             attempts += 1;
 
-            match self.runtime.block_on(futures.map(drop).collect()) {
+            match self.s3.runtime.lock().block_on(futures.map(drop).collect()) {
                 // this batch was successful, start another batch if there are still more files
                 Ok(_) => break,
                 Err(err) => {
