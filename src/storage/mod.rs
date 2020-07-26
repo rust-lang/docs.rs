@@ -68,7 +68,7 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
 
 enum StorageBackend {
     Database(DatabaseBackend),
-    S3(S3Backend),
+    S3(Box<S3Backend>),
 }
 
 pub struct Storage {
@@ -78,7 +78,7 @@ pub struct Storage {
 impl Storage {
     pub fn new(pool: Pool, config: &Config) -> Result<Self, Error> {
         let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(S3Backend::new(c, config)?)
+            StorageBackend::S3(Box::new(S3Backend::new(c, config)?))
         } else {
             StorageBackend::Database(DatabaseBackend::new(pool))
         };
@@ -88,7 +88,10 @@ impl Storage {
     #[cfg(test)]
     pub(crate) fn temp_new_s3(config: &Config) -> Result<Self, Error> {
         Ok(Storage {
-            backend: StorageBackend::S3(S3Backend::new(s3::s3_client().unwrap(), config)?),
+            backend: StorageBackend::S3(Box::new(S3Backend::new(
+                s3::s3_client().unwrap(),
+                config,
+            )?)),
         })
     }
 
