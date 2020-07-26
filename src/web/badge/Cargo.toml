@@ -1,6 +1,6 @@
 [package]
 name = "badge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Simple badge generator"
 authors = ["Onur Aslan <onur@onur.im>", "Joshua Nelson <jyn514@gmail.com>", "Chase Wilson <contact@chasewilson.dev>"]
 license-file = "LICENSE"
