@@ -7,7 +7,6 @@ use futures_util::{
     stream::{FuturesUnordered, StreamExt},
 };
 use log::warn;
-use once_cell::sync::Lazy;
 use rusoto_core::{region::Region, RusotoError};
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{
@@ -17,11 +16,9 @@ use rusoto_s3::{
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
 
-static S3_RUNTIME: Lazy<Runtime> =
-    Lazy::new(|| Runtime::new().expect("Failed to create S3 runtime"));
-
 pub(super) struct S3Backend {
     client: S3Client,
+    runtime: Runtime,
     bucket: String,
     #[cfg(test)]
     temporary: bool,
@@ -29,13 +26,15 @@ pub(super) struct S3Backend {
 
 impl S3Backend {
     pub(super) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
+        let runtime = Runtime::new()?;
+
         // Create the temporary S3 bucket during tests.
         if config.s3_bucket_is_temporary {
             if cfg!(not(test)) {
                 panic!("safeguard to prevent creating temporary buckets outside of tests");
             }
 
-            S3_RUNTIME
+            runtime
                 .handle()
                 .block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
                     bucket: config.s3_bucket.clone(),
@@ -45,6 +44,7 @@ impl S3Backend {
 
         Ok(Self {
             client,
+            runtime,
             bucket: config.s3_bucket.clone(),
             #[cfg(test)]
             temporary: config.s3_bucket_is_temporary,
@@ -52,7 +52,7 @@ impl S3Backend {
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
-        S3_RUNTIME.handle().block_on(async {
+        self.runtime.handle().block_on(async {
             let response = self
                 .client
                 .get_object(GetObjectRequest {
@@ -119,7 +119,7 @@ impl S3Backend {
         transaction.delete_prefix("")?;
         transaction.complete()?;
 
-        S3_RUNTIME.handle().block_on(self.client.delete_bucket(
+        self.runtime.handle().block_on(self.client.delete_bucket(
             rusoto_s3::DeleteBucketRequest {
                 bucket: self.bucket.clone(),
             },
@@ -135,7 +135,7 @@ pub(super) struct S3StorageTransaction<'a> {
 
 impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     fn store_batch(&mut self, mut batch: Vec<Blob>) -> Result<(), Error> {
-        S3_RUNTIME.handle().block_on(async {
+        self.s3.runtime.handle().block_on(async {
             // Attempt to upload the batch 3 times
             for _ in 0..3 {
                 let mut futures = FuturesUnordered::new();
@@ -183,7 +183,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     }
 
     fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
-        S3_RUNTIME.handle().block_on(async {
+        self.s3.runtime.handle().block_on(async {
             let mut continuation_token = None;
             loop {
                 let list = self
