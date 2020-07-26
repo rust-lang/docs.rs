@@ -111,6 +111,24 @@ impl Storage {
         Ok(blob)
     }
 
+    fn transaction<T, F>(&self, f: F) -> Result<T, Error>
+    where
+        F: FnOnce(&mut dyn StorageTransaction) -> Result<T, Error>,
+    {
+        let conn;
+        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
+            StorageBackend::Database(db) => {
+                conn = db.start_connection()?;
+                Box::new(conn.start_storage_transaction()?)
+            }
+            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
+        };
+
+        let res = f(trans.as_mut())?;
+        trans.complete()?;
+        Ok(res)
+    }
+
     // Store all files in `root_dir` into the backend under `prefix`.
     //
     // If the environment is configured with S3 credentials, this will upload to S3;
@@ -167,30 +185,23 @@ impl Storage {
         &self,
         mut blobs: impl Iterator<Item = Result<Blob, Error>>,
     ) -> Result<(), Error> {
-        let conn;
-        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
-            StorageBackend::Database(db) => {
-                conn = db.start_connection()?;
-                Box::new(conn.start_storage_transaction()?)
+        self.transaction(|trans| {
+            loop {
+                let batch: Vec<_> = blobs
+                    .by_ref()
+                    .take(MAX_CONCURRENT_UPLOADS)
+                    .collect::<Result<_, Error>>()?;
+                if batch.is_empty() {
+                    break;
+                }
+                trans.store_batch(batch)?;
             }
-            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
-        };
+            Ok(())
+        })
+    }
 
-        loop {
-            let batch: Vec<_> = blobs
-                .by_ref()
-                .take(MAX_CONCURRENT_UPLOADS)
-                .collect::<Result<_, Error>>()?;
-
-            if batch.is_empty() {
-                break;
-            }
-
-            trans.store_batch(batch)?;
-        }
-
-        trans.complete()?;
-        Ok(())
+    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
+        self.transaction(|trans| trans.delete_prefix(prefix))
     }
 
     // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
@@ -216,6 +227,7 @@ impl std::fmt::Debug for Storage {
 
 trait StorageTransaction {
     fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error>;
+    fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error>;
     fn complete(self: Box<Self>) -> Result<(), Error>;
 }
 
@@ -453,6 +465,70 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_delete_prefix(storage: &Storage) -> Result<(), Error> {
+        test_deletion(
+            storage,
+            "foo/bar/",
+            &[
+                "foo.txt",
+                "foo/bar.txt",
+                "foo/bar/baz.txt",
+                "foo/bar/foobar.txt",
+                "bar.txt",
+            ],
+            &["foo.txt", "foo/bar.txt", "bar.txt"],
+            &["foo/bar/baz.txt", "foo/bar/foobar.txt"],
+        )
+    }
+
+    fn test_delete_percent(storage: &Storage) -> Result<(), Error> {
+        // PostgreSQL treats "%" as a special char when deleting a prefix. Make sure any "%" in the
+        // provided prefix is properly escaped.
+        test_deletion(
+            storage,
+            "foo/%/",
+            &["foo/bar.txt", "foo/%/bar.txt"],
+            &["foo/bar.txt"],
+            &["foo/%/bar.txt"],
+        )
+    }
+
+    fn test_deletion(
+        storage: &Storage,
+        prefix: &str,
+        start: &[&str],
+        present: &[&str],
+        missing: &[&str],
+    ) -> Result<(), Error> {
+        storage.store_blobs(
+            start
+                .iter()
+                .map(|path| Blob {
+                    path: (*path).to_string(),
+                    content: b"foo\n".to_vec(),
+                    compression: None,
+                    mime: "text/plain".into(),
+                    date_updated: Utc::now(),
+                })
+                .collect(),
+        )?;
+
+        storage.delete_prefix(prefix)?;
+
+        for existing in present {
+            assert!(storage.get(existing, std::usize::MAX).is_ok());
+        }
+        for missing in missing {
+            assert!(storage
+                .get(missing, std::usize::MAX)
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+        }
+
+        Ok(())
+    }
+
     // Remember to add the test name to the macro below when adding a new one.
 
     macro_rules! backend_tests {
@@ -495,6 +571,8 @@ mod backend_tests {
             test_get_too_big,
             test_store_blobs,
             test_store_all,
+            test_delete_prefix,
+            test_delete_percent,
         }
     }
 }
