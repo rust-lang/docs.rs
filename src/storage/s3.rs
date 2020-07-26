@@ -111,6 +111,10 @@ impl S3Backend {
             return Ok(());
         }
 
+        if cfg!(not(test)) {
+            panic!("safeguard to prevent deleting the production bucket");
+        }
+
         let mut transaction = Box::new(self.start_storage_transaction()?);
         transaction.delete_prefix("")?;
         transaction.complete()?;
