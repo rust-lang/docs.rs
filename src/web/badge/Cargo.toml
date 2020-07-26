@@ -2,7 +2,7 @@
 name = "badge"
 version = "0.2.0"
 description = "Simple badge generator"
-authors = ["Onur Aslan <onur@onur.im>"]
+authors = ["Onur Aslan <onur@onur.im>", "Joshua Nelson <jyn514@gmail.com>", "Chase Wilson <contact@chasewilson.dev>"]
 license-file = "LICENSE"
 repository = "https://github.com/rust-lang/docs.rs"
 documentation = "https://docs.rs/badge"
