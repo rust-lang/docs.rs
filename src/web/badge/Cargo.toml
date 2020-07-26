@@ -9,6 +9,6 @@ documentation = "https://docs.rs/badge"
 edition = "2018"
 
 [dependencies]
-base64 = "0.9.0"
+base64 = "0.12"
 rusttype = "0.9"
 once_cell = "1"
