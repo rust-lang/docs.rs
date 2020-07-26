@@ -245,65 +245,7 @@ fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::wrapper;
     use std::env;
-
-    pub(crate) fn assert_blob_eq(blob: &Blob, actual: &Blob) {
-        assert_eq!(blob.path, actual.path);
-        assert_eq!(blob.content, actual.content);
-        assert_eq!(blob.mime, actual.mime);
-        // NOTE: this does _not_ compare the upload time since min.io doesn't allow this to be configured
-    }
-
-    pub(crate) fn test_roundtrip(blobs: &[Blob]) {
-        let dir = tempfile::Builder::new()
-            .prefix("docs.rs-upload-test")
-            .tempdir()
-            .unwrap();
-        for blob in blobs {
-            let path = dir.path().join(&blob.path);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::write(path, &blob.content).expect("failed to write to file");
-        }
-        wrapper(|env| {
-            let db = env.db();
-            let backend = Storage {
-                backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
-            };
-            let (stored_files, _algs) = backend.store_all("", dir.path()).unwrap();
-            assert_eq!(stored_files.len(), blobs.len());
-            for blob in blobs {
-                let name = Path::new(&blob.path);
-                assert!(stored_files.contains_key(name));
-
-                let actual = backend.get(&blob.path, std::usize::MAX).unwrap();
-                assert_blob_eq(blob, &actual);
-            }
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn test_batched_uploads() {
-        let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
-            .map(|i| {
-                let alg = CompressionAlgorithm::default();
-                let content = compress("fn main() {}".as_bytes(), alg).unwrap();
-                Blob {
-                    mime: "text/rust".into(),
-                    content,
-                    path: format!("{}.rs", i),
-                    date_updated: Utc::now(),
-                    compression: Some(alg),
-                }
-            })
-            .collect();
-
-        test_roundtrip(&uploads);
-    }
 
     #[test]
     fn test_get_file_list() {
@@ -486,6 +428,31 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_batched_uploads(storage: &Storage) -> Result<(), Error> {
+        let now = Utc::now();
+        let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
+            .map(|i| {
+                let content = format!("const IDX: usize = {};", i).as_bytes().to_vec();
+                Blob {
+                    mime: "text/rust".into(),
+                    content,
+                    path: format!("{}.rs", i),
+                    date_updated: now.clone(),
+                    compression: None,
+                }
+            })
+            .collect();
+
+        storage.store_blobs(uploads.clone())?;
+
+        for blob in &uploads {
+            let stored = storage.get(&blob.path, std::usize::MAX)?;
+            assert_eq!(&stored.content, &blob.content);
+        }
+
+        Ok(())
+    }
+
     // Remember to add the test name to the macro below when adding a new one.
 
     macro_rules! backend_tests {
@@ -523,6 +490,7 @@ mod backend_tests {
         }
 
         tests {
+            test_batched_uploads,
             test_get_object,
             test_get_too_big,
             test_store_blobs,
