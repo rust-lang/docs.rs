@@ -17,9 +17,9 @@ pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
-    if let Some(backend) = s3_client() {
+    if let Some(client) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&backend, &format!("{}/{}/", prefix, name))?;
+            delete_prefix_from_s3(&client, &format!("{}/{}/", prefix, name))?;
         }
     }
 
@@ -29,9 +29,9 @@ pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
 pub fn delete_version(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
     delete_version_from_database(conn, name, version)?;
 
-    if let Some(backend) = s3_client() {
+    if let Some(client) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(&backend, &format!("{}/{}/{}/", prefix, name, version))?;
+            delete_prefix_from_s3(&client, &format!("{}/{}/{}/", prefix, name, version))?;
         }
     }
 
