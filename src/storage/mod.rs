@@ -1,10 +1,10 @@
 mod compression;
 mod database;
-pub(crate) mod s3;
+mod s3;
 
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
-pub(crate) use self::database::DatabaseBackend;
-pub(crate) use self::s3::S3Backend;
+use self::database::DatabaseBackend;
+use self::s3::S3Backend;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};

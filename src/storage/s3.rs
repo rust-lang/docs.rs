@@ -17,18 +17,18 @@ use rusoto_s3::{
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
 
-pub(crate) static S3_RUNTIME: Lazy<Runtime> =
+static S3_RUNTIME: Lazy<Runtime> =
     Lazy::new(|| Runtime::new().expect("Failed to create S3 runtime"));
 
-pub(crate) struct S3Backend {
-    pub client: S3Client,
+pub(super) struct S3Backend {
+    client: S3Client,
     bucket: String,
     #[cfg(test)]
     temporary: bool,
 }
 
 impl S3Backend {
-    pub(crate) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
+    pub(super) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
         // Create the temporary S3 bucket during tests.
         if config.s3_bucket_is_temporary {
             if cfg!(not(test)) {
@@ -251,7 +251,7 @@ fn parse_timespec(mut raw: &str) -> Result<DateTime<Utc>, Error> {
     ))
 }
 
-pub(crate) fn s3_client() -> Option<S3Client> {
+pub(super) fn s3_client() -> Option<S3Client> {
     // If AWS keys aren't configured, then presume we should use the DB exclusively
     // for file storage.
     if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
@@ -280,7 +280,7 @@ pub(crate) fn s3_client() -> Option<S3Client> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use chrono::TimeZone;
 
