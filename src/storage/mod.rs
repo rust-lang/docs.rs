@@ -287,54 +287,6 @@ mod test {
     }
 
     #[test]
-    fn test_uploads() {
-        use std::fs;
-        let dir = tempfile::Builder::new()
-            .prefix("docs.rs-upload-test")
-            .tempdir()
-            .unwrap();
-        let files = ["Cargo.toml", "src/main.rs"];
-        for &file in &files {
-            let path = dir.path().join(file);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::write(path, "data").expect("failed to write to file");
-        }
-        wrapper(|env| {
-            let db = env.db();
-            let backend = Storage {
-                backend: StorageBackend::Database(DatabaseBackend::new(db.pool())),
-            };
-            let (stored_files, _algs) = backend.store_all("rustdoc", dir.path()).unwrap();
-            assert_eq!(stored_files.len(), files.len());
-            for name in &files {
-                let name = Path::new(name);
-                assert!(stored_files.contains_key(name));
-            }
-            assert_eq!(
-                stored_files.get(Path::new("Cargo.toml")).unwrap(),
-                "text/toml"
-            );
-            assert_eq!(
-                stored_files.get(Path::new("src/main.rs")).unwrap(),
-                "text/rust"
-            );
-
-            let file = backend.get("rustdoc/Cargo.toml", std::usize::MAX).unwrap();
-            assert_eq!(file.content, b"data");
-            assert_eq!(file.mime, "text/toml");
-            assert_eq!(file.path, "rustdoc/Cargo.toml");
-
-            let file = backend.get("rustdoc/src/main.rs", std::usize::MAX).unwrap();
-            assert_eq!(file.content, b"data");
-            assert_eq!(file.mime, "text/rust");
-            assert_eq!(file.path, "rustdoc/src/main.rs");
-            Ok(())
-        })
-    }
-
-    #[test]
     fn test_batched_uploads() {
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| {
@@ -396,6 +348,7 @@ mod test {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
+    use std::fs;
 
     fn test_get_object(storage: &Storage) -> Result<(), Error> {
         let blob = Blob {
@@ -488,6 +441,51 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_store_all(storage: &Storage) -> Result<(), Error> {
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-upload-test")
+            .tempdir()?;
+        let files = ["Cargo.toml", "src/main.rs"];
+        for &file in &files {
+            let path = dir.path().join(file);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(path, "data")?;
+        }
+
+        let (stored_files, algs) = storage.store_all("prefix", dir.path())?;
+        assert_eq!(stored_files.len(), files.len());
+        for name in &files {
+            let name = Path::new(name);
+            assert!(stored_files.contains_key(name));
+        }
+        assert_eq!(
+            stored_files.get(Path::new("Cargo.toml")).unwrap(),
+            "text/toml"
+        );
+        assert_eq!(
+            stored_files.get(Path::new("src/main.rs")).unwrap(),
+            "text/rust"
+        );
+
+        let file = storage.get("prefix/Cargo.toml", std::usize::MAX)?;
+        assert_eq!(file.content, b"data");
+        assert_eq!(file.mime, "text/toml");
+        assert_eq!(file.path, "prefix/Cargo.toml");
+
+        let file = storage.get("prefix/src/main.rs", std::usize::MAX)?;
+        assert_eq!(file.content, b"data");
+        assert_eq!(file.mime, "text/rust");
+        assert_eq!(file.path, "prefix/src/main.rs");
+
+        let mut expected_algs = HashSet::new();
+        expected_algs.insert(CompressionAlgorithm::default());
+        assert_eq!(algs, expected_algs);
+
+        Ok(())
+    }
+
     // Remember to add the test name to the macro below when adding a new one.
 
     macro_rules! backend_tests {
@@ -528,6 +526,7 @@ mod backend_tests {
             test_get_object,
             test_get_too_big,
             test_store_blobs,
+            test_store_all,
         }
     }
 }
