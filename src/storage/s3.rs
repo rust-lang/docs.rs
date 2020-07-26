@@ -10,7 +10,10 @@ use log::warn;
 use once_cell::sync::Lazy;
 use rusoto_core::{region::Region, RusotoError};
 use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{GetObjectError, GetObjectRequest, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{
+    DeleteObjectsRequest, GetObjectError, GetObjectRequest, ListObjectsV2Request, ObjectIdentifier,
+    PutObjectRequest, S3Client, S3,
+};
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
 
@@ -108,33 +111,15 @@ impl S3Backend {
             return Ok(());
         }
 
-        // TODO: the following code was copy/pasted from the old TestS3, it will be replaced with
-        // better, more resilient and tested code in a later commit.
+        let mut transaction = Box::new(self.start_storage_transaction()?);
+        transaction.delete_prefix("")?;
+        transaction.complete()?;
 
-        // delete the bucket when the test ends
-        // this has to delete all the objects in the bucket first or min.io will give an error
-        S3_RUNTIME.handle().block_on(async {
-            let list_req = rusoto_s3::ListObjectsRequest {
-                bucket: self.bucket.to_owned(),
-                ..Default::default()
-            };
-            let objects = self.client.list_objects(list_req).await?;
-            assert!(!objects.is_truncated.unwrap_or(false));
-            for path in objects.contents.unwrap_or_else(Vec::new) {
-                let delete_req = rusoto_s3::DeleteObjectRequest {
-                    bucket: self.bucket.clone(),
-                    key: path.key.unwrap(),
-                    ..Default::default()
-                };
-                self.client.delete_object(delete_req).await?;
-            }
-            let delete_req = rusoto_s3::DeleteBucketRequest {
+        S3_RUNTIME.handle().block_on(self.client.delete_bucket(
+            rusoto_s3::DeleteBucketRequest {
                 bucket: self.bucket.clone(),
-            };
-            self.client.delete_bucket(delete_req).await?;
-
-            Ok::<(), Error>(())
-        })?;
+            },
+        ))?;
 
         Ok(())
     }
@@ -190,6 +175,61 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
             }
 
             panic!("failed to upload 3 times, exiting");
+        })
+    }
+
+    fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
+        S3_RUNTIME.handle().block_on(async {
+            let mut continuation_token = None;
+            loop {
+                let list = self
+                    .s3
+                    .client
+                    .list_objects_v2(ListObjectsV2Request {
+                        bucket: self.s3.bucket.clone(),
+                        prefix: Some(prefix.into()),
+                        continuation_token,
+                        ..ListObjectsV2Request::default()
+                    })
+                    .await?;
+
+                let to_delete = list
+                    .contents
+                    .unwrap_or_else(Vec::new)
+                    .into_iter()
+                    .filter_map(|o| o.key)
+                    .map(|key| ObjectIdentifier {
+                        key,
+                        version_id: None,
+                    })
+                    .collect::<Vec<_>>();
+
+                let resp = self
+                    .s3
+                    .client
+                    .delete_objects(DeleteObjectsRequest {
+                        bucket: self.s3.bucket.clone(),
+                        delete: rusoto_s3::Delete {
+                            objects: to_delete,
+                            quiet: None,
+                        },
+                        ..DeleteObjectsRequest::default()
+                    })
+                    .await?;
+
+                if let Some(errs) = resp.errors {
+                    for err in &errs {
+                        log::error!("error deleting file from s3: {:?}", err);
+                    }
+
+                    failure::bail!("uploading to s3 failed");
+                }
+
+                continuation_token = list.continuation_token;
+                if continuation_token.is_none() {
+                    return Ok(());
+                }
+            }
         })
     }
 

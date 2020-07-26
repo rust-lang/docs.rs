@@ -99,6 +99,14 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
         Ok(())
     }
 
+    fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
+        self.transaction.execute(
+            "DELETE FROM files WHERE path LIKE $1;",
+            &[&format!("{}%", prefix.replace('%', "\\%"))],
+        )?;
+        Ok(())
+    }
+
     fn complete(self: Box<Self>) -> Result<(), Error> {
         self.transaction.commit()?;
         Ok(())

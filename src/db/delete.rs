@@ -1,10 +1,6 @@
-use crate::{
-    storage::s3::{s3_client, S3_RUNTIME},
-    Config,
-};
+use crate::Storage;
 use failure::{Error, Fail};
 use postgres::Connection;
-use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -16,35 +12,27 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
-pub fn delete_crate(config: &Config, conn: &Connection, name: &str) -> Result<(), Error> {
+pub fn delete_crate(conn: &Connection, storage: &Storage, name: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
-    if let Some(client) = s3_client() {
-        for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(config, &client, &format!("{}/{}/", prefix, name))?;
-        }
+    for prefix in STORAGE_PATHS_TO_DELETE {
+        storage.delete_prefix(&format!("{}/{}/", prefix, name))?;
     }
 
     Ok(())
 }
 
 pub fn delete_version(
-    config: &Config,
     conn: &Connection,
+    storage: &Storage,
     name: &str,
     version: &str,
 ) -> Result<(), Error> {
     delete_version_from_database(conn, name, version)?;
 
-    if let Some(client) = s3_client() {
-        for prefix in STORAGE_PATHS_TO_DELETE {
-            delete_prefix_from_s3(
-                config,
-                &client,
-                &format!("{}/{}/{}/", prefix, name, version),
-            )?;
-        }
+    for prefix in STORAGE_PATHS_TO_DELETE {
+        storage.delete_prefix(&format!("{}/{}/{}/", prefix, name, version))?;
     }
 
     Ok(())
@@ -120,68 +108,10 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
     transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
     transaction.execute("DELETE FROM crates WHERE id = $1;", &[&crate_id])?;
 
-    for prefix in STORAGE_PATHS_TO_DELETE {
-        transaction.execute(
-            "DELETE FROM files WHERE path LIKE $1;",
-            &[&format!("{}/{}/%", prefix, name)],
-        )?;
-    }
-
     // Transactions automatically rollback when not committing, so if any of the previous queries
     // fail the whole transaction will be aborted.
     transaction.commit()?;
     Ok(())
-}
-
-fn delete_prefix_from_s3(config: &Config, s3: &S3Client, name: &str) -> Result<(), Error> {
-    S3_RUNTIME.handle().block_on(async {
-        let mut continuation_token = None;
-        loop {
-            let list = s3
-                .list_objects_v2(ListObjectsV2Request {
-                    bucket: config.s3_bucket.clone(),
-                    prefix: Some(name.into()),
-                    continuation_token,
-                    ..ListObjectsV2Request::default()
-                })
-                .await?;
-
-            let to_delete = list
-                .contents
-                .unwrap_or_else(Vec::new)
-                .into_iter()
-                .filter_map(|o| o.key)
-                .map(|key| ObjectIdentifier {
-                    key,
-                    version_id: None,
-                })
-                .collect::<Vec<_>>();
-
-            let resp = s3
-                .delete_objects(DeleteObjectsRequest {
-                    bucket: config.s3_bucket.clone(),
-                    delete: rusoto_s3::Delete {
-                        objects: to_delete,
-                        quiet: None,
-                    },
-                    ..DeleteObjectsRequest::default()
-                })
-                .await?;
-
-            if let Some(errs) = resp.errors {
-                for err in &errs {
-                    log::error!("error deleting file from s3: {:?}", err);
-                }
-
-                failure::bail!("uploading to s3 failed");
-            }
-
-            continuation_token = list.continuation_token;
-            if continuation_token.is_none() {
-                return Ok(());
-            }
-        }
-    })
 }
 
 #[cfg(test)]
@@ -289,7 +219,7 @@ mod tests {
                 vec!["malicious actor".to_string(), "Peter Rabbit".to_string()]
             );
 
-            delete_version(&*env.config(), &db.conn(), "a", "1.0.0")?;
+            delete_version(&db.conn(), &*env.storage(), "a", "1.0.0")?;
             assert!(!release_exists(&db.conn(), v1)?);
             assert!(release_exists(&db.conn(), v2)?);
             assert_eq!(

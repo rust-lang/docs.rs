@@ -483,11 +483,11 @@ impl DatabaseSubcommand {
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&*ctx.config()?, &*ctx.conn()?, &name, &version)
+            } => db::delete_version(&*ctx.conn()?, &*ctx.storage()?, &name, &version)
                 .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&*ctx.config()?, &*ctx.conn()?, &name)
+            } => db::delete_crate(&*ctx.conn()?, &*ctx.storage()?, &name)
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
         }
