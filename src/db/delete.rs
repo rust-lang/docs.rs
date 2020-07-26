@@ -1,7 +1,7 @@
-use crate::storage::s3::{s3_client, S3Backend, S3_BUCKET_NAME, S3_RUNTIME};
+use crate::storage::s3::{s3_client, S3_BUCKET_NAME, S3_RUNTIME};
 use failure::{Error, Fail};
 use postgres::Connection;
-use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3};
+use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -17,7 +17,7 @@ pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
-    if let Some(backend) = s3_client().map(|client| S3Backend::new(client, S3_BUCKET_NAME)) {
+    if let Some(backend) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
             delete_prefix_from_s3(&backend, &format!("{}/{}/", prefix, name))?;
         }
@@ -29,7 +29,7 @@ pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
 pub fn delete_version(conn: &Connection, name: &str, version: &str) -> Result<(), Error> {
     delete_version_from_database(conn, name, version)?;
 
-    if let Some(backend) = s3_client().map(|client| S3Backend::new(client, S3_BUCKET_NAME)) {
+    if let Some(backend) = s3_client() {
         for prefix in STORAGE_PATHS_TO_DELETE {
             delete_prefix_from_s3(&backend, &format!("{}/{}/{}/", prefix, name, version))?;
         }
@@ -121,12 +121,11 @@ fn delete_crate_from_database(conn: &Connection, name: &str, crate_id: i32) -> R
     Ok(())
 }
 
-fn delete_prefix_from_s3(s3: &S3Backend, name: &str) -> Result<(), Error> {
+fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
     S3_RUNTIME.handle().block_on(async {
         let mut continuation_token = None;
         loop {
             let list = s3
-                .client
                 .list_objects_v2(ListObjectsV2Request {
                     bucket: S3_BUCKET_NAME.into(),
                     prefix: Some(name.into()),
@@ -147,7 +146,6 @@ fn delete_prefix_from_s3(s3: &S3Backend, name: &str) -> Result<(), Error> {
                 .collect::<Vec<_>>();
 
             let resp = s3
-                .client
                 .delete_objects(DeleteObjectsRequest {
                     bucket: S3_BUCKET_NAME.into(),
                     delete: rusoto_s3::Delete {
