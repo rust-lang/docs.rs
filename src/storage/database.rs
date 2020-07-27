@@ -13,6 +13,12 @@ impl DatabaseBackend {
         Self { pool }
     }
 
+    pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
+        let query = "SELECT COUNT(*) > 0 FROM files WHERE path = $1";
+        let conn = self.pool.get()?;
+        Ok(conn.query(query, &[&path])?.get(0).get(0))
+    }
+
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         use std::convert::TryInto;
 

@@ -54,6 +54,20 @@ impl S3Backend {
         })
     }
 
+    pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
+        self.runtime.handle().block_on(async {
+            let resp = self
+                .client
+                .list_objects_v2(ListObjectsV2Request {
+                    bucket: self.bucket.clone(),
+                    prefix: Some(path.into()),
+                    ..Default::default()
+                })
+                .await?;
+            Ok(resp.key_count.unwrap() > 0)
+        })
+    }
+
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         self.runtime.handle().block_on(async {
             let res = self
