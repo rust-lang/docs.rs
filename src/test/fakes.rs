@@ -1,6 +1,6 @@
 use super::TestDatabase;
 use crate::docbuilder::BuildResult;
-use crate::index::api::RegistryCrateData;
+use crate::index::api::{CrateData, ReleaseData};
 use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
@@ -19,7 +19,8 @@ pub(crate) struct FakeRelease<'a> {
     rustdoc_files: Vec<(&'a str, &'a [u8])>,
     doc_targets: Vec<String>,
     default_target: Option<&'a str>,
-    registry_crate_data: RegistryCrateData,
+    registry_crate_data: CrateData,
+    registry_release_data: ReleaseData,
     has_docs: bool,
     has_examples: bool,
     /// This stores the content, while `package.readme` stores the filename
@@ -60,11 +61,11 @@ impl<'a> FakeRelease<'a> {
             rustdoc_files: Vec::new(),
             doc_targets: Vec::new(),
             default_target: None,
-            registry_crate_data: RegistryCrateData {
+            registry_crate_data: CrateData { owners: Vec::new() },
+            registry_release_data: ReleaseData {
                 release_time: Utc::now(),
                 yanked: false,
                 downloads: 0,
-                owners: Vec::new(),
             },
             has_docs: true,
             has_examples: false,
@@ -73,7 +74,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn downloads(mut self, downloads: i32) -> Self {
-        self.registry_crate_data.downloads = downloads;
+        self.registry_release_data.downloads = downloads;
         self
     }
 
@@ -83,7 +84,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn release_time(mut self, new: DateTime<Utc>) -> Self {
-        self.registry_crate_data.release_time = new;
+        self.registry_release_data.release_time = new;
         self
     }
 
@@ -116,7 +117,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn yanked(mut self, new: bool) -> Self {
-        self.registry_crate_data.yanked = new;
+        self.registry_release_data.yanked = new;
         self
     }
 
@@ -249,10 +250,15 @@ impl<'a> FakeRelease<'a> {
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             source_meta,
             self.doc_targets,
-            &self.registry_crate_data,
+            &self.registry_release_data,
             self.has_docs,
             self.has_examples,
             algs,
+        )?;
+        crate::db::update_crate_data_in_database(
+            &db.conn(),
+            &package.name,
+            &self.registry_crate_data,
         )?;
         crate::db::add_build_into_database(&db.conn(), release_id, &self.build_result)?;
 

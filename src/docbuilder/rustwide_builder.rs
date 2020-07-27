@@ -2,7 +2,9 @@ use super::DocBuilder;
 use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
-use crate::db::{add_build_into_database, add_package_into_database, Pool};
+use crate::db::{
+    add_build_into_database, add_package_into_database, update_crate_data_in_database, Pool,
+};
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::storage::CompressionAlgorithms;
@@ -405,12 +407,20 @@ impl RustwideBuilder {
                     &res.target,
                     files_list,
                     successful_targets,
-                    &doc_builder.index.api().get_crate_data(name, version),
+                    &doc_builder.index.api().get_release_data(name, version),
                     has_docs,
                     has_examples,
                     algs,
                 )?;
+
                 add_build_into_database(&conn, release_id, &res.result)?;
+
+                // Some crates.io crate data is mutable, so we proactively update it during a release
+                update_crate_data_in_database(
+                    &conn,
+                    name,
+                    &doc_builder.index.api().get_crate_data(name),
+                )?;
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
