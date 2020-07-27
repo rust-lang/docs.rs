@@ -89,7 +89,7 @@ pub enum PoolError {
     #[fail(display = "the provided database URL was not valid")]
     InvalidDatabaseUrl(#[fail(cause)] postgres::Error),
 
-    #[fail(display = "failed to create the connection pool")]
+    #[fail(display = "failed to create the database connection pool")]
     PoolCreationFailed(#[fail(cause)] r2d2::Error),
 
     #[fail(display = "failed to get a database connection")]
