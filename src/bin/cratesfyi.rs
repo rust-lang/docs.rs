@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cratesfyi::db::{self, add_path_into_database, Pool};
+use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
     BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server, Storage,
@@ -417,6 +418,12 @@ enum DatabaseSubcommand {
     /// Updates github stats for crates.
     UpdateGithubFields,
 
+    /// Updates info for a crate from the registry's API
+    UpdateCrateRegistryFields {
+        #[structopt(name = "CRATE")]
+        name: String,
+    },
+
     AddDirectory {
         /// Path of file or directory
         #[structopt(name = "DIRECTORY")]
@@ -452,6 +459,16 @@ impl DatabaseSubcommand {
             Self::UpdateGithubFields => {
                 cratesfyi::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
                     .update_all_crates()?;
+            }
+
+            Self::UpdateCrateRegistryFields { name } => {
+                let index = Index::new(&ctx.config()?.registry_index_path)?;
+
+                db::update_crate_data_in_database(
+                    &*ctx.conn()?,
+                    &name,
+                    &index.api().get_crate_data(&name),
+                )?;
             }
 
             Self::AddDirectory { directory, prefix } => {

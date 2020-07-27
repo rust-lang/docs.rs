@@ -15,13 +15,13 @@ const APP_USER_AGENT: &str = concat!(
 );
 
 #[derive(Debug)]
-pub(crate) struct Api {
+pub struct Api {
     api_base: Option<Url>,
     client: reqwest::blocking::Client,
 }
 
 #[derive(Debug)]
-pub(crate) struct CrateData {
+pub struct CrateData {
     pub(crate) owners: Vec<CrateOwner>,
 }
 
@@ -33,7 +33,7 @@ pub(crate) struct ReleaseData {
 }
 
 #[derive(Debug)]
-pub(crate) struct CrateOwner {
+pub struct CrateOwner {
     pub(crate) avatar: String,
     pub(crate) email: String,
     pub(crate) login: String,
@@ -62,7 +62,7 @@ impl Api {
             .ok_or_else(|| err_msg("index is missing an api base url"))
     }
 
-    pub(crate) fn get_crate_data(&self, name: &str) -> CrateData {
+    pub fn get_crate_data(&self, name: &str) -> CrateData {
         let owners = self.get_owners(name).unwrap_or_else(|err| {
             warn!("Failed to get owners for {}: {}", name, err);
             Vec::new()

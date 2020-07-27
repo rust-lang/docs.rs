@@ -15,7 +15,7 @@ mod config;
 pub mod db;
 mod docbuilder;
 mod error;
-mod index;
+pub mod index;
 pub mod storage;
 #[cfg(test)]
 mod test;
