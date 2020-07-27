@@ -305,8 +305,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         path.push_str("/index.html");
         req_path.push("index.html");
 
-        File::from_path(&storage, &path, &config)
-            .map_err(|_| IronError::new(Nope::ResourceNotFound, status::NotFound))?
+        return if ctry!(req, storage.exists(&path)) {
+            redirect(&name, &version, &req_path[3..])
+        } else {
+            Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
+        };
     };
 
     // Serve non-html files directly
@@ -1387,7 +1390,7 @@ mod test {
 
     #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/856
-    fn test_no_trailing_slash() {
+    fn test_no_trailing_target_slash() {
         wrapper(|env| {
             env.fake_release().name("dummy").version("0.1.0").create()?;
             let web = env.frontend();
@@ -1491,6 +1494,22 @@ mod test {
             assert!(status("0.3.0")?);
             assert!(!status("0.2.0")?);
             Ok(())
+        })
+    }
+
+    #[test]
+    fn test_no_trailing_rustdoc_slash() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("tokio")
+                .version("0.2.21")
+                .rustdoc_file("tokio/time/index.html", b"content")
+                .create()?;
+            assert_redirect(
+                "/tokio/0.2.21/tokio/time",
+                "/tokio/0.2.21/tokio/time/index.html",
+                env.frontend(),
+            )
         })
     }
 }
