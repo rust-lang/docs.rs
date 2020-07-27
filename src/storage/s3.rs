@@ -28,18 +28,21 @@ impl S3Backend {
     pub(super) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
         let runtime = Runtime::new()?;
 
-        // Create the temporary S3 bucket during tests.
-        if config.s3_bucket_is_temporary {
-            if cfg!(not(test)) {
-                panic!("safeguard to prevent creating temporary buckets outside of tests");
-            }
+        #[cfg(test)]
+        {
+            // Create the temporary S3 bucket during tests.
+            if config.s3_bucket_is_temporary {
+                if cfg!(not(test)) {
+                    panic!("safeguard to prevent creating temporary buckets outside of tests");
+                }
 
-            runtime
-                .handle()
-                .block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
-                    bucket: config.s3_bucket.clone(),
-                    ..Default::default()
-                }))?;
+                runtime.handle().block_on(client.create_bucket(
+                    rusoto_s3::CreateBucketRequest {
+                        bucket: config.s3_bucket.clone(),
+                        ..Default::default()
+                    },
+                ))?;
+            }
         }
 
         Ok(Self {

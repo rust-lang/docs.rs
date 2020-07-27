@@ -14,6 +14,7 @@ pub struct Config {
 
     // S3 params
     pub(crate) s3_bucket: String,
+    #[cfg(test)]
     pub(crate) s3_bucket_is_temporary: bool,
 
     // Github authentication
@@ -38,6 +39,7 @@ impl Config {
             // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
             // Accidentally turning this on outside of the test suite might cause data loss in the
             // production environment.
+            #[cfg(test)]
             s3_bucket_is_temporary: false,
 
             github_username: maybe_env("CRATESFYI_GITHUB_USERNAME")?,
