@@ -166,6 +166,9 @@ impl RustwideBuilder {
         for target in &targets_to_install {
             self.toolchain.add_target(&self.workspace, target)?;
         }
+        // NOTE: rustup will automatically refuse to update the toolchain
+        // if `rustfmt` is not available in the newer version
+        self.toolchain.add_component(&self.workspace, "rustfmt")?;
 
         self.rustc_version = self.detect_rustc_version()?;
         if old_version.as_deref() != Some(&self.rustc_version) {
