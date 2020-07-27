@@ -1,13 +1,12 @@
-use crate::error::Result;
-use crate::{db::Pool, Config};
+use crate::{db::Pool, error::Result, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::{debug, warn};
-use postgres::Client;
+use postgres::Client as PostgresClient;
 use regex::Regex;
 use reqwest::{
-    blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
+    Client,
 };
 use serde::Deserialize;
 
@@ -28,7 +27,7 @@ struct GitHubFields {
 }
 
 pub struct GithubUpdater {
-    client: HttpClient,
+    client: Client,
     pool: Pool,
 }
 
@@ -50,24 +49,25 @@ impl GithubUpdater {
             warn!("No GitHub authorization specified, will be working with very low rate limits");
         }
 
-        let client = HttpClient::builder().default_headers(headers).build()?;
+        let client = Client::builder().default_headers(headers).build()?;
 
         Ok(GithubUpdater { client, pool })
     }
 
     /// Updates github fields in crates table
-    pub fn update_all_crates(&self) -> Result<()> {
+    pub async fn update_all_crates(&self) -> Result<()> {
         debug!("Starting update of all crates");
 
-        if self.is_rate_limited()? {
+        if self.is_rate_limited().await? {
             warn!("Skipping update because of rate limit");
+
             return Ok(());
         }
 
         let mut conn = self.pool.get()?;
         // TODO: This query assumes repository field in Cargo.toml is
         //       always the same across all versions of a crate
-        let rows = conn.query(
+        let rows = self.pool.get()?.query(
             "SELECT DISTINCT ON (crates.name)
                     crates.name,
                     crates.id,
@@ -87,11 +87,16 @@ impl GithubUpdater {
             let repository_url: String = row.get(2);
 
             debug!("Updating {}", crate_name);
-            if let Err(err) = self.update_crate(&mut conn, crate_id, &repository_url) {
-                if self.is_rate_limited()? {
+
+            if let Err(err) = self
+                .update_crate(&mut conn, crate_id, &repository_url)
+                .await
+            {
+                if self.is_rate_limited().await? {
                     warn!("Skipping remaining updates because of rate limit");
                     return Ok(());
                 }
+
                 warn!("Failed to update {}: {}", crate_name, err);
             }
         }
@@ -100,7 +105,7 @@ impl GithubUpdater {
         Ok(())
     }
 
-    fn is_rate_limited(&self) -> Result<bool> {
+    async fn is_rate_limited(&self) -> Result<bool> {
         #[derive(Deserialize)]
         struct Response {
             resources: Resources,
@@ -116,18 +121,30 @@ impl GithubUpdater {
             remaining: u64,
         }
 
-        let url = "https://api.github.com/rate_limit";
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+        const RATE_LIMIT_URL: &str = "https://api.github.com/rate_limit";
+        let response: Response = self
+            .client
+            .get(RATE_LIMIT_URL)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
 
         Ok(response.resources.core.remaining == 0)
     }
 
-    fn update_crate(&self, conn: &mut Client, crate_id: i32, repository_url: &str) -> Result<()> {
+    async fn update_crate(
+        &self,
+        conn: &mut PostgresClient,
+        crate_id: i32,
+        repository_url: &str,
+    ) -> Result<()> {
         let path =
             get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
-        let fields = self.get_github_fields(&path)?;
+        let fields = self.get_github_fields(&path).await?;
 
-        conn.execute(
+        self.pool.get()?.execute(
             "UPDATE crates
              SET github_description = $1,
                  github_stars = $2, github_forks = $3,
@@ -147,7 +164,7 @@ impl GithubUpdater {
         Ok(())
     }
 
-    fn get_github_fields(&self, path: &str) -> Result<GitHubFields> {
+    async fn get_github_fields(&self, path: &str) -> Result<GitHubFields> {
         #[derive(Deserialize)]
         struct Response {
             #[serde(default)]
@@ -163,7 +180,14 @@ impl GithubUpdater {
         }
 
         let url = format!("https://api.github.com/repos/{}", path);
-        let response: Response = self.client.get(&url).send()?.error_for_status()?.json()?;
+        let response: Response = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
 
         Ok(GitHubFields {
             description: response.description.unwrap_or_default(),

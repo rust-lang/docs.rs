@@ -43,7 +43,7 @@ strum = { version = "0.18.0", features = ["derive"] }
 lol_html = "0.2"
 
 # Async
-tokio = { version = "0.2.22", features = ["rt-threaded"] }
+tokio = { version = "0.2.22", features = ["rt-threaded", "io-util", "macros"] }
 futures-util = "0.3.5"
 rusoto_s3 = "0.45.0"
 rusoto_core = "0.45.0"

@@ -5,11 +5,11 @@ use failure::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use tokio::time;
 
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
-pub fn queue_builder(
+pub async fn queue_builder(
     mut doc_builder: DocBuilder,
     db: Pool,
     build_queue: Arc<BuildQueue>,
@@ -29,18 +29,18 @@ pub fn queue_builder(
     }
 
     let mut builder = RustwideBuilder::init(db, storage)?;
-
     let mut status = BuilderState::Fresh;
 
     loop {
         if !status.is_in_progress() {
-            thread::sleep(Duration::from_secs(60));
+            time::delay_for(Duration::from_secs(60)).await;
         }
 
         // check lock file
         if doc_builder.is_locked() {
             warn!("Lock file exits, skipping building new crates");
             status = BuilderState::Locked;
+
             continue;
         }
 
@@ -49,16 +49,16 @@ pub fn queue_builder(
             debug!("10 builds in a row; flushing caches");
             status = BuilderState::QueueInProgress(0);
 
-            match pubsubhubbub::ping_hubs() {
+            match pubsubhubbub::ping_hubs().await {
                 Err(e) => error!("Failed to ping hub: {}", e),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
             }
 
-            if let Err(e) = doc_builder.load_cache() {
+            if let Err(e) = doc_builder.load_cache().await {
                 error!("Failed to load cache: {}", e);
             }
 
-            if let Err(e) = doc_builder.save_cache() {
+            if let Err(e) = doc_builder.save_cache().await {
                 error!("Failed to save cache: {}", e);
             }
         }
@@ -74,17 +74,19 @@ pub fn queue_builder(
             Ok(0) => {
                 if status.count() > 0 {
                     // ping the hubs before continuing
-                    match pubsubhubbub::ping_hubs() {
+                    match pubsubhubbub::ping_hubs().await {
                         Err(e) => error!("Failed to ping hub: {}", e),
                         Ok(n) => debug!("Succesfully pinged {} hubs", n),
                     }
 
-                    if let Err(e) = doc_builder.save_cache() {
+                    if let Err(e) = doc_builder.save_cache().await {
                         error!("Failed to save cache: {}", e);
                     }
                 }
+
                 debug!("Queue is empty, going back to sleep");
                 status = BuilderState::EmptyQueue;
+
                 continue;
             }
 
@@ -99,8 +101,9 @@ pub fn queue_builder(
 
         // if we're starting a new batch, reload our caches and sources
         if !status.is_in_progress() {
-            if let Err(e) = doc_builder.load_cache() {
+            if let Err(e) = doc_builder.load_cache().await {
                 error!("Failed to load cache: {}", e);
+
                 continue;
             }
         }

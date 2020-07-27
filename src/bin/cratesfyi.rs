@@ -14,19 +14,22 @@ use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 use strum::VariantNames;
 
-pub fn main() {
+#[tokio::main]
+pub async fn main() {
     let _ = dotenv::dotenv();
     logger_init();
 
-    if let Err(err) = CommandLine::from_args().handle_args() {
+    if let Err(err) = CommandLine::from_args().handle_args().await {
         let mut msg = format!("Error: {}", err);
         for cause in err.iter_causes() {
             write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
         }
+
         eprintln!("{}", msg);
         if !err.backtrace().is_empty() {
             eprintln!("\nStack backtrace:\n{}", err.backtrace());
         }
+
         std::process::exit(1);
     }
 }
@@ -107,11 +110,11 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    pub fn handle_args(self) -> Result<(), Error> {
+    pub async fn handle_args(self) -> Result<(), Error> {
         let ctx = Context::new();
 
         match self {
-            Self::Build(build) => build.handle_args(ctx)?,
+            Self::Build(build) => build.handle_args(ctx).await?,
             Self::StartWebServer {
                 socket_addr,
                 reload_templates,
@@ -139,9 +142,10 @@ impl CommandLine {
                     ctx.build_queue()?,
                     ctx.storage()?,
                     registry_watcher == Toggle::Enabled,
-                )?;
+                )
+                .await?;
             }
-            Self::Database { subcommand } => subcommand.handle_args(ctx)?,
+            Self::Database { subcommand } => subcommand.handle_args(ctx).await?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
         }
 
@@ -259,7 +263,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub async fn handle_args(self, ctx: Context) -> Result<(), Error> {
         let docbuilder = {
             let config = ctx.config()?;
             let mut doc_options =
@@ -276,7 +280,7 @@ impl Build {
             DocBuilder::new(doc_options, ctx.pool()?, ctx.build_queue()?)
         };
 
-        self.subcommand.handle_args(ctx, docbuilder)
+        self.subcommand.handle_args(ctx, docbuilder).await
     }
 }
 
@@ -324,17 +328,23 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: Context, mut docbuilder: DocBuilder) -> Result<(), Error> {
+    pub async fn handle_args(self, ctx: Context, mut docbuilder: DocBuilder) -> Result<(), Error> {
         match self {
             Self::World => {
-                docbuilder.load_cache().context("Failed to load cache")?;
+                docbuilder
+                    .load_cache()
+                    .await
+                    .context("Failed to load cache")?;
 
                 let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
                 builder
                     .build_world(&mut docbuilder)
                     .context("Failed to build world")?;
 
-                docbuilder.save_cache().context("Failed to save cache")?;
+                docbuilder
+                    .save_cache()
+                    .await
+                    .context("Failed to save cache")?;
             }
 
             Self::Crate {
@@ -342,7 +352,10 @@ impl BuildSubcommand {
                 crate_version,
                 local,
             } => {
-                docbuilder.load_cache().context("Failed to load cache")?;
+                docbuilder
+                    .load_cache()
+                    .await
+                    .context("Failed to load cache")?;
                 let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)
                     .context("failed to initialize rustwide")?;
 
@@ -362,7 +375,10 @@ impl BuildSubcommand {
                         .context("Building documentation failed")?;
                 }
 
-                docbuilder.save_cache().context("Failed to save cache")?;
+                docbuilder
+                    .save_cache()
+                    .await
+                    .context("Failed to save cache")?;
             }
 
             Self::UpdateToolchain { only_first_time } => {
@@ -446,7 +462,7 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub async fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
                 db::migrate(version, &mut *ctx.conn()?)
@@ -455,7 +471,8 @@ impl DatabaseSubcommand {
 
             Self::UpdateGithubFields => {
                 cratesfyi::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
-                    .update_all_crates()?;
+                    .update_all_crates()
+                    .await?;
             }
 
             Self::UpdateCrateRegistryFields { name } => {

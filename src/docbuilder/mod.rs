@@ -15,13 +15,16 @@ use crate::error::Result;
 use crate::index::Index;
 use crate::BuildQueue;
 use crate::DocBuilderOptions;
+use futures_util::stream::StreamExt;
 use log::debug;
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::{
+    fs::{File, OpenOptions},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+};
 
 /// chroot based documentation builder
 pub struct DocBuilder {
@@ -47,15 +50,17 @@ impl DocBuilder {
     }
 
     /// Loads build cache
-    pub fn load_cache(&mut self) -> Result<()> {
+    pub async fn load_cache(&mut self) -> Result<()> {
         debug!("Loading cache");
 
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let reader = fs::File::open(path).map(BufReader::new);
+        let reader = File::open(path).await.map(BufReader::new);
 
         if let Ok(reader) = reader {
-            for line in reader.lines() {
-                self.cache.insert(line?);
+            let mut lines = reader.lines();
+
+            while let Some(line) = lines.next().await.transpose()? {
+                self.cache.insert(line);
             }
         }
 
@@ -83,14 +88,18 @@ impl DocBuilder {
     }
 
     /// Saves build cache
-    pub fn save_cache(&self) -> Result<()> {
+    pub async fn save_cache(&self) -> Result<()> {
         debug!("Saving cache");
 
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let mut file = fs::OpenOptions::new().write(true).create(true).open(path)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path)
+            .await?;
 
         for krate in &self.cache {
-            writeln!(file, "{}", krate)?;
+            file.write_all(krate.as_bytes()).await?;
         }
 
         Ok(())
