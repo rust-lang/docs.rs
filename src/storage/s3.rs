@@ -10,8 +10,8 @@ use log::warn;
 use rusoto_core::{region::Region, RusotoError};
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{
-    DeleteObjectsRequest, GetObjectError, GetObjectRequest, ListObjectsV2Request, ObjectIdentifier,
-    PutObjectRequest, S3Client, S3,
+    DeleteObjectsRequest, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectRequest,
+    ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
 };
 use std::{convert::TryInto, io::Write};
 use tokio::runtime::Runtime;
@@ -56,15 +56,18 @@ impl S3Backend {
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
         self.runtime.handle().block_on(async {
-            let resp = self
-                .client
-                .list_objects_v2(ListObjectsV2Request {
-                    bucket: self.bucket.clone(),
-                    prefix: Some(path.into()),
-                    ..Default::default()
-                })
-                .await?;
-            Ok(resp.key_count.unwrap() > 0)
+            let req = HeadObjectRequest {
+                bucket: self.bucket.clone(),
+                key: path.into(),
+                ..Default::default()
+            };
+            let resp = self.client.head_object(req).await;
+            match resp {
+                Ok(_) => Ok(true),
+                Err(RusotoError::Service(HeadObjectError::NoSuchKey(_))) => Ok(false),
+                Err(RusotoError::Unknown(resp)) if resp.status == 404 => Ok(false),
+                Err(other) => Err(other.into()),
+            }
         })
     }
 
