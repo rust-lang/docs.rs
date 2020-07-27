@@ -102,6 +102,13 @@ impl Storage {
         })
     }
 
+    pub(crate) fn exists(&self, path: &str) -> Result<bool, Error> {
+        match &self.backend {
+            StorageBackend::Database(db) => db.exists(path),
+            StorageBackend::S3(s3) => s3.exists(path),
+        }
+    }
+
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         let mut blob = match &self.backend {
             StorageBackend::Database(db) => db.get(path, max_size),
@@ -306,6 +313,21 @@ mod test {
 mod backend_tests {
     use super::*;
     use std::fs;
+
+    fn test_exists(storage: &Storage) -> Result<(), Error> {
+        assert!(!storage.exists("path/to/file.txt").unwrap());
+        let blob = Blob {
+            path: "path/to/file.txt".into(),
+            mime: "text/plain".into(),
+            date_updated: Utc::now(),
+            content: "Hello world!".into(),
+            compression: None,
+        };
+        storage.store_blobs(vec![blob])?;
+        assert!(storage.exists("path/to/file.txt")?);
+
+        Ok(())
+    }
 
     fn test_get_object(storage: &Storage) -> Result<(), Error> {
         let blob = Blob {
@@ -570,6 +592,7 @@ mod backend_tests {
 
         tests {
             test_batched_uploads,
+            test_exists,
             test_get_object,
             test_get_too_big,
             test_store_blobs,
