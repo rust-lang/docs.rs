@@ -14,18 +14,25 @@ const APP_USER_AGENT: &str = concat!(
     include_str!(concat!(env!("OUT_DIR"), "/git_version"))
 );
 
+#[derive(Debug)]
 pub(crate) struct Api {
     api_base: Option<Url>,
     client: reqwest::blocking::Client,
 }
 
-pub(crate) struct RegistryCrateData {
-    pub(crate) release_time: DateTime<Utc>,
-    pub(crate) yanked: bool,
-    pub(crate) downloads: i32,
+#[derive(Debug)]
+pub(crate) struct CrateData {
     pub(crate) owners: Vec<CrateOwner>,
 }
 
+#[derive(Debug)]
+pub(crate) struct ReleaseData {
+    pub(crate) release_time: DateTime<Utc>,
+    pub(crate) yanked: bool,
+    pub(crate) downloads: i32,
+}
+
+#[derive(Debug)]
 pub(crate) struct CrateOwner {
     pub(crate) avatar: String,
     pub(crate) email: String,
@@ -55,7 +62,16 @@ impl Api {
             .ok_or_else(|| err_msg("index is missing an api base url"))
     }
 
-    pub(crate) fn get_crate_data(&self, name: &str, version: &str) -> RegistryCrateData {
+    pub(crate) fn get_crate_data(&self, name: &str) -> CrateData {
+        let owners = self.get_owners(name).unwrap_or_else(|err| {
+            warn!("Failed to get owners for {}: {}", name, err);
+            Vec::new()
+        });
+
+        CrateData { owners }
+    }
+
+    pub(crate) fn get_release_data(&self, name: &str, version: &str) -> ReleaseData {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
             .unwrap_or_else(|err| {
@@ -63,16 +79,10 @@ impl Api {
                 (Utc::now(), false, 0)
             });
 
-        let owners = self.get_owners(name).unwrap_or_else(|err| {
-            warn!("Failed to get owners for {}-{}: {}", name, version, err);
-            Vec::new()
-        });
-
-        RegistryCrateData {
+        ReleaseData {
             release_time,
             yanked,
             downloads,
-            owners,
         }
     }
 

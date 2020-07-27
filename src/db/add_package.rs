@@ -7,11 +7,11 @@ use std::{
 use crate::{
     docbuilder::BuildResult,
     error::Result,
-    index::api::{CrateOwner, RegistryCrateData},
+    index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
 };
-use log::debug;
+use log::{debug, info};
 use postgres::Connection;
 use regex::Regex;
 use serde_json::Value;
@@ -32,7 +32,7 @@ pub(crate) fn add_package_into_database(
     default_target: &str,
     source_files: Option<Value>,
     doc_targets: Vec<String>,
-    registry_data: &RegistryCrateData,
+    registry_data: &ReleaseData,
     has_docs: bool,
     has_examples: bool,
     compression_algorithms: std::collections::HashSet<CompressionAlgorithm>,
@@ -117,7 +117,6 @@ pub(crate) fn add_package_into_database(
 
     add_keywords_into_database(&conn, &metadata_pkg, release_id)?;
     add_authors_into_database(&conn, &metadata_pkg, release_id)?;
-    add_owners_into_database(&conn, &registry_data.owners, crate_id)?;
     add_compression_into_database(&conn, compression_algorithms.into_iter(), release_id)?;
 
     // Update the crates table with the new release
@@ -328,31 +327,103 @@ fn add_authors_into_database(
     Ok(())
 }
 
+pub(crate) fn update_crate_data_in_database(
+    conn: &Connection,
+    name: &str,
+    registry_data: &CrateData,
+) -> Result<()> {
+    info!("Updating crate data for {}", name);
+    let crate_id = conn
+        .query("SELECT id FROM crates WHERE crates.name = $1", &[&name])?
+        .get(0)
+        .get(0);
+
+    update_owners_in_database(conn, &registry_data.owners, crate_id)?;
+
+    Ok(())
+}
+
 /// Adds owners into database
-fn add_owners_into_database(conn: &Connection, owners: &[CrateOwner], crate_id: i32) -> Result<()> {
+fn update_owners_in_database(
+    conn: &Connection,
+    owners: &[CrateOwner],
+    crate_id: i32,
+) -> Result<()> {
+    let existing_owners: Vec<String> = conn
+        .query(
+            "
+        SELECT login
+        FROM owners
+        INNER JOIN owner_rels
+            ON owner_rels.oid = owners.id
+        WHERE owner_rels.cid = $1
+    ",
+            &[&crate_id],
+        )?
+        .into_iter()
+        .map(|row| row.get(0))
+        .collect();
+
     for owner in owners {
+        debug!("Updating owner data for {}: {:?}", owner.login, owner);
+
+        // Update any existing owner data since it is mutable and could have changed since last
+        // time we pulled it
         let owner_id: i32 = {
-            let rows = conn.query("SELECT id FROM owners WHERE login = $1", &[&owner.login])?;
-            if !rows.is_empty() {
-                rows.get(0).get(0)
-            } else {
-                conn.query(
-                    "INSERT INTO owners (login, avatar, name, email)
-                                 VALUES ($1, $2, $3, $4)
-                                 RETURNING id",
-                    &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-                )?
-                .get(0)
-                .get(0)
-            }
+            conn.query(
+                "
+                INSERT INTO owners (login, avatar, name, email)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (login) DO UPDATE
+                    SET
+                        avatar = $2,
+                        name = $3,
+                        email = $4
+                RETURNING id
+            ",
+                &[&owner.login, &owner.avatar, &owner.name, &owner.email],
+            )?
+            .get(0)
+            .get(0)
         };
 
         // add relationship
-        let _ = conn.query(
+        let updated = conn.query(
             "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
             &[&crate_id, &owner_id],
         );
+
+        match updated {
+            Ok(_) => debug!("Added new owner relationship"),
+            Err(e)
+                if e.as_db().and_then(|e| e.constraint.as_deref())
+                    == Some("owner_rels_cid_oid_key") =>
+            {
+                debug!("Existing owner relationship");
+            }
+            Err(e) => return Err(e.into()),
+        }
     }
+
+    let to_remove = existing_owners
+        .iter()
+        .filter(|login| !owners.iter().any(|owner| &&owner.login == login));
+
+    for login in to_remove {
+        debug!("Removing owner relationship {}", login);
+        // remove relationship
+        conn.query(
+            "
+            DELETE FROM owner_rels
+            USING owners
+            WHERE owner_rels.cid = $1
+                AND owner_rels.oid = owners.id
+                AND owners.login = $2
+        ",
+            &[&crate_id, &login],
+        )?;
+    }
+
     Ok(())
 }
 
