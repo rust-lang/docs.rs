@@ -227,7 +227,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                         log::error!("error deleting file from s3: {:?}", err);
                     }
 
-                    failure::bail!("uploading to s3 failed");
+                    failure::bail!("deleting from s3 failed");
                 }
 
                 continuation_token = list.continuation_token;
