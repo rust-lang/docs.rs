@@ -56,25 +56,23 @@ impl S3Backend {
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
         self.runtime.handle().block_on(async {
-            let response = self
+            let res = self
                 .client
                 .get_object(GetObjectRequest {
                     bucket: self.bucket.to_string(),
                     key: path.into(),
                     ..Default::default()
                 })
-                .await;
-
-            let res = match response {
-                Ok(res) => res,
-                Err(RusotoError::Service(GetObjectError::NoSuchKey(_))) => {
-                    return Err(super::PathNotFoundError.into());
-                }
-                Err(RusotoError::Unknown(http)) if http.status == 404 => {
-                    return Err(super::PathNotFoundError.into());
-                }
-                Err(err) => return Err(err.into()),
-            };
+                .await
+                .map_err(|err| match err {
+                    RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
+                        super::PathNotFoundError.into()
+                    }
+                    RusotoError::Unknown(http) if http.status == 404 => {
+                        super::PathNotFoundError.into()
+                    }
+                    err => Error::from(err),
+                })?;
 
             let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
             content.reserve(
