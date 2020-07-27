@@ -31,6 +31,7 @@ impl BuildQueue {
             "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
             &[&name, &version, &priority],
         )?;
+
         Ok(())
     }
 
@@ -39,6 +40,7 @@ impl BuildQueue {
             "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
             &[&self.max_attempts],
         )?;
+
         Ok(res[0].get::<_, i64>(0) as usize)
     }
 

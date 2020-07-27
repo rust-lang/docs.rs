@@ -18,12 +18,12 @@ use crate::DocBuilderOptions;
 use futures_util::stream::StreamExt;
 use log::debug;
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::{
-    fs::{File, OpenOptions},
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    fs::{self, File, OpenOptions},
+    io::{AsyncBufReadExt, AsyncWriteExt},
+    task,
 };
 
 /// chroot based documentation builder
@@ -39,6 +39,7 @@ pub struct DocBuilder {
 impl DocBuilder {
     pub fn new(options: DocBuilderOptions, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
         let index = Index::new(&options.registry_index_path).expect("valid index");
+
         DocBuilder {
             build_queue,
             options,
@@ -54,7 +55,7 @@ impl DocBuilder {
         debug!("Loading cache");
 
         let path = PathBuf::from(&self.options.prefix).join("cache");
-        let reader = File::open(path).await.map(BufReader::new);
+        let reader = fs::read(path).await;
 
         if let Ok(reader) = reader {
             let mut lines = reader.lines();
@@ -64,25 +65,39 @@ impl DocBuilder {
             }
         }
 
-        self.load_database_cache()?;
+        self.load_database_cache().await?;
 
         Ok(())
     }
 
-    fn load_database_cache(&mut self) -> Result<()> {
+    async fn load_database_cache(&mut self) -> Result<()> {
         debug!("Loading database cache");
 
-        let mut conn = self.db.get()?;
-        for row in &mut conn.query(
-            "SELECT name, version FROM crates, releases \
-             WHERE crates.id = releases.crate_id",
-            &[],
-        )? {
-            let name: String = row.get(0);
-            let version: String = row.get(1);
+        let db = self.db.clone();
+        // FIXME: When DB ops are async, remove the `spawn_blocking` and directly insert into the cache
+        let cache = task::spawn_blocking(move || {
+            let conn = db.get()?;
+            let query = conn.query(
+                "SELECT name, version FROM crates, releases \
+                 WHERE crates.id = releases.crate_id",
+                &[],
+            )?;
 
-            self.db_cache.insert(format!("{}-{}", name, version));
-        }
+            let cache: Vec<String> = query
+                .iter()
+                .map(|row| {
+                    let name: String = row.get(0);
+                    let version: String = row.get(1);
+
+                    format!("{}-{}", name, version)
+                })
+                .collect();
+
+            Result::<_>::Ok(cache)
+        })
+        .await??;
+
+        self.db_cache.extend(cache);
 
         Ok(())
     }
@@ -100,6 +115,7 @@ impl DocBuilder {
 
         for krate in &self.cache {
             file.write_all(krate.as_bytes()).await?;
+            file.write_all(b"\n").await?;
         }
 
         Ok(())
@@ -110,20 +126,20 @@ impl DocBuilder {
     }
 
     /// Creates a lock file. Daemon will check this lock file and stop operating if its exists.
-    pub fn lock(&self) -> Result<()> {
+    pub async fn lock(&self) -> Result<()> {
         let path = self.lock_path();
         if !path.exists() {
-            fs::OpenOptions::new().write(true).create(true).open(path)?;
+            File::create(path).await?;
         }
 
         Ok(())
     }
 
     /// Removes lock file.
-    pub fn unlock(&self) -> Result<()> {
+    pub async fn unlock(&self) -> Result<()> {
         let path = self.lock_path();
         if path.exists() {
-            fs::remove_file(path)?;
+            fs::remove_file(path).await?;
         }
 
         Ok(())

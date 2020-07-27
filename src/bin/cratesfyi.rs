@@ -409,8 +409,8 @@ impl BuildSubcommand {
                     .context("failed to add essential files")?;
             }
 
-            Self::Lock => docbuilder.lock().context("Failed to lock")?,
-            Self::Unlock => docbuilder.unlock().context("Failed to unlock")?,
+            Self::Lock => docbuilder.lock().await.context("Failed to lock")?,
+            Self::Unlock => docbuilder.unlock().await.context("Failed to unlock")?,
             Self::PrintOptions => println!("{:?}", docbuilder.options()),
         }
 

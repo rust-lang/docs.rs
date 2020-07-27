@@ -11,8 +11,10 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::{env, path::PathBuf, sync::Arc};
+use std::{env, panic, sync::Arc};
 use tokio::{
+    runtime::Handle,
+    sync::Mutex,
     task::{self, JoinHandle},
     time::{self, Duration, Instant},
 };
@@ -21,23 +23,42 @@ async fn start_registry_watcher(
     opts: DocBuilderOptions,
     pool: Pool,
     build_queue: Arc<BuildQueue>,
+    options: DocBuilderOptions,
 ) -> JoinHandle<()> {
     task::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let (cloned_pool, cloned_build_queue, cloned_options) =
+            (pool.clone(), build_queue.clone(), options.clone());
 
-        let mut doc_builder = DocBuilder::new(opts.clone(), pool.clone(), build_queue.clone());
+        let doc_builder = Arc::new(Mutex::new(
+            task::spawn_blocking(move || {
+                DocBuilder::new(cloned_options, cloned_pool, cloned_build_queue)
+            })
+            .await
+            .unwrap(),
+        ));
 
         loop {
-            interval.tick().await;
+            // Pause for a minute between each doc run
+            time::delay_for(Duration::from_secs(60)).await;
 
-            if doc_builder.is_locked() {
+            if doc_builder.lock().await.is_locked() {
                 debug!("Lock file exists, skipping checking new crates");
             } else {
                 debug!("Checking new crates");
 
-                match doc_builder.get_new_crates() {
-                    Ok(n) => debug!("{} crates added to queue", n),
-                    Err(e) => error!("Failed to get new crates: {}", e),
+                // TODO: When `.get_new_crates()` is async use `FutureExt::catch_unwind`
+                // FIXME: Use `Result::flatten()` via https://github.com/rust-lang/rust/issues/70142
+                let doc_builder = doc_builder.clone();
+                match task::spawn_blocking(move || {
+                    Handle::current()
+                        .block_on(doc_builder.lock())
+                        .get_new_crates()
+                })
+                .await
+                .map_err(Into::into)
+                {
+                    Ok(Ok(n)) => debug!("{} crates added to queue", n),
+                    Ok(Err(e)) | Err(e) => error!("Failed to get new crates: {}", e),
                 }
             }
         }
@@ -58,20 +79,27 @@ pub async fn start_daemon(
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(dbopts.clone(), db.clone(), build_queue.clone()).await;
+        start_registry_watcher(
+            dbopts.clone(),
+            db.clone(),
+            build_queue.clone(),
+            dbopts.clone(),
+        )
+        .await;
     }
 
     // build new crates every minute
-    let cloned_db = db.clone();
-    let cloned_build_queue = build_queue.clone();
-    let cloned_storage = storage.clone();
-
-    task::spawn(async {
-        let doc_builder = DocBuilder::new(
-            dbopts.clone(),
-            cloned_db.clone(),
-            cloned_build_queue.clone(),
-        );
+    let (cloned_db, cloned_build_queue, cloned_storage, options) = (
+        db.clone(),
+        build_queue.clone(),
+        storage.clone(),
+        dbopts.clone(),
+    );
+    task::spawn(async move {
+        let (db, build_queue) = (cloned_db.clone(), cloned_build_queue.clone());
+        let doc_builder = task::spawn_blocking(move || DocBuilder::new(options, db, build_queue))
+            .await
+            .unwrap();
 
         queue_builder(doc_builder, cloned_db, cloned_build_queue, cloned_storage)
             .await
@@ -94,10 +122,13 @@ pub async fn start_daemon(
             interval.tick().await;
 
             info!("Updating release activity");
-            if let Err(err) = cloned_db
-                .get()
-                .map_err(Into::into)
-                .and_then(|pool| update_release_activity(&mut *pool))
+            let db = cloned_db.clone();
+            if let Err(err) = task::spawn_blocking(move || {
+                db.get()
+                    .map_err(Into::into)
+                    .and_then(|pool| update_release_activity(&*pool))
+            })
+            .await
             {
                 error!(
                     "failed to run scheduled task 'release activity updater': {:?}",
@@ -134,8 +165,8 @@ pub async fn start_daemon(
 }
 
 fn opts() -> DocBuilderOptions {
-    let prefix = PathBuf::from(
-        env::var("CRATESFYI_PREFIX").expect("CRATESFYI_PREFIX environment variable not found"),
-    );
+    let prefix =
+        env::var("CRATESFYI_PREFIX").expect("CRATESFYI_PREFIX environment variable not found");
+
     DocBuilderOptions::from_prefix(prefix)
 }
