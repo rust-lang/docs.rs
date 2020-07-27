@@ -8,7 +8,7 @@ use failure::ResultExt;
 
 pub(crate) mod api;
 
-pub(crate) struct Index {
+pub struct Index {
     path: PathBuf,
     api: Api,
 }
@@ -39,7 +39,7 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub(crate) fn new(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_owned();
         // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
         // See https://github.com/rust-lang/docs.rs/pull/847
@@ -56,7 +56,7 @@ impl Index {
         Ok(diff)
     }
 
-    pub(crate) fn api(&self) -> &Api {
+    pub fn api(&self) -> &Api {
         &self.api
     }
 }

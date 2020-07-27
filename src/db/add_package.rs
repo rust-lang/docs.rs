@@ -327,7 +327,7 @@ fn add_authors_into_database(
     Ok(())
 }
 
-pub(crate) fn update_crate_data_in_database(
+pub fn update_crate_data_in_database(
     conn: &Connection,
     name: &str,
     registry_data: &CrateData,
