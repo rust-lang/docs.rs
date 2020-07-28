@@ -1,6 +1,6 @@
 use super::TestDatabase;
 use crate::docbuilder::BuildResult;
-use crate::index::api::{CrateData, ReleaseData};
+use crate::index::api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
@@ -165,6 +165,11 @@ impl<'a> FakeRelease<'a> {
     pub(crate) fn readme(mut self, content: &'a str) -> Self {
         self.readme = Some(content);
         self.source_file("README.md", content.as_bytes())
+    }
+
+    pub(crate) fn add_owner(mut self, owner: CrateOwner) -> Self {
+        self.registry_crate_data.owners.push(owner);
+        self
     }
 
     /// Returns the release_id

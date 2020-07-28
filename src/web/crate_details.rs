@@ -315,6 +315,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::api::CrateOwner;
     use crate::test::{wrapper, TestDatabase};
     use failure::Error;
     use kuchiki::traits::TendrilSink;
@@ -605,6 +606,97 @@ mod tests {
                     .get("title")
                     .unwrap(),
                 "binary-0.1.0 is not a library"
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_updating_owners() {
+        wrapper(|env| {
+            let db = env.db();
+
+            env.fake_release()
+                .name("foo")
+                .version("0.0.1")
+                .add_owner(CrateOwner {
+                    login: "foobar".into(),
+                    avatar: "https://example.org/foobar".into(),
+                    name: "Foo Bar".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(
+                details.owners,
+                vec![("foobar".into(), "https://example.org/foobar".into())]
+            );
+
+            // Adding a new owner, and changing details on an existing owner
+            env.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .add_owner(CrateOwner {
+                    login: "foobar".into(),
+                    avatar: "https://example.org/foobarv2".into(),
+                    name: "Foo Bar".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .add_owner(CrateOwner {
+                    login: "barfoo".into(),
+                    avatar: "https://example.org/barfoo".into(),
+                    name: "Bar Foo".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            let mut owners = details.owners.clone();
+            owners.sort();
+            assert_eq!(
+                owners,
+                vec![
+                    ("barfoo".into(), "https://example.org/barfoo".into()),
+                    ("foobar".into(), "https://example.org/foobarv2".into())
+                ]
+            );
+
+            // Removing an existing owner
+            env.fake_release()
+                .name("foo")
+                .version("0.0.3")
+                .add_owner(CrateOwner {
+                    login: "barfoo".into(),
+                    avatar: "https://example.org/barfoo".into(),
+                    name: "Bar Foo".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(
+                details.owners,
+                vec![("barfoo".into(), "https://example.org/barfoo".into())]
+            );
+
+            // Changing owner details on another of there crates applies too
+            env.fake_release()
+                .name("bar")
+                .version("0.0.1")
+                .add_owner(CrateOwner {
+                    login: "barfoo".into(),
+                    avatar: "https://example.org/barfoov2".into(),
+                    name: "Bar Foo".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .create()?;
+
+            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            assert_eq!(
+                details.owners,
+                vec![("barfoo".into(), "https://example.org/barfoov2".into())]
             );
 
             Ok(())
