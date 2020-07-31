@@ -63,7 +63,7 @@ struct About {
     limits: Limits,
 }
 
-impl_webpage!(About = "core/about.html");
+impl_webpage!(About = "core/about/index.html");
 
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;

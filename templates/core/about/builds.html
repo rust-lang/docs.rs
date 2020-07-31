@@ -1,0 +1,71 @@
+<h2>Builds</h2>
+        <p>
+            Docs.rs automatically builds crates' documentation released on
+            <a href="https://crates.io/">crates.io</a>
+            using the nightly release of the Rust compiler.
+	    Builds can take a while depending how many crates are in <a href="/releases/queue">the queue</a>.
+	</p>
+
+	{%- if rustc_version %}
+	The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
+	If you need a newer version of this compiler, check the
+	<a href="{{ docsrs_repo | safe }}/issues">issues page</a>
+	and file a new issue if you don't see an existing request.
+	{%- endif -%}
+</p>
+
+<p>
+	The README of a crate is taken from the <code>readme</code> field defined in
+	<code>Cargo.toml</code>. If a crate doesn't have this field,
+	no README will be displayed.
+</p>
+
+<h3>Diagnosing a failed build</h3>
+
+<h4>Missing dependencies</h4>
+<p>
+	Missing dependencies are a common reason for a failed build.
+	Docs.rs dependencies are managed through https://github.com/rust-lang/crates-build-env;
+	see https://forge.rust-lang.org/docs-rs/add-dependencies.html for instructions
+	on how to make a PR. You can always <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>
+	if you're having trouble.
+</p>
+
+<h4>Detecting Docs.rs from <code>build.rs</code></h4>
+<p>
+	Docs.rs builds crates with the environment variable <code>DOCS_RS</code> set to
+	<code>1</code>, which enables the crate to detect docs.rs and build the
+	crate differently for docs. This can be helpful if you need
+	dependencies for building the library, but not for building the documentation.
+</p>
+
+<h4>Detecting Docs.rs from <code>#[cfg]</code> attributes</h4>
+<p>
+	You can detect Docs.rs by having a <a href="https://doc.rust-lang.org/cargo/reference/features.html">feature</a>
+	which is only set by Docs.rs. See <a href="metadata.html">Metadata</a> for more information.
+</p>
+
+<h4>Global sandbox limits</h4>
+
+<p>
+	All the builds on docs.rs are executed inside a sandbox with limited
+	resources. The current limits are the following:
+</p>
+
+{{ macros::crate_limits(limits=limits) }}
+
+<p>
+	If a build fails because it hit one of those limits please
+	<a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
+	to get them increased for your crate.
+	Note that network access will not be enabled for any crate.
+</p>
+
+<h4>Test crate documentation build locally</h4>
+{%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
+<p>
+	The <a href="{{ build_subcommand | safe }}">docs.rs README</a> describes how to build an
+	unpublished crate's documentation locally using the same build environment as the build agent.
+</p>
+
+<h4></h4>
