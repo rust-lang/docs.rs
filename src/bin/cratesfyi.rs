@@ -467,7 +467,7 @@ impl DatabaseSubcommand {
                 db::update_crate_data_in_database(
                     &*ctx.conn()?,
                     &name,
-                    &index.api().get_crate_data(&name),
+                    &index.api().get_crate_data(&name)?,
                 )?;
             }
 

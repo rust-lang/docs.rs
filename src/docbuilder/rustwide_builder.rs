@@ -7,6 +7,7 @@ use crate::db::{
 };
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
+use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::storage::Storage;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
@@ -399,6 +400,15 @@ impl RustwideBuilder {
                 } else {
                     crate::web::metrics::NON_LIBRARY_BUILDS.inc();
                 }
+
+                let release_data = match doc_builder.index.api().get_release_data(name, version) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        warn!("{:#?}", err);
+                        ReleaseData::default()
+                    }
+                };
+
                 let release_id = add_package_into_database(
                     &conn,
                     res.cargo_metadata.root(),
@@ -407,7 +417,7 @@ impl RustwideBuilder {
                     &res.target,
                     files_list,
                     successful_targets,
-                    &doc_builder.index.api().get_release_data(name, version),
+                    &release_data,
                     has_docs,
                     has_examples,
                     algs,
@@ -416,11 +426,10 @@ impl RustwideBuilder {
                 add_build_into_database(&conn, release_id, &res.result)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
-                update_crate_data_in_database(
-                    &conn,
-                    name,
-                    &doc_builder.index.api().get_crate_data(name),
-                )?;
+                match doc_builder.index.api().get_crate_data(name) {
+                    Ok(crate_data) => update_crate_data_in_database(&conn, name, &crate_data)?,
+                    Err(err) => warn!("{:#?}", err),
+                }
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
