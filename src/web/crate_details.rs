@@ -681,7 +681,7 @@ mod tests {
                 vec![("barfoo".into(), "https://example.org/barfoo".into())]
             );
 
-            // Changing owner details on another of there crates applies too
+            // Changing owner details on another of their crates applies the change to both
             env.fake_release()
                 .name("bar")
                 .version("0.0.1")
