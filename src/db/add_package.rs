@@ -349,20 +349,17 @@ fn update_owners_in_database(
     owners: &[CrateOwner],
     crate_id: i32,
 ) -> Result<()> {
-    let existing_owners: Vec<String> = conn
-        .query(
-            "
-        SELECT login
-        FROM owners
-        INNER JOIN owner_rels
-            ON owner_rels.oid = owners.id
-        WHERE owner_rels.cid = $1
-    ",
-            &[&crate_id],
-        )?
-        .into_iter()
-        .map(|row| row.get(0))
-        .collect();
+    let rows = conn.query(
+        "
+            SELECT login
+            FROM owners
+            INNER JOIN owner_rels
+                ON owner_rels.oid = owners.id
+            WHERE owner_rels.cid = $1
+        ",
+        &[&crate_id],
+    )?;
+    let existing_owners = rows.into_iter().map(|row| -> String { row.get(0) });
 
     for owner in owners {
         debug!("Updating owner data for {}: {:?}", owner.login, owner);
@@ -372,15 +369,15 @@ fn update_owners_in_database(
         let owner_id: i32 = {
             conn.query(
                 "
-                INSERT INTO owners (login, avatar, name, email)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (login) DO UPDATE
-                    SET
-                        avatar = $2,
-                        name = $3,
-                        email = $4
-                RETURNING id
-            ",
+                    INSERT INTO owners (login, avatar, name, email)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (login) DO UPDATE
+                        SET
+                            avatar = $2,
+                            name = $3,
+                            email = $4
+                    RETURNING id
+                ",
                 &[&owner.login, &owner.avatar, &owner.name, &owner.email],
             )?
             .get(0)
@@ -388,38 +385,26 @@ fn update_owners_in_database(
         };
 
         // add relationship
-        let updated = conn.query(
-            "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2)",
+        conn.query(
+            "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             &[&crate_id, &owner_id],
-        );
-
-        match updated {
-            Ok(_) => debug!("Added new owner relationship"),
-            Err(e)
-                if e.as_db().and_then(|e| e.constraint.as_deref())
-                    == Some("owner_rels_cid_oid_key") =>
-            {
-                debug!("Existing owner relationship");
-            }
-            Err(e) => return Err(e.into()),
-        }
+        )?;
     }
 
-    let to_remove = existing_owners
-        .iter()
-        .filter(|login| !owners.iter().any(|owner| &&owner.login == login));
+    let to_remove =
+        existing_owners.filter(|login| !owners.iter().any(|owner| &owner.login == login));
 
     for login in to_remove {
         debug!("Removing owner relationship {}", login);
         // remove relationship
         conn.query(
             "
-            DELETE FROM owner_rels
-            USING owners
-            WHERE owner_rels.cid = $1
-                AND owner_rels.oid = owners.id
-                AND owners.login = $2
-        ",
+                DELETE FROM owner_rels
+                USING owners
+                WHERE owner_rels.cid = $1
+                    AND owner_rels.oid = owners.id
+                    AND owners.login = $2
+            ",
             &[&crate_id, &login],
         )?;
     }
