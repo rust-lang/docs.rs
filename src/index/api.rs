@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
-use failure::err_msg;
-use log::warn;
+use failure::{err_msg, ResultExt};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::Deserialize;
@@ -30,6 +29,16 @@ pub(crate) struct ReleaseData {
     pub(crate) release_time: DateTime<Utc>,
     pub(crate) yanked: bool,
     pub(crate) downloads: i32,
+}
+
+impl Default for ReleaseData {
+    fn default() -> ReleaseData {
+        ReleaseData {
+            release_time: Utc::now(),
+            yanked: false,
+            downloads: 0,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -62,28 +71,24 @@ impl Api {
             .ok_or_else(|| err_msg("index is missing an api base url"))
     }
 
-    pub fn get_crate_data(&self, name: &str) -> CrateData {
-        let owners = self.get_owners(name).unwrap_or_else(|err| {
-            warn!("Failed to get owners for {}: {}", name, err);
-            Vec::new()
-        });
+    pub fn get_crate_data(&self, name: &str) -> Result<CrateData> {
+        let owners = self
+            .get_owners(name)
+            .context(format!("Failed to get owners for {}", name))?;
 
-        CrateData { owners }
+        Ok(CrateData { owners })
     }
 
-    pub(crate) fn get_release_data(&self, name: &str, version: &str) -> ReleaseData {
+    pub(crate) fn get_release_data(&self, name: &str, version: &str) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
-            .unwrap_or_else(|err| {
-                warn!("Failed to get crate data for {}-{}: {}", name, version, err);
-                (Utc::now(), false, 0)
-            });
+            .context(format!("Failed to get crate data for {}-{}", name, version))?;
 
-        ReleaseData {
+        Ok(ReleaseData {
             release_time,
             yanked,
             downloads,
-        }
+        })
     }
 
     /// Get release_time, yanked and downloads from the registry's API
