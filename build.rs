@@ -11,6 +11,14 @@ fn main() {
         env::var("TARGET").unwrap()
     );
 
+    // Don't rerun anytime a single change is made
+    println!("cargo:rerun-if-changed=templates/style.scss");
+    println!("cargo:rerun-if-changed=templates/menu.js");
+    println!("cargo:rerun-if-changed=templates/index.js");
+    // TODO: are these right?
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/index");
+
     write_git_version();
     compile_sass();
     copy_js();
