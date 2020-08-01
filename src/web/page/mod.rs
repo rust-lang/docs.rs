@@ -2,7 +2,7 @@ mod templates;
 mod web_page;
 
 pub(crate) use templates::TemplateData;
-pub(super) use web_page::{respond, WebPage};
+pub(super) use web_page::WebPage;
 
 use serde::Serialize;
 
