@@ -142,7 +142,17 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
             for file in std::fs::read_dir("templates/core/about")? {
-                assert_success(path?, web)?;
+                use std::ffi::OsStr;
+
+                let file_path = file?.path();
+                if file_path.extension() != Some(OsStr::new("html"))
+                    || file_path.file_stem() == Some(OsStr::new("index"))
+                {
+                    continue;
+                }
+                let filename = file_path.file_stem().unwrap().to_str().unwrap();
+                let path = format!("/about/{}", filename);
+                assert_success(&path, web)?;
             }
             assert_success("/about", web)
         })
