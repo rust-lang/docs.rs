@@ -26,26 +26,41 @@ macro_rules! impl_webpage {
     };
 }
 
+pub(in crate::web) fn respond(
+    template: &str,
+    ctx: Context,
+    content_type: ContentType,
+    status: Status,
+    req: &Request,
+) -> IronResult<Response> {
+    let rendered = req
+        .extensions
+        .get::<TemplateData>()
+        .expect("missing TemplateData from the request extensions")
+        .templates
+        .load()
+        .render(template, &ctx)
+        .unwrap();
+
+    let mut response = Response::with((status, rendered));
+    response.headers.set(content_type);
+
+    Ok(response)
+}
+
 /// The central trait that rendering pages revolves around, it handles selecting and rendering the template
 pub trait WebPage: Serialize + Sized {
     /// Turn the current instance into a `Response`, ready to be served
     // TODO: We could cache similar pages using the `&Context`
     fn into_response(self, req: &Request) -> IronResult<Response> {
         let ctx = Context::from_serialize(&self).unwrap();
-
-        let rendered = req
-            .extensions
-            .get::<TemplateData>()
-            .expect("missing TemplateData from the request extensions")
-            .templates
-            .load()
-            .render(Self::TEMPLATE, &ctx)
-            .unwrap();
-
-        let mut response = Response::with((self.get_status(), rendered));
-        response.headers.set(Self::content_type());
-
-        Ok(response)
+        respond(
+            Self::TEMPLATE,
+            ctx,
+            Self::content_type(),
+            self.get_status(),
+            req,
+        )
     }
 
     /// The name of the template to be rendered

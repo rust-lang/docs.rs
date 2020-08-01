@@ -23,6 +23,8 @@ pub(super) fn build_routes() -> Routes {
 
     routes.internal_page("/about", super::sitemap::about_handler);
     routes.internal_page("/about/metrics", super::metrics::metrics_handler);
+    routes.internal_page("/about/builds", super::sitemap::about_builds_handler);
+    routes.internal_page("/about/:subpage", super::sitemap::about_handler);
 
     routes.internal_page("/releases", super::releases::recent_releases_handler);
     routes.static_resource("/releases/feed", super::releases::releases_feed_handler);
