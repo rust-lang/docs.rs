@@ -35,7 +35,8 @@
 {% macro active_link(expected, href, text) %}
     <li class="pure-menu-item">
         <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
-            {{ text }}
+            {# safe: allow passing in HTML #}
+            {{ text | safe }}
         </a>
     </li>
 {% endmacro active_link %}
