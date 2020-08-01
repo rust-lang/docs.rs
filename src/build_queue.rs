@@ -283,8 +283,8 @@ mod tests {
             let queue = env.build_queue();
 
             let test_crates = [
-                ("foo", "1.0.0", -10),
                 ("bar", "1.0.0", 0),
+                ("foo", "1.0.0", -10),
                 ("baz", "1.0.0", 10),
             ];
             for krate in &test_crates {
@@ -293,26 +293,15 @@ mod tests {
 
             assert_eq!(
                 vec![
-                    QueuedCrate {
-                        id: 1,
-                        name: "foo".into(),
-                        version: "1.0.0".into(),
-                        priority: -10,
-                    },
-                    QueuedCrate {
-                        id: 2,
-                        name: "bar".into(),
-                        version: "1.0.0".into(),
-                        priority: 0,
-                    },
-                    QueuedCrate {
-                        id: 3,
-                        name: "baz".into(),
-                        version: "1.0.0".into(),
-                        priority: 10,
-                    },
+                    ("foo", "1.0.0", -10),
+                    ("bar", "1.0.0", 0),
+                    ("baz", "1.0.0", 10),
                 ],
-                queue.queued_crates()?
+                queue
+                    .queued_crates()?
+                    .iter()
+                    .map(|c| (c.name.as_str(), c.version.as_str(), c.priority))
+                    .collect::<Vec<_>>()
             );
 
             Ok(())
