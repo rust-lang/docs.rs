@@ -2,20 +2,6 @@
     Makes the appropriate JS imports for highlighting
     * `languages` An array of strings where each is a valid highlight.js language
 #}
-{#
-    Creates a list entry for active tabs. When the active tab is the same as `expected`, it will show the current tab as active.
-    * `expected` A string that represents the current tab, when `active_tab == expected` the current will be shown as active
-    * `href` A string used as the tab's link
-    * `text` A string used as the tab's text
-#}
-{% macro active_link(expected, href, text) %}
-    <li class="pure-menu-item">
-        <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
-            {{ text }}
-        </a>
-    </li>
-{% endmacro active_link %}
-
 {% macro highlight_js(languages) %}
     {# Load the highlight script #}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/highlight.min.js" type="text/javascript"
@@ -39,6 +25,20 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/github.min.css"
         type="text/css" media="all" />
 {% endmacro highlight_css %}
+
+{#
+    Creates a list entry for active tabs. When the active tab is the same as `expected`, it will show the current tab as active.
+    * `expected` A string that represents the current tab, when `active_tab == expected` the current will be shown as active
+    * `href` A string used as the tab's link
+    * `text` A string used as the tab's text
+#}
+{% macro active_link(expected, href, text) %}
+    <li class="pure-menu-item">
+        <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
+            {{ text }}
+        </a>
+    </li>
+{% endmacro active_link %}
 
 {#
     Creates a formatted table showing the resource limits of a crate
