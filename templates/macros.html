@@ -2,6 +2,14 @@
     Makes the appropriate JS imports for highlighting
     * `languages` An array of strings where each is a valid highlight.js language
 #}
+{% macro active_link(expected, href, text) %}
+    <li class="pure-menu-item">
+        <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
+        {{ text }}
+        </a>
+    </li>
+{% endmacro active_link %}
+
 {% macro highlight_js(languages) %}
     {# Load the highlight script #}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/highlight.min.js" type="text/javascript"
