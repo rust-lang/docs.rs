@@ -5,13 +5,15 @@
 {%- block body -%}
 {%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
 <h1>Builds</h1>
-        <p>
-            Docs.rs automatically builds crates' documentation released on
-            <a href="https://crates.io/">crates.io</a>
-            using the nightly release of the Rust compiler.
-	    Builds can take a while depending how many crates are in <a href="/releases/queue">the queue</a>.
-	</p>
+<div class="container about">
+<p>
+	Docs.rs automatically builds crates' documentation released on
+	<a href="https://crates.io/">crates.io</a>
+	using the nightly release of the Rust compiler.
+	Builds can take a while depending how many crates are in <a href="/releases/queue">the queue</a>.
+</p>
 
+<p>
 	{%- if rustc_version %}
 	The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
 	If you need a newer version of this compiler, check the
@@ -31,8 +33,9 @@
 <h4>Missing dependencies</h4>
 <p>
 	Missing dependencies are a common reason for a failed build.
-	Docs.rs dependencies are managed through https://github.com/rust-lang/crates-build-env;
-	see https://forge.rust-lang.org/docs-rs/add-dependencies.html for instructions
+	Docs.rs dependencies are managed through
+	<a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>;
+	see <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for instructions
 	on how to make a PR. You can always <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>
 	if you're having trouble.
 </p>
@@ -73,6 +76,7 @@
 	The <a href="{{ build_subcommand | safe }}">docs.rs README</a> describes how to build an
 	unpublished crate's documentation locally using the same build environment as the build agent.
 </p>
+</div>
 
 {%- endblock body %}
 
