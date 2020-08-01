@@ -364,6 +364,22 @@ pub fn migrate(version: Option<Version>, conn: &Connection) -> CratesfyiResult<(
             "DROP TABLE compression_rels;
              ALTER TABLE files DROP COLUMN compression;"
         ),
+        migration!(
+            context,
+            // version
+            15,
+            // description
+            "Fix owner_rels.cid foreign key reference",
+            // upgrade query
+            "
+            ALTER TABLE owner_rels DROP CONSTRAINT owner_rels_cid_fkey;
+            ALTER TABLE owner_rels ADD FOREIGN KEY (cid) REFERENCES crates(id);
+            ",
+            // downgrade query
+            "
+            -- Nope, this is a pure database fix, no going back.
+            "
+        ),
     ];
 
     for migration in migrations {
