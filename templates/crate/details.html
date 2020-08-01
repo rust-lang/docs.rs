@@ -147,10 +147,14 @@
                 {%- else -%}
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
-                        docs.rs failed to build {{ details.name }}-{{ details.version }}<br>Please check the
+                        docs.rs failed to build {{ details.name }}-{{ details.version }}
+
+                        <br>Please check the
                         <a href="/crate/{{ details.name }}/{{ details.version }}/builds">build logs</a> and, if you believe this is
                         docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.
-                        See <a href="/about/builds">Builds</a> for ideas on how to fix a failed build.
+
+                        <br>See <a href="/about/builds">Builds</a> for ideas on how to fix a failed build,
+                        or <a href="/about/metadata">Metadata</a> for how to configure docs.rs builds.
                     </div>
 
                     {# If there is one, display the most next most recent successful build #}
