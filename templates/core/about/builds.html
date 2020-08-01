@@ -16,9 +16,6 @@
 <p>
 	{%- if rustc_version %}
 	The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
-	If you need a newer version of this compiler, check the
-	<a href="{{ docsrs_repo | safe }}/issues">issues page</a>
-	and file a new issue if you don't see an existing request.
 	{%- endif -%}
 </p>
 
@@ -44,7 +41,7 @@
 <p>
 	Docs.rs builds crates with the environment variable <code>DOCS_RS</code> set to
 	<code>1</code>, which enables the crate to detect docs.rs and build the
-	crate differently for docs. This can be helpful if you need
+	crate differently. This can be helpful if you need
 	dependencies for building the library, but not for building the documentation.
 </p>
 
