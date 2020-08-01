@@ -61,6 +61,8 @@ struct AboutBuilds {
     rustc_version: Option<String>,
     /// The default crate build limits
     limits: Limits,
+    /// Just for the template, since this isn't shared with AboutPage
+    active_tab: &'static str,
 }
 
 impl_webpage!(AboutBuilds = "core/about/builds.html");
@@ -83,20 +85,27 @@ pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
     AboutBuilds {
         rustc_version,
         limits: Limits::default(),
+        active_tab: "builds",
     }
     .into_response(req)
 }
 
+#[derive(Serialize)]
+struct AboutPage<'a> {
+    #[serde(skip)]
+    template: String,
+    active_tab: &'a str,
+}
+
+impl_webpage!(AboutPage<'_> = |this: &AboutPage| this.template.clone().into());
+
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
-    use super::page::respond;
     use super::ErrorPage;
     use iron::status::Status;
 
-    let template = match *req.url.path().last().expect("iron is broken") {
-        "about" | "index.html" => "index.html",
-        "badges" => "badges.html",
-        "metadata" => "metadata.html",
-        "redirections" => "redirections.html",
+    let name = match *req.url.path().last().expect("iron is broken") {
+        "about" | "index" => "index",
+        x @ "badges" | x @ "metadata" | x @ "redirections" => x,
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";
@@ -108,14 +117,12 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
             return page.into_response(req);
         }
     };
-    let template = format!("core/about/{}", template);
-    respond(
-        &template,
-        tera::Context::new(),
-        ContentType::html(),
-        Status::Ok,
-        req,
-    )
+    let template = format!("core/about/{}.html", name);
+    AboutPage {
+        template,
+        active_tab: name,
+    }
+    .into_response(req)
 }
 
 #[cfg(test)]

@@ -1,14 +1,20 @@
 use super::TemplateData;
 use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
 use serde::Serialize;
+use std::borrow::Cow;
 use tera::Context;
 
 /// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
 #[macro_export]
 macro_rules! impl_webpage {
+    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+        impl_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
+    };
     ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl $crate::web::page::WebPage for $page {
-            const TEMPLATE: &'static str = $template;
+            fn template(&self) -> ::std::borrow::Cow<'static, str> {
+                $template(self)
+            }
 
             $(
                 fn get_status(&self) -> ::iron::status::Status {
@@ -26,45 +32,29 @@ macro_rules! impl_webpage {
     };
 }
 
-pub(in crate::web) fn respond(
-    template: &str,
-    ctx: Context,
-    content_type: ContentType,
-    status: Status,
-    req: &Request,
-) -> IronResult<Response> {
-    let rendered = req
-        .extensions
-        .get::<TemplateData>()
-        .expect("missing TemplateData from the request extensions")
-        .templates
-        .load()
-        .render(template, &ctx)
-        .unwrap();
-
-    let mut response = Response::with((status, rendered));
-    response.headers.set(content_type);
-
-    Ok(response)
-}
-
 /// The central trait that rendering pages revolves around, it handles selecting and rendering the template
 pub trait WebPage: Serialize + Sized {
     /// Turn the current instance into a `Response`, ready to be served
     // TODO: We could cache similar pages using the `&Context`
     fn into_response(self, req: &Request) -> IronResult<Response> {
         let ctx = Context::from_serialize(&self).unwrap();
-        respond(
-            Self::TEMPLATE,
-            ctx,
-            Self::content_type(),
-            self.get_status(),
-            req,
-        )
+        let rendered = req
+            .extensions
+            .get::<TemplateData>()
+            .expect("missing TemplateData from the request extensions")
+            .templates
+            .load()
+            .render(&self.template(), &ctx)
+            .unwrap();
+
+        let mut response = Response::with((self.get_status(), rendered));
+        response.headers.set(Self::content_type());
+
+        Ok(response)
     }
 
     /// The name of the template to be rendered
-    const TEMPLATE: &'static str;
+    fn template(&self) -> Cow<'static, str>;
 
     /// Gets the status of the request, defaults to `Ok`
     fn get_status(&self) -> Status {
