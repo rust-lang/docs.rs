@@ -13,7 +13,8 @@ macro_rules! impl_webpage {
     ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl $crate::web::page::WebPage for $page {
             fn template(&self) -> ::std::borrow::Cow<'static, str> {
-                $template(self)
+                let template: fn(&Self) -> ::std::borrow::Cow<'static, str> = $template;
+                template(self)
             }
 
             $(
