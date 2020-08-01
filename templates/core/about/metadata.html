@@ -5,6 +5,7 @@
 {%- block body -%}
 <h1>Metadata for custom builds</h1>
 
+<div class="container about">
 <p>
 	You can customize docs.rs builds by defining <code>[package.metadata.docs.rs]</code>
 	table in your crates' <code>Cargo.toml</code>.
@@ -13,4 +14,5 @@
 <p>The available configuration flags you can customize are:</p>
 
 <pre><code>{%- include "core/Cargo.toml.example" -%}</code></pre>
+</div>
 {%- endblock body %}
