@@ -1,4 +1,10 @@
-<h2>Builds</h2>
+{% extends "base.html" -%}
+
+{%- block title -%} Builds {%- endblock title -%}
+
+{%- block body -%}
+{%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
+<h1>Builds</h1>
         <p>
             Docs.rs automatically builds crates' documentation released on
             <a href="https://crates.io/">crates.io</a>
@@ -42,7 +48,7 @@
 <h4>Detecting Docs.rs from <code>#[cfg]</code> attributes</h4>
 <p>
 	You can detect Docs.rs by having a <a href="https://doc.rust-lang.org/cargo/reference/features.html">feature</a>
-	which is only set by Docs.rs. See <a href="metadata.html">Metadata</a> for more information.
+	which is only set by Docs.rs. See <a href="metadata">Metadata</a> for more information.
 </p>
 
 <h4>Global sandbox limits</h4>
@@ -68,4 +74,12 @@
 	unpublished crate's documentation locally using the same build environment as the build agent.
 </p>
 
-<h4></h4>
+{%- endblock body %}
+
+{% block css -%}
+    {{ macros::highlight_css() }}
+{%- endblock css %}
+
+{% block javascript -%}
+    {{ macros::highlight_js(languages=["ini"]) }}
+{%- endblock javascript %}

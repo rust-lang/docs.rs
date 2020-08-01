@@ -1,4 +1,9 @@
-<h2 id="metadata"><a href="#metadata">Metadata for custom builds</a></h2>
+{% extends "base.html" -%}
+
+{%- block title -%} Metadata {%- endblock title -%}
+
+{%- block body -%}
+<h1>Metadata for custom builds</h1>
 
 <p>
 	You can customize docs.rs builds by defining <code>[package.metadata.docs.rs]</code>
@@ -8,3 +13,4 @@
 <p>The available configuration flags you can customize are:</p>
 
 <pre><code>{%- include "core/Cargo.toml.example" -%}</code></pre>
+{%- endblock body %}

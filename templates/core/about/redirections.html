@@ -1,4 +1,9 @@
-<h2>Redirections</h2>
+{% extends "base.html" -%}
+
+{%- block title -%} Redirections {%- endblock title -%}
+
+{%- block body -%}
+<h1>Redirections</h1>
 
 <p>
     Docs.rs uses semver to parse URLs. You can use this feature to access
@@ -50,3 +55,4 @@
 	</tr>
     </tbody>
 </table>
+{%- endblock body %}

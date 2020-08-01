@@ -56,16 +56,16 @@ pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct About {
+struct AboutBuilds {
     /// The current version of rustc that docs.rs is using to build crates
     rustc_version: Option<String>,
     /// The default crate build limits
     limits: Limits,
 }
 
-impl_webpage!(About = "core/about/index.html");
+impl_webpage!(AboutBuilds = "core/about/builds.html");
 
-pub fn about_handler(req: &mut Request) -> IronResult<Response> {
+pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
     let res = ctry!(
         req,
@@ -80,11 +80,42 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
         }
     });
 
-    About {
+    AboutBuilds {
         rustc_version,
         limits: Limits::default(),
     }
     .into_response(req)
+}
+
+pub fn about_handler(req: &mut Request) -> IronResult<Response> {
+    use super::page::respond;
+    use super::ErrorPage;
+    use iron::status::Status;
+
+    let template = match *req.url.path().last().expect("iron is broken") {
+        "about" | "index.html" => "index.html",
+        "badges" => "badges.html",
+        "metadata" => "metadata.html",
+        "redirections" => "redirections.html",
+        _ => {
+            let msg = "This /about page does not exist. \
+                Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";
+            let page = ErrorPage {
+                title: "The requested page does not exist",
+                message: Some(msg.into()),
+                status: Status::NotFound,
+            };
+            return page.into_response(req);
+        }
+    };
+    let template = format!("core/about/{}", template);
+    respond(
+        &template,
+        tera::Context::new(),
+        ContentType::html(),
+        Status::Ok,
+        req,
+    )
 }
 
 #[cfg(test)]
@@ -110,6 +141,9 @@ mod tests {
     fn about_page() {
         wrapper(|env| {
             let web = env.frontend();
+            for file in std::fs::read_dir("templates/core/about")? {
+                assert_success(path?, web)?;
+            }
             assert_success("/about", web)
         })
     }
