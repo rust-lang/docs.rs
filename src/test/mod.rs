@@ -239,6 +239,29 @@ impl TestDatabase {
         ))?;
         crate::db::migrate(None, &conn)?;
 
+        // Move all sequence start positions 10000 apart to avoid overlapping primary keys
+        let query: String = conn
+            .query(
+                "
+                    SELECT relname
+                    FROM pg_class
+                    INNER JOIN pg_namespace
+                        ON pg_class.relnamespace = pg_namespace.oid
+                    WHERE pg_class.relkind = 'S'
+                        AND pg_namespace.nspname = $1
+                ",
+                &[&schema],
+            )?
+            .into_iter()
+            .map(|row| row.get(0))
+            .enumerate()
+            .map(|(i, sequence): (_, String)| {
+                let offset = (i + 1) * 10000;
+                format!(r#"ALTER SEQUENCE "{}" RESTART WITH {};"#, sequence, offset)
+            })
+            .collect();
+        conn.batch_execute(&query)?;
+
         Ok(TestDatabase {
             pool: Pool::new_with_schema(config, &schema)?,
             schema,
