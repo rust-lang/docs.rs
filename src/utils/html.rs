@@ -23,6 +23,7 @@ pub(crate) fn rewrite_lol(
         head.append(&tera_head, ContentType::Html);
         Ok(())
     };
+
     // Before: <body> ... rustdoc content ... </body>
     // After:
     // ```html
