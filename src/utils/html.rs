@@ -27,7 +27,15 @@ pub(crate) fn rewrite_lol(
     // ```
     let body_handler = |rustdoc_body_class: &mut Element| {
         // Add the `rustdoc` classes to the html body
-        rustdoc_body_class.set_attribute("container-rustdoc", "")?;
+        let mut tmp;
+        let klass = if let Some(classes) = rustdoc_body_class.get_attribute("class") {
+            tmp = classes;
+            tmp.push_str(" container-rustdoc");
+            &tmp
+        } else {
+            "container-rustdoc"
+        };
+        rustdoc_body_class.set_attribute("class", klass)?;
         rustdoc_body_class.set_attribute("id", "rustdoc_body_wrapper")?;
         rustdoc_body_class.set_attribute("tabindex", "-1")?;
         // Change the `body` to a `div`
