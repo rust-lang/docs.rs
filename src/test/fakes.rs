@@ -124,7 +124,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    /// Since we switch to LOL HTML, all data must have a valid <head> and <body>.
+    /// Since we switched to LOL HTML, all data must have a valid <head> and <body>.
     /// To avoid duplicating them in every test, this just makes up some content.
     pub(crate) fn rustdoc_file(mut self, path: &'a str) -> Self {
         self.rustdoc_files.push((path, DEFAULT_CONTENT));
