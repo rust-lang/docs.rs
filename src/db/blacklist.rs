@@ -69,11 +69,11 @@ mod tests {
             let db = env.db();
 
             // crates are added out of order to verify sorting
-            add_crate(&db.conn(), "crate A")?;
-            add_crate(&db.conn(), "crate C")?;
-            add_crate(&db.conn(), "crate B")?;
+            add_crate(&mut db.conn(), "crate A")?;
+            add_crate(&mut db.conn(), "crate C")?;
+            add_crate(&mut db.conn(), "crate B")?;
 
-            assert!(list_crates(&db.conn())? == vec!["crate A", "crate B", "crate C"]);
+            assert!(list_crates(&mut db.conn())? == vec!["crate A", "crate B", "crate C"]);
             Ok(())
         });
     }
@@ -83,11 +83,11 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            assert!(!is_blacklisted(&db.conn(), "crate foo")?);
-            add_crate(&db.conn(), "crate foo")?;
-            assert!(is_blacklisted(&db.conn(), "crate foo")?);
-            remove_crate(&db.conn(), "crate foo")?;
-            assert!(!is_blacklisted(&db.conn(), "crate foo")?);
+            assert!(!is_blacklisted(&mut db.conn(), "crate foo")?);
+            add_crate(&mut db.conn(), "crate foo")?;
+            assert!(is_blacklisted(&mut db.conn(), "crate foo")?);
+            remove_crate(&mut db.conn(), "crate foo")?;
+            assert!(!is_blacklisted(&mut db.conn(), "crate foo")?);
             Ok(())
         });
     }
@@ -97,9 +97,9 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            add_crate(&db.conn(), "crate foo")?;
-            assert!(add_crate(&db.conn(), "crate foo").is_err());
-            add_crate(&db.conn(), "crate bar")?;
+            add_crate(&mut db.conn(), "crate foo")?;
+            assert!(add_crate(&mut db.conn(), "crate foo").is_err());
+            add_crate(&mut db.conn(), "crate bar")?;
 
             Ok(())
         });
@@ -110,7 +110,7 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            assert!(remove_crate(&db.conn(), "crate foo").is_err());
+            assert!(remove_crate(&mut db.conn(), "crate foo").is_err());
 
             Ok(())
         });

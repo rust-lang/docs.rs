@@ -326,7 +326,7 @@ mod tests {
         version: &str,
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
-        let details = CrateDetails::new(&db.conn(), package, version)
+        let details = CrateDetails::new(&mut db.conn(), package, version)
             .ok_or_else(|| failure::err_msg("could not fetch crate details"))?;
 
         assert_eq!(
@@ -454,7 +454,7 @@ mod tests {
                 .binary(true)
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.2.0").unwrap();
+            let details = CrateDetails::new(&mut db.conn(), "foo", "0.2.0").unwrap();
             assert_eq!(
                 details.releases,
                 vec![
@@ -523,7 +523,7 @@ mod tests {
             env.fake_release().name("foo").version("0.0.2").create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
                 assert_eq!(details.latest_release().version, "0.0.3");
             }
 
@@ -545,7 +545,7 @@ mod tests {
             env.fake_release().name("foo").version("0.0.2").create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
                 assert_eq!(details.latest_release().version, "0.0.2");
             }
 
@@ -575,7 +575,7 @@ mod tests {
                 .create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = CrateDetails::new(&db.conn(), "foo", version).unwrap();
+                let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
                 assert_eq!(details.latest_release().version, "0.0.3");
             }
 
@@ -628,7 +628,7 @@ mod tests {
                 })
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            let details = CrateDetails::new(&mut db.conn(), "foo", "0.0.1").unwrap();
             assert_eq!(
                 details.owners,
                 vec![("foobar".into(), "https://example.org/foobar".into())]
@@ -652,7 +652,7 @@ mod tests {
                 })
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            let details = CrateDetails::new(&mut db.conn(), "foo", "0.0.1").unwrap();
             let mut owners = details.owners.clone();
             owners.sort();
             assert_eq!(
@@ -675,7 +675,7 @@ mod tests {
                 })
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            let details = CrateDetails::new(&mut db.conn(), "foo", "0.0.1").unwrap();
             assert_eq!(
                 details.owners,
                 vec![("barfoo".into(), "https://example.org/barfoo".into())]
@@ -693,7 +693,7 @@ mod tests {
                 })
                 .create()?;
 
-            let details = CrateDetails::new(&db.conn(), "foo", "0.0.1").unwrap();
+            let details = CrateDetails::new(&mut db.conn(), "foo", "0.0.1").unwrap();
             assert_eq!(
                 details.owners,
                 vec![("barfoo".into(), "https://example.org/barfoov2".into())]

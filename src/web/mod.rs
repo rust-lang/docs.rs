@@ -650,7 +650,7 @@ mod test {
     }
 
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        match_version(&db.conn(), "foo", v)
+        match_version(&mut db.conn(), "foo", v)
             .and_then(|version| version.assume_exact().map(|semver| semver.into_parts().0))
     }
 

@@ -717,7 +717,7 @@ mod tests {
                 .version("0.0.0")
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "foo", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "foo", 1, 100);
             assert_eq!(num_results, 4);
 
             let mut results = results.into_iter();
@@ -746,7 +746,7 @@ mod tests {
 
             for name in near_matches.iter() {
                 let (num_results, mut results) =
-                    dbg!(get_search_results(&db.conn(), *name, 1, 100));
+                    dbg!(get_search_results(&mut db.conn(), *name, 1, 100));
                 assert_eq!(num_results, 3);
 
                 for name in releases.iter() {
@@ -769,7 +769,7 @@ mod tests {
                 .build_result_successful(false)
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "regex", 1, 100);
             assert_eq!(num_results, 0);
 
             let results = results.into_iter();
@@ -789,7 +789,7 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "regex", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "regex", 1, 100);
             assert_eq!(num_results, 0);
 
             let results = results.into_iter();
@@ -805,7 +805,7 @@ mod tests {
             let db = env.db();
             env.fake_release().name("regex").version("0.0.0").create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "redex", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "redex", 1, 100);
             assert_eq!(num_results, 1);
 
             let mut results = results.into_iter();
@@ -827,7 +827,7 @@ mod tests {
     //             .create()?;
     //
     //         let (num_results, results) =
-    //             get_search_results(&db.conn(), "supercalifragilisticexpialidocious", 1, 100);
+    //             get_search_results(&mut db.conn(), "supercalifragilisticexpialidocious", 1, 100);
     //         assert_eq!(num_results, 1);
     //
     //         let mut results = results.into_iter();
@@ -853,7 +853,7 @@ mod tests {
                 .name("something_completely_unrelated")
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "something", 1, 2);
+            let (num_results, results) = get_search_results(&mut db.conn(), "something", 1, 2);
             assert_eq!(num_results, 4);
 
             let mut results = results.into_iter();
@@ -876,7 +876,7 @@ mod tests {
                 .name("something_completely_unrelated")
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "something", 2, 2);
+            let (num_results, results) = get_search_results(&mut db.conn(), "something", 2, 2);
             assert_eq!(num_results, 4);
 
             let mut results = results.into_iter();
@@ -920,7 +920,7 @@ mod tests {
                 .version("0.0.0")
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "somethang", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "somethang", 1, 100);
             assert_eq!(num_results, 1);
 
             let mut results = results.into_iter();
@@ -952,7 +952,7 @@ mod tests {
     //             .create()?;
     //
     //         let (num_results, results) =
-    //             get_search_results(&db.conn(), "name_better_than_description", 1, 100);
+    //             get_search_results(&mut db.conn(), "name_better_than_description", 1, 100);
     //         assert_eq!(num_results, 2);
     //
     //         let mut results = results.into_iter();
@@ -985,7 +985,7 @@ mod tests {
                 .name("i_am_useless_and_mean_nothing")
                 .create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "match", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "match", 1, 100);
             assert_eq!(num_results, 3);
 
             let mut results = results.into_iter();
@@ -1006,7 +1006,7 @@ mod tests {
             env.fake_release().name("matcb").downloads(10).create()?;
             env.fake_release().name("matcc").downloads(1).create()?;
 
-            let (num_results, results) = get_search_results(&db.conn(), "match", 1, 100);
+            let (num_results, results) = get_search_results(&mut db.conn(), "match", 1, 100);
             assert_eq!(num_results, 3);
 
             let mut results = results.into_iter();

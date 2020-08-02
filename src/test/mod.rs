@@ -8,7 +8,7 @@ use crate::Config;
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
-use postgres::Client;
+use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
@@ -229,7 +229,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let mut conn = Client::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
+        let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
         conn.batch_execute(&format!(
             "
                 CREATE SCHEMA {0};
@@ -281,11 +281,11 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        crate::db::migrate(Some(0), &self.conn()).expect("downgrading database works");
-        if let Err(e) = self
-            .conn()
-            .execute(&format!("DROP SCHEMA {} CASCADE;", self.schema), &[])
-        {
+        crate::db::migrate(Some(0), &mut self.conn()).expect("downgrading database works");
+        if let Err(e) = self.conn().execute(
+            format!("DROP SCHEMA {} CASCADE;", self.schema).as_str(),
+            &[],
+        ) {
             error!("failed to drop test schema {}: {}", self.schema, e);
         }
     }
