@@ -56,28 +56,34 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            set_crate_priority(&db.conn(), "cratesfyi-%", -100)?;
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-database")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-s3")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-webserver")?, -100);
+            set_crate_priority(&mut db.conn(), "cratesfyi-%", -100)?;
             assert_eq!(
-                get_crate_priority(&db.conn(), "cratesfyi")?,
+                get_crate_priority(&mut db.conn(), "cratesfyi-database")?,
+                -100
+            );
+            assert_eq!(get_crate_priority(&mut db.conn(), "cratesfyi-")?, -100);
+            assert_eq!(get_crate_priority(&mut db.conn(), "cratesfyi-s3")?, -100);
+            assert_eq!(
+                get_crate_priority(&mut db.conn(), "cratesfyi-webserver")?,
+                -100
+            );
+            assert_eq!(
+                get_crate_priority(&mut db.conn(), "cratesfyi")?,
                 DEFAULT_PRIORITY
             );
 
-            set_crate_priority(&db.conn(), "_c_", 100)?;
-            assert_eq!(get_crate_priority(&db.conn(), "rcc")?, 100);
-            assert_eq!(get_crate_priority(&db.conn(), "rc")?, DEFAULT_PRIORITY);
+            set_crate_priority(&mut db.conn(), "_c_", 100)?;
+            assert_eq!(get_crate_priority(&mut db.conn(), "rcc")?, 100);
+            assert_eq!(get_crate_priority(&mut db.conn(), "rc")?, DEFAULT_PRIORITY);
 
-            set_crate_priority(&db.conn(), "hexponent", 10)?;
-            assert_eq!(get_crate_priority(&db.conn(), "hexponent")?, 10);
+            set_crate_priority(&mut db.conn(), "hexponent", 10)?;
+            assert_eq!(get_crate_priority(&mut db.conn(), "hexponent")?, 10);
             assert_eq!(
-                get_crate_priority(&db.conn(), "hexponents")?,
+                get_crate_priority(&mut db.conn(), "hexponents")?,
                 DEFAULT_PRIORITY
             );
             assert_eq!(
-                get_crate_priority(&db.conn(), "floathexponent")?,
+                get_crate_priority(&mut db.conn(), "floathexponent")?,
                 DEFAULT_PRIORITY
             );
 
@@ -90,15 +96,15 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            set_crate_priority(&db.conn(), "cratesfyi-%", -100)?;
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-")?, -100);
+            set_crate_priority(&mut db.conn(), "cratesfyi-%", -100)?;
+            assert_eq!(get_crate_priority(&mut db.conn(), "cratesfyi-")?, -100);
 
             assert_eq!(
-                remove_crate_priority(&db.conn(), "cratesfyi-%")?,
+                remove_crate_priority(&mut db.conn(), "cratesfyi-%")?,
                 Some(-100)
             );
             assert_eq!(
-                get_crate_priority(&db.conn(), "cratesfyi-")?,
+                get_crate_priority(&mut db.conn(), "cratesfyi-")?,
                 DEFAULT_PRIORITY
             );
 
@@ -111,14 +117,20 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            set_crate_priority(&db.conn(), "cratesfyi-%", -100)?;
+            set_crate_priority(&mut db.conn(), "cratesfyi-%", -100)?;
 
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-database")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-s3")?, -100);
-            assert_eq!(get_crate_priority(&db.conn(), "cratesfyi-webserver")?, -100);
             assert_eq!(
-                get_crate_priority(&db.conn(), "unrelated")?,
+                get_crate_priority(&mut db.conn(), "cratesfyi-database")?,
+                -100
+            );
+            assert_eq!(get_crate_priority(&mut db.conn(), "cratesfyi-")?, -100);
+            assert_eq!(get_crate_priority(&mut db.conn(), "cratesfyi-s3")?, -100);
+            assert_eq!(
+                get_crate_priority(&mut db.conn(), "cratesfyi-webserver")?,
+                -100
+            );
+            assert_eq!(
+                get_crate_priority(&mut db.conn(), "unrelated")?,
                 DEFAULT_PRIORITY
             );
 
@@ -132,17 +144,20 @@ mod tests {
             let db = env.db();
 
             assert_eq!(
-                get_crate_priority(&db.conn(), "cratesfyi")?,
+                get_crate_priority(&mut db.conn(), "cratesfyi")?,
                 DEFAULT_PRIORITY
             );
-            assert_eq!(get_crate_priority(&db.conn(), "rcc")?, DEFAULT_PRIORITY);
-            assert_eq!(get_crate_priority(&db.conn(), "lasso")?, DEFAULT_PRIORITY);
+            assert_eq!(get_crate_priority(&mut db.conn(), "rcc")?, DEFAULT_PRIORITY);
             assert_eq!(
-                get_crate_priority(&db.conn(), "hexponent")?,
+                get_crate_priority(&mut db.conn(), "lasso")?,
                 DEFAULT_PRIORITY
             );
             assert_eq!(
-                get_crate_priority(&db.conn(), "rust4lyfe")?,
+                get_crate_priority(&mut db.conn(), "hexponent")?,
+                DEFAULT_PRIORITY
+            );
+            assert_eq!(
+                get_crate_priority(&mut db.conn(), "rust4lyfe")?,
                 DEFAULT_PRIORITY
             );
 

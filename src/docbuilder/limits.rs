@@ -81,7 +81,7 @@ mod test {
 
             let krate = "hexponent";
             // limits work if no crate has limits set
-            let hexponent = Limits::for_crate(&db.conn(), krate)?;
+            let hexponent = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(hexponent, Limits::default());
 
             db.conn().query(
@@ -89,7 +89,7 @@ mod test {
                 &[&krate],
             )?;
             // limits work if crate has limits set
-            let hexponent = Limits::for_crate(&db.conn(), krate)?;
+            let hexponent = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(
                 hexponent,
                 Limits {
@@ -111,7 +111,7 @@ mod test {
                  VALUES ($1, $2, $3, $4)",
                 &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)]
             )?;
-            assert_eq!(limits, Limits::for_crate(&db.conn(), krate)?);
+            assert_eq!(limits, Limits::for_crate(&mut db.conn(), krate)?);
             Ok(())
         });
     }

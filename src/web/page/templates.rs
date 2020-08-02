@@ -258,7 +258,7 @@ mod tests {
         crate::test::wrapper(|env| {
             let db = env.db();
 
-            let tera = load_templates(&db.conn()).unwrap();
+            let tera = load_templates(&mut db.conn()).unwrap();
             tera.check_macro_files().unwrap();
 
             Ok(())

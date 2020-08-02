@@ -152,25 +152,24 @@ mod tests {
                 .create()?;
             let pkg2_id = env.fake_release().name("package-2").create()?;
 
-            assert!(crate_exists(&db.conn(), "package-1")?);
-            assert!(crate_exists(&db.conn(), "package-2")?);
-            assert!(release_exists(&db.conn(), pkg1_v1_id)?);
-            assert!(release_exists(&db.conn(), pkg1_v2_id)?);
-            assert!(release_exists(&db.conn(), pkg2_id)?);
+            assert!(crate_exists(&mut db.conn(), "package-1")?);
+            assert!(crate_exists(&mut db.conn(), "package-2")?);
+            assert!(release_exists(&mut db.conn(), pkg1_v1_id)?);
+            assert!(release_exists(&mut db.conn(), pkg1_v2_id)?);
+            assert!(release_exists(&mut db.conn(), pkg2_id)?);
 
             let pkg1_id = &db
                 .conn()
-                .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?
-                .get(0)
+                .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?[0]
                 .get("id");
 
-            delete_crate_from_database(&db.conn(), "package-1", *pkg1_id)?;
+            delete_crate_from_database(&mut db.conn(), "package-1", *pkg1_id)?;
 
-            assert!(!crate_exists(&db.conn(), "package-1")?);
-            assert!(crate_exists(&db.conn(), "package-2")?);
-            assert!(!release_exists(&db.conn(), pkg1_v1_id)?);
-            assert!(!release_exists(&db.conn(), pkg1_v2_id)?);
-            assert!(release_exists(&db.conn(), pkg2_id)?);
+            assert!(!crate_exists(&mut db.conn(), "package-1")?);
+            assert!(crate_exists(&mut db.conn(), "package-2")?);
+            assert!(!release_exists(&mut db.conn(), pkg1_v1_id)?);
+            assert!(!release_exists(&mut db.conn(), pkg1_v2_id)?);
+            assert!(release_exists(&mut db.conn(), pkg2_id)?);
 
             Ok(())
         });
@@ -206,8 +205,8 @@ mod tests {
                 .version("2.0.0")
                 .author("Peter Rabbit")
                 .create()?;
-            assert!(release_exists(&db.conn(), v1)?);
-            assert!(release_exists(&db.conn(), v2)?);
+            assert!(release_exists(&mut db.conn(), v1)?);
+            assert!(release_exists(&mut db.conn(), v2)?);
             let crate_id = db
                 .conn()
                 .query("SELECT crate_id FROM releases WHERE id = $1", &[&v1])?
@@ -216,15 +215,15 @@ mod tests {
                 .unwrap()
                 .get(0);
             assert_eq!(
-                authors(&db.conn(), crate_id)?,
+                authors(&mut db.conn(), crate_id)?,
                 vec!["malicious actor".to_string(), "Peter Rabbit".to_string()]
             );
 
-            delete_version(&db.conn(), &*env.storage(), "a", "1.0.0")?;
-            assert!(!release_exists(&db.conn(), v1)?);
-            assert!(release_exists(&db.conn(), v2)?);
+            delete_version(&mut db.conn(), &*env.storage(), "a", "1.0.0")?;
+            assert!(!release_exists(&mut db.conn(), v1)?);
+            assert!(release_exists(&mut db.conn(), v2)?);
             assert_eq!(
-                authors(&db.conn(), crate_id)?,
+                authors(&mut db.conn(), crate_id)?,
                 vec!["Peter Rabbit".to_string()]
             );
 

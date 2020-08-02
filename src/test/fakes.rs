@@ -248,7 +248,7 @@ impl<'a> FakeRelease<'a> {
             fs::write(crate_dir.join("README.md"), markdown)?;
         }
         let release_id = crate::db::add_package_into_database(
-            &db.conn(),
+            &mut db.conn(),
             &package,
             crate_dir,
             &self.build_result,
@@ -261,11 +261,11 @@ impl<'a> FakeRelease<'a> {
             algs,
         )?;
         crate::db::update_crate_data_in_database(
-            &db.conn(),
+            &mut db.conn(),
             &package.name,
             &self.registry_crate_data,
         )?;
-        crate::db::add_build_into_database(&db.conn(), release_id, &self.build_result)?;
+        crate::db::add_build_into_database(&mut db.conn(), release_id, &self.build_result)?;
 
         Ok(release_id)
     }
