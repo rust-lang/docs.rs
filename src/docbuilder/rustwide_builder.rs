@@ -171,7 +171,12 @@ impl RustwideBuilder {
         }
         // NOTE: rustup will automatically refuse to update the toolchain
         // if `rustfmt` is not available in the newer version
-        self.toolchain.add_component(&self.workspace, "rustfmt")?;
+        // NOTE: this ignores the error so that you can still run a build without rustfmt.
+        // This should only happen if you run a build for the first time when rustfmt isn't available.
+        if let Err(err) = self.toolchain.add_component(&self.workspace, "rustfmt") {
+            log::warn!("failed to install rustfmt: {}", err);
+            log::info!("continuing anyway, since this must be the first build");
+        }
 
         self.rustc_version = self.detect_rustc_version()?;
         if old_version.as_deref() != Some(&self.rustc_version) {
