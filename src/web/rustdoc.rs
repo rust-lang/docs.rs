@@ -192,7 +192,7 @@ struct RustdocPage {
 }
 
 impl RustdocPage {
-    fn into_response(self, rustdoc_html: &[u8], req: &mut Request) -> IronResult<Response> {
+    fn into_response(self, rustdoc_html: &[u8], max_parse_memory: usize, req: &mut Request) -> IronResult<Response> {
         use iron::{headers::ContentType, status::Status};
 
         let templates = req
@@ -203,7 +203,7 @@ impl RustdocPage {
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self),);
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
-        let html = ctry!(req, utils::rewrite_lol(rustdoc_html, ctx, templates));
+        let html = ctry!(req, utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates));
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
@@ -382,7 +382,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         is_latest_version,
         krate,
     }
-    .into_response(&file.0.content, req)
+    .into_response(&file.0.content, config.max_parse_memory, req)
 }
 
 /// Checks whether the given path exists.
