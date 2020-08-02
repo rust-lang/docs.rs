@@ -27,7 +27,6 @@ backtrace = "0.3"
 failure = { version = "0.1.3", features = ["backtrace"] }
 comrak = { version = "0.3", default-features = false }
 toml = "0.5"
-kuchiki = "0.8"
 schemamama = "0.3"
 schemamama_postgres = "0.2"
 systemstat = "0.1.4"
@@ -41,6 +40,7 @@ path-slash = "0.1.3"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.12.1"
 strum = { version = "0.18.0", features = ["derive"] }
+lol_html = "0.2"
 
 # Async
 tokio = { version = "0.2.22", features = ["rt-threaded"] }
@@ -82,6 +82,7 @@ procfs = "0.7"
 
 [dev-dependencies]
 criterion = "0.3"
+kuchiki = "0.8"
 rand = "0.7.3"
 
 [[bench]]
