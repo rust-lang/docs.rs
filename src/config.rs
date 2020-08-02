@@ -28,6 +28,8 @@ pub struct Config {
     // Max size of the files served by the docs.rs frontend
     pub(crate) max_file_size: usize,
     pub(crate) max_file_size_html: usize,
+    // The most memory that can be used to parse an HTML file
+    pub(crate) max_parse_memory: usize,
 }
 
 impl Config {
@@ -55,7 +57,8 @@ impl Config {
             github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
 
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
-            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 5 * 1024 * 1024)?,
+            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
+            max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 350 * 1024 * 1024)?,
         })
     }
 

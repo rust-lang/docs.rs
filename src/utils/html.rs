@@ -9,6 +9,7 @@ use tera::Context;
 /// The output is an HTML page which has not yet been UTF-8 validated.
 pub(crate) fn rewrite_lol(
     html: &[u8],
+    max_allowed_memory_usage: usize,
     ctx: Context,
     templates: &TemplateData,
 ) -> Result<Vec<u8>, RewritingError> {
@@ -67,7 +68,7 @@ pub(crate) fn rewrite_lol(
     let settings = Settings {
         element_content_handlers: vec![head, body],
         memory_settings: MemorySettings {
-            max_allowed_memory_usage: 1024 * 1024 * 350, // 350 MB, about 1.5x as large as our current largest file
+            max_allowed_memory_usage,
             ..MemorySettings::default()
         },
         ..Settings::default()
