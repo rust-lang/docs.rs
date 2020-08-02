@@ -12,7 +12,7 @@ use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
     modifiers::Redirect,
-    status, IronError, IronResult, Plugin, Request, Response, Url,
+    status, IronError, IronResult, Request, Response, Url,
 };
 use postgres::Connection;
 use router::Router;
@@ -498,17 +498,20 @@ impl_webpage! {
 }
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
-    use params::{Params, Value};
-
-    let params = ctry!(req, req.get::<Params>());
-    let query = params.find(&["query"]);
+    let url = req.url.as_ref();
+    let mut params = url.query_pairs();
+    let query = params.find(|(key, _)| key == "query");
     let conn = extension!(req, Pool).get()?;
 
-    if let Some(Value::String(query)) = query {
+    if let Some((_, query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
         // if there is a match
         // TODO: Redirecting to latest doc might be more useful
-        if params.find(&["i-am-feeling-lucky"]).is_some() {
+        // NOTE: calls `query_pairs()` again because iterators are lazy and only yield items once
+        if url
+            .query_pairs()
+            .any(|(key, _)| key == "i-am-feeling-lucky")
+        {
             // redirect to a random crate if query is empty
             if query.is_empty() {
                 // FIXME: This is a fast query but using a constant
@@ -612,7 +615,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         Search {
             title,
             results,
-            search_query: Some(query.to_owned()),
+            search_query: Some(query.into_owned()),
             ..Default::default()
         }
         .into_response(req)
