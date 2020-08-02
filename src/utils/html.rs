@@ -3,12 +3,12 @@ use lol_html::errors::RewritingError;
 use tera::Context;
 
 pub(crate) fn rewrite_lol(
-    html: &str,
+    html: &[u8],
     ctx: Context,
     templates: &TemplateData,
-) -> Result<String, RewritingError> {
+) -> Result<Vec<u8>, RewritingError> {
     use lol_html::html_content::{ContentType, Element};
-    use lol_html::{ElementContentHandlers, RewriteStrSettings};
+    use lol_html::{ElementContentHandlers, HtmlRewriter, MemorySettings, Settings};
 
     let templates = templates.templates.load();
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
@@ -58,10 +58,22 @@ pub(crate) fn rewrite_lol(
         &body_selector,
         ElementContentHandlers::default().element(body_handler),
     );
-    let settings = RewriteStrSettings {
+    let settings = Settings {
         element_content_handlers: vec![head, body],
-        ..RewriteStrSettings::default()
+        memory_settings: MemorySettings {
+            max_allowed_memory_usage: 1024 * 1024 * 350, // 350 MB, about 1.5x as large as our current largest file
+            ..MemorySettings::default()
+        },
+        ..Settings::default()
     };
 
-    lol_html::rewrite_str(html, settings)
+    // The input and output are always strings, we just use `&[u8]` so we only have to validate once.
+    let mut buffer = Vec::new();
+    let mut writer = HtmlRewriter::try_new(settings, |bytes: &[u8]| {
+        buffer.extend_from_slice(bytes);
+    })
+    .expect("utf8 is a valid encoding");
+    writer.write(html)?;
+    writer.end()?;
+    Ok(buffer)
 }
