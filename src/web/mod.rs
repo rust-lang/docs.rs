@@ -369,17 +369,18 @@ fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option
 
 /// Wrapper around the Markdown parser and renderer to render markdown
 fn render_markdown(text: &str) -> String {
-    use comrak::{markdown_to_html, ComrakOptions};
+    use comrak::{markdown_to_html, ComrakExtensionOptions, ComrakOptions};
 
-    let options = {
-        let mut options = ComrakOptions::default();
-        options.safe = true;
-        options.ext_superscript = true;
-        options.ext_table = true;
-        options.ext_autolink = true;
-        options.ext_tasklist = true;
-        options.ext_strikethrough = true;
-        options
+    let options = ComrakOptions {
+        extension: ComrakExtensionOptions {
+            superscript: true,
+            table: true,
+            autolink: true,
+            tasklist: true,
+            strikethrough: true,
+            ..ComrakExtensionOptions::default()
+        },
+        ..ComrakOptions::default()
     };
 
     markdown_to_html(text, &options)
