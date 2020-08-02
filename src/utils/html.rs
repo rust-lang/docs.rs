@@ -2,6 +2,11 @@ use crate::web::page::TemplateData;
 use lol_html::errors::RewritingError;
 use tera::Context;
 
+/// Rewrite a rustdoc page to have the docs.rs header
+///
+/// Given a rustdoc HTML page and a context to serialize it with,
+/// render the `rustdoc/` templates with the `html`.
+/// The output is an HTML page which has not yet been UTF-8 validated.
 pub(crate) fn rewrite_lol(
     html: &[u8],
     ctx: Context,
