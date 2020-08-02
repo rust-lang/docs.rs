@@ -30,7 +30,7 @@ pub(crate) fn add_package_into_database(
     source_dir: &Path,
     res: &BuildResult,
     default_target: &str,
-    source_files: Option<Value>,
+    source_files: Value,
     doc_targets: Vec<String>,
     registry_data: &ReleaseData,
     has_docs: bool,

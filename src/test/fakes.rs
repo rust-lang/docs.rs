@@ -174,67 +174,64 @@ impl<'a> FakeRelease<'a> {
 
     /// Returns the release_id
     pub(crate) fn create(self) -> Result<i32, Error> {
-        use std::collections::HashSet;
         use std::fs;
         use std::path::Path;
 
         let tempdir = tempfile::Builder::new().prefix("docs.rs-fake").tempdir()?;
         let package = self.package;
         let db = self.db;
+        let mut rustdoc_files = self.rustdoc_files;
+        let storage = self.storage;
 
-        let mut source_meta = None;
-        let mut algs = HashSet::new();
+        // Upload all source files as rustdoc files
+        // In real life, these would be highlighted HTML, but for testing we just use the files themselves.
+        for (source_path, data) in &self.source_files {
+            if source_path.starts_with("src/") {
+                let updated = ["src", &package.name, &source_path[4..]].join("/");
+                rustdoc_files.push((Box::leak(Box::new(updated)), data));
+            }
+        }
+
+        let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
+            let mut path_prefix = tempdir.path().join(prefix);
+            if let Some(target) = target {
+                path_prefix.push(target);
+            }
+            fs::create_dir(&path_prefix)?;
+
+            for (path, data) in files {
+                // allow `src/main.rs`
+                if let Some(parent) = Path::new(path).parent() {
+                    fs::create_dir_all(path_prefix.join(parent))?;
+                }
+                let file = path_prefix.join(&path);
+                log::debug!("writing file {}", file.display());
+                fs::write(file, data)?;
+            }
+
+            let prefix = format!(
+                "{}/{}/{}/{}",
+                prefix,
+                package.name,
+                package.version,
+                target.unwrap_or("")
+            );
+            log::debug!("adding directory {} from {}", prefix, path_prefix.display());
+            crate::db::add_path_into_database(&storage, &prefix, path_prefix)
+        };
+
+        let (source_meta, mut algs) = upload_files("source", &self.source_files, None)?;
+        log::debug!("added source files {}", source_meta);
+
         if self.build_result.successful {
-            let storage = self.storage.clone();
-            let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
-                let mut path_prefix = tempdir.path().join(prefix);
-                if let Some(target) = target {
-                    path_prefix.push(target);
-                }
-                fs::create_dir(&path_prefix)?;
-
-                for (path, data) in files {
-                    // allow `src/main.rs`
-                    if let Some(parent) = Path::new(path).parent() {
-                        fs::create_dir_all(path_prefix.join(parent))?;
-                    }
-                    let file = path_prefix.join(&path);
-                    log::debug!("writing file {}", file.display());
-                    fs::write(file, data)?;
-                }
-
-                let prefix = format!(
-                    "{}/{}/{}/{}",
-                    prefix,
-                    package.name,
-                    package.version,
-                    target.unwrap_or("")
-                );
-                log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-                crate::db::add_path_into_database(&storage, &prefix, path_prefix)
-            };
-
             let index = [&package.name, "index.html"].join("/");
-            let mut rustdoc_files = self.rustdoc_files;
             if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
                 rustdoc_files.push((&index, b"default index content"));
             }
-            for (source_path, data) in &self.source_files {
-                if source_path.starts_with("src/") {
-                    let updated = ["src", &package.name, &source_path[4..]].join("/");
-                    rustdoc_files.push((Box::leak(Box::new(updated)), data));
-                }
-            }
+
             let (rustdoc_meta, new_algs) = upload_files("rustdoc", &rustdoc_files, None)?;
             algs.extend(new_algs);
             log::debug!("added rustdoc files {}", rustdoc_meta);
-            match upload_files("source", &self.source_files, None)? {
-                (json, new_algs) => {
-                    source_meta = Some(json);
-                    algs.extend(new_algs);
-                }
-            }
-            log::debug!("added source files {}", source_meta.as_ref().unwrap());
 
             for target in &package.targets[1..] {
                 let platform = target.src_path.as_ref().unwrap();

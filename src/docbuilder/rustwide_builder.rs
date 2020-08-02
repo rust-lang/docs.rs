@@ -343,9 +343,7 @@ impl RustwideBuilder {
             .run(|build| {
                 use crate::docbuilder::metadata::BuildTargets;
 
-                let mut files_list = None;
                 let mut has_docs = false;
-                let mut algs = CompressionAlgorithms::default();
                 let mut successful_targets = Vec::new();
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
                 let BuildTargets {
@@ -353,16 +351,15 @@ impl RustwideBuilder {
                     other_targets,
                 } = metadata.targets();
 
-                // Do an initial build and then copy the sources in the database
+                // Store the sources even if the build fails
+                debug!("adding sources into database");
+                let prefix = format!("sources/{}/{}", name, version);
+                let (files_list, mut algs) =
+                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
+
+                // Perform an initial build
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
                 if res.result.successful {
-                    debug!("adding sources into database");
-                    let prefix = format!("sources/{}/{}", name, version);
-                    let (files, new_algs) =
-                        add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
-                    files_list = Some(files);
-                    algs.extend(new_algs);
-
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
                         has_docs = host_target.join("doc").join(name).is_dir();
