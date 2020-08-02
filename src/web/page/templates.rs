@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
 use path_slash::PathExt;
-use postgres::Connection;
+use postgres::Client as Connection;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -27,7 +27,7 @@ pub(crate) struct TemplateData {
 }
 
 impl TemplateData {
-    pub(crate) fn new(conn: &Connection) -> Result<Self> {
+    pub(crate) fn new(conn: &mut Connection) -> Result<Self> {
         log::trace!("Loading templates");
 
         let data = Self {
@@ -50,10 +50,10 @@ impl TemplateData {
 
         thread::spawn(move || {
             fn reload(template_data: &TemplateData, pool: &Pool) -> Result<()> {
-                let conn = pool.get()?;
+                let mut conn = pool.get()?;
                 template_data
                     .templates
-                    .swap(Arc::new(load_templates(&conn)?));
+                    .swap(Arc::new(load_templates(&mut conn)?));
                 log::info!("Reloaded templates");
 
                 Ok(())
@@ -72,7 +72,7 @@ impl TemplateData {
     }
 }
 
-fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
+fn load_rustc_resource_suffix(conn: &mut Connection) -> Result<String> {
     let res = conn.query(
         "SELECT value FROM config WHERE name = 'rustc_version';",
         &[],
@@ -82,7 +82,7 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
         failure::bail!("missing rustc version");
     }
 
-    if let Some(Ok(vers)) = res.get(0).get_opt::<_, Value>("value") {
+    if let Ok(vers) = res[0].try_get::<_, Value>("value") {
         if let Some(vers_str) = vers.as_str() {
             return Ok(crate::utils::parse_rustc_version(vers_str)?);
         }
@@ -91,7 +91,7 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
     failure::bail!("failed to parse the rustc version");
 }
 
-pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
+pub(super) fn load_templates(conn: &mut Connection) -> Result<Tera> {
     // This uses a custom function to find the templates in the filesystem instead of Tera's
     // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
     // application and running the tests.

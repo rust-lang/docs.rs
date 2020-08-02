@@ -21,7 +21,7 @@ impl_webpage! {
 }
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
+    let mut conn = extension!(req, Pool).get()?;
     let query = conn
         .query(
             "SELECT DISTINCT ON (crates.name)
@@ -66,14 +66,14 @@ struct About {
 impl_webpage!(About = "core/about.html");
 
 pub fn about_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
+    let mut conn = extension!(req, Pool).get()?;
     let res = ctry!(
         req,
         conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]),
     );
 
     let rustc_version = res.iter().next().and_then(|row| {
-        if let Some(Ok(Value::String(version))) = row.get_opt(0) {
+        if let Ok(Some(Value::String(version))) = row.try_get(0) {
             Some(version)
         } else {
             None

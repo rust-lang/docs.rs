@@ -4,7 +4,7 @@ use crate::{db::Pool, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::{status, Url};
-use postgres::Connection;
+use postgres::Client as Connection;
 use router::Router;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
@@ -67,7 +67,7 @@ pub struct Release {
 }
 
 impl CrateDetails {
-    pub fn new(conn: &Connection, name: &str, version: &str) -> Option<CrateDetails> {
+    pub fn new(conn: &mut Connection, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
         let query = "
             SELECT
@@ -107,7 +107,7 @@ impl CrateDetails {
         let krate = if rows.is_empty() {
             return None;
         } else {
-            rows.get(0)
+            &rows[0]
         };
 
         let crate_id: i32 = krate.get("crate_id");
@@ -125,7 +125,7 @@ impl CrateDetails {
             versions.reverse();
             versions
                 .iter()
-                .map(|version| map_to_release(&conn, crate_id, version.to_string()))
+                .map(|version| map_to_release(conn, crate_id, version.to_string()))
                 .collect()
         };
 
@@ -241,7 +241,7 @@ impl CrateDetails {
     }
 }
 
-fn map_to_release(conn: &Connection, crate_id: i32, version: String) -> Release {
+fn map_to_release(conn: &mut Connection, crate_id: i32, version: String) -> Release {
     let rows = conn
         .query(
             "SELECT build_status,
@@ -285,11 +285,11 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(req, router.find("name"));
     let req_version = router.find("version");
 
-    let conn = extension!(req, Pool).get()?;
+    let mut conn = extension!(req, Pool).get()?;
 
-    match match_version(&conn, &name, req_version).and_then(|m| m.assume_exact()) {
+    match match_version(&mut conn, &name, req_version).and_then(|m| m.assume_exact()) {
         Some(MatchSemver::Exact((version, _))) => {
-            let details = cexpect!(req, CrateDetails::new(&conn, &name, &version));
+            let details = cexpect!(req, CrateDetails::new(&mut conn, &name, &version));
 
             CrateDetailsPage { details }.into_response(req)
         }

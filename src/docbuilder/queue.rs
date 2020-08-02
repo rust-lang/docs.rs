@@ -10,7 +10,7 @@ impl DocBuilder {
     /// Updates registry index repository and adds new crates into build queue.
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
-        let conn = self.db.get()?;
+        let mut conn = self.db.get()?;
         let diff = self.index.diff()?;
         let (mut changes, oid) = diff.peek_changes()?;
         let mut crates_added = 0;
@@ -42,7 +42,7 @@ impl DocBuilder {
                 }
 
                 ChangeKind::Added => {
-                    let priority = get_crate_priority(&conn, &krate.name)?;
+                    let priority = get_crate_priority(&mut conn, &krate.name)?;
 
                     match self
                         .build_queue

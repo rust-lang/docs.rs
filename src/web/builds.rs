@@ -42,8 +42,8 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let version = cexpect!(req, router.find("version"));
     let req_build_id: i32 = router.find("id").unwrap_or("0").parse().unwrap_or(0);
 
-    let conn = extension!(req, Pool).get()?;
-    let limits = ctry!(req, Limits::for_crate(&conn, name));
+    let mut conn = extension!(req, Pool).get()?;
+    let limits = ctry!(req, Limits::for_crate(&mut conn, name));
 
     let query = ctry!(
         req,
@@ -111,7 +111,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     } else {
         BuildsPage {
-            metadata: MetaData::from_crate(&conn, &name, &version),
+            metadata: MetaData::from_crate(&mut conn, &name, &version),
             builds,
             build_details,
             limits,

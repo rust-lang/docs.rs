@@ -1,27 +1,28 @@
 use crate::error::Result;
 use chrono::{Duration, Utc};
-use postgres::Connection;
+use postgres::Client as Connection;
 use serde_json::{Map, Value};
 
-pub fn update_release_activity(conn: &Connection) -> Result<()> {
+pub fn update_release_activity(conn: &mut Connection) -> Result<()> {
     let mut dates = Vec::with_capacity(30);
     let mut crate_counts = Vec::with_capacity(30);
     let mut failure_counts = Vec::with_capacity(30);
 
     for day in 0..30 {
         let rows = conn.query(
-            &format!(
+            format!(
                 "SELECT COUNT(*)
                  FROM releases
                  WHERE release_time < NOW() - INTERVAL '{} day' AND
                        release_time > NOW() - INTERVAL '{} day'",
                 day,
                 day + 1
-            ),
+            )
+            .as_str(),
             &[],
         )?;
         let failures_count_rows = conn.query(
-            &format!(
+            format!(
                 "SELECT COUNT(*)
                  FROM releases
                  WHERE is_library = TRUE AND
@@ -30,12 +31,13 @@ pub fn update_release_activity(conn: &Connection) -> Result<()> {
                        release_time > NOW() - INTERVAL '{} day'",
                 day,
                 day + 1
-            ),
+            )
+            .as_str(),
             &[],
         )?;
 
-        let release_count: i64 = rows.get(0).get(0);
-        let failure_count: i64 = failures_count_rows.get(0).get(0);
+        let release_count: i64 = rows[0].get(0);
+        let failure_count: i64 = failures_count_rows[0].get(0);
         let now = Utc::now().naive_utc();
         let date = now - Duration::days(day);
 

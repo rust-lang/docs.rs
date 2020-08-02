@@ -14,7 +14,7 @@ use iron::{
     modifiers::Redirect,
     status, IronError, IronResult, Request, Response, Url,
 };
-use postgres::Connection;
+use postgres::Client as Connection;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
@@ -65,7 +65,12 @@ impl Default for Order {
     }
 }
 
-pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Order) -> Vec<Release> {
+pub(crate) fn get_releases(
+    conn: &mut Connection,
+    page: i64,
+    limit: i64,
+    order: Order,
+) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
@@ -91,7 +96,7 @@ pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Orde
         ordering,
     );
 
-    conn.query(&query, &[&limit, &offset, &filter_failed])
+    conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
         .unwrap()
         .into_iter()
         .map(|row| Release {
@@ -107,7 +112,7 @@ pub(crate) fn get_releases(conn: &Connection, page: i64, limit: i64, order: Orde
 }
 
 fn get_releases_by_author(
-    conn: &Connection,
+    conn: &mut Connection,
     page: i64,
     limit: i64,
     author: &str,
@@ -130,7 +135,7 @@ fn get_releases_by_author(
         WHERE authors.slug = $1
         ORDER BY crates.github_stars DESC
         LIMIT $2 OFFSET $3";
-    let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
+    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
 
     let mut author_name = None;
     let packages = query
@@ -156,7 +161,7 @@ fn get_releases_by_author(
 }
 
 fn get_releases_by_owner(
-    conn: &Connection,
+    conn: &mut Connection,
     page: i64,
     limit: i64,
     author: &str,
@@ -179,7 +184,7 @@ fn get_releases_by_owner(
                  WHERE owners.login = $1
                  ORDER BY crates.github_stars DESC
                  LIMIT $2 OFFSET $3";
-    let query = conn.query(&query, &[&author, &limit, &offset]).unwrap();
+    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
 
     let mut author_name = None;
     let packages = query
@@ -221,7 +226,7 @@ fn get_releases_by_owner(
 /// Returns 0 and an empty Vec when no results are found or if a database error occurs
 ///
 fn get_search_results(
-    conn: &Connection,
+    conn: &mut Connection,
     mut query: &str,
     page: i64,
     limit: i64,
@@ -301,8 +306,8 @@ impl_webpage! {
 }
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+    let mut conn = extension!(req, Pool).get()?;
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
 
     HomePage { recent_releases }.into_response(req)
 }
@@ -318,8 +323,8 @@ impl_webpage! {
 }
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+    let mut conn = extension!(req, Pool).get()?;
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
 
     ReleaseFeed { recent_releases }.into_response(req)
 }
@@ -371,8 +376,8 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
     };
 
     let releases = {
-        let conn = extension!(req, Pool).get()?;
-        get_releases(&conn, page_number, RELEASES_IN_RELEASES, release_order)
+        let mut conn = extension!(req, Pool).get()?;
+        get_releases(&mut conn, page_number, RELEASES_IN_RELEASES, release_order)
     };
 
     // Show next and previous page buttons
@@ -422,20 +427,20 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound))?;
 
     let (author_name, releases) = {
-        let conn = extension!(req, Pool).get()?;
+        let mut conn = extension!(req, Pool).get()?;
 
         if author.starts_with('@') {
             let mut author = author.split('@');
 
             get_releases_by_owner(
-                &conn,
+                &mut conn,
                 page_number,
                 RELEASES_IN_RELEASES,
                 // TODO: Is this fallible?
                 cexpect!(req, author.nth(1)),
             )
         } else {
-            get_releases_by_author(&conn, page_number, RELEASES_IN_RELEASES, author)
+            get_releases_by_author(&mut conn, page_number, RELEASES_IN_RELEASES, author)
         }
     };
 
@@ -501,7 +506,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let url = req.url.as_ref();
     let mut params = url.query_pairs();
     let query = params.find(|(key, _)| key == "query");
-    let conn = extension!(req, Pool).get()?;
+    let mut conn = extension!(req, Pool).get()?;
 
     if let Some((_, query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
@@ -556,7 +561,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             // since we never pass a version into `match_version` here, we'll never get
             // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
             // matter
-            if let Some(matchver) = match_version(&conn, &query, None) {
+            if let Some(matchver) = match_version(&mut conn, &query, None) {
                 let (version, id) = matchver.version.into_parts();
                 let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
 
@@ -604,7 +609,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             }
         }
 
-        let (_, results) = get_search_results(&conn, &query, 1, RELEASES_IN_RELEASES);
+        let (_, results) = get_search_results(&mut conn, &query, 1, RELEASES_IN_RELEASES);
         let title = if results.is_empty() {
             format!("No results found for '{}'", query)
         } else {
@@ -635,7 +640,7 @@ impl_webpage! {
 }
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
-    let conn = extension!(req, Pool).get()?;
+    let mut conn = extension!(req, Pool).get()?;
     let activity_data: Value = ctry!(
         req,
         conn.query(

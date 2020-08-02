@@ -1,14 +1,14 @@
 use crate::Config;
-use postgres::Connection;
+use postgres::{Client as Connection, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 
-pub(crate) type PoolConnection = r2d2::PooledConnection<PostgresConnectionManager>;
+pub(crate) type PoolConnection = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
 
 const DEFAULT_SCHEMA: &str = "public";
 
 #[derive(Debug, Clone)]
 pub struct Pool {
-    pool: r2d2::Pool<PostgresConnectionManager>,
+    pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
 }
 
 impl Pool {
@@ -24,12 +24,11 @@ impl Pool {
     fn new_inner(config: &Config, schema: &str) -> Result<Pool, PoolError> {
         crate::web::metrics::MAX_DB_CONNECTIONS.set(config.max_pool_size as i64);
 
-        let manager = PostgresConnectionManager::new(
-            config.database_url.as_str(),
-            r2d2_postgres::TlsMode::None,
-        )
-        .map_err(PoolError::InvalidDatabaseUrl)?;
-
+        let url = config
+            .database_url
+            .parse()
+            .map_err(PoolError::InvalidDatabaseUrl)?;
+        let manager = PostgresConnectionManager::new(url, NoTls);
         let pool = r2d2::Pool::builder()
             .max_size(config.max_pool_size)
             .min_idle(Some(config.min_pool_idle))
@@ -76,7 +75,7 @@ impl r2d2::CustomizeConnection<Connection, postgres::Error> for SetSchema {
     fn on_acquire(&self, conn: &mut Connection) -> Result<(), postgres::Error> {
         if self.schema != DEFAULT_SCHEMA {
             conn.execute(
-                &format!("SET search_path TO {}, {};", self.schema, DEFAULT_SCHEMA),
+                format!("SET search_path TO {}, {};", self.schema, DEFAULT_SCHEMA).as_str(),
                 &[],
             )?;
         }
