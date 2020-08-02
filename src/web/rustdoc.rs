@@ -593,7 +593,7 @@ mod test {
     ) -> Result<Option<String>, failure::Error> {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
-        println!("fetched path {} and got content {}", path, data);
+        log::info!("fetched path {} and got content {}", path, data);
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom
