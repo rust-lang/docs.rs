@@ -375,10 +375,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     );
     // Extract the head and body of the rustdoc file so that we can insert it into our own html
     let html = ctry!(req, utils::rewrite_lol(file_content, ctx, templates));
-    /*
-    let (rustdoc_head, rustdoc_body, mut rustdoc_body_class) =
-        ctry!(req, utils::extract_head_and_body(&file_content));
-    */
 
     rendering_time.step("serve html");
     use iron::{headers::ContentType, status::Status};
