@@ -1,5 +1,5 @@
 use failure::{Error, Fail};
-use postgres::Connection;
+use postgres::Client as Connection;
 
 #[derive(Debug, Fail)]
 enum BlacklistError {
@@ -11,18 +11,18 @@ enum BlacklistError {
 }
 
 /// Returns whether the given name is blacklisted.
-pub fn is_blacklisted(conn: &Connection, name: &str) -> Result<bool, Error> {
+pub fn is_blacklisted(conn: &mut Connection, name: &str) -> Result<bool, Error> {
     let rows = conn.query(
         "SELECT COUNT(*) FROM blacklisted_crates WHERE crate_name = $1;",
         &[&name],
     )?;
-    let count: i64 = rows.get(0).get(0);
+    let count: i64 = rows[0].get(0);
 
     Ok(count != 0)
 }
 
 /// Returns the crate names on the blacklist, sorted ascending.
-pub fn list_crates(conn: &Connection) -> Result<Vec<String>, Error> {
+pub fn list_crates(conn: &mut Connection) -> Result<Vec<String>, Error> {
     let rows = conn.query(
         "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
         &[],
@@ -32,7 +32,7 @@ pub fn list_crates(conn: &Connection) -> Result<Vec<String>, Error> {
 }
 
 /// Adds a crate to the blacklist.
-pub fn add_crate(conn: &Connection, name: &str) -> Result<(), Error> {
+pub fn add_crate(conn: &mut Connection, name: &str) -> Result<(), Error> {
     if is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()).into());
     }
@@ -46,7 +46,7 @@ pub fn add_crate(conn: &Connection, name: &str) -> Result<(), Error> {
 }
 
 /// Removes a crate from the blacklist.
-pub fn remove_crate(conn: &Connection, name: &str) -> Result<(), Error> {
+pub fn remove_crate(conn: &mut Connection, name: &str) -> Result<(), Error> {
     if !is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateNotOnBlacklist(name.into()).into());
     }

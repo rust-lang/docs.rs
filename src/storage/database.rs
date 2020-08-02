@@ -2,7 +2,7 @@ use super::{Blob, StorageTransaction};
 use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
-use postgres::transaction::Transaction;
+use postgres::Transaction;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
@@ -15,8 +15,8 @@ impl DatabaseBackend {
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
         let query = "SELECT COUNT(*) > 0 FROM files WHERE path = $1";
-        let conn = self.pool.get()?;
-        Ok(conn.query(query, &[&path])?.get(0).get(0))
+        let mut conn = self.pool.get()?;
+        Ok(conn.query(query, &[&path])?[0].get(0))
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -41,7 +41,7 @@ impl DatabaseBackend {
         if rows.is_empty() {
             Err(super::PathNotFoundError.into())
         } else {
-            let row = rows.get(0);
+            let row = &rows[0];
 
             if row.get("is_too_big") {
                 return Err(std::io::Error::new(
@@ -78,7 +78,7 @@ pub(super) struct DatabaseConnection {
 
 impl DatabaseConnection {
     pub(super) fn start_storage_transaction(
-        &self,
+        &mut self,
     ) -> Result<DatabaseStorageTransaction<'_>, Error> {
         Ok(DatabaseStorageTransaction {
             transaction: self.conn.transaction()?,

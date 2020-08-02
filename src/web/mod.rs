@@ -90,7 +90,7 @@ use iron::{
     Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
 };
 use page::TemplateData;
-use postgres::Connection;
+use postgres::Client as Connection;
 use router::NoRoute;
 use semver::{Version, VersionReq};
 use serde::Serialize;
@@ -284,7 +284,7 @@ impl MatchSemver {
 /// This function will also check for crates where dashes in the name (`-`) have been replaced with
 /// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
-fn match_version(conn: &Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
+fn match_version(conn: &mut Connection, name: &str, version: Option<&str>) -> Option<MatchVersion> {
     // version is an Option<&str> from router::Router::get, need to decode first
     use iron::url::percent_encoding::percent_decode;
 
@@ -400,7 +400,7 @@ impl Server {
         storage: Arc<Storage>,
     ) -> Result<Self, Error> {
         // Initialize templates
-        let template_data = Arc::new(TemplateData::new(&*db.get()?)?);
+        let template_data = Arc::new(TemplateData::new(&mut *db.get()?)?);
         if reload_templates {
             TemplateData::start_template_reloading(template_data.clone(), db.clone());
         }
@@ -590,7 +590,7 @@ pub(crate) struct MetaData {
 }
 
 impl MetaData {
-    fn from_crate(conn: &Connection, name: &str, version: &str) -> Option<MetaData> {
+    fn from_crate(conn: &mut Connection, name: &str, version: &str) -> Option<MetaData> {
         let rows = conn
             .query(
                 "SELECT crates.name,

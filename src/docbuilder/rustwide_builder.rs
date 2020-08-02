@@ -209,8 +209,8 @@ impl RustwideBuilder {
 
         info!("building a dummy crate to get essential files");
 
-        let conn = self.db.get()?;
-        let limits = Limits::for_crate(&conn, DUMMY_CRATE_NAME)?;
+        let mut conn = self.db.get()?;
+        let limits = Limits::for_crate(&mut conn, DUMMY_CRATE_NAME)?;
 
         let mut build_dir = self
             .workspace
@@ -322,14 +322,14 @@ impl RustwideBuilder {
 
         info!("building package {} {}", name, version);
 
-        let conn = self.db.get()?;
+        let mut conn = self.db.get()?;
 
-        if is_blacklisted(&conn, name)? {
+        if is_blacklisted(&mut conn, name)? {
             info!("skipping build of {}, crate has been blacklisted", name);
             return Ok(false);
         }
 
-        let limits = Limits::for_crate(&conn, name)?;
+        let limits = Limits::for_crate(&mut conn, name)?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
         build_dir.purge()?;
@@ -415,7 +415,7 @@ impl RustwideBuilder {
                 };
 
                 let release_id = add_package_into_database(
-                    &conn,
+                    &mut conn,
                     res.cargo_metadata.root(),
                     &build.host_source_dir(),
                     &res.result,
@@ -428,11 +428,11 @@ impl RustwideBuilder {
                     algs,
                 )?;
 
-                add_build_into_database(&conn, release_id, &res.result)?;
+                add_build_into_database(&mut conn, release_id, &res.result)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
                 match doc_builder.index.api().get_crate_data(name) {
-                    Ok(crate_data) => update_crate_data_in_database(&conn, name, &crate_data)?,
+                    Ok(crate_data) => update_crate_data_in_database(&mut conn, name, &crate_data)?,
                     Err(err) => warn!("{:#?}", err),
                 }
 

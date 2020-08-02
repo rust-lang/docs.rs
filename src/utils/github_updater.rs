@@ -3,7 +3,7 @@ use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::{debug, warn};
-use postgres::Connection;
+use postgres::Client as Connection;
 use regex::Regex;
 use reqwest::header::{HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
@@ -62,7 +62,7 @@ impl GithubUpdater {
             return Ok(());
         }
 
-        let conn = self.pool.get()?;
+        let mut conn = self.pool.get()?;
         // TODO: This query assumes repository field in Cargo.toml is
         //       always the same across all versions of a crate
         let rows = conn.query(
@@ -85,7 +85,7 @@ impl GithubUpdater {
             let repository_url: String = row.get(2);
 
             debug!("Updating {}", crate_name);
-            if let Err(err) = self.update_crate(&conn, crate_id, &repository_url) {
+            if let Err(err) = self.update_crate(&mut conn, crate_id, &repository_url) {
                 if self.is_rate_limited()? {
                     warn!("Skipping remaining updates because of rate limit");
                     return Ok(());
@@ -120,7 +120,12 @@ impl GithubUpdater {
         Ok(response.resources.core.remaining == 0)
     }
 
-    fn update_crate(&self, conn: &Connection, crate_id: i32, repository_url: &str) -> Result<()> {
+    fn update_crate(
+        &self,
+        conn: &mut Connection,
+        crate_id: i32,
+        repository_url: &str,
+    ) -> Result<()> {
         let path =
             get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
         let fields = self.get_github_fields(&path)?;

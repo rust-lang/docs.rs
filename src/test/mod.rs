@@ -8,7 +8,7 @@ use crate::Config;
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
-use postgres::Connection;
+use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
@@ -229,7 +229,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let conn = Connection::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
+        let mut conn = Connection::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
         conn.batch_execute(&format!(
             "
                 CREATE SCHEMA {0};
@@ -237,7 +237,7 @@ impl TestDatabase {
             ",
             schema
         ))?;
-        crate::db::migrate(None, &conn)?;
+        crate::db::migrate(None, &mut conn)?;
 
         // Move all sequence start positions 10000 apart to avoid overlapping primary keys
         let query: String = conn

@@ -216,12 +216,12 @@ impl PrioritySubcommand {
     pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Set { pattern, priority } => {
-                set_crate_priority(&*ctx.conn()?, &pattern, priority)
+                set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
                     .context("Could not set pattern's priority")?;
             }
 
             Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(&*ctx.conn()?, &pattern)
+                if let Some(priority) = remove_crate_priority(&mut *ctx.conn()?, &pattern)
                     .context("Could not remove pattern's priority")?
                 {
                     println!("Removed pattern with priority {}", priority);
@@ -367,7 +367,7 @@ impl BuildSubcommand {
 
             Self::UpdateToolchain { only_first_time } => {
                 if only_first_time {
-                    let conn = ctx
+                    let mut conn = ctx
                         .pool()?
                         .get()
                         .context("failed to get a database connection")?;
@@ -449,7 +449,8 @@ impl DatabaseSubcommand {
     pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
-                db::migrate(version, &*ctx.conn()?).context("Failed to run database migrations")?;
+                db::migrate(version, &mut *ctx.conn()?)
+                    .context("Failed to run database migrations")?;
             }
 
             Self::UpdateGithubFields => {
@@ -461,7 +462,7 @@ impl DatabaseSubcommand {
                 let index = Index::new(&ctx.config()?.registry_index_path)?;
 
                 db::update_crate_data_in_database(
-                    &*ctx.conn()?,
+                    &mut *ctx.conn()?,
                     &name,
                     &index.api().get_crate_data(&name)?,
                 )?;
@@ -473,16 +474,18 @@ impl DatabaseSubcommand {
             }
 
             // FIXME: This is actually util command not database
-            Self::UpdateReleaseActivity => cratesfyi::utils::update_release_activity(&*ctx.conn()?)
-                .context("Failed to update release activity")?,
+            Self::UpdateReleaseActivity => {
+                cratesfyi::utils::update_release_activity(&mut *ctx.conn()?)
+                    .context("Failed to update release activity")?
+            }
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&*ctx.conn()?, &*ctx.storage()?, &name, &version)
+            } => db::delete_version(&mut *ctx.conn()?, &*ctx.storage()?, &name, &version)
                 .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&*ctx.conn()?, &*ctx.storage()?, &name)
+            } => db::delete_crate(&mut *ctx.conn()?, &*ctx.storage()?, &name)
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
         }
@@ -512,19 +515,19 @@ enum BlacklistSubcommand {
 
 impl BlacklistSubcommand {
     fn handle_args(self, ctx: Context) -> Result<(), Error> {
-        let conn = &*ctx.conn()?;
+        let mut conn = &mut *ctx.conn()?;
         match self {
             Self::List => {
-                let crates = db::blacklist::list_crates(&conn)
+                let crates = db::blacklist::list_crates(&mut conn)
                     .context("failed to list crates on blacklist")?;
 
                 println!("{}", crates.join("\n"));
             }
 
-            Self::Add { crate_name } => db::blacklist::add_crate(&conn, &crate_name)
+            Self::Add { crate_name } => db::blacklist::add_crate(&mut conn, &crate_name)
                 .context("failed to add crate to blacklist")?,
 
-            Self::Remove { crate_name } => db::blacklist::remove_crate(&conn, &crate_name)
+            Self::Remove { crate_name } => db::blacklist::remove_crate(&mut conn, &crate_name)
                 .context("failed to remove crate from blacklist")?,
         }
         Ok(())
@@ -602,7 +605,10 @@ impl Context {
 
     fn conn(
         &self,
-    ) -> Result<r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager>, Error> {
+    ) -> Result<
+        r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<postgres::NoTls>>,
+        Error,
+    > {
         Ok(self.pool()?.get()?)
     }
 }

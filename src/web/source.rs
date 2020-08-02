@@ -7,7 +7,7 @@ use crate::{
     Config, Storage,
 };
 use iron::{status::Status, IronError, IronResult, Request, Response};
-use postgres::Connection;
+use postgres::Client as Connection;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
@@ -47,7 +47,12 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
-    fn from_path(conn: &Connection, name: &str, version: &str, req_path: &str) -> Option<FileList> {
+    fn from_path(
+        conn: &mut Connection,
+        name: &str,
+        version: &str,
+        req_path: &str,
+    ) -> Option<FileList> {
         let rows = conn
             .query(
                 "SELECT crates.name,
@@ -68,7 +73,7 @@ impl FileList {
             return None;
         }
 
-        let files: Value = rows.get(0).get_opt(5).unwrap().ok()?;
+        let files: Value = rows[0].try_get(5).ok()?;
 
         let mut file_list = Vec::new();
         if let Some(files) = files.as_array() {
@@ -127,12 +132,12 @@ impl FileList {
 
             Some(FileList {
                 metadata: MetaData {
-                    name: rows.get(0).get(0),
-                    version: rows.get(0).get(1),
-                    description: rows.get(0).get(2),
-                    target_name: rows.get(0).get(3),
-                    rustdoc_status: rows.get(0).get(4),
-                    default_target: rows.get(0).get(6),
+                    name: rows[0].get(0),
+                    version: rows[0].get(1),
+                    description: rows[0].get(2),
+                    target_name: rows[0].get(3),
+                    rustdoc_status: rows[0].get(4),
+                    default_target: rows[0].get(6),
                 },
                 files: file_list,
             })
@@ -185,7 +190,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let pool = extension!(req, Pool);
-    let conn = pool.get()?;
+    let mut conn = pool.get()?;
     let storage = extension!(req, Storage);
     let config = extension!(req, Config);
 
@@ -213,7 +218,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (None, false)
     };
 
-    let file_list = FileList::from_path(&conn, &name, &version, &req_path)
+    let file_list = FileList::from_path(&mut conn, &name, &version, &req_path)
         .ok_or_else(|| IronError::new(Nope::NoResults, Status::NotFound))?;
 
     SourcePage {

@@ -88,7 +88,7 @@ pub fn start_daemon(
             let now = Utc::now();
             if now.hour() == 23 && now.minute() == 55 {
                 info!("Updating release activity");
-                update_release_activity(&*cloned_db.get()?)?;
+                update_release_activity(&mut *cloned_db.get()?)?;
             }
             Ok(())
         },

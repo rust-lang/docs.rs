@@ -125,7 +125,7 @@ impl Storage {
     where
         F: FnOnce(&mut dyn StorageTransaction) -> Result<T, Error>,
     {
-        let conn;
+        let mut conn;
         let mut trans: Box<dyn StorageTransaction> = match &self.backend {
             StorageBackend::Database(db) => {
                 conn = db.start_connection()?;
