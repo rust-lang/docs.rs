@@ -192,7 +192,12 @@ struct RustdocPage {
 }
 
 impl RustdocPage {
-    fn into_response(self, rustdoc_html: &[u8], max_parse_memory: usize, req: &mut Request) -> IronResult<Response> {
+    fn into_response(
+        self,
+        rustdoc_html: &[u8],
+        max_parse_memory: usize,
+        req: &mut Request,
+    ) -> IronResult<Response> {
         use iron::{headers::ContentType, status::Status};
 
         let templates = req
@@ -203,7 +208,10 @@ impl RustdocPage {
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self),);
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
-        let html = ctry!(req, utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates));
+        let html = ctry!(
+            req,
+            utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates)
+        );
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
