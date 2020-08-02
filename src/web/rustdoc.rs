@@ -593,7 +593,7 @@ mod test {
     ) -> Result<Option<String>, failure::Error> {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
-        println!("{}", data);
+        println!("fetched path {} and got content {}", path, data);
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom
@@ -610,8 +610,8 @@ mod test {
     }
 
     fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
-        try_latest_version_redirect(path, web)
-            .and_then(|v| v.ok_or_else(|| failure::format_err!("no redirect found for {}", path)))
+        try_latest_version_redirect(path, web)?
+            .ok_or_else(|| failure::format_err!("no redirect found for {}", path))
     }
 
     #[test]
@@ -623,12 +623,12 @@ mod test {
                 .name("buggy")
                 .version("0.1.0")
                 .build_result_successful(true)
-                .rustdoc_file("settings.html", b"some data")
-                .rustdoc_file("directory_1/index.html", b"some data 1")
-                .rustdoc_file("directory_2.html/index.html", b"some data 1")
-                .rustdoc_file("all.html", b"some data 2")
-                .rustdoc_file("directory_3/.gitignore", b"*.ext")
-                .rustdoc_file("directory_4/empty_file_no_ext", b"")
+                .rustdoc_file("settings.html")
+                .rustdoc_file("directory_1/index.html")
+                .rustdoc_file("directory_2.html/index.html")
+                .rustdoc_file("all.html")
+                .rustdoc_file("directory_3/.gitignore")
+                .rustdoc_file("directory_4/empty_file_no_ext")
                 .create()?;
             env.fake_release()
                 .name("buggy")
@@ -654,7 +654,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/index.html")
                 .create()?;
 
             let web = env.frontend();
@@ -668,7 +668,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/index.html", b"some content")
+                .rustdoc_file("dummy/index.html")
                 .default_target(target)
                 .create()?;
             let base = "/dummy/0.2.0/dummy/";
@@ -681,8 +681,8 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
-                .rustdoc_file("dummy/index.html", b"some content")
-                .rustdoc_file("all.html", b"html")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("all.html")
                 .default_target(target)
                 .create()?;
             let base = "/dummy/0.3.0/dummy/";
@@ -705,15 +705,15 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/blah/index.html", b"lah")
-                .rustdoc_file("dummy/blah/blah.html", b"lah")
-                .rustdoc_file("dummy/struct.will-be-deleted.html", b"lah")
+                .rustdoc_file("dummy/blah/index.html")
+                .rustdoc_file("dummy/blah/blah.html")
+                .rustdoc_file("dummy/struct.will-be-deleted.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/blah/index.html", b"lah")
-                .rustdoc_file("dummy/blah/blah.html", b"lah")
+                .rustdoc_file("dummy/blah/index.html")
+                .rustdoc_file("dummy/blah/blah.html")
                 .create()?;
 
             let web = env.frontend();
@@ -751,7 +751,7 @@ mod test {
                 .name("dummy")
                 .version("0.1.0")
                 .add_platform("x86_64-pc-windows-msvc")
-                .rustdoc_file("dummy/struct.Blah.html", b"lah")
+                .rustdoc_file("dummy/struct.Blah.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
@@ -797,7 +797,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
@@ -819,17 +819,17 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
 
@@ -850,19 +850,19 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
 
@@ -895,7 +895,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
 
@@ -904,7 +904,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/index.html", b"lah")
+                .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
 
@@ -938,7 +938,7 @@ mod test {
             env.fake_release()
                 .name("fake-crate")
                 .version("0.0.1")
-                .rustdoc_file("fake_crate/index.html", b"some content")
+                .rustdoc_file("fake_crate/index.html")
                 .create()?;
 
             let web = env.frontend();
@@ -964,7 +964,7 @@ mod test {
                 env.fake_release()
                     .name(name)
                     .version(version)
-                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"), b"")
+                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"))
                     .create()?;
             }
 
@@ -1014,13 +1014,13 @@ mod test {
             env.fake_release()
                 .name("dummy-dash")
                 .version("0.1.0")
-                .rustdoc_file("dummy_dash/index.html", b"")
+                .rustdoc_file("dummy_dash/index.html")
                 .create()?;
 
             env.fake_release()
                 .name("dummy_mixed-separators")
                 .version("0.1.0")
-                .rustdoc_file("dummy_mixed_separators/index.html", b"")
+                .rustdoc_file("dummy_mixed_separators/index.html")
                 .create()?;
 
             let web = env.frontend();
@@ -1126,8 +1126,8 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("dummy/index.html", b"some content")
-                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("dummy/struct.Dummy.html")
                 .add_target("x86_64-unknown-linux-gnu")
                 .create()?;
 
@@ -1156,8 +1156,8 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .rustdoc_file("dummy/index.html", b"some content")
-                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-pc-windows-msvc")
                 .create()?;
 
@@ -1186,8 +1186,8 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
-                .rustdoc_file("dummy/index.html", b"some content")
-                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-unknown-linux-gnu")
                 .create()?;
 
@@ -1216,20 +1216,14 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.4.0")
-                .rustdoc_file("settings.html", b"top-level items")
-                .rustdoc_file("dummy/index.html", b"some content")
-                .rustdoc_file("dummy/struct.Dummy.html", b"some other content")
-                .rustdoc_file("dummy/struct.DefaultOnly.html", b"some otter content")
-                .rustdoc_file("x86_64-pc-windows-msvc/settings.html", b"top-level items")
-                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html", b"some content")
-                .rustdoc_file(
-                    "x86_64-pc-windows-msvc/dummy/struct.Dummy.html",
-                    b"some other content",
-                )
-                .rustdoc_file(
-                    "x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html",
-                    b"some otter content",
-                )
+                .rustdoc_file("settings.html")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("dummy/struct.Dummy.html")
+                .rustdoc_file("dummy/struct.DefaultOnly.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/settings.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/struct.Dummy.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/struct.WindowsOnly.html")
                 .default_target("x86_64-unknown-linux-gnu")
                 .add_target("x86_64-pc-windows-msvc")
                 .create()?;
@@ -1498,7 +1492,7 @@ mod test {
             env.fake_release()
                 .name("tokio")
                 .version("0.2.21")
-                .rustdoc_file("tokio/time/index.html", b"content")
+                .rustdoc_file("tokio/time/index.html")
                 .create()?;
             assert_redirect(
                 "/tokio/0.2.21/tokio/time",
