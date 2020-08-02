@@ -1,9 +1,9 @@
 use crate::error::Result;
 use chrono::{Duration, Utc};
-use postgres::Client as Connection;
+use postgres::Client;
 use serde_json::{Map, Value};
 
-pub fn update_release_activity(conn: &mut Connection) -> Result<()> {
+pub fn update_release_activity(conn: &mut Client) -> Result<()> {
     let mut dates = Vec::with_capacity(30);
     let mut crate_counts = Vec::with_capacity(30);
     let mut failure_counts = Vec::with_capacity(30);

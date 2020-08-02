@@ -1,8 +1,8 @@
 use crate::Config;
-use postgres::{Client as Connection, NoTls};
+use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 
-pub(crate) type PoolConnection = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
+pub(crate) type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
 
 const DEFAULT_SCHEMA: &str = "public";
 
@@ -39,12 +39,12 @@ impl Pool {
         Ok(Pool { pool })
     }
 
-    pub fn get(&self) -> Result<PoolConnection, PoolError> {
+    pub fn get(&self) -> Result<PoolClient, PoolError> {
         match self.pool.get() {
             Ok(conn) => Ok(conn),
             Err(err) => {
                 crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
-                Err(PoolError::ConnectionError(err))
+                Err(PoolError::ClientError(err))
             }
         }
     }
@@ -71,8 +71,8 @@ impl SetSchema {
     }
 }
 
-impl r2d2::CustomizeConnection<Connection, postgres::Error> for SetSchema {
-    fn on_acquire(&self, conn: &mut Connection) -> Result<(), postgres::Error> {
+impl r2d2::CustomizeConnection<Client, postgres::Error> for SetSchema {
+    fn on_acquire(&self, conn: &mut Client) -> Result<(), postgres::Error> {
         if self.schema != DEFAULT_SCHEMA {
             conn.execute(
                 format!("SET search_path TO {}, {};", self.schema, DEFAULT_SCHEMA).as_str(),
@@ -92,5 +92,5 @@ pub enum PoolError {
     PoolCreationFailed(#[fail(cause)] r2d2::Error),
 
     #[fail(display = "failed to get a database connection")]
-    ConnectionError(#[fail(cause)] r2d2::Error),
+    ClientError(#[fail(cause)] r2d2::Error),
 }

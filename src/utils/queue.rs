@@ -1,12 +1,12 @@
 //! Utilities for interacting with the build queue
 
 use crate::error::Result;
-use postgres::Client as Connection;
+use postgres::Client;
 
 const DEFAULT_PRIORITY: i32 = 0;
 
 /// Get the build queue priority for a crate
-pub fn get_crate_priority(conn: &mut Connection, name: &str) -> Result<i32> {
+pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
     // Search the `priority` table for a priority where the crate name matches the stored pattern
     let query = conn.query(
         "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
@@ -26,7 +26,7 @@ pub fn get_crate_priority(conn: &mut Connection, name: &str) -> Result<i32> {
 /// Note: `pattern` is used in a `LIKE` statement, so it must follow the postgres like syntax
 ///
 /// [`pattern`]: https://www.postgresql.org/docs/8.3/functions-matching.html
-pub fn set_crate_priority(conn: &mut Connection, pattern: &str, priority: i32) -> Result<()> {
+pub fn set_crate_priority(conn: &mut Client, pattern: &str, priority: i32) -> Result<()> {
     conn.query(
         "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
         &[&pattern, &priority],
@@ -37,7 +37,7 @@ pub fn set_crate_priority(conn: &mut Connection, pattern: &str, priority: i32) -
 
 /// Remove a pattern from the priority table, returning the priority that it was associated with or `None`
 /// if nothing was removed
-pub fn remove_crate_priority(conn: &mut Connection, pattern: &str) -> Result<Option<i32>> {
+pub fn remove_crate_priority(conn: &mut Client, pattern: &str) -> Result<Option<i32>> {
     let query = conn.query(
         "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
         &[&pattern],

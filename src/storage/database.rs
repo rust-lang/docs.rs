@@ -65,18 +65,18 @@ impl DatabaseBackend {
         }
     }
 
-    pub(super) fn start_connection(&self) -> Result<DatabaseConnection, Error> {
-        Ok(DatabaseConnection {
+    pub(super) fn start_connection(&self) -> Result<DatabaseClient, Error> {
+        Ok(DatabaseClient {
             conn: self.pool.get()?,
         })
     }
 }
 
-pub(super) struct DatabaseConnection {
-    conn: crate::db::PoolConnection,
+pub(super) struct DatabaseClient {
+    conn: crate::db::PoolClient,
 }
 
-impl DatabaseConnection {
+impl DatabaseClient {
     pub(super) fn start_storage_transaction(
         &mut self,
     ) -> Result<DatabaseStorageTransaction<'_>, Error> {
