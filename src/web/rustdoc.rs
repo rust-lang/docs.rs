@@ -298,18 +298,20 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Attempt to load the file from the database
-    let file = if let Ok(file) = File::from_path(&storage, &path, &config) {
-        file
-    } else {
-        // If it fails, we try again with /index.html at the end
-        path.push_str("/index.html");
-        req_path.push("index.html");
+    let file = match File::from_path(&storage, &path, &config) {
+        Ok(file) => file,
+        Err(err) => {
+            log::debug!("got error serving {}: {}", path, err);
+            // If it fails, we try again with /index.html at the end
+            path.push_str("/index.html");
+            req_path.push("index.html");
 
-        return if ctry!(req, storage.exists(&path)) {
-            redirect(&name, &version, &req_path[3..])
-        } else {
-            Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
-        };
+            return if ctry!(req, storage.exists(&path)) {
+                redirect(&name, &version, &req_path[3..])
+            } else {
+                Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
+            };
+        }
     };
 
     // Serve non-html files directly
