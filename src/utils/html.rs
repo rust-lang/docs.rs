@@ -7,6 +7,7 @@ use tera::Context;
 /// Given a rustdoc HTML page and a context to serialize it with,
 /// render the `rustdoc/` templates with the `html`.
 /// The output is an HTML page which has not yet been UTF-8 validated.
+/// In practice, the output should always be valid UTF-8.
 pub(crate) fn rewrite_lol(
     html: &[u8],
     max_allowed_memory_usage: usize,
