@@ -27,6 +27,9 @@ pub(crate) struct FakeRelease<'a> {
     readme: Option<&'a str>,
 }
 
+const DEFAULT_CONTENT: &[u8] =
+    b"<html><head></head><body>default content for test/fakes</body></html>";
+
 impl<'a> FakeRelease<'a> {
     pub(super) fn new(db: &'a TestDatabase, storage: Arc<Storage>) -> Self {
         FakeRelease {
@@ -121,7 +124,14 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn rustdoc_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
+    /// Since we switch to LOL HTML, all data must have a valid <head> and <body>.
+    /// To avoid duplicating them in every test, this just makes up some content.
+    pub(crate) fn rustdoc_file(mut self, path: &'a str) -> Self {
+        self.rustdoc_files.push((path, DEFAULT_CONTENT));
+        self
+    }
+
+    pub(crate) fn rustdoc_file_with(mut self, path: &'a str, data: &'a [u8]) -> Self {
         self.rustdoc_files.push((path, data));
         self
     }
@@ -217,7 +227,7 @@ impl<'a> FakeRelease<'a> {
             let index = [&package.name, "index.html"].join("/");
             let mut rustdoc_files = self.rustdoc_files;
             if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
-                rustdoc_files.push((&index, b"default index content"));
+                rustdoc_files.push((&index, DEFAULT_CONTENT));
             }
             for (source_path, data) in &self.source_files {
                 if source_path.starts_with("src/") {

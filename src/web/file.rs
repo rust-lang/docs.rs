@@ -115,12 +115,12 @@ mod tests {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
-                .rustdoc_file("small.html", &[b'A'; MAX_HTML_SIZE / 2] as &[u8])
-                .rustdoc_file("exact.html", &[b'A'; MAX_HTML_SIZE] as &[u8])
-                .rustdoc_file("big.html", &[b'A'; MAX_HTML_SIZE * 2] as &[u8])
-                .rustdoc_file("small.js", &[b'A'; MAX_SIZE / 2] as &[u8])
-                .rustdoc_file("exact.js", &[b'A'; MAX_SIZE] as &[u8])
-                .rustdoc_file("big.js", &[b'A'; MAX_SIZE * 2] as &[u8])
+                .rustdoc_file_with("small.html", &[b'A'; MAX_HTML_SIZE / 2] as &[u8])
+                .rustdoc_file_with("exact.html", &[b'A'; MAX_HTML_SIZE] as &[u8])
+                .rustdoc_file_with("big.html", &[b'A'; MAX_HTML_SIZE * 2] as &[u8])
+                .rustdoc_file_with("small.js", &[b'A'; MAX_SIZE / 2] as &[u8])
+                .rustdoc_file_with("exact.js", &[b'A'; MAX_SIZE] as &[u8])
+                .rustdoc_file_with("big.js", &[b'A'; MAX_SIZE * 2] as &[u8])
                 .create()?;
 
             let file = |path| {
