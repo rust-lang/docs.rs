@@ -1,6 +1,6 @@
 mod fakes;
 
-use crate::db::{Pool, PoolConnection};
+use crate::db::{Pool, PoolClient};
 use crate::storage::Storage;
 use crate::web::Server;
 use crate::BuildQueue;
@@ -8,7 +8,7 @@ use crate::Config;
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
-use postgres::Client as Connection;
+use postgres::Client;
 use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
@@ -229,7 +229,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let mut conn = Connection::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
+        let mut conn = Client::connect(config.database_url.as_str(), postgres::TlsMode::None)?;
         conn.batch_execute(&format!(
             "
                 CREATE SCHEMA {0};
@@ -272,7 +272,7 @@ impl TestDatabase {
         self.pool.clone()
     }
 
-    pub(crate) fn conn(&self) -> PoolConnection {
+    pub(crate) fn conn(&self) -> PoolClient {
         self.pool
             .get()
             .expect("failed to get a connection out of the pool")

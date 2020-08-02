@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
 use path_slash::PathExt;
-use postgres::Client as Connection;
+use postgres::Client;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -27,7 +27,7 @@ pub(crate) struct TemplateData {
 }
 
 impl TemplateData {
-    pub(crate) fn new(conn: &mut Connection) -> Result<Self> {
+    pub(crate) fn new(conn: &mut Client) -> Result<Self> {
         log::trace!("Loading templates");
 
         let data = Self {
@@ -72,7 +72,7 @@ impl TemplateData {
     }
 }
 
-fn load_rustc_resource_suffix(conn: &mut Connection) -> Result<String> {
+fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
     let res = conn.query(
         "SELECT value FROM config WHERE name = 'rustc_version';",
         &[],
@@ -91,7 +91,7 @@ fn load_rustc_resource_suffix(conn: &mut Connection) -> Result<String> {
     failure::bail!("failed to parse the rustc version");
 }
 
-pub(super) fn load_templates(conn: &mut Connection) -> Result<Tera> {
+pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
     // This uses a custom function to find the templates in the filesystem instead of Tera's
     // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
     // application and running the tests.

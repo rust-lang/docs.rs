@@ -1,5 +1,5 @@
 use crate::error::Result;
-use postgres::Client as Connection;
+use postgres::Client;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -25,7 +25,7 @@ impl Default for Limits {
 }
 
 impl Limits {
-    pub(crate) fn for_crate(conn: &mut Connection, name: &str) -> Result<Self> {
+    pub(crate) fn for_crate(conn: &mut Client, name: &str) -> Result<Self> {
         let mut limits = Self::default();
 
         let res = conn.query(

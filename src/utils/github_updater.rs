@@ -3,7 +3,7 @@ use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::{debug, warn};
-use postgres::Client as Connection;
+use postgres::Client;
 use regex::Regex;
 use reqwest::header::{HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
@@ -120,12 +120,7 @@ impl GithubUpdater {
         Ok(response.resources.core.remaining == 0)
     }
 
-    fn update_crate(
-        &self,
-        conn: &mut Connection,
-        crate_id: i32,
-        repository_url: &str,
-    ) -> Result<()> {
+    fn update_crate(&self, conn: &mut Client, crate_id: i32, repository_url: &str) -> Result<()> {
         let path =
             get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
         let fields = self.get_github_fields(&path)?;

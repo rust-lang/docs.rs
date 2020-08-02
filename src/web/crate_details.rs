@@ -4,7 +4,7 @@ use crate::{db::Pool, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::{status, Url};
-use postgres::Client as Connection;
+use postgres::Client;
 use router::Router;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
@@ -67,7 +67,7 @@ pub struct Release {
 }
 
 impl CrateDetails {
-    pub fn new(conn: &mut Connection, name: &str, version: &str) -> Option<CrateDetails> {
+    pub fn new(conn: &mut Client, name: &str, version: &str) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
         let query = "
             SELECT
@@ -241,7 +241,7 @@ impl CrateDetails {
     }
 }
 
-fn map_to_release(conn: &mut Connection, crate_id: i32, version: String) -> Release {
+fn map_to_release(conn: &mut Client, crate_id: i32, version: String) -> Release {
     let rows = conn
         .query(
             "SELECT build_status,

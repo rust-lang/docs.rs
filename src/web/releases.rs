@@ -14,7 +14,7 @@ use iron::{
     modifiers::Redirect,
     status, IronError, IronResult, Request, Response, Url,
 };
-use postgres::Client as Connection;
+use postgres::Client;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
@@ -65,12 +65,7 @@ impl Default for Order {
     }
 }
 
-pub(crate) fn get_releases(
-    conn: &mut Connection,
-    page: i64,
-    limit: i64,
-    order: Order,
-) -> Vec<Release> {
+pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Order) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
@@ -112,7 +107,7 @@ pub(crate) fn get_releases(
 }
 
 fn get_releases_by_author(
-    conn: &mut Connection,
+    conn: &mut Client,
     page: i64,
     limit: i64,
     author: &str,
@@ -161,7 +156,7 @@ fn get_releases_by_author(
 }
 
 fn get_releases_by_owner(
-    conn: &mut Connection,
+    conn: &mut Client,
     page: i64,
     limit: i64,
     author: &str,
@@ -226,7 +221,7 @@ fn get_releases_by_owner(
 /// Returns 0 and an empty Vec when no results are found or if a database error occurs
 ///
 fn get_search_results(
-    conn: &mut Connection,
+    conn: &mut Client,
     mut query: &str,
     page: i64,
     limit: i64,

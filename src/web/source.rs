@@ -7,7 +7,7 @@ use crate::{
     Config, Storage,
 };
 use iron::{status::Status, IronError, IronResult, Request, Response};
-use postgres::Client as Connection;
+use postgres::Client;
 use router::Router;
 use serde::Serialize;
 use serde_json::Value;
@@ -47,12 +47,7 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
-    fn from_path(
-        conn: &mut Connection,
-        name: &str,
-        version: &str,
-        req_path: &str,
-    ) -> Option<FileList> {
+    fn from_path(conn: &mut Client, name: &str, version: &str, req_path: &str) -> Option<FileList> {
         let rows = conn
             .query(
                 "SELECT crates.name,
