@@ -3,8 +3,7 @@ use crate::{
     web::{page::WebPage, releases::Search, ErrorPage},
 };
 use failure::Fail;
-use iron::{status::Status, Handler, IronError, IronResult, Plugin, Request, Response};
-use params::{Params, Value};
+use iron::{status::Status, Handler, IronError, IronResult, Request, Response};
 use std::{error::Error, fmt};
 
 #[derive(Debug, Copy, Clone)]
@@ -54,13 +53,13 @@ impl Handler for Nope {
             }
 
             Nope::NoResults => {
-                let params = req.get::<Params>().unwrap();
+                let mut params = req.url.as_ref().query_pairs();
 
-                if let Some(Value::String(ref query)) = params.find(&["query"]) {
+                if let Some((_, query)) = params.find(|(key, _)| key == "query") {
                     // this used to be a search
                     Search {
                         title: format!("No crates found matching '{}'", query),
-                        search_query: Some(query.to_owned()),
+                        search_query: Some(query.into_owned()),
                         status: Status::NotFound,
                         ..Default::default()
                     }

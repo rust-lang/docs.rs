@@ -12,7 +12,7 @@ use crate::{
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
-    status, Handler, IronError, IronResult, Plugin, Request, Response, Url,
+    status, Handler, IronError, IronResult, Request, Response, Url,
 };
 use router::Router;
 use serde::Serialize;
@@ -491,13 +491,11 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     use badge::{Badge, BadgeOptions};
     use iron::headers::ContentType;
-    use params::{Params, Value};
-
     let version = {
-        let params = ctry!(req, req.get_ref::<Params>());
-        match params.find(&["version"]) {
-            Some(&Value::String(ref version)) => version.clone(),
-            _ => "*".to_owned(),
+        let mut params = req.url.as_ref().query_pairs();
+        match params.find(|(key, _)| key == "version") {
+            Some((_, version)) => version.into_owned(),
+            None => "*".to_owned(),
         }
     };
 
