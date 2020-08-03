@@ -2,7 +2,6 @@ use crate::{db::Pool, error::Result, Config};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use log::{debug, warn};
-use postgres::Client as PostgresClient;
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
@@ -70,7 +69,6 @@ impl GithubUpdater {
             return Ok(());
         }
 
-        let mut conn = self.pool.get()?;
         // TODO: This query assumes repository field in Cargo.toml is
         //       always the same across all versions of a crate
         let pool = self.pool.clone();
@@ -100,10 +98,7 @@ impl GithubUpdater {
 
             debug!("Updating {}", crate_name);
 
-            if let Err(err) = self
-                .update_crate(&mut conn, crate_id, &repository_url)
-                .await
-            {
+            if let Err(err) = self.update_crate(crate_id, &repository_url).await {
                 if self.is_rate_limited().await? {
                     warn!("Skipping remaining updates because of rate limit");
 
@@ -147,14 +142,11 @@ impl GithubUpdater {
         Ok(response.resources.core.remaining == 0)
     }
 
-    async fn update_crate(
-        &self,
-        conn: &mut PostgresClient,
-        crate_id: i32,
-        repository_url: &str,
-    ) -> Result<()> {
-        let path =
-            get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
+    // TODO: Pass around a connection with sqlx
+    async fn update_crate(&self, crate_id: i32, repository_url: &str) -> Result<()> {
+        let path = self
+            .get_github_path(repository_url)
+            .ok_or_else(|| err_msg("Failed to get github path"))?;
         let fields = self.get_github_fields(&path).await?;
 
         let pool = self.pool.clone();
@@ -162,11 +154,11 @@ impl GithubUpdater {
             pool.get()?
                 .execute(
                     "UPDATE crates
-                     SET github_description = $1,
-                         github_stars = $2, github_forks = $3,
-                         github_issues = $4, github_last_commit = $5,
-                         github_last_update = NOW()
-                     WHERE id = $6",
+                 SET github_description = $1,
+                     github_stars = $2, github_forks = $3,
+                     github_issues = $4, github_last_commit = $5,
+                     github_last_update = NOW()
+                 WHERE id = $6",
                     &[
                         &fields.description,
                         &(fields.stars as i32),

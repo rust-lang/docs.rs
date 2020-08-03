@@ -11,7 +11,7 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::{env, panic, sync::Arc};
+use std::sync::Arc;
 use tokio::{
     runtime::Handle,
     sync::Mutex,
@@ -20,7 +20,6 @@ use tokio::{
 };
 
 async fn start_registry_watcher(
-    opts: DocBuilderOptions,
     pool: Pool,
     build_queue: Arc<BuildQueue>,
     options: DocBuilderOptions,
@@ -79,13 +78,7 @@ pub async fn start_daemon(
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(
-            dbopts.clone(),
-            db.clone(),
-            build_queue.clone(),
-            dbopts.clone(),
-        )
-        .await;
+        start_registry_watcher(db.clone(), build_queue.clone(), dbopts.clone()).await;
     }
 
     // build new crates every minute
@@ -126,7 +119,7 @@ pub async fn start_daemon(
             if let Err(err) = task::spawn_blocking(move || {
                 db.get()
                     .map_err(Into::into)
-                    .and_then(|pool| update_release_activity(&*pool))
+                    .and_then(|mut conn| update_release_activity(&mut conn))
             })
             .await
             {
@@ -162,11 +155,4 @@ pub async fn start_daemon(
 
     crate::Server::start(None, false, db, config, build_queue, storage)?;
     Ok(())
-}
-
-fn opts() -> DocBuilderOptions {
-    let prefix =
-        env::var("CRATESFYI_PREFIX").expect("CRATESFYI_PREFIX environment variable not found");
-
-    DocBuilderOptions::from_prefix(prefix)
 }

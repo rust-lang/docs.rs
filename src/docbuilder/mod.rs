@@ -76,7 +76,7 @@ impl DocBuilder {
         let db = self.db.clone();
         // FIXME: When DB ops are async, remove the `spawn_blocking` and directly insert into the cache
         let cache = task::spawn_blocking(move || {
-            let conn = db.get()?;
+            let mut conn = db.get()?;
             let query = conn.query(
                 "SELECT name, version FROM crates, releases \
                  WHERE crates.id = releases.crate_id",
