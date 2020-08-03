@@ -58,7 +58,9 @@ impl Config {
 
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
-            max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 350 * 1024 * 1024)?,
+            // LOL HTML only uses as much memory as the size of the start tag!
+            // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
+            max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
         })
     }
 
