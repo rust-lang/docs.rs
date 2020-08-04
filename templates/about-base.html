@@ -1,23 +1,23 @@
 {% extends "base.html" %}
 
 {% block header %}
-<div class="cratesfyi-package-container">
-<div class="container about">
-	<h3 id="crate-title">Docs.rs documentation</h3>
-	<div class="pure-menu pure-menu-horizontal">
-	<ul class="pure-menu-list">
-		{% set text = '<i class="fa fa-fw fa-info-circle"></i> <span class="title">About</span>' %}
-		{{ macros::active_link(expected="index", href="/about", text=text) }}
-		{% set text = '<i class="fa fa-fw fa-fonticons"></i> <span class="title">Badges</span>' %}
-		{{ macros::active_link(expected="badges", href="/about/badges", text=text) }}
-		{% set text = '<i class="fa fa-fw fa-cogs"></i> <span class="title">Builds</span>' %}
-		{{ macros::active_link(expected="builds", href="/about/builds", text=text) }}
-		{% set text = '<i class="fa fa-fw fa-table"></i> <span class="title">Metadata</span>' %}
-		{{ macros::active_link(expected="metadata", href="/about/metadata", text=text) }}
-		{% set text = '<i class="fa fa-fw fa-road"></i> <span class="title">Shorthand URLs</span>' %}
-		{{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
-	</ul>
+	<div class="cratesfyi-package-container">
+	<div class="container about">
+		<h3 id="crate-title">Docs.rs documentation</h3>
+		<div class="pure-menu pure-menu-horizontal">
+		<ul class="pure-menu-list">
+			{% set text = '<i class="fa fa-fw fa-info-circle"></i> <span class="title">About</span>' %}
+			{{ macros::active_link(expected="index", href="/about", text=text) }}
+			{% set text = '<i class="fa fa-fw fa-fonticons"></i> <span class="title">Badges</span>' %}
+			{{ macros::active_link(expected="badges", href="/about/badges", text=text) }}
+			{% set text = '<i class="fa fa-fw fa-cogs"></i> <span class="title">Builds</span>' %}
+			{{ macros::active_link(expected="builds", href="/about/builds", text=text) }}
+			{% set text = '<i class="fa fa-fw fa-table"></i> <span class="title">Metadata</span>' %}
+			{{ macros::active_link(expected="metadata", href="/about/metadata", text=text) }}
+			{% set text = '<i class="fa fa-fw fa-road"></i> <span class="title">Shorthand URLs</span>' %}
+			{{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
+		</ul>
+		</div>
 	</div>
-</div>
-</div>
+	</div>
 {% endblock %}
