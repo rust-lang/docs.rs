@@ -147,6 +147,14 @@ pub static CURRENTLY_RUNNING_THREADS: Lazy<IntGauge> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static HTML_REWRITE_OOMS: Lazy<IntGauge> = Lazy::new(|| {
+    register_int_gauge!(
+        "docsrs_html_rewrite_ooms",
+        "The number of attempted files that failed due to a memory limit"
+    )
+    .unwrap()
+});
+
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     let pool = extension!(req, Pool);
     let queue = extension!(req, BuildQueue);
