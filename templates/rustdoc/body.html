@@ -31,7 +31,10 @@
                         <div class="pure-menu-children package-details-menu">
                             {# Crate name, description and license #}
                             <ul class="pure-menu-list menu-item-divided">
-                                <li class="pure-menu-heading">{{ krate.name }}</li>
+                                <li class="pure-menu-heading" id="crate-title">
+                                    {{ krate.name }} {{ krate.version }}
+                                    <i class="fa fa-copy fa-1" id="clipboard" aria-label="Copy crate name and version information"></i>
+                                </li>
 
                                 <li class="pure-menu-item">
                                     <a href="{{ crate_url }}" class="pure-menu-link"
