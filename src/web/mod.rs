@@ -695,6 +695,10 @@ mod test {
                 "/crate/fake_crate/0.0.1/source/",
                 web
             ));
+            assert!(clipboard_is_present_for_path(
+                "/fake_crate/0.0.1/fake_crate",
+                web
+            ));
             Ok(())
         });
     }
@@ -711,10 +715,6 @@ mod test {
             assert!(!clipboard_is_present_for_path("/about", web));
             assert!(!clipboard_is_present_for_path("/releases", web));
             assert!(!clipboard_is_present_for_path("/", web));
-            assert!(!clipboard_is_present_for_path(
-                "/fake_crate/0.0.1/fake_crate",
-                web
-            ));
             assert!(!clipboard_is_present_for_path("/not/a/real/path", web));
             Ok(())
         });
