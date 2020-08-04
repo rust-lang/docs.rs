@@ -14,6 +14,7 @@ use iron::{
     modifiers::Redirect,
     status, Handler, IronError, IronResult, Request, Response, Url,
 };
+use lol_html::errors::RewritingError;
 use router::Router;
 use serde::Serialize;
 
@@ -197,6 +198,7 @@ impl RustdocPage {
         rustdoc_html: &[u8],
         max_parse_memory: usize,
         req: &mut Request,
+        file_path: &str,
     ) -> IronResult<Response> {
         use iron::{headers::ContentType, status::Status};
 
@@ -206,12 +208,23 @@ impl RustdocPage {
             .expect("missing TemplateData from the request extensions");
 
         // Build the page of documentation
-        let ctx = ctry!(req, tera::Context::from_serialize(self),);
+        let ctx = ctry!(req, tera::Context::from_serialize(self));
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
-        let html = ctry!(
-            req,
-            utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates)
-        );
+        // while logging OOM errors from html rewriting
+        let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
+            Err(RewritingError::MemoryLimitExceeded(..)) => {
+                crate::web::metrics::HTML_REWRITE_OOMS.inc();
+
+                let config = extension!(req, Config);
+                let err = failure::err_msg(format!(
+                    "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
+                    file_path, config.max_parse_memory,
+                ));
+
+                ctry!(req, Err(err))
+            }
+            result => ctry!(req, result),
+        };
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
@@ -339,6 +352,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // Serve non-html files directly
     if !path.ends_with(".html") {
         rendering_time.step("serve asset");
+
         return Ok(file.serve());
     }
 
@@ -392,7 +406,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         is_latest_version,
         krate,
     }
-    .into_response(&file.0.content, config.max_parse_memory, req)
+    .into_response(&file.0.content, config.max_parse_memory, req, &path)
 }
 
 /// Checks whether the given path exists.

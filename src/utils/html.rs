@@ -23,6 +23,7 @@ pub(crate) fn rewrite_lol(
 
     let head_handler = |head: &mut Element| {
         head.append(&tera_head, ContentType::Html);
+
         Ok(())
     };
 
@@ -77,11 +78,14 @@ pub(crate) fn rewrite_lol(
 
     // The input and output are always strings, we just use `&[u8]` so we only have to validate once.
     let mut buffer = Vec::new();
+    // TODO: Make the rewriter persistent?
     let mut writer = HtmlRewriter::try_new(settings, |bytes: &[u8]| {
         buffer.extend_from_slice(bytes);
     })
     .expect("utf8 is a valid encoding");
+
     writer.write(html)?;
     writer.end()?;
+
     Ok(buffer)
 }
