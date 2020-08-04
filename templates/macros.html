@@ -88,12 +88,9 @@
 {% macro releases_list(name, releases) %}
     {%- for release in releases -%}
         {# The url for the release, `/crate/:name/:version` #}
-        {# FIXME: https://github.com/Keats/tera/issues/539 #}
-        {%- set name = name | escape -%}
-        {%- set version = release.version | escape -%}
-        {%- set release_url = "/crate/" ~ name ~ "/" ~ version -%}
+        {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
         {# The release's name and version, `:name-:version` #}
-        {%- set release_name = name ~ "-" ~ version -%}
+        {%- set release_name = name ~ "-" ~ release.version -%}
 
         <li class="pure-menu-item">
             {# If the release isn't a library, then display that warning #}

@@ -12,20 +12,17 @@
     <updated>{{ recent_releases[0].release_time | default(value=now()) | date(format="%+") }}</updated>
 
     {%- for release in recent_releases -%}
-        {# FIXME: https://github.com/Keats/tera/issues/539 #}
-        {%- set name = release.name | escape_xml -%}
-        {%- set version = release.version | escape_xml -%}
         {%- if release.rustdoc_status -%}
-            {%- set link = "/" ~ name ~ "/" ~ version ~ "/" ~ release.target_name -%}
+            {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
         {%- else -%}
-            {%- set link = "/crate/" ~ name ~ "/" ~ version -%}
+            {%- set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
         {%- endif %}
 
         <entry>
-            <title>{{ name }}-{{ version }}</title>
+            <title>{{ release.name }}-{{ version }}</title>
 
             <link href="{{ link | safe }}" />
-            <id>urn:docs-rs:{{ name }}:{{ version }}</id>
+            <id>urn:docs-rs:{{ release.name }}:{{ version }}</id>
             <updated>{{ release.release_time | date(format="%+") }}</updated>
 
             <summary>
