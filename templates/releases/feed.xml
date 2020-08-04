@@ -19,14 +19,14 @@
         {%- endif %}
 
         <entry>
-            <title>{{ release.name }}-{{ version }}</title>
+            <title>{{ release.name }}-{{ release.version }}</title>
 
             <link href="{{ link | safe }}" />
-            <id>urn:docs-rs:{{ release.name }}:{{ version }}</id>
+            <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id>
             <updated>{{ release.release_time | date(format="%+") }}</updated>
 
             <summary>
-                {{ release.description | default(value="-") | escape_xml }}
+                {{ release.description | default(value="") | escape_xml }}
             </summary>
 
             <author>
