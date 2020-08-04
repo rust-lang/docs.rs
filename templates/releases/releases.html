@@ -21,12 +21,10 @@
             <ul>
                 {# TODO: If there are no releases, then display a message that says so #}
                 {%- for release in releases -%}
-                    {%- set name = release.name | escape -%}
-                    {%- set version = release.version | escape -%}
                     {%- if release.rustdoc_status -%}
-                        {% set link = "/" ~ name ~ "/" ~ version ~ "/" ~ release.target_name -%}
+                        {% set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
                     {%- else -%}
-                        {% set link = "/crate/" ~ name ~ "/" ~ version -%}
+                        {% set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
                     {%- endif -%}
 
                     <li>

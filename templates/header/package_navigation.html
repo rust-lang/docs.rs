@@ -54,10 +54,7 @@
 
                 <ul class="pure-menu-list">
                     {# The partial path of the crate, `:name/:release` #}
-                    {# FIXME: https://github.com/Keats/tera/issues/539 #}
-                    {%- set name = metadata.name | escape -%}
-                    {%- set version = metadata.version | escape -%}
-                    {%- set crate_path = name ~ "/" ~ version -%}
+                    {%- set crate_path = metadata.name ~ "/" ~ metadata.version -%}
 
                     {# If docs are built, show a tab for them #}
                     {%- if metadata.rustdoc_status -%}
