@@ -3,7 +3,8 @@ use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{
-    add_build_into_database, add_package_into_database, update_crate_data_in_database, Pool,
+    add_build_into_database, add_doc_coverage, add_package_into_database,
+    update_crate_data_in_database, Pool,
 };
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
@@ -428,6 +429,12 @@ impl RustwideBuilder {
                     algs,
                 )?;
 
+                if let (Some(total), Some(documented)) =
+                    (res.result.total_items, res.result.documented_items)
+                {
+                    add_doc_coverage(&mut conn, release_id, total, documented)?;
+                }
+
                 add_build_into_database(&mut conn, release_id, &res.result)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
@@ -467,6 +474,106 @@ impl RustwideBuilder {
             }
         }
         Ok(())
+    }
+
+    fn get_coverage(
+        &self,
+        target: &str,
+        build: &Build,
+        metadata: &Metadata,
+        limits: &Limits,
+    ) -> Option<(i32, i32)> {
+        let rustdoc_flags: Vec<String> = vec![
+            "-Z".to_string(),
+            "unstable-options".to_string(),
+            "--static-root-path".to_string(),
+            "/".to_string(),
+            "--cap-lints".to_string(),
+            "warn".to_string(),
+            "--output-format".to_string(),
+            "json".to_string(),
+            "--show-coverage".to_string(),
+        ];
+
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
+        if target != HOST_TARGET {
+            // If the explicit target is not a tier one target, we need to install it.
+            if !TARGETS.contains(&target) {
+                // This is a no-op if the target is already installed.
+                self.toolchain.add_target(&self.workspace, target).ok()?;
+            }
+            cargo_args.push("--target");
+            cargo_args.push(target);
+        };
+
+        let tmp_jobs;
+        if let Some(cpu_limit) = self.cpu_limit {
+            tmp_jobs = format!("-j{}", cpu_limit);
+            cargo_args.push(&tmp_jobs);
+        }
+
+        let tmp;
+        if let Some(features) = &metadata.features {
+            cargo_args.push("--features");
+            tmp = features.join(" ");
+            cargo_args.push(&tmp);
+        }
+        if metadata.all_features {
+            cargo_args.push("--all-features");
+        }
+        if metadata.no_default_features {
+            cargo_args.push("--no-default-features");
+        }
+
+        let mut storage = LogStorage::new(LevelFilter::Info);
+        storage.set_max_size(limits.max_log_size());
+
+        let mut json = String::new();
+        if build
+            .cargo()
+            .timeout(Some(limits.timeout()))
+            .no_output_timeout(None)
+            .env(
+                "RUSTFLAGS",
+                metadata
+                    .rustc_args
+                    .as_ref()
+                    .map(|args| args.join(" "))
+                    .unwrap_or_default(),
+            )
+            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
+            // For docs.rs detection from build script:
+            // https://github.com/rust-lang/docs.rs/issues/147
+            .env("DOCS_RS", "1")
+            .args(&cargo_args)
+            .log_output(false)
+            .process_lines(&mut |line, _| {
+                if line.starts_with('{') && line.ends_with('}') {
+                    json = line.to_owned();
+                }
+            })
+            .run()
+            .is_ok()
+        {
+            match serde_json::from_str(&json).expect("conversion failed...") {
+                Value::Object(m) => {
+                    let mut total = 0;
+                    let mut documented = 0;
+                    for entry in m.values() {
+                        if let Some(Value::Number(n)) = entry.get("total") {
+                            total += n.as_i64().unwrap_or(0) as i32;
+                        }
+                        if let Some(Value::Number(n)) = entry.get("with_docs") {
+                            documented += n.as_i64().unwrap_or(0) as i32;
+                        }
+                    }
+                    Some((total, documented))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 
     fn execute_build(
@@ -556,6 +663,14 @@ impl RustwideBuilder {
                 .run()
                 .is_ok()
         });
+        let mut total_items = None;
+        let mut documented_items = None;
+        if successful {
+            if let Some((total, documented)) = self.get_coverage(target, build, metadata, limits) {
+                total_items = Some(total);
+                documented_items = Some(documented);
+            }
+        }
         // If we're passed a default_target which requires a cross-compile,
         // cargo will put the output in `target/<target>/doc`.
         // However, if this is the default build, we don't want it there,
@@ -575,6 +690,8 @@ impl RustwideBuilder {
                 rustc_version: self.rustc_version.clone(),
                 docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                 successful,
+                total_items,
+                documented_items,
             },
             cargo_metadata,
             target: target.to_string(),
@@ -631,4 +748,9 @@ pub(crate) struct BuildResult {
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
+    /// The total items that could be documented in the current crate, used to calculate
+    /// documentation coverage.
+    pub(crate) total_items: Option<i32>,
+    /// The items of the crate that are documented, used to calculate documentation coverage.
+    pub(crate) documented_items: Option<i32>,
 }

@@ -381,6 +381,23 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             -- Nope, this is a pure database fix, no going back.
             "
         ),
+        migration!(
+            context,
+            // version
+            16,
+            // description
+            "Create new table for doc coverage",
+            // upgrade query
+            "
+            CREATE TABLE doc_coverage (
+                release_id INT UNIQUE REFERENCES releases(id),
+                total_items INT,
+                documented_items INT
+            );
+            ",
+            // downgrade query
+            "DROP TABLE doc_coverage;"
+        ),
     ];
 
     for migration in migrations {
