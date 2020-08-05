@@ -5,7 +5,10 @@ use failure::err_msg;
 use log::{debug, warn};
 use postgres::Client;
 use regex::Regex;
-use reqwest::header::{HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
+use reqwest::{
+    blocking::Client as HttpClient,
+    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
+};
 use serde::Deserialize;
 
 const APP_USER_AGENT: &str = concat!(
@@ -25,30 +28,29 @@ struct GitHubFields {
 }
 
 pub struct GithubUpdater {
-    client: reqwest::blocking::Client,
+    client: HttpClient,
     pool: Pool,
 }
 
 impl GithubUpdater {
     pub fn new(config: &Config, pool: Pool) -> Result<Self> {
-        let mut headers = vec![
-            (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
-            (ACCEPT, HeaderValue::from_static("application/json")),
-        ];
+        let github_auth = config.github_auth();
 
-        if let Some((username, accesstoken)) = config.github_auth() {
+        let mut headers = HeaderMap::with_capacity(2 + github_auth.is_some() as usize);
+        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+
+        if let Some((username, accesstoken)) = github_auth {
             let basicauth = format!(
                 "Basic {}",
                 base64::encode(format!("{}:{}", username, accesstoken))
             );
-            headers.push((AUTHORIZATION, HeaderValue::from_str(&basicauth).unwrap()));
+            headers.insert(AUTHORIZATION, HeaderValue::from_str(&basicauth).unwrap());
         } else {
             warn!("No GitHub authorization specified, will be working with very low rate limits");
         }
 
-        let client = reqwest::blocking::Client::builder()
-            .default_headers(headers.into_iter().collect())
-            .build()?;
+        let client = HttpClient::builder().default_headers(headers).build()?;
 
         Ok(GithubUpdater { client, pool })
     }
