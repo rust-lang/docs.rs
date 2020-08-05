@@ -59,6 +59,8 @@ impl<'a> FakeRelease<'a> {
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
                 build_log: "It works!".into(),
                 successful: true,
+                total_items: None,
+                documented_items: None,
             },
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),

@@ -54,6 +54,7 @@ const METADATA: &[(&str, &str)] = &[
     ("keyword_rels", "rid"),
     ("builds", "rid"),
     ("compression_rels", "release"),
+    ("doc_coverage", "release_id"),
 ];
 
 fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<(), Error> {

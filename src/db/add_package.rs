@@ -130,6 +130,26 @@ pub(crate) fn add_package_into_database(
     Ok(release_id)
 }
 
+pub(crate) fn add_doc_coverage(
+    conn: &mut Client,
+    release_id: i32,
+    total_items: i32,
+    documented_items: i32,
+) -> Result<i32> {
+    debug!("Adding doc coverage into database");
+    let rows = conn.query(
+        "INSERT INTO doc_coverage (release_id, total_items, documented_items)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (release_id) DO UPDATE
+                SET
+                    total_items = $2,
+                    documented_items = $3
+            RETURNING release_id",
+        &[&release_id, &total_items, &documented_items],
+    )?;
+    Ok(rows[0].get(0))
+}
+
 /// Adds a build into database
 pub(crate) fn add_build_into_database(
     conn: &mut Client,

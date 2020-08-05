@@ -44,6 +44,8 @@ pub struct CrateDetails {
     pub(crate) doc_targets: Vec<String>,
     license: Option<String>,
     documentation_url: Option<String>,
+    total_items: Option<f32>,
+    documented_items: Option<f32>,
 }
 
 fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
@@ -97,9 +99,12 @@ impl CrateDetails {
                 releases.doc_targets,
                 releases.license,
                 releases.documentation_url,
-                releases.default_target
+                releases.default_target,
+                doc_coverage.total_items,
+                doc_coverage.documented_items
             FROM releases
             INNER JOIN crates ON releases.crate_id = crates.id
+            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
@@ -150,6 +155,9 @@ impl CrateDetails {
                 .unwrap_or_else(Vec::new)
         };
 
+        let documented_items: Option<i32> = krate.get("documented_items");
+        let total_items: Option<i32> = krate.get("total_items");
+
         let mut crate_details = CrateDetails {
             name: krate.get("name"),
             version: krate.get("version"),
@@ -180,6 +188,8 @@ impl CrateDetails {
             doc_targets,
             license: krate.get("license"),
             documentation_url: krate.get("documentation_url"),
+            documented_items: documented_items.map(|v| v as f32),
+            total_items: total_items.map(|v| v as f32),
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {
