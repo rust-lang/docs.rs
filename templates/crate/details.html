@@ -16,6 +16,10 @@
             <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
+                        {%- if details.doc_coverage -%}
+                            <li class="pure-menu-heading">Documentation<br>coverage</li>
+                            <li class="pure-menu-item" style="text-align:center;">{{ details.doc_coverage | round(precision=2) }} %</li>
+                        {%- endif -%}
                         {# List the release author's names and a link to their docs.rs profile #}
                         <li class="pure-menu-heading">Authors</li>
                         {%- for author in details.authors -%}
