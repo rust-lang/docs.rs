@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    docbuilder::BuildResult,
+    docbuilder::{BuildResult, DocCoverage},
     error::Result,
     index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
@@ -133,8 +133,7 @@ pub(crate) fn add_package_into_database(
 pub(crate) fn add_doc_coverage(
     conn: &mut Client,
     release_id: i32,
-    total_items: i32,
-    documented_items: i32,
+    doc_coverage: DocCoverage,
 ) -> Result<i32> {
     debug!("Adding doc coverage into database");
     let rows = conn.query(
@@ -145,7 +144,7 @@ pub(crate) fn add_doc_coverage(
                     total_items = $2,
                     documented_items = $3
             RETURNING release_id",
-        &[&release_id, &total_items, &documented_items],
+        &[&release_id, &doc_coverage.total_items, &doc_coverage.documented_items],
     )?;
     Ok(rows[0].get(0))
 }
