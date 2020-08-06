@@ -69,6 +69,16 @@ const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
+// This macro exists because of lifetimes issues surrounding the `Command::process_lines` method:
+// it expects a mutable reference to a closure, in which we capture a variable in order to store
+// the JSON output. Unfortunately, we *need* to create the command in the same scope level otherwise
+// rustc becomes very grumpy about the fact that the variable needs to be static because it is
+// captured in a mutably referenced closure.
+//
+// So either you create a function with a callback in which you pass the `Command` as an argument,
+// or you create a function returning a `Command`, it's very unhappy in both cases.
+//
+// TODO: make `Command::process_lines` take the closure by value rather than a mutable reference.
 macro_rules! config_command {
     ($obj:ident, $build:expr, $target:expr, $metadata:expr, $limits:expr, $rustdoc_flags_extras:expr, $($extra:tt)+) => {{
         let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
@@ -109,6 +119,11 @@ macro_rules! config_command {
             "--cap-lints".to_string(),
             "warn".to_string(),
         ];
+
+        if let Some(package_rustdoc_args) = &$metadata.rustdoc_args {
+            rustdoc_flags.append(&mut package_rustdoc_args.clone());
+        }
+
         rustdoc_flags.extend($rustdoc_flags_extras);
 
         $build
@@ -602,9 +617,6 @@ impl RustwideBuilder {
                 dep.name,
                 dep.version
             ));
-        }
-        if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
-            rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
         }
 
         rustdoc_flags.extend(vec![
