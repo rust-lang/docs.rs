@@ -9,46 +9,33 @@ of crates for the Rust Programming Language.
 Docs.rs automatically builds crates' documentation released on crates.io using
 the nightly release of the Rust compiler.
 
-The README of a crate is taken from the readme field defined in Cargo.toml.
-If a crate doesn't have this field, no README will be displayed.
+This readme is for developing docs.rs. See [the about page](https://docs.rs/about) for user-facing documentation.
 
-### Redirections
+## Changing the build environment
 
-Docs.rs is using semver to parse URLs. You can use this feature to access
-crates' documentation easily. Example of URL redirections for `clap` crate:
-
-| URL                                           | Redirects to documentation of                    |
-|-----------------------------------------------|--------------------------------------------------|
-| <https://docs.rs/clap>                        | Latest version of clap                           |
-| <https://docs.rs/clap/~2>                     | 2.* version                                      |
-| <https://docs.rs/clap/~2.9>                   | 2.9.* version                                    |
-| <https://docs.rs/clap/2.9.3>                  | 2.9.3 version (you don't need = unlike semver)   |
-| <https://docs.rs/clap/*/clap/struct.App.html> | Latest version of this page (if it still exists).|
-
-### Badges
-
-You can use badges to show state of your documentation to your users.
-The default badge will be pointed at the latest version of a crate.
-You can use `version` parameter to show status of documentation for
-any version you want.
-
-Badge will display in blue if docs.rs is successfully hosting your crate
-documentation, and red if building documentation failing.
-
-Example badges for `mio` crate:
-
-| URL   | Badge |
-|-------|-------|
-| Latest version: <https://docs.rs/mio/badge.svg> | ![mio](https://docs.rs/mio/badge.svg) |
-| Version 0.4.4: <https://docs.rs/mio/badge.svg?version=0.4.4> | ![mio](https://docs.rs/mio/badge.svg?version=0.4.4) |
-| Version 0.1.0: <https://docs.rs/mio/badge.svg?version=0.1.0> | ![mio](https://docs.rs/mio/badge.svg?version=0.1.0) |
-
+To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
+and test that it works on docs.rs, see [the wiki](https://forge.rust-lang.org/docs-rs/add-dependencies.html).
 
 ## Development
 
-We strongly recommend using [docker-compose](https://docs.docker.com/compose/),
-which will make it easier to get started without adding new users and packages
-to your host machine.
+The recommended way to develop docs.rs is a combination of `cargo run` for
+the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
+This gives you reasonable incremental build times without having to add new users and packages to your host machine.
+
+### Dependencies
+
+Docs.rs requires at least the following native C dependencies.
+
+- gcc
+- g++
+- pkg-config
+- git
+- make
+- cmake
+- zlib
+- openssl
+
+There may be other dependencies that have not been documented.
 
 ### Getting started
 
@@ -57,35 +44,42 @@ Make sure you have docker-compose and are able to download ~10GB data on the fir
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
+# Configure the default settings for external services
 cp .env.sample .env
-
-docker-compose build  # This builds the docs.rs binary
-
+# Builds the docs.rs binary
+cargo build
+# Start the extenal services
+docker-compose up -d db s3
 # Build a sample crate to make sure it works
 # This sets up the docs.rs build environment, including installing the nightly
 # Rust toolchain. This will take a while the first time but will be cached afterwards.
-docker-compose run web build crate regex 1.3.1
-
+cargo run web build crate regex 1.3.1
 # This starts the web server but does not build any crates.
-# If you want to build crates, see below under `build` subcommand.
-# It should print a link to the website once it finishes initializing.
-docker-compose up
-
+cargo run start-web-server
 ```
 
 If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
+### Pure docker-compose
+
+If you have trouble with the above commands, consider using `docker-compose up`,
+which uses docker-compose for the web server as well.
+This will not cache dependencies as well - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
+but makes sure that you're in a known environment so you should have fewer problems getting started.
+
+Please file bugs for any trouble you have running docs.rs!
+
 ### Running tests
 
-Tests are run outside of the docker-compose environment, and can be run with:
+Tests are only supported via cargo, not docker-compose.
 
 ```
 cargo test
 ```
 
-Some tests require access to the database. To run them, set the
+Most tests require access to the database. To run them, set the
 `CRATESFYI_DATABASE_URL` in `.env` to the url of a PostgreSQL database,
 and set the `AWS_ACCESS_KEY_ID`, `S3_ENDPOINT`, and `AWS_SECRET_ACCESS_KEY` variables.
 We have some reasonable default parameters in `.env.sample`.
@@ -101,7 +95,7 @@ If you don't want to use docker-compose, see the
 for more information on how to setup this environment.
 Note that either way, you will need docker installed for sandboxing with Rustwide.
 
-[wiki-no-compose]: https://github.com/rust-lang/docs.rs/wiki/Developing-without-docker-compose
+[wiki-no-compose]: https://forge.rust-lang.org/docs-rs/no-docker-compose.html
 
 ### Docker-Compose
 
@@ -111,7 +105,7 @@ Three services are defined:
 | name | access                                          | credentials                | description                            |
 |------|-------------------------------------------------|----------------------------|----------------------------------------|
 | web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
-| db   | postgresql://cratesfyi:password@localhost:15432/ | -                          | Postgres database used by web          |
+| db   | postgresql://cratesfyi:password@localhost:15432 | -                          | Postgres database used by web          |
 | s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
 
 [docker-compose.yml]: ./docker-compose.yml
@@ -133,12 +127,13 @@ This is probably because you have `git.autocrlf` set to true,
 
 ### CLI
 
-#### Starting web server
+See `cargo run -- --help` for a full list of commands.
+
+#### Starting the web server
 
 ```sh
-# This command will start web interface of docs.rs and you can access it from
-# http://localhost:3000/`
-docker-compose up
+# This command will start web interface of docs.rs on http://localhost:3000
+cargo run start-web-server
 ```
 
 #### `build` subcommand
@@ -147,16 +142,16 @@ docker-compose up
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
 # For example, `docker-compose run web build crate regex 1.1.6`
-docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
+cargo run web build crate <CRATE_NAME> <CRATE_VERSION>
 
-# Builds every crate and adds them into database
+# Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)
-docker-compose run web build world
+cargo run web build world
 
 # Builds a local package you have at <SOURCE> and adds it to the database.
 # The package does not have to be on crates.io.
 # The package must be on the local filesystem, git urls are not allowed.
-docker-compose run -v "$(realpath <SOURCE>)":/build web build crate --local /build
+cargo build crate --local /path/to/source
 ```
 
 #### `database` subcommand
@@ -176,39 +171,31 @@ If you want to explore or edit database manually, you can connect to the databas
 with the `psql` command.
 
 ```sh
-# NOTE: this creates a new container that will keep running after you exit
-# To remove the new container, run `docker-compose down`.
-docker exec -it "$(docker-compose run -d db && sleep 1)" psql -U cratesfyi
-# You only need to start the container once, in the future you can attach to it like so:
-docker exec -it "$(docker container ps | grep postgres | cut -d ' ' -f 1)" psql -U cratesfyi
+. .env
+psql $CRATESFYI_DATABASE_URL
 ```
 
 The database contains a blacklist of crates that should not be built.
 
 ```sh
 # List the crates on the blacklist
-docker-compose run web database blacklist list
+cargo run web database blacklist list
 
 # Adds <CRATE_NAME> to the blacklist
-docker-compose run web database blacklist add <CRATE_NAME>
+cargo run web database blacklist add <CRATE_NAME>
 
 # Removes <CRATE_NAME> from the blacklist
-docker-compose run web database blacklist remove <CRATE_NAME>
+cargo run web database blacklist remove <CRATE_NAME>
 ```
 
 #### `daemon` subcommand
 
 ```sh
 # Run a persistent daemon which queues builds and starts a web server.
-# Warning: This will try to queue hundreds of packages on crates.io, only start it
-# if you have enough resources!
-docker-compose run -p 3000:3000 web daemon
+cargo run daemon --registry-watcher disabled
+# Add crates to the queue
+cargo run queue add <CRATE> <VERSION>
 ```
-
-### Changing the build environment
-
-To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
-and test that it works on docs.rs, see [the wiki](https://github.com/rust-lang/docs.rs/wiki/Making-changes-to-the-build-environment).
 
 ### Contact
 
