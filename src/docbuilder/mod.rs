@@ -7,8 +7,8 @@ mod rustwide_builder;
 
 pub(crate) use self::limits::Limits;
 pub(self) use self::metadata::Metadata;
-pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
 pub use self::rustwide_builder::RustwideBuilder;
+pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
 
 use crate::db::Pool;
 use crate::error::Result;
