@@ -429,10 +429,8 @@ impl RustwideBuilder {
                     algs,
                 )?;
 
-                if let (Some(total), Some(documented)) =
-                    (res.result.total_items, res.result.documented_items)
-                {
-                    add_doc_coverage(&mut conn, release_id, total, documented)?;
+                if let Some(doc_coverage) = res.result.doc_coverage {
+                    add_doc_coverage(&mut conn, release_id, doc_coverage)?;
                 }
 
                 add_build_into_database(&mut conn, release_id, &res.result)?;
@@ -534,7 +532,7 @@ impl RustwideBuilder {
         build: &Build,
         metadata: &Metadata,
         limits: &Limits,
-    ) -> Result<Option<(i32, i32)>> {
+    ) -> Result<Option<DocCoverage>> {
         self.make_build_object(
             target,
             metadata,
@@ -573,16 +571,19 @@ impl RustwideBuilder {
                     .ok();
                 if let Some(json) = doc_coverage_json {
                     if let Ok(Value::Object(m)) = serde_json::from_str(&json) {
-                        let (mut total, mut documented) = (0, 0);
+                        let (mut total_items, mut documented_items) = (0, 0);
                         for entry in m.values() {
                             if let Some(Value::Number(n)) = entry.get("total") {
-                                total += n.as_i64().unwrap_or(0) as i32;
+                                total_items += n.as_i64().unwrap_or(0) as i32;
                             }
                             if let Some(Value::Number(n)) = entry.get("with_docs") {
-                                documented += n.as_i64().unwrap_or(0) as i32;
+                                documented_items += n.as_i64().unwrap_or(0) as i32;
                             }
                         }
-                        return Ok(Some((total, documented)));
+                        return Ok(Some(DocCoverage {
+                            total_items,
+                            documented_items,
+                        }));
                     }
                 }
                 Ok(None)
@@ -648,16 +649,11 @@ impl RustwideBuilder {
                         .run()
                         .is_ok()
                 });
-                let mut total_items = None;
-                let mut documented_items = None;
-                if successful {
-                    if let Some((total, documented)) =
-                        self.get_coverage(target, build, metadata, limits)?
-                    {
-                        total_items = Some(total);
-                        documented_items = Some(documented);
-                    }
-                }
+                let doc_coverage = if successful {
+                    self.get_coverage(target, build, metadata, limits)?
+                } else {
+                    None
+                };
                 // If we're passed a default_target which requires a cross-compile,
                 // cargo will put the output in `target/<target>/doc`.
                 // However, if this is the default build, we don't want it there,
@@ -677,8 +673,7 @@ impl RustwideBuilder {
                         rustc_version: self.rustc_version.clone(),
                         docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                         successful,
-                        total_items,
-                        documented_items,
+                        doc_coverage
                     },
                     cargo_metadata,
                     target: target.to_string(),
@@ -732,14 +727,19 @@ struct FullBuildResult {
     cargo_metadata: CargoMetadata,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct DocCoverage {
+    /// The total items that could be documented in the current crate, used to calculate
+    /// documentation coverage.
+    pub(crate) total_items: i32,
+    /// The items of the crate that are documented, used to calculate documentation coverage.
+    pub(crate) documented_items: i32,
+}
+
 pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
-    /// The total items that could be documented in the current crate, used to calculate
-    /// documentation coverage.
-    pub(crate) total_items: Option<i32>,
-    /// The items of the crate that are documented, used to calculate documentation coverage.
-    pub(crate) documented_items: Option<i32>,
+    pub(crate) doc_coverage: Option<DocCoverage>,
 }
