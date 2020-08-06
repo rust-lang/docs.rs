@@ -54,7 +54,6 @@ impl TemplateData {
                 template_data
                     .templates
                     .swap(Arc::new(load_templates(&mut conn)?));
-                log::info!("Reloaded templates");
 
                 Ok(())
             }
@@ -65,7 +64,9 @@ impl TemplateData {
 
             while rx.recv().is_ok() {
                 if let Err(err) = reload(&template_data, &pool) {
-                    log::error!("failed to reload templates: {:?}", err);
+                    log::error!("Failed to reload templates:\n{}", err);
+                } else {
+                    log::info!("Reloaded templates");
                 }
             }
         });

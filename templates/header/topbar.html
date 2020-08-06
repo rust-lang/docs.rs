@@ -24,16 +24,28 @@
                 </a>
 
                 <ul class="pure-menu-list">
-                    <li class="pure-menu-item">
-                        <a href="/about" class="pure-menu-link">
+                    <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+                        <a href="/about" class="pure-menu-link disable-menu-arrow">
                             About
                         </a>
+
+                        <ul class="pure-menu-children">
+                            <a href="/about" class="pure-menu-link">
+                                Documentation about builds, badges and more
+                            </a>
+                        </ul>
                     </li>
 
-                    <li class="pure-menu-item">
-                        <a href="/releases" class="pure-menu-link">
+                    <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+                        <a href="/releases" class="pure-menu-link disable-menu-arrow">
                             Releases
                         </a>
+
+                        <ul class="pure-menu-children">
+                            <a href="/releases" class="pure-menu-link">
+                                Recent releases, the release queue and build failures
+                            </a>
+                        </ul>
                     </li>
 
                     {# The Rust dropdown menu #}
