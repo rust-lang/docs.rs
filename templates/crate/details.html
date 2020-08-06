@@ -18,7 +18,7 @@
                     <ul class="pure-menu-list">
                         {%- if details.documented_items and details.total_items -%}
                             {% set percent = details.documented_items * 100 / details.total_items %}
-                            <li class="pure-menu-heading">Documentation<br>coverage</li>
+                            <li class="pure-menu-heading">Coverage</li>
                             <li class="pure-menu-item" style="text-align:center;"><b>{{ percent | round(precision=2) }} %</b><br>
                                 <span style="font-size: 13px;"><b>{{ details.documented_items }}</b> out of <b>{{ details.total_items }}</b> items documented</span>
                             </li>
