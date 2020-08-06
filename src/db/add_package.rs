@@ -144,7 +144,11 @@ pub(crate) fn add_doc_coverage(
                     total_items = $2,
                     documented_items = $3
             RETURNING release_id",
-        &[&release_id, &doc_coverage.total_items, &doc_coverage.documented_items],
+        &[
+            &release_id,
+            &doc_coverage.total_items,
+            &doc_coverage.documented_items,
+        ],
     )?;
     Ok(rows[0].get(0))
 }
