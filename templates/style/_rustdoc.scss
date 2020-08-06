@@ -1,0 +1,45 @@
+// FIXME: Use modules
+@import "vars";
+
+// rustdoc overrides
+div.rustdoc {
+    font-family: $font-family-serif;
+    padding: 10px 15px 20px 15px;
+    position: relative;
+
+    @media (max-width: 700px) {
+        padding-top: 0;
+    }
+
+    .sidebar {
+        @media (min-width: 701px) {
+            margin-top: $top-navbar-height;
+        }
+
+        .block > ul > li {
+            margin-right: -10px;
+        }
+
+        @media (max-width: 700px) {
+            &.mobile {
+                top: $top-navbar-height;
+
+                .sidebar-elems .show-it {
+                    top: 77px;
+                }
+
+                #sidebar-filler {
+                    top: $top-navbar-height;
+                }
+            }
+        }
+    }
+
+    #source-sidebar {
+        top: $top-navbar-height;
+    }
+
+    #sidebar-toggle {
+        top: 62px;
+    }
+}

@@ -1,34 +1,11 @@
-// FONTS
-$font-family-sans: "Fira Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-$font-family-serif: "Source Serif Pro",Georgia,Times,"Times New Roman",serif;
-$font-family-mono: "Source Code Pro", Menlo, Monaco, Consolas, "DejaVu Sans Mono", Inconsolata, monospace;
+// FIXME: Use modules
+@import "vars", "rustdoc", "utils", "navbar";
 
-// COLORS - Guess what?
-$color-standard: #000;             // pure black
-$color-url: #4d76ae;               // blue
-$color-macro: #068000;             // green
-$color-struct: #df3600;            // red
-$color-enum: #5e9766;              // light green
-$color-type: #e57300;              // orange
-$color-keyword: #8959A8;           // purple
-$color-string: #718C00;            // greenish
-$color-macro-in-code: #3E999F;     // blueish
-$color-lifetime-incode: #B76514;   // orangish
-$color-comment-in-code: #8E908C;   // light gray
-$color-background-code: #F5F5F5;   // lighter gray
-$color-border: #ddd;               // gray
-$color-red: #d93d3d;               // red
-$top-navbar-height: 32px;          // height of the floating top navbar
-
-// pure compatible media queries
-$media-sm: "screen and (min-width: 35.5em)";
-$media-md: "screen and (min-width: 48em)";
-$media-lg: "screen and (min-width: 64em)";
-$media-xl: "screen and (min-width: 80em)";
-// usage:
-// @media #{$media-sm} { ... }
-
-html, input, select, textarea, .pure-g [class *= "pure-u"] {
+html,
+input,
+select,
+textarea,
+.pure-g [class*="pure-u"] {
     font-family: $font-family-sans;
     color: $color-standard;
 }
@@ -43,60 +20,39 @@ html, input, select, textarea, .pure-g [class *= "pure-u"] {
     font-family: $font-family-serif;
 }
 
-// rustdoc overrides
-div.rustdoc {
-    font-family: $font-family-serif;
-    padding: 10px 15px 20px 15px;
-
-    @media (max-width: 700px) {
-        padding-top: 0;
-    }
-
-    .sidebar {
-        @media (min-width: 701px) {
-            margin-top: $top-navbar-height;
-        }
-
-        .block > ul > li {
-            margin-right: -10px;
-        }
-    }
-
-    #source-sidebar {
-        top: $top-navbar-height;
-    }
-
-    #sidebar-toggle {
-        top: 62px;
-    }
-
-    @media (max-width: 700px) {
-        .sidebar.mobile {
-            top: $top-navbar-height;
-
-            .sidebar-elems.show-it {
-                top: 77px;
-            }
-
-            #sidebar-filler {
-                top: $top-navbar-height;
-            }
-        }
-    }
-
-    position: relative;
-}
-
 body {
     padding: 0;
     margin: 0;
+
+    // rustdocs have 200px sidebar and
+    // max-width 960px main pane
+    // BUT I really want to make the website centered
+    text-align: center;
+    font: 16px/1.4 $font-family-sans;
+
     // Since top navbar is fixed, we need to add padding to the body content.
     padding-top: $top-navbar-height;
+
     // The scroll padding on the <body> is necessary for Chrome
     // browsers for now (see
     // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
     // for an explanation)
     scroll-padding-top: $top-navbar-height;
+
+    // this is a super nasty override for help dialog in rustdocs
+    // see #52 for details
+    .blur > :not(#help) {
+        filter: none;
+        -webkit-filter: none;
+    }
+
+    .blur > div.nav-container > *,
+    .blur > div.cratesfyi-package-container > *,
+    .blur > div.rustdoc > :not(#help) {
+        filter: blur(8px);
+        -webkit-filter: blur(8px);
+        opacity: 0.7;
+    }
 }
 
 html {
@@ -104,29 +60,6 @@ html {
     // overlap the top navigation bar (not supported on Desktop/Mobile
     // Safari yet):
     scroll-padding-top: $top-navbar-height;
-}
-
-// this is a super nasty override for help dialog in rustdocs
-// see #52 for details
-body.blur > :not(#help) {
-    filter: none;
-    -webkit-filter: none;
-}
-
-body.blur > div.nav-container > *,
-body.blur > div.cratesfyi-package-container > *,
-body.blur > div.rustdoc > :not(#help) {
-    filter: blur(8px);
-    -webkit-filter: blur(8px);
-    opacity: .7;
-}
-
-// rustdocs have 200px sidebar and
-// max-width 960px main pane
-// BUT I really want to make the website centered
-body {
-    text-align: center;
-    font: 16px/1.4 $font-family-sans;
 }
 
 pre {
@@ -143,151 +76,6 @@ div.container {
 
 div.container-rustdoc {
     text-align: left;
-}
-
-div.nav-container {
-    // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
-    z-index: 999;
-    height: $top-navbar-height;
-    border-bottom: 1px solid $color-border;
-    background-color: #fff;
-    left: 0;
-    right: 0;
-    top: 0;
-    position: fixed;
-
-    li {
-        border-left: 1px solid $color-border;
-    }
-
-    .pure-menu-has-children>.pure-menu-link:after {
-        font-size: 0.8em;
-    }
-
-    .pure-menu-link {
-        font-size: 0.8em;
-        font-weight: 400;
-    }
-
-    .pure-menu-link:hover {
-        color: $color-standard;
-        background-color: inherit;
-    }
-
-    form.landing-search-form-nav {
-        max-width: 1200px;
-
-        #search-input-nav {
-            float: right;
-            max-width: 150px;
-            display: none;
-            border-left: 1px solid $color-border;
-
-            @media #{$media-sm} {
-                display: block;
-            }
-
-            @media #{$media-md} {
-                 max-width: 200px;
-            }
-
-            label {
-                 color: #777;
-                 cursor: pointer;
-                 padding-left: 0.5rem;
-                 font-size: 0.8em;
-            }
-
-            input {
-                 border: none;
-                 margin: 0 1em 0 0;
-                 font-size: 0.8em;
-                 box-shadow: none;
-                 background-color: #fff;
-                 height: 31px;
-            }
-        }
-
-        input.search-input-nav:focus {
-            outline: unset;
-        }
-    }
-
-    .pure-menu-children {
-        border: 1px solid $color-border;
-        border-radius: 0 0 2px 2px;
-        margin-left: -1px;
-
-        li {
-            border-left: none;
-        }
-    }
-
-    // used for latest version warning
-    .warn, .warn:hover {
-        color: $color-type;
-    }
-
-    a.warn:hover {
-        color: darken($color-type, 10%);
-    }
-
-    // used for global alerts
-    .error {
-        color: $color-red;
-
-        &:hover {
-            color: darken($color-red, 10%);
-        }
-    }
-
-    div.rustdoc-navigation {
-        span.title {
-            display: none;
-
-            @media #{$media-sm} {
-                display: inline;
-            }
-        }
-
-        div.package-details-menu {
-            width: 350px;
-
-            p.description {
-                font-family: $font-family-sans;
-                font-size: 0.8em;
-                color: #777;  // color from pure
-                padding: .5em 1em;
-                margin: 0;
-            }
-
-            ul.pure-menu-list {
-                width: 100%;
-            }
-
-            div.right-border {
-                border-right: 1px solid $color-border;
-            }
-
-            a.pure-menu-link {
-                word-wrap: normal;
-                white-space: normal;
-            }
-
-            div.sub-menu {
-                max-height: 150px;
-                overflow-y: auto;
-
-                ul.pure-menu-list {
-                    border-top: none;
-                }
-
-                li.pure-menu-item:last-child {
-                    border-bottom: none;
-                }
-            }
-        }
-    }
 }
 
 div.nav-container-rustdoc {
@@ -315,7 +103,7 @@ div.landing {
     form.landing-search-form {
         max-width: 500px;
         margin: 0 auto;
-        padding: .4em 1em;
+        padding: 0.4em 1em;
 
         div.buttons {
             margin-top: 30px;
@@ -331,7 +119,8 @@ div.recent-releases-container {
     text-align: left;
     margin-bottom: 50px;
 
-    ul, li {
+    ul,
+    li {
         list-style-type: none;
         margin: 0;
         padding: 0;
@@ -357,15 +146,16 @@ div.recent-releases-container {
     .release {
         display: block;
         border-bottom: 1px solid $color-border;
-        padding: .4em 1em;
+        padding: 0.4em 1em;
 
         @media #{$media-lg} {
-            padding: .4em 0;
+            padding: 0.4em 0;
             margin: 0 1em;
         }
     }
 
-    .release:hover, li.selected > .release {
+    .release:hover,
+    li.selected > .release {
         background-color: $color-background-code;
     }
 
@@ -452,7 +242,7 @@ div.recent-releases-container {
 
 div.package-container {
     background-color: $color-url;
-    color: $color-background-code;;
+    color: $color-background-code;
 
     h1 {
         margin: 0;
@@ -472,7 +262,7 @@ div.package-container {
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
             border-bottom: 2px solid $color-border;
-            padding: .4em 1em;
+            padding: 0.4em 1em;
         }
 
         .pure-menu-active {
@@ -492,7 +282,7 @@ div.package-sheet-container {
 
     .pure-menu-link {
         border-radius: 4px;
-        padding: .2em .8em;
+        padding: 0.2em 0.8em;
         font-weight: 400;
     }
 
@@ -580,7 +370,12 @@ div.package-page-container {
             text-decoration: underline;
         }
 
-        h1, h2, h3, h4, h5, h6 {
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
             font-family: $font-family-sans;
         }
 
@@ -601,7 +396,8 @@ div.package-page-container {
             border: 1px solid #cbcbcb;
             margin-bottom: 15px;
 
-            td, th {
+            td,
+            th {
                 border-left: 1px solid #cbcbcb;
                 border-width: 0 0 0 1px;
                 font-size: inherit;
@@ -676,7 +472,7 @@ div.cratesfyi-package-container {
         .pure-menu-link {
             color: #666;
             font-size: 14px;
-            padding: .4em 1em .3em 1em;
+            padding: 0.4em 1em 0.3em 1em;
 
             .title {
                 display: none;
@@ -719,7 +515,7 @@ div.cratesfyi-package-container {
             border-radius: 2px;
         }
 
-        .pure-menu-has-children>.pure-menu-link:after {
+        .pure-menu-has-children > .pure-menu-link:after {
             font-size: 14px;
         }
 
@@ -733,33 +529,14 @@ div.cratesfyi-package-container-rustdoc {
     margin-bottom: 10px;
 }
 
-div.info {
-    font-family: $font-family-sans;
-    border-radius: 4px;
-    background-color: $color-background-code;
-    padding: .4em 1em;
-    text-align: center;
-    margin-bottom: 10px;
-
-    a {
-        color: $color-url;
-        text-decoration: underline;
-    }
-}
-
-div.warning {
-    @extend div.info;
-    background-color: lighten($color-type, 45%);
-}
-
 div.search-page-search-form {
-    padding: .4em 1em;
+    padding: 0.4em 1em;
     text-align: center;
 
     input.search-input {
         display: inline-block;
         max-width: 300px;
-        padding: .4em 1em;
+        padding: 0.4em 1em;
     }
 }
 
@@ -776,13 +553,14 @@ div.search-page-search-form {
 
 .about {
     font-family: $font-family-serif;
-    padding: .4em 1em;
+    padding: 0.4em 1em;
 
     a {
         color: $color-url;
-    }
-    a:hover {
-        text-decoration: underline;
+
+        :hover {
+            text-decoration: underline;
+        }
     }
 
     table {
@@ -816,11 +594,12 @@ div.search-page-search-form {
 }
 
 i.dependencies.normal {
-  visibility: hidden;
-  display: none;
+    visibility: hidden;
+    display: none;
 }
 
 /* Don't put a newline after code fragments in headers */
-h3 > code, h4 > code {
-  display: inline-block;
+h3 > code,
+h4 > code {
+    display: inline-block;
 }

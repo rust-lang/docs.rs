@@ -1,0 +1,148 @@
+// FIXME: Use modules
+@import "vars", "utils";
+
+div.nav-container {
+    // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
+    z-index: 999;
+    height: $top-navbar-height;
+    border-bottom: 1px solid $color-border;
+    background-color: #fff;
+    left: 0;
+    right: 0;
+    top: 0;
+    position: fixed;
+
+    li {
+        border-left: 1px solid $color-border;
+    }
+
+    .pure-menu-has-children > .pure-menu-link:after {
+        font-size: 0.8em;
+    }
+
+    .pure-menu-link {
+        font-size: 0.8em;
+        font-weight: 400;
+
+        &:hover {
+            color: $color-standard;
+            background-color: inherit;
+        }
+    }
+
+    form.landing-search-form-nav {
+        max-width: 1200px;
+
+        #search-input-nav {
+            float: right;
+            max-width: 150px;
+            display: none;
+            border-left: 1px solid $color-border;
+
+            @media #{$media-sm} {
+                display: block;
+            }
+
+            @media #{$media-md} {
+                max-width: 200px;
+            }
+
+            label {
+                color: #777;
+                cursor: pointer;
+                padding-left: 0.5rem;
+                font-size: 0.8em;
+            }
+
+            input {
+                border: none;
+                margin: 0 1em 0 0;
+                font-size: 0.8em;
+                box-shadow: none;
+                background-color: #fff;
+                height: 31px;
+            }
+        }
+
+        input.search-input-nav:focus {
+            outline: unset;
+        }
+    }
+
+    .pure-menu-children {
+        border: 1px solid $color-border;
+        border-radius: 0 0 2px 2px;
+        margin-left: -1px;
+
+        li {
+            border-left: none;
+        }
+    }
+
+    // used for latest version warning
+    .warn,
+    .warn:hover {
+        color: $color-type;
+    }
+
+    a.warn:hover {
+        color: darken($color-type, 10%);
+    }
+
+    // used for global alerts
+    .error {
+        color: $color-red;
+
+        &:hover {
+            color: darken($color-red, 10%);
+        }
+    }
+
+    div.rustdoc-navigation {
+        span.title {
+            display: none;
+
+            @media #{$media-sm} {
+                display: inline;
+            }
+        }
+
+        div.package-details-menu {
+            width: 350px;
+
+            p.description {
+                font-family: $font-family-sans;
+                font-size: 0.8em;
+                color: #777; // color from pure
+                padding: 0.5em 1em;
+                margin: 0;
+            }
+
+            ul.pure-menu-list {
+                width: 100%;
+            }
+
+            div.right-border {
+                border-right: 1px solid $color-border;
+            }
+
+            a.pure-menu-link {
+                word-wrap: normal;
+                white-space: normal;
+            }
+
+            div.sub-menu {
+                max-height: 150px;
+                overflow-y: auto;
+
+                ul.pure-menu-list {
+                    border-top: none;
+                }
+
+                li.pure-menu-item:last-child {
+                    border-bottom: none;
+                }
+            }
+        }
+    }
+}

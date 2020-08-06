@@ -1,18 +1,25 @@
 use git2::Repository;
-use std::env;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::Path;
+use std::{
+    env,
+    error::Error,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
 
 fn main() {
     // Set the host target
     println!(
         "cargo:rustc-env=CRATESFYI_HOST_TARGET={}",
-        env::var("TARGET").unwrap()
+        env::var("TARGET").unwrap(),
     );
 
     // Don't rerun anytime a single change is made
-    println!("cargo:rerun-if-changed=templates/style.scss");
+    println!("cargo:rerun-if-changed=templates/style/base.scss");
+    println!("cargo:rerun-if-changed=templates/style/_rustdoc.scss");
+    println!("cargo:rerun-if-changed=templates/style/_vars.scss");
+    println!("cargo:rerun-if-changed=templates/style/_utils.scss");
+    println!("cargo:rerun-if-changed=templates/style/_navbar.scss");
     println!("cargo:rerun-if-changed=templates/menu.js");
     println!("cargo:rerun-if-changed=templates/index.js");
     // TODO: are these right?
@@ -20,7 +27,9 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/index");
 
     write_git_version();
-    compile_sass();
+    if let Err(sass_err) = compile_sass() {
+        panic!("Error compiling SASS: {}", sass_err);
+    }
     copy_js();
 }
 
@@ -46,15 +55,24 @@ fn get_git_hash() -> Option<String> {
     })
 }
 
-fn compile_sass() {
-    use sass_rs::Context;
+fn compile_sass() -> Result<(), Box<dyn Error>> {
+    use sass_rs::{Context, Options, OutputStyle};
 
-    let mut file_context =
-        Context::new_file(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style.scss")).unwrap();
-    let css = file_context.compile().unwrap();
-    let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("style.css");
-    let mut file = File::create(&dest_path).unwrap();
-    file.write_all(css.as_bytes()).unwrap();
+    const STYLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style");
+
+    let mut context = Context::new_file(format!("{}/base.scss", STYLE_DIR))?;
+    context.set_options(Options {
+        output_style: OutputStyle::Compressed,
+        include_paths: vec![STYLE_DIR.to_owned()],
+        ..Default::default()
+    });
+
+    let css = context.compile()?;
+    let dest_path = Path::new(&env::var("OUT_DIR")?).join("style.css");
+    let mut file = File::create(&dest_path)?;
+    file.write_all(css.as_bytes())?;
+
+    Ok(())
 }
 
 fn copy_js() {
