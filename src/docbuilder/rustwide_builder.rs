@@ -351,12 +351,6 @@ impl RustwideBuilder {
                     other_targets,
                 } = metadata.targets();
 
-                // Store the sources even if the build fails
-                debug!("adding sources into database");
-                let prefix = format!("sources/{}/{}", name, version);
-                let (files_list, mut algs) =
-                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
-
                 // Perform an initial build
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
                 if res.result.successful {
@@ -366,6 +360,7 @@ impl RustwideBuilder {
                     }
                 }
 
+                let mut algs = HashSet::new();
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
                     self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
@@ -388,6 +383,13 @@ impl RustwideBuilder {
                     let new_algs = self.upload_docs(name, version, local_storage.path())?;
                     algs.extend(new_algs);
                 };
+
+                // Store the sources even if the build fails
+                debug!("adding sources into database");
+                let prefix = format!("sources/{}/{}", name, version);
+                let (files_list, new_algs) =
+                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
+                algs.extend(new_algs);
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
                 if res.result.successful {
