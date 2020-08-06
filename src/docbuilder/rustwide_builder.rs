@@ -69,6 +69,69 @@ const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
+macro_rules! config_command {
+    ($obj:ident, $build:expr, $target:expr, $metadata:expr, $limits:expr, $rustdoc_flags_extras:expr, $($extra:tt)+) => {{
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
+        if $target != HOST_TARGET {
+            // If the explicit target is not a tier one target, we need to install it.
+            if !TARGETS.contains(&$target) {
+                // This is a no-op if the target is already installed.
+                $obj.toolchain.add_target(&$obj.workspace, $target)?;
+            }
+            cargo_args.push("--target");
+            cargo_args.push($target);
+        };
+
+        let tmp;
+        if let Some(cpu_limit) = $obj.cpu_limit {
+            tmp = format!("-j{}", cpu_limit);
+            cargo_args.push(&tmp);
+        }
+
+        let tmp;
+        if let Some(features) = &$metadata.features {
+            cargo_args.push("--features");
+            tmp = features.join(" ");
+            cargo_args.push(&tmp);
+        }
+        if $metadata.all_features {
+            cargo_args.push("--all-features");
+        }
+        if $metadata.no_default_features {
+            cargo_args.push("--no-default-features");
+        }
+
+        let mut rustdoc_flags = vec![
+            "-Z".to_string(),
+            "unstable-options".to_string(),
+            "--static-root-path".to_string(),
+            "/".to_string(),
+            "--cap-lints".to_string(),
+            "warn".to_string(),
+        ];
+        rustdoc_flags.extend($rustdoc_flags_extras);
+
+        $build
+            .cargo()
+            .timeout(Some($limits.timeout()))
+            .no_output_timeout(None)
+            .env(
+                "RUSTFLAGS",
+                $metadata
+                    .rustc_args
+                    .as_ref()
+                    .map(|args| args.join(" "))
+                    .unwrap_or_default(),
+            )
+            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
+            // For docs.rs detection from build script:
+            // https://github.com/rust-lang/docs.rs/issues/147
+            .env("DOCS_RS", "1")
+            .args(&cargo_args)
+            $($extra)+
+    }}
+}
+
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
@@ -473,58 +536,6 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    fn make_build_object<T, F: Fn(Vec<&str>, Vec<String>, LogStorage) -> Result<T>>(
-        &self,
-        target: &str,
-        metadata: &Metadata,
-        limits: &Limits,
-        f: F,
-    ) -> Result<T> {
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
-        if target != HOST_TARGET {
-            // If the explicit target is not a tier one target, we need to install it.
-            if !TARGETS.contains(&target) {
-                // This is a no-op if the target is already installed.
-                self.toolchain.add_target(&self.workspace, target)?;
-            }
-            cargo_args.push("--target");
-            cargo_args.push(target);
-        };
-
-        let tmp_jobs;
-        if let Some(cpu_limit) = self.cpu_limit {
-            tmp_jobs = format!("-j{}", cpu_limit);
-            cargo_args.push(&tmp_jobs);
-        }
-
-        let tmp;
-        if let Some(features) = &metadata.features {
-            cargo_args.push("--features");
-            tmp = features.join(" ");
-            cargo_args.push(&tmp);
-        }
-        if metadata.all_features {
-            cargo_args.push("--all-features");
-        }
-        if metadata.no_default_features {
-            cargo_args.push("--no-default-features");
-        }
-
-        let mut storage = LogStorage::new(LevelFilter::Info);
-        storage.set_max_size(limits.max_log_size());
-
-        let rustdoc_flags: Vec<String> = vec![
-            "-Z".to_string(),
-            "unstable-options".to_string(),
-            "--static-root-path".to_string(),
-            "/".to_string(),
-            "--cap-lints".to_string(),
-            "warn".to_string(),
-        ];
-
-        f(cargo_args, rustdoc_flags, storage)
-    }
-
     fn get_coverage(
         &self,
         target: &str,
@@ -532,62 +543,41 @@ impl RustwideBuilder {
         metadata: &Metadata,
         limits: &Limits,
     ) -> Result<Option<DocCoverage>> {
-        self.make_build_object(
-            target,
-            metadata,
-            limits,
-            |cargo_args, mut rustdoc_flags, _| {
-                rustdoc_flags.extend(vec![
-                    "--output-format".to_string(),
-                    "json".to_string(),
-                    "--show-coverage".to_string(),
-                ]);
-                let mut doc_coverage_json = None;
-                build
-                    .cargo()
-                    .timeout(Some(limits.timeout()))
-                    .no_output_timeout(None)
-                    .env(
-                        "RUSTFLAGS",
-                        metadata
-                            .rustc_args
-                            .as_ref()
-                            .map(|args| args.join(" "))
-                            .unwrap_or_default(),
-                    )
-                    .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
-                    // For docs.rs detection from build script:
-                    // https://github.com/rust-lang/docs.rs/issues/147
-                    .env("DOCS_RS", "1")
-                    .args(&cargo_args)
-                    .log_output(false)
-                    .process_lines(&mut |line, _| {
-                        if line.starts_with('{') && line.ends_with('}') {
-                            doc_coverage_json = Some(line.to_owned());
-                        }
-                    })
-                    .run()
-                    .ok();
-                if let Some(json) = doc_coverage_json {
-                    if let Ok(Value::Object(m)) = serde_json::from_str(&json) {
-                        let (mut total_items, mut documented_items) = (0, 0);
-                        for entry in m.values() {
-                            if let Some(Value::Number(n)) = entry.get("total") {
-                                total_items += n.as_i64().unwrap_or(0) as i32;
-                            }
-                            if let Some(Value::Number(n)) = entry.get("with_docs") {
-                                documented_items += n.as_i64().unwrap_or(0) as i32;
-                            }
-                        }
-                        return Ok(Some(DocCoverage {
-                            total_items,
-                            documented_items,
-                        }));
+        let mut doc_coverage_json = None;
+
+        let rustdoc_flags = vec![
+            "--output-format".to_string(),
+            "json".to_string(),
+            "--show-coverage".to_string(),
+        ];
+        config_command!(self, build, target, metadata, limits, rustdoc_flags,
+            .process_lines(&mut |line, _| {
+                if line.starts_with('{') && line.ends_with('}') {
+                    doc_coverage_json = Some(line.to_owned());
+                }
+            })
+            .log_output(false)
+            .run()?;
+        );
+
+        if let Some(json) = doc_coverage_json {
+            if let Ok(Value::Object(m)) = serde_json::from_str(&json) {
+                let (mut total_items, mut documented_items) = (0, 0);
+                for entry in m.values() {
+                    if let Some(Value::Number(n)) = entry.get("total") {
+                        total_items += n.as_i64().unwrap_or(0) as i32;
+                    }
+                    if let Some(Value::Number(n)) = entry.get("with_docs") {
+                        documented_items += n.as_i64().unwrap_or(0) as i32;
                     }
                 }
-                Ok(None)
-            },
-        )
+                return Ok(Some(DocCoverage {
+                    total_items,
+                    documented_items,
+                }));
+            }
+        }
+        Ok(None)
     }
 
     fn execute_build(
@@ -598,87 +588,69 @@ impl RustwideBuilder {
         limits: &Limits,
         metadata: &Metadata,
     ) -> Result<FullBuildResult> {
-        self.make_build_object(
-            target,
-            metadata,
-            limits,
-            |cargo_args, mut rustdoc_flags, storage| {
-                rustdoc_flags.extend(vec![
-                    "--resource-suffix".to_string(),
-                    format!("-{}", parse_rustc_version(&self.rustc_version)?),
-                ]);
-                let cargo_metadata = CargoMetadata::load(
-                    &self.workspace,
-                    &self.toolchain,
-                    &build.host_source_dir(),
-                )?;
+        let cargo_metadata =
+            CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
-                for dep in &cargo_metadata.root_dependencies() {
-                    rustdoc_flags.push("--extern-html-root-url".to_string());
-                    rustdoc_flags.push(format!(
-                        "{}=https://docs.rs/{}/{}",
-                        dep.name.replace("-", "_"),
-                        dep.name,
-                        dep.version
-                    ));
-                }
-                if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
-                    rustdoc_flags
-                        .append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
-                }
+        let mut rustdoc_flags = Vec::new();
 
-                let successful = logging::capture(&storage, || {
-                    build
-                        .cargo()
-                        .timeout(Some(limits.timeout()))
-                        .no_output_timeout(None)
-                        .env(
-                            "RUSTFLAGS",
-                            metadata
-                                .rustc_args
-                                .as_ref()
-                                .map(|args| args.join(" "))
-                                .unwrap_or_default(),
-                        )
-                        .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
-                        // For docs.rs detection from build script:
-                        // https://github.com/rust-lang/docs.rs/issues/147
-                        .env("DOCS_RS", "1")
-                        .args(&cargo_args)
-                        .run()
-                        .is_ok()
-                });
-                let doc_coverage = if successful {
-                    self.get_coverage(target, build, metadata, limits)?
-                } else {
-                    None
-                };
-                // If we're passed a default_target which requires a cross-compile,
-                // cargo will put the output in `target/<target>/doc`.
-                // However, if this is the default build, we don't want it there,
-                // we want it in `target/doc`.
-                if target != HOST_TARGET && is_default_target {
-                    // mv target/$target/doc target/doc
-                    let target_dir = build.host_target_dir();
-                    let old_dir = target_dir.join(target).join("doc");
-                    let new_dir = target_dir.join("doc");
-                    debug!("rename {} to {}", old_dir.display(), new_dir.display());
-                    std::fs::rename(old_dir, new_dir)?;
-                }
+        for dep in &cargo_metadata.root_dependencies() {
+            rustdoc_flags.push("--extern-html-root-url".to_string());
+            rustdoc_flags.push(format!(
+                "{}=https://docs.rs/{}/{}",
+                dep.name.replace("-", "_"),
+                dep.name,
+                dep.version
+            ));
+        }
+        if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
+            rustdoc_flags.append(&mut package_rustdoc_args.iter().map(|s| s.to_owned()).collect());
+        }
 
-                Ok(FullBuildResult {
-                    result: BuildResult {
-                        build_log: storage.to_string(),
-                        rustc_version: self.rustc_version.clone(),
-                        docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
-                        successful,
-                        doc_coverage
-                    },
-                    cargo_metadata,
-                    target: target.to_string(),
-                })
+        rustdoc_flags.extend(vec![
+            "--resource-suffix".to_string(),
+            format!("-{}", parse_rustc_version(&self.rustc_version)?),
+        ]);
+
+        let mut storage = LogStorage::new(LevelFilter::Info);
+        storage.set_max_size(limits.max_log_size());
+
+        let successful = logging::capture(&storage, || {
+            let wrap = || {
+                config_command!(self, build, target, metadata, limits, rustdoc_flags,
+                    .run()
+                )
+            };
+            wrap().is_ok()
+        });
+        let doc_coverage = if successful {
+            self.get_coverage(target, build, metadata, limits)?
+        } else {
+            None
+        };
+        // If we're passed a default_target which requires a cross-compile,
+        // cargo will put the output in `target/<target>/doc`.
+        // However, if this is the default build, we don't want it there,
+        // we want it in `target/doc`.
+        if target != HOST_TARGET && is_default_target {
+            // mv target/$target/doc target/doc
+            let target_dir = build.host_target_dir();
+            let old_dir = target_dir.join(target).join("doc");
+            let new_dir = target_dir.join("doc");
+            debug!("rename {} to {}", old_dir.display(), new_dir.display());
+            std::fs::rename(old_dir, new_dir)?;
+        }
+
+        Ok(FullBuildResult {
+            result: BuildResult {
+                build_log: storage.to_string(),
+                rustc_version: self.rustc_version.clone(),
+                docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
+                successful,
+                doc_coverage,
             },
-        )
+            cargo_metadata,
+            target: target.to_string(),
+        })
     }
 
     fn copy_docs(
