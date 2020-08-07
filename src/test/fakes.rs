@@ -1,5 +1,5 @@
 use super::TestDatabase;
-use crate::docbuilder::BuildResult;
+use crate::docbuilder::{BuildResult, DocCoverage};
 use crate::index::api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
@@ -59,7 +59,10 @@ impl<'a> FakeRelease<'a> {
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
                 build_log: "It works!".into(),
                 successful: true,
-                doc_coverage: None,
+                doc_coverage: Some(DocCoverage {
+                    total_items: 10,
+                    documented_items: 6,
+                }),
             },
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
@@ -277,6 +280,11 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )?;
         crate::db::add_build_into_database(&mut db.conn(), release_id, &self.build_result)?;
+        crate::db::add_doc_coverage(
+            &mut db.conn(),
+            release_id,
+            self.build_result.doc_coverage.clone().unwrap(),
+        )?;
 
         Ok(release_id)
     }
