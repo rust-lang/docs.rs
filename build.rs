@@ -28,7 +28,7 @@ fn main() {
 
     write_git_version();
     if let Err(sass_err) = compile_sass() {
-        panic!("Error compiling SASS: {}", sass_err);
+        panic!("Error compiling sass: {}", sass_err);
     }
     copy_js();
 }
