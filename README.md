@@ -73,7 +73,7 @@ Please file bugs for any trouble you have running docs.rs!
 
 ### Running tests
 
-Tests are only supported via cargo, not docker-compose.
+Tests are only supported via cargo and do not work in docker-compose
 
 ```
 cargo test
