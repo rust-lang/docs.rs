@@ -64,9 +64,9 @@ impl TemplateData {
 
             while rx.recv().is_ok() {
                 if let Err(err) = reload(&template_data, &pool) {
-                    log::error!("Failed to reload templates:\n{}", err);
+                    log::error!("failed to reload templates: {}", err);
                 } else {
-                    log::info!("Reloaded templates");
+                    log::info!("reloaded templates");
                 }
             }
         });
