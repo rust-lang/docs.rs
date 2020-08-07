@@ -668,11 +668,41 @@ mod test {
         node.select("#clipboard").unwrap().count() == 1
     }
 
+    fn check_doc_coverage_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
+        let data = web.get(path).send().unwrap().text().unwrap();
+        let node = kuchiki::parse_html().one(data);
+        node.select(".pure-menu-heading")
+            .unwrap()
+            .any(|e| e.text_contents().contains("Coverage"))
+    }
+
     #[test]
     fn test_index_returns_success() {
         wrapper(|env| {
             let web = env.frontend();
             assert!(web.get("/").send()?.status().is_success());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_doc_coverage_for_crate_pages() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake_crate")
+                .version("0.0.1")
+                .source_file("test.rs", &[])
+                .create()
+                .unwrap();
+            let web = env.frontend();
+            assert!(check_doc_coverage_is_present_for_path(
+                "/crate/fake_crate/0.0.1",
+                web
+            ));
+            assert!(check_doc_coverage_is_present_for_path(
+                "/fake_crate/0.0.1/fake_crate",
+                web
+            ));
             Ok(())
         });
     }
