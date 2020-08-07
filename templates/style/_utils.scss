@@ -23,12 +23,3 @@ div {
         background-color: lighten($color-type, 45%);
     }
 }
-
-// Disable the dropdown arrow for pure menu items
-// It's a wonderful hack, but it allows us to hijack pure's dropdown menus to
-// make tooltips that appear when you hover over them that don't have the little
-// arrow on the link itself
-.disable-menu-arrow,
-.pure-menu-has-children > .disable-menu-arrow.pure-menu-link:after {
-    content: "" !important;
-}
