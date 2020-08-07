@@ -20,7 +20,7 @@ use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -68,84 +68,6 @@ const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
-
-// This macro exists because of lifetimes issues surrounding the `Command::process_lines` method:
-// it expects a mutable reference to a closure, in which we capture a variable in order to store
-// the JSON output. Unfortunately, we *need* to create the command in the same scope level otherwise
-// rustc becomes very grumpy about the fact that the variable needs to be static because it is
-// captured in a mutably referenced closure.
-//
-// So either you create a function with a callback in which you pass the `Command` as an argument,
-// or you create a function returning a `Command`, it's very unhappy in both cases.
-//
-// TODO: make `Command::process_lines` take the closure by value rather than a mutable reference.
-macro_rules! config_command {
-    ($obj:ident, $build:expr, $target:expr, $metadata:expr, $limits:expr, $rustdoc_flags_extras:expr, $($extra:tt)+) => {{
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
-        if $target != HOST_TARGET {
-            // If the explicit target is not a tier one target, we need to install it.
-            if !TARGETS.contains(&$target) {
-                // This is a no-op if the target is already installed.
-                $obj.toolchain.add_target(&$obj.workspace, $target)?;
-            }
-            cargo_args.push("--target");
-            cargo_args.push($target);
-        };
-
-        let tmp;
-        if let Some(cpu_limit) = $obj.cpu_limit {
-            tmp = format!("-j{}", cpu_limit);
-            cargo_args.push(&tmp);
-        }
-
-        let tmp;
-        if let Some(features) = &$metadata.features {
-            cargo_args.push("--features");
-            tmp = features.join(" ");
-            cargo_args.push(&tmp);
-        }
-        if $metadata.all_features {
-            cargo_args.push("--all-features");
-        }
-        if $metadata.no_default_features {
-            cargo_args.push("--no-default-features");
-        }
-
-        let mut rustdoc_flags = vec![
-            "-Z".to_string(),
-            "unstable-options".to_string(),
-            "--static-root-path".to_string(),
-            "/".to_string(),
-            "--cap-lints".to_string(),
-            "warn".to_string(),
-        ];
-
-        if let Some(package_rustdoc_args) = &$metadata.rustdoc_args {
-            rustdoc_flags.append(&mut package_rustdoc_args.clone());
-        }
-
-        rustdoc_flags.extend($rustdoc_flags_extras);
-
-        $build
-            .cargo()
-            .timeout(Some($limits.timeout()))
-            .no_output_timeout(None)
-            .env(
-                "RUSTFLAGS",
-                $metadata
-                    .rustc_args
-                    .as_ref()
-                    .map(|args| args.join(" "))
-                    .unwrap_or_default(),
-            )
-            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
-            // For docs.rs detection from build script:
-            // https://github.com/rust-lang/docs.rs/issues/147
-            .env("DOCS_RS", "1")
-            .args(&cargo_args)
-            $($extra)+
-    }}
-}
 
 pub struct RustwideBuilder {
     workspace: Workspace,
@@ -558,41 +480,46 @@ impl RustwideBuilder {
         metadata: &Metadata,
         limits: &Limits,
     ) -> Result<Option<DocCoverage>> {
-        let mut doc_coverage_json = None;
-
         let rustdoc_flags = vec![
             "--output-format".to_string(),
             "json".to_string(),
             "--show-coverage".to_string(),
         ];
-        config_command!(self, build, target, metadata, limits, rustdoc_flags,
+
+        #[derive(serde::Deserialize)]
+        struct FileCoverage {
+            total: i32,
+            with_docs: i32,
+        }
+
+        let mut coverage = DocCoverage {
+            total_items: 0,
+            documented_items: 0,
+        };
+
+        self.prepare_command(build, target, metadata, limits, rustdoc_flags)?
             .process_lines(&mut |line, _| {
                 if line.starts_with('{') && line.ends_with('}') {
-                    doc_coverage_json = Some(line.to_owned());
+                    let parsed = match serde_json::from_str::<HashMap<String, FileCoverage>>(line) {
+                        Ok(parsed) => parsed,
+                        Err(_) => return,
+                    };
+                    for file in parsed.values() {
+                        coverage.total_items += file.total;
+                        coverage.documented_items += file.with_docs;
+                    }
                 }
             })
             .log_output(false)
             .run()?;
-        );
 
-        if let Some(json) = doc_coverage_json {
-            if let Ok(Value::Object(m)) = serde_json::from_str(&json) {
-                let (mut total_items, mut documented_items) = (0, 0);
-                for entry in m.values() {
-                    if let Some(Value::Number(n)) = entry.get("total") {
-                        total_items += n.as_i64().unwrap_or(0) as i32;
-                    }
-                    if let Some(Value::Number(n)) = entry.get("with_docs") {
-                        documented_items += n.as_i64().unwrap_or(0) as i32;
-                    }
-                }
-                return Ok(Some(DocCoverage {
-                    total_items,
-                    documented_items,
-                }));
-            }
-        }
-        Ok(None)
+        Ok(
+            if coverage.total_items == 0 && coverage.documented_items == 0 {
+                None
+            } else {
+                Some(coverage)
+            },
+        )
     }
 
     fn execute_build(
@@ -627,12 +554,9 @@ impl RustwideBuilder {
         storage.set_max_size(limits.max_log_size());
 
         let successful = logging::capture(&storage, || {
-            let wrap = || {
-                config_command!(self, build, target, metadata, limits, rustdoc_flags,
-                    .run()
-                )
-            };
-            wrap().is_ok()
+            self.prepare_command(build, target, metadata, limits, rustdoc_flags)
+                .and_then(|command| command.run().map_err(failure::Error::from))
+                .is_ok()
         });
         let doc_coverage = if successful {
             self.get_coverage(target, build, metadata, limits)?
@@ -663,6 +587,80 @@ impl RustwideBuilder {
             cargo_metadata,
             target: target.to_string(),
         })
+    }
+
+    fn prepare_command<'ws, 'pl>(
+        &self,
+        build: &'ws Build,
+        target: &str,
+        metadata: &Metadata,
+        limits: &Limits,
+        rustdoc_flags_extras: Vec<String>,
+    ) -> Result<Command<'ws, 'pl>> {
+        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
+        if target != HOST_TARGET {
+            // If the explicit target is not a tier one target, we need to install it.
+            if !TARGETS.contains(&target) {
+                // This is a no-op if the target is already installed.
+                self.toolchain.add_target(&self.workspace, target)?;
+            }
+            cargo_args.push("--target");
+            cargo_args.push(target);
+        };
+
+        let tmp;
+        if let Some(cpu_limit) = self.cpu_limit {
+            tmp = format!("-j{}", cpu_limit);
+            cargo_args.push(&tmp);
+        }
+
+        let tmp;
+        if let Some(features) = &metadata.features {
+            cargo_args.push("--features");
+            tmp = features.join(" ");
+            cargo_args.push(&tmp);
+        }
+        if metadata.all_features {
+            cargo_args.push("--all-features");
+        }
+        if metadata.no_default_features {
+            cargo_args.push("--no-default-features");
+        }
+
+        let mut rustdoc_flags = vec![
+            "-Z".to_string(),
+            "unstable-options".to_string(),
+            "--static-root-path".to_string(),
+            "/".to_string(),
+            "--cap-lints".to_string(),
+            "warn".to_string(),
+        ];
+
+        if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
+            rustdoc_flags.append(&mut package_rustdoc_args.clone());
+        }
+
+        rustdoc_flags.extend(rustdoc_flags_extras);
+
+        let command = build
+            .cargo()
+            .timeout(Some(limits.timeout()))
+            .no_output_timeout(None)
+            .env(
+                "RUSTFLAGS",
+                metadata
+                    .rustc_args
+                    .as_ref()
+                    .map(|args| args.join(" "))
+                    .unwrap_or_default(),
+            )
+            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
+            // For docs.rs detection from build script:
+            // https://github.com/rust-lang/docs.rs/issues/147
+            .env("DOCS_RS", "1")
+            .args(&cargo_args);
+
+        Ok(command)
     }
 
     fn copy_docs(
