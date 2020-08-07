@@ -47,7 +47,7 @@ COPY build.rs build.rs
 RUN touch build.rs
 COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
-COPY templates/style.scss templates/
+COPY templates/style templates/style
 COPY templates/index.js templates/
 COPY templates/menu.js templates/
 
