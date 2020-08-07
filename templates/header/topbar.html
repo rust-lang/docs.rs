@@ -25,26 +25,73 @@
 
                 <ul class="pure-menu-list">
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                        <a href="/about" class="pure-menu-link disable-menu-arrow">
+                        <a href="/about" class="pure-menu-link">
                             About
                         </a>
 
                         <ul class="pure-menu-children">
-                            <a href="/about" class="pure-menu-link">
-                                Documentation about builds, badges and more
-                            </a>
+                            <li class="pure-menu-item">
+                                <a href="/about/badges" class="pure-menu-link">
+                                    Badges
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/about/builds" class="pure-menu-link">
+                                    Builds
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/about/metadata" class="pure-menu-link">
+                                    Metadata
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/about/redirections" class="pure-menu-link">
+                                    Shorthand URLs
+                                </a>
+                            </li>
                         </ul>
+
                     </li>
 
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                        <a href="/releases" class="pure-menu-link disable-menu-arrow">
+                        <a href="/releases" class="pure-menu-link">
                             Releases
                         </a>
 
                         <ul class="pure-menu-children">
-                            <a href="/releases" class="pure-menu-link">
-                                Recent releases, the release queue and build failures
-                            </a>
+                            <li class="pure-menu-item">
+                                <a href="/releases/stars" class="pure-menu-link">
+                                    Releases by Stars
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/recent-failures" class="pure-menu-link">
+                                    Recent Build Failures
+                                </a>
+                            </li>
+
+                            <ul class="pure-menu-children">
+                                <a href="/releases/failures" class="pure-menu-link">
+                                    Build Failures by Stars
+                                </a>
+                            </ul>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/failures" class="pure-menu-link">
+                                    Release Activity
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/queue" class="pure-menu-link">
+                                    Build Queue
+                                </a>
+                            </li>
                         </ul>
                     </li>
 
@@ -101,7 +148,7 @@
 
                     {# The global alert, if there is one #}
                     {% include "header/global_alert.html" -%}
-                </ul>
+                    </li>
             </form>
         </div>
     </div>
