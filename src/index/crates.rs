@@ -1,6 +1,5 @@
 use crates_index::Crate;
 use failure::ResultExt;
-use std::io::{Seek, SeekFrom, Write};
 
 pub(crate) struct Crates {
     repo: git2::Repository,
@@ -18,23 +17,16 @@ impl Crates {
             .find_commit(self.repo.refname_to_id("refs/remotes/origin/master")?)?
             .tree()?;
 
-        // crates_index doesn't publicly expose their slice constructor, so need to write each blob
-        // to a file before loading it as a `Crate`.
-        let mut tmp = tempfile::NamedTempFile::new()?;
-
         let mut result = Ok(());
 
         tree.walk(git2::TreeWalkMode::PreOrder, |_, entry| {
             result = (|| {
                 if let Some(blob) = entry.to_object(&self.repo)?.as_blob() {
-                    tmp.write_all(blob.content())?;
-                    if let Ok(krate) = Crate::new(tmp.path()) {
+                    if let Ok(krate) = Crate::from_slice(blob.content()) {
                         f(krate);
                     } else {
                         log::warn!("Not a crate '{}'", entry.name().unwrap());
                     }
-                    tmp.as_file().set_len(0)?;
-                    tmp.seek(SeekFrom::Start(0))?;
                 }
                 Result::<(), failure::Error>::Ok(())
             })()
