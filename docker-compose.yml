@@ -18,6 +18,7 @@ services:
         environment:
             CRATESFYI_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
             CRATESFYI_DATABASE_URL: postgresql://cratesfyi:password@db
+            DOCSRS_STORAGE_BACKEND: s3
             S3_ENDPOINT: http://s3:9000
             AWS_ACCESS_KEY_ID: cratesfyi
             AWS_SECRET_ACCESS_KEY: secret_key

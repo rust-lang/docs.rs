@@ -1,3 +1,4 @@
+use crate::storage::StorageBackendKind;
 use failure::{bail, format_err, Error, Fail, ResultExt};
 use std::env::VarError;
 use std::path::PathBuf;
@@ -15,6 +16,9 @@ pub struct Config {
     pub(crate) database_url: String,
     pub(crate) max_pool_size: u32,
     pub(crate) min_pool_idle: u32,
+
+    // Storage params
+    pub(crate) storage_backend: StorageBackendKind,
 
     // S3 params
     pub(crate) s3_bucket: String,
@@ -47,6 +51,8 @@ impl Config {
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
+
+            storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageBackendKind::Database)?,
 
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
             // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!

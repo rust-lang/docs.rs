@@ -67,6 +67,28 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     Ok(files)
 }
 
+#[derive(Debug, failure::Fail)]
+#[fail(display = "invalid storage backend")]
+pub(crate) struct InvalidStorageBackendError;
+
+#[derive(Debug)]
+pub(crate) enum StorageBackendKind {
+    Database,
+    S3,
+}
+
+impl std::str::FromStr for StorageBackendKind {
+    type Err = InvalidStorageBackendError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "database" => Ok(StorageBackendKind::Database),
+            "s3" => Ok(StorageBackendKind::S3),
+            _ => Err(InvalidStorageBackendError),
+        }
+    }
+}
+
 enum StorageBackend {
     Database(DatabaseBackend),
     S3(Box<S3Backend>),
@@ -78,29 +100,17 @@ pub struct Storage {
 
 impl Storage {
     pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
-        let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(Box::new(S3Backend::new(c, metrics, config)?))
-        } else {
-            StorageBackend::Database(DatabaseBackend::new(pool, metrics))
-        };
-        Ok(Storage { backend })
-    }
-
-    #[cfg(test)]
-    pub(crate) fn temp_new_s3(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         Ok(Storage {
-            backend: StorageBackend::S3(Box::new(S3Backend::new(
-                s3::s3_client().unwrap(),
-                metrics,
-                config,
-            )?)),
-        })
-    }
-
-    #[cfg(test)]
-    pub(crate) fn temp_new_db(pool: Pool, metrics: Arc<Metrics>) -> Result<Self, Error> {
-        Ok(Storage {
-            backend: StorageBackend::Database(DatabaseBackend::new(pool, metrics)),
+            backend: match config.storage_backend {
+                StorageBackendKind::Database => {
+                    StorageBackend::Database(DatabaseBackend::new(pool, metrics))
+                }
+                StorageBackendKind::S3 => StorageBackend::S3(Box::new(S3Backend::new(
+                    s3::s3_client().unwrap(),
+                    metrics,
+                    config,
+                )?)),
+            },
         })
     }
 
@@ -564,18 +574,21 @@ mod backend_tests {
 
     macro_rules! backend_tests {
         (
-            backends($env:ident) { $($backend:ident => $create:expr,)* }
+            backends { $($backend:ident => $config:expr,)* }
             tests $tests:tt
             tests_with_metrics $tests_with_metrics:tt
         ) => {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
-                    use crate::storage::Storage;
+                    use crate::storage::{Storage, StorageBackendKind};
                     use std::sync::Arc;
 
-                    fn get_storage($env: &TestEnvironment) -> Arc<Storage> {
-                        $create
+                    fn get_storage(env: &TestEnvironment) -> Arc<Storage> {
+                        env.override_config(|config| {
+                            config.storage_backend = $config;
+                        });
+                        env.storage()
                     }
 
                     backend_tests!(@tests $tests);
@@ -606,9 +619,9 @@ mod backend_tests {
     }
 
     backend_tests! {
-        backends(env) {
-            s3 => env.s3(),
-            database => env.temp_storage_db(),
+        backends {
+            s3 => StorageBackendKind::S3,
+            database => StorageBackendKind::Database,
         }
 
         tests {
