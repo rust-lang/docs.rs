@@ -42,6 +42,21 @@
 {% endmacro active_link %}
 
 {#
+    Creates a list entry
+    * `href` A string used as the tab's link
+    * `text` A string used as the tab's text
+    * `target` An optional target
+    * `extra_classes` Optional extra css classes
+#}
+{% macro menu_link(href, text, target="", extra_classes="") %}
+    <li class="pure-menu-item">
+        <a class="pure-menu-link {{ extra_classes }}" href="{{ href }}" {% if target != "" -%} target="{{ target }}" {%- endif %}>
+            {{ text }}
+        </a>
+    </li>
+{% endmacro active_link %}
+
+{#
     Creates a formatted table showing the resource limits of a crate
     * `limits` A non-null `Limits` struct
 #}

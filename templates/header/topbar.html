@@ -30,29 +30,10 @@
                         </a>
 
                         <ul class="pure-menu-children">
-                            <li class="pure-menu-item">
-                                <a href="/about/badges" class="pure-menu-link">
-                                    Badges
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/about/builds" class="pure-menu-link">
-                                    Builds
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/about/metadata" class="pure-menu-link">
-                                    Metadata
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/about/redirections" class="pure-menu-link">
-                                    Shorthand URLs
-                                </a>
-                            </li>
+                            {{ macros::menu_link(href="/about/badges", text="Badges") }}
+                            {{ macros::menu_link(href="/about/builds", text="Builds") }}
+                            {{ macros::menu_link(href="/about/metadata", text="Metadata") }}
+                            {{ macros::menu_link(href="/about/redirections", text="Shorthand URLs") }}
                         </ul>
                     </li>
 
@@ -62,35 +43,11 @@
                         </a>
 
                         <ul class="pure-menu-children">
-                            <li class="pure-menu-item">
-                                <a href="/releases/stars" class="pure-menu-link">
-                                    Releases by Stars
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/recent-failures" class="pure-menu-link">
-                                    Recent Build Failures
-                                </a>
-                            </li>
-
-                            <ul class="pure-menu-children">
-                                <a href="/releases/failures" class="pure-menu-link">
-                                    Build Failures by Stars
-                                </a>
-                            </ul>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/failures" class="pure-menu-link">
-                                    Release Activity
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/queue" class="pure-menu-link">
-                                    Build Queue
-                                </a>
-                            </li>
+                            {{ macros::menu_link(href="/releases/stars", text="Releases by Stars") }}
+                            {{ macros::menu_link(href="/releases/recent-failures", text="Recent Build Failures") }}
+                            {{ macros::menu_link(href="/releases/failures", text="Build Failures by Stars") }}
+                            {{ macros::menu_link(href="/releases/failures", text="Release Activity") }}
+                            {{ macros::menu_link(href="/releases/queue", text="Build Queue") }}
                         </ul>
                     </li>
 
@@ -99,49 +56,48 @@
                         <a href="#" class="pure-menu-link">Rust</a>
 
                         <ul class="pure-menu-children">
-                            <li class="pure-menu-item">
-                                <a href="https://www.rust-lang.org/" target="_blank" class="pure-menu-link">
-                                    The Rust Programming Language
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://www.rust-lang.org/",
+                                text="The Rust Programming Language",
+                                target="_blank"
+                            ) }}
 
-                            <li class="pure-menu-item">
-                                <a href="https://doc.rust-lang.org/book/" target="_blank" class="pure-menu-link">
-                                    The Book
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://doc.rust-lang.org/book/",
+                                text="The Book",
+                                target="_blank"
+                            ) }}
 
-                            <li class="pure-menu-item">
-                                <a href="https://doc.rust-lang.org/std/" target="_blank" class="pure-menu-link">
-                                    Standard Library API Reference
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://doc.rust-lang.org/std/",
+                                text="Standard Library API Reference",
+                                target="_blank"
+                            ) }}
 
-                            <li class="pure-menu-item">
-                                <a href="https://doc.rust-lang.org/rust-by-example/" target="_blank"
-                                    class="pure-menu-link">
-                                    Rust by Example
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://doc.rust-lang.org/rust-by-example/",
+                                text="Rust by Example",
+                                target="_blank"
+                            ) }}
 
-                            <li class="pure-menu-item menu-item-divided">
-                                <a href="https://rust-lang-nursery.github.io/rust-cookbook/" target="_blank"
-                                    class="pure-menu-link">
-                                    Rust Cookbook
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://rust-lang-nursery.github.io/rust-cookbook/",
+                                text="Rust Cookbook",
+                                target="_blank",
+                                extra_classes="menu-item-divided"
+                            ) }}
 
-                            <li class="pure-menu-item">
-                                <a href="https://crates.io" target="_blank" class="pure-menu-link">
-                                    Crates.io
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="https://crates.io",
+                                text="Crates.io",
+                                target="_blank"
+                            ) }}
 
-                            <li class="pure-menu-item menu-item-divided">
-                                <a href="http://doc.crates.io/guide.html" target="_blank" class="pure-menu-link">
-                                    The Cargo Guide
-                                </a>
-                            </li>
+                            {{ macros::menu_link(
+                                href="http://doc.crates.io/guide.html",
+                                text="The Cargo Guide",
+                                target="_blank"
+                            ) }}
                         </ul>
                     </li>
 
