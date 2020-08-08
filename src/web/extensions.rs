@@ -1,18 +1,31 @@
-use crate::config::Config;
-use crate::db::Pool;
-use crate::storage::Storage;
 use crate::web::page::TemplateData;
-use crate::BuildQueue;
+use crate::{db::Pool, BuildQueue, Config, Context, Storage};
+use failure::Error;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub(super) struct InjectExtensions {
-    pub(super) build_queue: Arc<BuildQueue>,
-    pub(super) pool: Pool,
-    pub(super) config: Arc<Config>,
-    pub(super) storage: Arc<Storage>,
-    pub(super) template_data: Arc<TemplateData>,
+    build_queue: Arc<BuildQueue>,
+    pool: Pool,
+    config: Arc<Config>,
+    storage: Arc<Storage>,
+    template_data: Arc<TemplateData>,
+}
+
+impl InjectExtensions {
+    pub(super) fn new(
+        context: &dyn Context,
+        template_data: Arc<TemplateData>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            build_queue: context.build_queue()?,
+            pool: context.pool()?,
+            config: context.config()?,
+            storage: context.storage()?,
+            template_data,
+        })
+    }
 }
 
 impl BeforeMiddleware for InjectExtensions {

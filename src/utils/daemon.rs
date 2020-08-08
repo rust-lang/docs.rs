@@ -6,7 +6,7 @@ use crate::{
     db::Pool,
     storage::Storage,
     utils::{queue_builder, update_release_activity, GithubUpdater},
-    BuildQueue, Config, DocBuilder, DocBuilderOptions,
+    Context, BuildQueue, Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
 use failure::Error;
@@ -54,6 +54,7 @@ fn start_registry_watcher(
 }
 
 pub fn start_daemon(
+    context: &dyn Context,
     config: Arc<Config>,
     db: Pool,
     build_queue: Arc<BuildQueue>,
@@ -122,7 +123,7 @@ pub fn start_daemon(
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, db, config, build_queue, storage)?;
+    crate::Server::start(None, false, context)?;
     Ok(())
 }
 

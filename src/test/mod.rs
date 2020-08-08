@@ -185,9 +185,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend.get_or_init(|| {
-            TestFrontend::new(self.db(), self.config(), self.build_queue(), self.storage())
-        })
+        self.frontend.get_or_init(|| TestFrontend::new(&*self))
     }
 
     pub(crate) fn s3(&self) -> Arc<Storage> {
@@ -314,22 +312,10 @@ pub(crate) struct TestFrontend {
 }
 
 impl TestFrontend {
-    fn new(
-        db: &TestDatabase,
-        config: Arc<Config>,
-        build_queue: Arc<BuildQueue>,
-        storage: Arc<Storage>,
-    ) -> Self {
+    fn new(context: &dyn Context) -> Self {
         Self {
-            server: Server::start(
-                Some("127.0.0.1:0"),
-                false,
-                db.pool.clone(),
-                config,
-                build_queue,
-                storage,
-            )
-            .expect("failed to start the web server"),
+            server: Server::start(Some("127.0.0.1:0"), false, context)
+                .expect("failed to start the web server"),
             client: Client::new(),
         }
     }
