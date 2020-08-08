@@ -322,7 +322,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "crates-index"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "git2 0.13.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -356,7 +356,7 @@ dependencies = [
  "base64 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "comrak 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "crates-index 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "crates-index 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "crates-index-diff 7.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "criterion 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3791,7 +3791,7 @@ dependencies = [
 "checksum core-foundation 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "57d24c7a13c43e870e37c1556b74555437870a04514f7685f5b354e090567171"
 "checksum core-foundation-sys 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b3a71ab494c0b5b860bdc8407ae08978052417070c2ced38573a9157ad75b8ac"
 "checksum cpuid-bool 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "8aebca1129a03dc6dc2b127edd729435bbc4a37e1d5f4d7513165089ceb02634"
-"checksum crates-index 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "15467291e8911aa3e73b0e77d988362da1df7ac974c7189ab38b94b6f7edfa7e"
+"checksum crates-index 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1df1045d54201422cb3a9910da25de7d59fbdad0d03cabd10e33ef592e12ae6d"
 "checksum crates-index-diff 7.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2e6bb290b5bb11353fbb46ca4c68ad2e8f54ab6674e4ee6a94c102054fdaf00f"
 "checksum crc32fast 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ba125de2af0df55319f41944744ad91c71113bf74a4646efff39afe1f6842db1"
 "checksum criterion 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "70daa7ceec6cf143990669a04c7df13391d55fb27bd4079d252fca774ba244d8"
