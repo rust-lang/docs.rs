@@ -1,7 +1,7 @@
 mod fakes;
 
 use crate::db::{Pool, PoolClient};
-use crate::storage::Storage;
+use crate::storage::{Storage, StorageBackendKind};
 use crate::web::Server;
 use crate::{BuildQueue, Config, Context, Metrics};
 use failure::Error;
@@ -137,6 +137,9 @@ impl TestEnvironment {
         // Use less connections for each test compared to production.
         config.max_pool_size = 2;
         config.min_pool_idle = 0;
+
+        // Use the database for storage, as it's faster than S3.
+        config.storage_backend = StorageBackendKind::Database;
 
         // Use a temporary S3 bucket.
         config.s3_bucket = format!("docsrs-test-bucket-{}", rand::random::<u64>());
