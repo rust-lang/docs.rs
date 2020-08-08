@@ -368,7 +368,7 @@ dependencies = [
  "rusoto_core 0.45.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_credential 0.45.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_s3 0.45.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustwide 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustwide 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sass-rs 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "schemamama 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "schemamama_postgres 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2516,10 +2516,10 @@ dependencies = [
 
 [[package]]
 name = "rustwide"
-version = "0.7.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "base64 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2536,6 +2536,7 @@ dependencies = [
  "serde_json 1.0.53 (registry+https://github.com/rust-lang/crates.io-index)",
  "tar 0.4.26 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror 1.0.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3971,7 +3972,7 @@ dependencies = [
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum rusttype 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dc7c727aded0be18c5b80c1640eae0ac8e396abf6fa8477d96cb37d18ee5ec59"
-"checksum rustwide 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6e97a51dfbb3333ed70d6373d7980165d20dbd84a8173ab184c2c4d8f27bd122"
+"checksum rustwide 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "417d578ebc7fa963bcd06f365f7987c091abeba70eac22dba94b7fd922a95c09"
 "checksum ryu 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "ed3d612bc64430efeb3f7ee6ef26d590dce0c43249217bddc62112540c7941e1"
 "checksum safemem 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
 "checksum same-file 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
