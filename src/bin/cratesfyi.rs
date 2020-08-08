@@ -116,14 +116,7 @@ impl CommandLine {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(
-                    Some(&socket_addr),
-                    reload_templates,
-                    ctx.pool()?,
-                    ctx.config()?,
-                    ctx.build_queue()?,
-                    ctx.storage()?,
-                )?;
+                Server::start(Some(&socket_addr), reload_templates, &ctx)?;
             }
             Self::Daemon {
                 foreground,
@@ -134,6 +127,7 @@ impl CommandLine {
                 }
 
                 cratesfyi::utils::start_daemon(
+                    &ctx,
                     ctx.config()?,
                     ctx.pool()?,
                     ctx.build_queue()?,
