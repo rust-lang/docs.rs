@@ -7,7 +7,7 @@ use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
-    BuildQueue, Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server, Storage,
+    BuildQueue, Config, Context, DocBuilder, DocBuilderOptions, RustwideBuilder, Server, Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -108,7 +108,7 @@ enum CommandLine {
 
 impl CommandLine {
     pub fn handle_args(self) -> Result<(), Error> {
-        let ctx = Context::new();
+        let ctx = BinContext::new();
 
         match self {
             Self::Build(build) => build.handle_args(ctx)?,
@@ -177,7 +177,7 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         match self {
             Self::Add {
                 crate_name,
@@ -213,7 +213,7 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         match self {
             Self::Set { pattern, priority } => {
                 set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
@@ -259,7 +259,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         let docbuilder = {
             let config = ctx.config()?;
             let mut doc_options =
@@ -324,7 +324,7 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: Context, mut docbuilder: DocBuilder) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext, mut docbuilder: DocBuilder) -> Result<(), Error> {
         match self {
             Self::World => {
                 docbuilder.load_cache().context("Failed to load cache")?;
@@ -446,7 +446,7 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         match self {
             Self::Migrate { version } => {
                 db::migrate(version, &mut *ctx.conn()?)
@@ -514,7 +514,7 @@ enum BlacklistSubcommand {
 }
 
 impl BlacklistSubcommand {
-    fn handle_args(self, ctx: Context) -> Result<(), Error> {
+    fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
         let mut conn = &mut *ctx.conn()?;
         match self {
             Self::List => {
@@ -554,14 +554,14 @@ enum DeleteSubcommand {
     },
 }
 
-struct Context {
+struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
 }
 
-impl Context {
+impl BinContext {
     fn new() -> Self {
         Self {
             build_queue: OnceCell::new(),
@@ -571,6 +571,17 @@ impl Context {
         }
     }
 
+    fn conn(
+        &self,
+    ) -> Result<
+        r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<postgres::NoTls>>,
+        Error,
+    > {
+        Ok(self.pool()?.get()?)
+    }
+}
+
+impl Context for BinContext {
     fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
         Ok(self
             .build_queue
@@ -601,14 +612,5 @@ impl Context {
             .pool
             .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?)?))?
             .clone())
-    }
-
-    fn conn(
-        &self,
-    ) -> Result<
-        r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<postgres::NoTls>>,
-        Error,
-    > {
-        Ok(self.pool()?.get()?)
     }
 }

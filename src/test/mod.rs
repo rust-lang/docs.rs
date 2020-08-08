@@ -3,8 +3,7 @@ mod fakes;
 use crate::db::{Pool, PoolClient};
 use crate::storage::Storage;
 use crate::web::Server;
-use crate::BuildQueue;
-use crate::Config;
+use crate::{BuildQueue, Config, Context};
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
@@ -215,6 +214,24 @@ impl TestEnvironment {
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
         fakes::FakeRelease::new(self.db(), self.storage())
+    }
+}
+
+impl Context for TestEnvironment {
+    fn config(&self) -> Result<Arc<Config>, Error> {
+        Ok(TestEnvironment::config(self))
+    }
+
+    fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
+        Ok(TestEnvironment::build_queue(self))
+    }
+
+    fn storage(&self) -> Result<Arc<Storage>, Error> {
+        Ok(TestEnvironment::storage(self))
+    }
+
+    fn pool(&self) -> Result<Pool, Error> {
+        Ok(self.db().pool())
     }
 }
 
