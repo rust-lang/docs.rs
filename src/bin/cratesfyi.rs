@@ -126,14 +126,7 @@ impl CommandLine {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(
-                    &ctx,
-                    ctx.config()?,
-                    ctx.pool()?,
-                    ctx.build_queue()?,
-                    ctx.storage()?,
-                    registry_watcher == Toggle::Enabled,
-                )?;
+                cratesfyi::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
