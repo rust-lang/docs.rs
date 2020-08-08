@@ -42,7 +42,7 @@ services:
             # Use a non-standard port on the host to avoid conflicting with existing postgres servers
             - "15432:5432"
         healthcheck:
-            test: ["CMD", "pg_isready"]
+            test: ["CMD", "pg_isready", "--username", "cratesfyi"]
             interval: 10s
             timeout: 5s
             retries: 10
