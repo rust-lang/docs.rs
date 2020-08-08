@@ -139,7 +139,7 @@ See `cargo run -- --help` for a full list of commands.
 
 ```sh
 # This command will start web interface of docs.rs on http://localhost:3000
-cargo run start-web-server
+cargo run -- start-web-server
 ```
 
 #### `build` subcommand
@@ -148,16 +148,16 @@ cargo run start-web-server
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
 # For example, `docker-compose run web build crate regex 1.1.6`
-cargo run web build crate <CRATE_NAME> <CRATE_VERSION>
+cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
 
 # Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)
-cargo run web build world
+cargo run -- build world
 
 # Builds a local package you have at <SOURCE> and adds it to the database.
 # The package does not have to be on crates.io.
 # The package must be on the local filesystem, git urls are not allowed.
-cargo build crate --local /path/to/source
+cargo run -- build crate --local /path/to/source
 ```
 
 #### `database` subcommand
@@ -185,22 +185,22 @@ The database contains a blacklist of crates that should not be built.
 
 ```sh
 # List the crates on the blacklist
-cargo run web database blacklist list
+cargo run -- database blacklist list
 
 # Adds <CRATE_NAME> to the blacklist
-cargo run web database blacklist add <CRATE_NAME>
+cargo run -- database blacklist add <CRATE_NAME>
 
 # Removes <CRATE_NAME> from the blacklist
-cargo run web database blacklist remove <CRATE_NAME>
+cargo run -- database blacklist remove <CRATE_NAME>
 ```
 
 #### `daemon` subcommand
 
 ```sh
 # Run a persistent daemon which queues builds and starts a web server.
-cargo run daemon --registry-watcher disabled
+cargo run -- daemon --registry-watcher=disabled
 # Add crates to the queue
-cargo run queue add <CRATE> <VERSION>
+cargo run -- queue add <CRATE> <VERSION>
 ```
 
 ### Contact
