@@ -41,6 +41,7 @@ once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.12.1"
 strum = { version = "0.18.0", features = ["derive"] }
 lol_html = "0.2"
+parking_lot = "0.10.2"
 
 # Async
 tokio = { version = "0.2.22", features = ["rt-threaded", "io-util", "macros"] }

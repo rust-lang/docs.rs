@@ -4,9 +4,7 @@ use crate::{
 };
 use failure::Error;
 use log::{debug, error, info, warn};
-use std::panic;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{panic, sync::Arc, time::Duration};
 use tokio::{runtime::Handle, sync::Mutex, task, time};
 
 /// This is the core of the documentation building, within the inner loop we should never panic in any way

@@ -11,10 +11,9 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::sync::Arc;
+use parking_lot::Mutex;
+use std::{convert::identity, sync::Arc};
 use tokio::{
-    runtime::Handle,
-    sync::Mutex,
     task::{self, JoinHandle},
     time::{self, Duration, Instant},
 };
@@ -40,24 +39,24 @@ async fn start_registry_watcher(
             // Pause for a minute between each doc run
             time::delay_for(Duration::from_secs(60)).await;
 
-            if doc_builder.lock().await.is_locked() {
+            if doc_builder.lock().is_locked() {
                 debug!("Lock file exists, skipping checking new crates");
             } else {
                 debug!("Checking new crates");
 
-                // TODO: When `.get_new_crates()` is async use `FutureExt::catch_unwind`
-                // FIXME: Use `Result::flatten()` via https://github.com/rust-lang/rust/issues/70142
                 let doc_builder = doc_builder.clone();
-                match task::spawn_blocking(move || {
-                    Handle::current()
-                        .block_on(doc_builder.lock())
-                        .get_new_crates()
-                })
-                .await
-                .map_err(Into::into)
-                {
-                    Ok(Ok(n)) => debug!("{} crates added to queue", n),
-                    Ok(Err(e)) | Err(e) => error!("Failed to get new crates: {}", e),
+
+                // This error stack is just evil, I'm so sorry
+                // FIXME: Use `Result::flatten()` via https://github.com/rust-lang/rust/issues/70142
+                let result: Result<usize, Error> =
+                    task::spawn_blocking(move || doc_builder.lock().get_new_crates())
+                        .await
+                        .map_err(Into::into)
+                        .and_then(identity)
+                        .map_err(Into::into);
+                match result {
+                    Ok(n) => debug!("{} crates added to queue", n),
+                    Err(e) => error!("Failed to get new crates: {}", e),
                 }
             }
         }
