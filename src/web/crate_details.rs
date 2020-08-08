@@ -102,13 +102,7 @@ impl CrateDetails {
             INNER JOIN crates ON releases.crate_id = crates.id
             WHERE crates.name = $1 AND releases.version = $2;";
 
-        let rows = conn.query(query, &[&name, &version]).unwrap();
-
-        let krate = if rows.is_empty() {
-            return None;
-        } else {
-            &rows[0]
-        };
+        let krate = conn.query_opt(query, &[&name, &version]).unwrap()?;
 
         let crate_id: i32 = krate.get("crate_id");
         let release_id: i32 = krate.get("release_id");
@@ -242,8 +236,8 @@ impl CrateDetails {
 }
 
 fn map_to_release(conn: &mut Client, crate_id: i32, version: String) -> Release {
-    let rows = conn
-        .query(
+    let row = conn
+        .query_opt(
             "SELECT build_status,
                     yanked,
                     is_library
@@ -253,14 +247,13 @@ fn map_to_release(conn: &mut Client, crate_id: i32, version: String) -> Release 
         )
         .unwrap();
 
-    let (build_status, yanked, is_library) =
-        rows.iter().next().map_or_else(Default::default, |row| {
-            (
-                row.get("build_status"),
-                row.get("yanked"),
-                row.get("is_library"),
-            )
-        });
+    let (build_status, yanked, is_library) = row.map_or_else(Default::default, |row| {
+        (
+            row.get("build_status"),
+            row.get("yanked"),
+            row.get("is_library"),
+        )
+    });
 
     Release {
         version,

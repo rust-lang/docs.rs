@@ -137,7 +137,7 @@ pub(crate) fn add_build_into_database(
     res: &BuildResult,
 ) -> Result<i32> {
     debug!("Adding build into database");
-    let rows = conn.query(
+    let row = conn.query_one(
         "INSERT INTO builds (rid, rustc_version,
                                                     cratesfyi_version,
                                                     build_status, output)
@@ -151,19 +151,23 @@ pub(crate) fn add_build_into_database(
             &res.build_log,
         ],
     )?;
-    Ok(rows[0].get(0))
+    Ok(row.get(0))
 }
 
 fn initialize_package_in_database(conn: &mut Client, pkg: &MetadataPackage) -> Result<i32> {
-    let mut rows = conn.query("SELECT id FROM crates WHERE name = $1", &[&pkg.name])?;
     // insert crate into database if it is not exists
-    if rows.is_empty() {
-        rows = conn.query(
-            "INSERT INTO crates (name) VALUES ($1) RETURNING id",
-            &[&pkg.name],
-        )?;
-    }
-    Ok(rows[0].get(0))
+    let row = conn
+        .query_opt("SELECT id FROM crates WHERE name = $1", &[&pkg.name])
+        .transpose()
+        .unwrap_or_else(|| {
+            conn.query_one(
+                "INSERT INTO crates (name)
+             VALUES ($1)
+             RETURNING id",
+                &[&pkg.name],
+            )
+        })?;
+    Ok(row.get(0))
 }
 
 /// Convert dependencies into Vec<(String, String, String)>
@@ -257,23 +261,26 @@ fn add_keywords_into_database(
     for keyword in &pkg.keywords {
         let slug = slugify(&keyword);
         let keyword_id: i32 = {
-            let rows = conn.query("SELECT id FROM keywords WHERE slug = $1", &[&slug])?;
-            if !rows.is_empty() {
-                rows[0].get(0)
-            } else {
-                conn.query(
-                    "INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
-                    &[&keyword, &slug],
-                )?[0]
-                    .get(0)
-            }
+            conn.query_opt("SELECT id FROM keywords WHERE slug = $1", &[&slug])
+                .transpose()
+                .unwrap_or_else(|| {
+                    conn.query_one(
+                        "INSERT INTO keywords (name, slug)
+                     VALUES ($1, $2)
+                     RETURNING id",
+                        &[&keyword, &slug],
+                    )
+                })?
+                .get(0)
         };
 
-        // add releationship
-        let _ = conn.query(
-            "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
+        // add relationship
+        conn.execute(
+            "INSERT INTO keyword_rels (rid, kid)
+             VALUES ($1, $2)
+             ON CONFLICT DO NOTHING",
             &[&release_id, &keyword_id],
-        );
+        )?;
     }
 
     Ok(())
@@ -301,24 +308,32 @@ fn add_authors_into_database(
             let slug = slugify(&author);
 
             let author_id: i32 = {
-                let rows = conn.query("SELECT id FROM authors WHERE slug = $1", &[&slug])?;
-                if !rows.is_empty() {
-                    rows[0].get(0)
-                } else {
-                    conn.query(
-                        "INSERT INTO authors (name, email, slug) VALUES ($1, $2, $3)
-                                     RETURNING id",
-                        &[&author, &email, &slug],
-                    )?[0]
-                        .get(0)
-                }
+                // TODO: If an author uses different email addresses per crate, or multiple authors
+                // have the same slugified name, this will flip-flop their name and email address
+                // on each crate publish.
+                //
+                // But, at least doing an upsert will result in their email/exact name rendering
+                // being updated if they change it in a new release.
+                conn.query_one(
+                    "INSERT INTO authors (name, email, slug)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (slug) DO UPDATE
+                       SET
+                         name = $1,
+                         email = $2
+                     RETURNING id",
+                    &[&author, &email, &slug],
+                )?
+                .get(0)
             };
 
             // add relationship
-            let _ = conn.query(
-                "INSERT INTO author_rels (rid, aid) VALUES ($1, $2)",
+            conn.execute(
+                "INSERT INTO author_rels (rid, aid)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING",
                 &[&release_id, &author_id],
-            );
+            )?;
         }
     }
 
@@ -331,7 +346,14 @@ pub fn update_crate_data_in_database(
     registry_data: &CrateData,
 ) -> Result<()> {
     info!("Updating crate data for {}", name);
-    let crate_id = conn.query("SELECT id FROM crates WHERE crates.name = $1", &[&name])?[0].get(0);
+    let crate_id = conn
+        .query_one(
+            "SELECT id
+         FROM crates
+         WHERE crates.name = $1",
+            &[&name],
+        )?
+        .get(0);
 
     update_owners_in_database(conn, &registry_data.owners, crate_id)?;
 
@@ -362,7 +384,7 @@ fn update_owners_in_database(
         // Update any existing owner data since it is mutable and could have changed since last
         // time we pulled it
         let owner_id: i32 = {
-            conn.query(
+            conn.query_one(
                 "
                     INSERT INTO owners (login, avatar, name, email)
                     VALUES ($1, $2, $3, $4)
@@ -374,12 +396,12 @@ fn update_owners_in_database(
                     RETURNING id
                 ",
                 &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-            )?[0]
-                .get(0)
+            )?
+            .get(0)
         };
 
         // add relationship
-        conn.query(
+        conn.execute(
             "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             &[&crate_id, &owner_id],
         )?;
@@ -391,7 +413,7 @@ fn update_owners_in_database(
     for login in to_remove {
         debug!("Removing owner relationship {}", login);
         // remove relationship
-        conn.query(
+        conn.execute(
             "
                 DELETE FROM owner_rels
                 USING owners
@@ -417,7 +439,7 @@ where
     ON CONFLICT DO NOTHING;";
     let prepared = conn.prepare(sql)?;
     for alg in algorithms {
-        conn.query(&prepared, &[&release_id, &(alg as i32)])?;
+        conn.execute(&prepared, &[&release_id, &(alg as i32)])?;
     }
     Ok(())
 }

@@ -74,22 +74,20 @@ impl TemplateData {
 }
 
 fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
-    let res = conn.query(
-        "SELECT value FROM config WHERE name = 'rustc_version';",
-        &[],
-    )?;
+    let row = conn
+        .query_opt(
+            "SELECT value FROM config WHERE name = 'rustc_version';",
+            &[],
+        )?
+        .ok_or_else(|| failure::err_msg("missing rustc version"))?;
 
-    if res.is_empty() {
-        failure::bail!("missing rustc version");
-    }
+    let vers: Value = row.get("value");
+    let vers = vers
+        .as_str()
+        .ok_or_else(|| failure::err_msg("'rustc_version' wasn't a string"))?;
+    let vers = crate::utils::parse_rustc_version(vers)?;
 
-    if let Ok(vers) = res[0].try_get::<_, Value>("value") {
-        if let Some(vers_str) = vers.as_str() {
-            return Ok(crate::utils::parse_rustc_version(vers_str)?);
-        }
-    }
-
-    failure::bail!("failed to parse the rustc version");
+    Ok(vers)
 }
 
 pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {

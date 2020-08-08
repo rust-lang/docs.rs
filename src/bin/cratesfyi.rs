@@ -371,10 +371,12 @@ impl BuildSubcommand {
                         .pool()?
                         .get()
                         .context("failed to get a database connection")?;
-                    let res =
-                        conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[])?;
+                    let res = conn.query_one(
+                        "SELECT COUNT(*) > 1 FROM config WHERE name = 'rustc_version';",
+                        &[],
+                    )?;
 
-                    if !res.is_empty() {
+                    if res.get(0) {
                         println!("update-toolchain was already called in the past, exiting");
                         return Ok(());
                     }

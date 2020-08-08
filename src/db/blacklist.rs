@@ -12,11 +12,11 @@ enum BlacklistError {
 
 /// Returns whether the given name is blacklisted.
 pub fn is_blacklisted(conn: &mut Client, name: &str) -> Result<bool, Error> {
-    let rows = conn.query(
+    let row = conn.query_one(
         "SELECT COUNT(*) FROM blacklisted_crates WHERE crate_name = $1;",
         &[&name],
     )?;
-    let count: i64 = rows[0].get(0);
+    let count: i64 = row.get(0);
 
     Ok(count != 0)
 }

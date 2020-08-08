@@ -159,9 +159,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(
+        let row = ctry!(
             req,
-            conn.query(
+            conn.query_one(
                 "SELECT target_name, rustdoc_status
                  FROM releases
                  WHERE releases.id = $1",
@@ -169,7 +169,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             ),
         );
 
-        (rows[0].get(0), rows[0].get(1))
+        (row.get(0), row.get(1))
     };
 
     if target == Some("index.html") || target == Some(&target_name) {
@@ -523,16 +523,16 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let options =
         match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
             Some(MatchSemver::Exact((version, id))) => {
-                let rows = ctry!(
+                let row = ctry!(
                     req,
-                    conn.query(
+                    conn.query_one(
                         "SELECT rustdoc_status
                      FROM releases
                      WHERE releases.id = $1",
                         &[&id]
                     ),
                 );
-                if !rows.is_empty() && rows[0].get(0) {
+                if row.get(0) {
                     BadgeOptions {
                         subject: "docs".to_owned(),
                         status: version,
@@ -1440,8 +1440,8 @@ mod test {
                 .version("0.13.0")
                 .create()?;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
-            db.conn().query(
-                r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#,
+            db.conn().execute(
+                "UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1",
                 &[&id],
             )?;
             let web = env.frontend();

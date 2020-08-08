@@ -2,6 +2,7 @@ use super::{Blob, StorageTransaction};
 use crate::db::Pool;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
+use log::debug;
 use postgres::Transaction;
 
 pub(crate) struct DatabaseBackend {
@@ -14,9 +15,9 @@ impl DatabaseBackend {
     }
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
-        let query = "SELECT COUNT(*) > 0 FROM files WHERE path = $1";
         let mut conn = self.pool.get()?;
-        Ok(conn.query(query, &[&path])?[0].get(0))
+        let row = conn.query_one("SELECT COUNT(*) > 0 FROM files WHERE path = $1", &[&path])?;
+        Ok(row.get(0))
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
@@ -28,41 +29,39 @@ impl DatabaseBackend {
 
         // The size limit is checked at the database level, to avoid receiving data altogether if
         // the limit is exceeded.
-        let rows = self.pool.get()?.query(
-            "SELECT
+        let row = self
+            .pool
+            .get()?
+            .query_opt(
+                "SELECT
                  path, mime, date_updated, compression,
                  (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
                  (LENGTH(content) > $2) AS is_too_big
              FROM files
              WHERE path = $1;",
-            &[&path, &(max_size)],
-        )?;
+                &[&path, &(max_size)],
+            )?
+            .ok_or_else(|| super::PathNotFoundError)?;
 
-        if rows.is_empty() {
-            Err(super::PathNotFoundError.into())
-        } else {
-            let row = &rows[0];
-
-            if row.get("is_too_big") {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    crate::error::SizeLimitReached,
-                )
-                .into());
-            }
-
-            let compression = row.get::<_, Option<i32>>("compression").map(|i| {
-                i.try_into()
-                    .expect("invalid compression algorithm stored in database")
-            });
-            Ok(Blob {
-                path: row.get("path"),
-                mime: row.get("mime"),
-                date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
-                content: row.get("content"),
-                compression,
-            })
+        if row.get("is_too_big") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                crate::error::SizeLimitReached,
+            )
+            .into());
         }
+
+        let compression = row.get::<_, Option<i32>>("compression").map(|i| {
+            i.try_into()
+                .expect("invalid compression algorithm stored in database")
+        });
+        Ok(Blob {
+            path: row.get("path"),
+            mime: row.get("mime"),
+            date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
+            content: row.get("content"),
+            compression,
+        })
     }
 
     pub(super) fn start_connection(&self) -> Result<DatabaseClient, Error> {
@@ -106,10 +105,11 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
     }
 
     fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
-        self.transaction.execute(
+        let deleted = self.transaction.execute(
             "DELETE FROM files WHERE path LIKE $1;",
             &[&format!("{}%", prefix.replace('%', "\\%"))],
         )?;
+        debug!("deleted {} files from prefix '{}'", deleted, prefix);
         Ok(())
     }
 

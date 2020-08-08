@@ -35,27 +35,27 @@ impl BuildQueue {
     }
 
     pub(crate) fn pending_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
+        let res = self.db.get()?.query_one(
             "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
             &[&self.max_attempts],
         )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        Ok(res.get::<_, i64>(0) as usize)
     }
 
     pub(crate) fn prioritized_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
+        let res = self.db.get()?.query_one(
             "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
             &[&self.max_attempts],
         )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        Ok(res.get::<_, i64>(0) as usize)
     }
 
     pub(crate) fn failed_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
+        let res = self.db.get()?.query_one(
             "SELECT COUNT(*) FROM queue WHERE attempt >= $1;",
             &[&self.max_attempts],
         )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        Ok(res.get::<_, i64>(0) as usize)
     }
 
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
@@ -98,11 +98,11 @@ impl BuildQueue {
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = conn.query(
+                let rows = conn.query_one(
                     "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
                     &[&to_process.id],
                 )?;
-                let attempt: i32 = rows[0].get(0);
+                let attempt: i32 = rows.get(0);
 
                 if attempt >= self.max_attempts {
                     crate::web::metrics::FAILED_BUILDS.inc();

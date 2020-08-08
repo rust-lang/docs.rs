@@ -306,9 +306,8 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
             WHERE normalize_crate_name(name) = normalize_crate_name($1)";
 
         let rows = conn.query(query, &[&name]).unwrap();
-        let mut rows = rows.iter().peekable();
 
-        if let Some(row) = rows.peek() {
+        if let Some(row) = rows.first() {
             let db_name = row.get(0);
 
             if db_name != name {
@@ -316,7 +315,8 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
             }
         };
 
-        rows.map(|row| (row.get(1), row.get(2), row.get(3)))
+        rows.into_iter()
+            .map(|row| (row.get(1), row.get(2), row.get(3)))
             .collect()
     };
 
@@ -591,8 +591,8 @@ pub(crate) struct MetaData {
 
 impl MetaData {
     fn from_crate(conn: &mut Client, name: &str, version: &str) -> Option<MetaData> {
-        let rows = conn
-            .query(
+        let row = conn
+            .query_opt(
                 "SELECT crates.name,
                        releases.version,
                        releases.description,
@@ -604,9 +604,7 @@ impl MetaData {
                 WHERE crates.name = $1 AND releases.version = $2",
                 &[&name, &version],
             )
-            .unwrap();
-
-        let row = rows.iter().next()?;
+            .unwrap()?;
 
         Some(MetaData {
             name: row.get(0),
@@ -809,7 +807,7 @@ mod test {
             let release_id = release("0.3.0", env);
             let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
 
-            db.conn().query(query, &[&release_id]).unwrap();
+            db.conn().execute(query, &[&release_id]).unwrap();
             assert_eq!(version(None, db), None);
             assert_eq!(version(Some("0.3"), db), None);
 

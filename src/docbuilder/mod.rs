@@ -68,7 +68,7 @@ impl DocBuilder {
         debug!("Loading database cache");
 
         let mut conn = self.db.get()?;
-        for row in &mut conn.query(
+        for row in conn.query(
             "SELECT name, version FROM crates, releases \
              WHERE crates.id = releases.crate_id",
             &[],

@@ -28,12 +28,11 @@ impl Limits {
     pub(crate) fn for_crate(conn: &mut Client, name: &str) -> Result<Self> {
         let mut limits = Self::default();
 
-        let res = conn.query(
+        let res = conn.query_opt(
             "SELECT * FROM sandbox_overrides WHERE crate_name = $1;",
             &[&name],
         )?;
-        if !res.is_empty() {
-            let row = &res[0];
+        if let Some(row) = res {
             if let Some(memory) = row.get::<_, Option<i64>>("max_memory_bytes") {
                 limits.memory = memory as usize;
             }
@@ -84,7 +83,7 @@ mod test {
             let hexponent = Limits::for_crate(&mut db.conn(), krate)?;
             assert_eq!(hexponent, Limits::default());
 
-            db.conn().query(
+            db.conn().execute(
                 "INSERT INTO sandbox_overrides (crate_name, max_targets) VALUES ($1, 15)",
                 &[&krate],
             )?;
@@ -106,7 +105,7 @@ mod test {
                 targets: 1,
                 ..Limits::default()
             };
-            db.conn().query(
+            db.conn().execute(
                 "INSERT INTO sandbox_overrides (crate_name, max_memory_bytes, timeout_seconds, max_targets)
                  VALUES ($1, $2, $3, $4)",
                 &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)]

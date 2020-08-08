@@ -39,8 +39,8 @@ pub fn delete_version(
 }
 
 fn get_id(conn: &mut Client, name: &str) -> Result<i32, Error> {
-    let crate_id_res = conn.query("SELECT id FROM crates WHERE name = $1", &[&name])?;
-    if let Some(row) = crate_id_res.into_iter().next() {
+    let row = conn.query_opt("SELECT id FROM crates WHERE name = $1", &[&name])?;
+    if let Some(row) = row {
         Ok(row.get("id"))
     } else {
         Err(CrateDeletionError::MissingCrate(name.into()).into())
@@ -123,15 +123,15 @@ mod tests {
     use postgres::Client;
 
     fn crate_exists(conn: &mut Client, name: &str) -> Result<bool, Error> {
-        Ok(!conn
-            .query("SELECT * FROM crates WHERE name = $1;", &[&name])?
-            .is_empty())
+        Ok(conn
+            .query_one("SELECT COUNT(*) > 0 FROM crates WHERE name = $1;", &[&name])?
+            .get(0))
     }
 
     fn release_exists(conn: &mut Client, id: i32) -> Result<bool, Error> {
-        Ok(!conn
-            .query("SELECT * FROM releases WHERE id = $1;", &[&id])?
-            .is_empty())
+        Ok(conn
+            .query_one("SELECT COUNT(*) > 0 FROM releases WHERE id = $1;", &[&id])?
+            .get(0))
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
 
             let pkg1_id = &db
                 .conn()
-                .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?[0]
+                .query_one("SELECT id FROM crates WHERE name = 'package-1';", &[])?
                 .get("id");
 
             delete_crate_from_database(&mut db.conn(), "package-1", *pkg1_id)?;
@@ -209,10 +209,7 @@ mod tests {
             assert!(release_exists(&mut db.conn(), v2)?);
             let crate_id = db
                 .conn()
-                .query("SELECT crate_id FROM releases WHERE id = $1", &[&v1])?
-                .into_iter()
-                .next()
-                .unwrap()
+                .query_one("SELECT crate_id FROM releases WHERE id = $1", &[&v1])?
                 .get(0);
             assert_eq!(
                 authors(&mut db.conn(), crate_id)?,

@@ -48,8 +48,8 @@ impl FileList {
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
     fn from_path(conn: &mut Client, name: &str, version: &str, req_path: &str) -> Option<FileList> {
-        let rows = conn
-            .query(
+        let row = conn
+            .query_opt(
                 "SELECT crates.name,
                         releases.version,
                         releases.description,
@@ -62,13 +62,9 @@ impl FileList {
                 WHERE crates.name = $1 AND releases.version = $2",
                 &[&name, &version],
             )
-            .unwrap();
+            .unwrap()?;
 
-        if rows.is_empty() {
-            return None;
-        }
-
-        let files: Value = rows[0].try_get(5).ok()?;
+        let files: Value = row.try_get(5).ok()?;
 
         let mut file_list = Vec::new();
         if let Some(files) = files.as_array() {
@@ -127,12 +123,12 @@ impl FileList {
 
             Some(FileList {
                 metadata: MetaData {
-                    name: rows[0].get(0),
-                    version: rows[0].get(1),
-                    description: rows[0].get(2),
-                    target_name: rows[0].get(3),
-                    rustdoc_status: rows[0].get(4),
-                    default_target: rows[0].get(6),
+                    name: row.get(0),
+                    version: row.get(1),
+                    description: row.get(2),
+                    target_name: row.get(3),
+                    rustdoc_status: row.get(4),
+                    default_target: row.get(6),
                 },
                 files: file_list,
             })

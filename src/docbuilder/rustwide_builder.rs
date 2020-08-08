@@ -260,7 +260,7 @@ impl RustwideBuilder {
                 }
 
                 add_path_into_database(&self.storage, "", &dest)?;
-                conn.query(
+                conn.execute(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
                     &[&Value::String(self.rustc_version.clone())],

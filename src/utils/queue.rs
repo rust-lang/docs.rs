@@ -8,13 +8,13 @@ const DEFAULT_PRIORITY: i32 = 0;
 /// Get the build queue priority for a crate
 pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
     // Search the `priority` table for a priority where the crate name matches the stored pattern
-    let query = conn.query(
+    let row = conn.query_opt(
         "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
         &[&name],
     )?;
 
     // If no match is found, return the default priority
-    if let Some(row) = query.iter().next() {
+    if let Some(row) = row {
         Ok(row.get(0))
     } else {
         Ok(DEFAULT_PRIORITY)
@@ -27,7 +27,7 @@ pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
 ///
 /// [`pattern`]: https://www.postgresql.org/docs/8.3/functions-matching.html
 pub fn set_crate_priority(conn: &mut Client, pattern: &str, priority: i32) -> Result<()> {
-    conn.query(
+    conn.execute(
         "INSERT INTO crate_priorities (pattern, priority) VALUES ($1, $2)",
         &[&pattern, &priority],
     )?;
@@ -38,12 +38,12 @@ pub fn set_crate_priority(conn: &mut Client, pattern: &str, priority: i32) -> Re
 /// Remove a pattern from the priority table, returning the priority that it was associated with or `None`
 /// if nothing was removed
 pub fn remove_crate_priority(conn: &mut Client, pattern: &str) -> Result<Option<i32>> {
-    let query = conn.query(
+    let row = conn.query_opt(
         "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
         &[&pattern],
     )?;
 
-    Ok(query.iter().next().map(|row| row.get(0)))
+    Ok(row.map(|row| row.get(0)))
 }
 
 #[cfg(test)]

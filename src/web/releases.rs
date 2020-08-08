@@ -517,9 +517,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 // FIXME: This is a fast query but using a constant
                 //        There are currently 280 crates with docs and 100+
                 //        starts. This should be fine for a while.
-                let rows = ctry!(
+                let row = ctry!(
                     req,
-                    conn.query(
+                    conn.query_one(
                         "SELECT crates.name,
                             releases.version,
                             releases.target_name
@@ -531,7 +531,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                         &[]
                     ),
                 );
-                let row = rows.into_iter().next().unwrap();
 
                 let name: String = row.get("name");
                 let version: String = row.get("version");
@@ -564,9 +563,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 //        match_version should handle this instead of this code block.
                 //        This block is introduced to fix #163
                 let rustdoc_status = {
-                    let rows = ctry!(
+                    let row = ctry!(
                         req,
-                        conn.query(
+                        conn.query_one(
                             "SELECT rustdoc_status
                          FROM releases
                          WHERE releases.id = $1",
@@ -574,10 +573,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                         ),
                     );
 
-                    rows.into_iter()
-                        .next()
-                        .map(|r| r.get("rustdoc_status"))
-                        .unwrap_or_default()
+                    row.get("rustdoc_status")
                 };
 
                 let url = if rustdoc_status {
@@ -638,13 +634,11 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
     let activity_data: Value = ctry!(
         req,
-        conn.query(
+        conn.query_opt(
             "SELECT value FROM config WHERE name = 'release_activity'",
             &[]
         ),
     )
-    .iter()
-    .next()
     .map_or(Value::Null, |row| row.get("value"));
 
     ReleaseActivity {
