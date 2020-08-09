@@ -58,6 +58,10 @@ metrics! {
         pub(crate) html_rewrite_ooms: IntCounter,
     }
 
+    // The Rust prometheus library treats the namespace as the "prefix" of the metric name: a
+    // metric named `foo` with a prefix of `docsrs` will expose a metric called `docsrs_foo`.
+    //
+    // https://docs.rs/prometheus/0.9.0/prometheus/struct.Opts.html#structfield.namespace
     namespace: "docsrs",
 }
 
