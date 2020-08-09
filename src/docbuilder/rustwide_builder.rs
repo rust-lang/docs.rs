@@ -10,8 +10,8 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
-use crate::storage::Storage;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
+use crate::{Metrics, Storage};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use rustwide::cmd::{Command, SandboxBuilder};
@@ -74,12 +74,13 @@ pub struct RustwideBuilder {
     toolchain: Toolchain,
     db: Pool,
     storage: Arc<Storage>,
+    metrics: Arc<Metrics>,
     rustc_version: String,
     cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
-    pub fn init(db: Pool, storage: Arc<Storage>) -> Result<Self> {
+    pub fn init(db: Pool, metrics: Arc<Metrics>, storage: Arc<Storage>) -> Result<Self> {
         use rustwide::cmd::SandboxImage;
         let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
         let workspace_path = env_workspace_path
@@ -115,6 +116,7 @@ impl RustwideBuilder {
             toolchain,
             db,
             storage,
+            metrics,
             rustc_version: String::new(),
             cpu_limit,
         })
@@ -399,11 +401,11 @@ impl RustwideBuilder {
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
                 if res.result.successful {
-                    crate::web::metrics::SUCCESSFUL_BUILDS.inc();
+                    self.metrics.successful_builds.inc();
                 } else if res.cargo_metadata.root().is_library() {
-                    crate::web::metrics::FAILED_BUILDS.inc();
+                    self.metrics.failed_builds.inc();
                 } else {
-                    crate::web::metrics::NON_LIBRARY_BUILDS.inc();
+                    self.metrics.non_library_builds.inc();
                 }
 
                 let release_data = match doc_builder.index.api().get_release_data(name, version) {

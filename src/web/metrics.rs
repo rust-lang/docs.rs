@@ -1,182 +1,19 @@
 use crate::db::Pool;
 use crate::BuildQueue;
+use crate::Metrics;
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
-use once_cell::sync::Lazy;
-use prometheus::{
-    opts, register_counter, register_int_counter, register_int_gauge, Encoder, IntCounter,
-    IntGauge, TextEncoder, __register_gauge, register_int_counter_vec, IntCounterVec,
-    __register_counter_vec, histogram_opts, register_histogram_vec, HistogramVec,
-};
+use prometheus::{Encoder, HistogramVec, TextEncoder};
 use std::time::{Duration, Instant};
 
-static QUEUED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_queued_crates_count",
-        "Number of crates in the build queue"
-    )
-    .unwrap()
-});
-
-pub static PRIORITIZED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_prioritized_crates_count",
-        "Number of crates in the build queue that have a positive priority"
-    )
-    .unwrap()
-});
-
-static FAILED_CRATES_COUNT: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_failed_crates_count",
-        "Number of crates that failed to build"
-    )
-    .unwrap()
-});
-
-pub static TOTAL_BUILDS: Lazy<IntCounter> =
-    Lazy::new(|| register_int_counter!("docsrs_total_builds", "Number of crates built").unwrap());
-
-pub static SUCCESSFUL_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "docsrs_successful_builds",
-        "Number of builds that successfully generated docs"
-    )
-    .unwrap()
-});
-
-pub static FAILED_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "docsrs_failed_builds",
-        "Number of builds that generated a compile error"
-    )
-    .unwrap()
-});
-
-pub static NON_LIBRARY_BUILDS: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "docsrs_non_library_builds",
-        "Number of builds that did not complete due to not being a library"
-    )
-    .unwrap()
-});
-
-pub static UPLOADED_FILES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "docsrs_uploaded_files_total",
-        "Number of files uploaded to S3 or stored in the database"
-    )
-    .unwrap()
-});
-
-pub static ROUTES_VISITED: Lazy<IntCounterVec> = Lazy::new(|| {
-    register_int_counter_vec!(
-        "docsrs_routes_visited",
-        "The traffic of various docs.rs routes",
-        &["route"]
-    )
-    .unwrap()
-});
-
-pub static RESPONSE_TIMES: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
-        "docsrs_response_time",
-        "The response times of various docs.rs routes",
-        &["route"]
-    )
-    .unwrap()
-});
-
-pub static RUSTDOC_RENDERING_TIMES: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
-        "docsrs_rustdoc_rendering_time",
-        "The time it takes to render a rustdoc page",
-        &["step"]
-    )
-    .unwrap()
-});
-
-pub static FAILED_DB_CONNECTIONS: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "docsrs_failed_db_connections",
-        "Number of attempted and failed connections to the database"
-    )
-    .unwrap()
-});
-
-pub static USED_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_used_db_connections",
-        "The number of used database connections"
-    )
-    .unwrap()
-});
-
-pub static IDLE_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_idle_db_connections",
-        "The number of idle database connections"
-    )
-    .unwrap()
-});
-
-pub static MAX_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_max_db_connections",
-        "The maximum database connections"
-    )
-    .unwrap()
-});
-
-#[cfg(not(windows))]
-pub static OPEN_FILE_DESCRIPTORS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_open_file_descriptors",
-        "The number of currently opened file descriptors"
-    )
-    .unwrap()
-});
-
-#[cfg(not(windows))]
-pub static CURRENTLY_RUNNING_THREADS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_running_threads",
-        "The number of threads being used by docs.rs"
-    )
-    .unwrap()
-});
-
-pub static HTML_REWRITE_OOMS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "docsrs_html_rewrite_ooms",
-        "The number of attempted files that failed due to a memory limit"
-    )
-    .unwrap()
-});
-
 pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
+    let metrics = extension!(req, Metrics);
     let pool = extension!(req, Pool);
     let queue = extension!(req, BuildQueue);
 
-    USED_DB_CONNECTIONS.set(pool.used_connections() as i64);
-    IDLE_DB_CONNECTIONS.set(pool.idle_connections() as i64);
-
-    QUEUED_CRATES_COUNT.set(ctry!(req, queue.pending_count()) as i64);
-    PRIORITIZED_CRATES_COUNT.set(ctry!(req, queue.prioritized_count()) as i64);
-    FAILED_CRATES_COUNT.set(ctry!(req, queue.failed_count()) as i64);
-
-    #[cfg(target_os = "linux")]
-    {
-        use procfs::process::Process;
-
-        let process = Process::myself().unwrap();
-        OPEN_FILE_DESCRIPTORS.set(process.fd().unwrap().len() as i64);
-        CURRENTLY_RUNNING_THREADS.set(process.stat().unwrap().num_threads as i64);
-    }
-
     let mut buffer = Vec::new();
-    let families = prometheus::gather();
+    let families = ctry!(req, metrics.gather(pool, &*queue));
     ctry!(req, TextEncoder::new().encode(&families, &mut buffer));
 
     let mut resp = Response::with(buffer);
@@ -213,13 +50,15 @@ impl iron::Handler for RequestRecorder {
         let result = self.handler.handle(request);
         let resp_time = duration_to_seconds(start.elapsed());
 
-        ROUTES_VISITED.with_label_values(&[&self.route_name]).inc();
-        RESPONSE_TIMES
+        let metrics = extension!(request, Metrics);
+        metrics
+            .routes_visited
+            .with_label_values(&[&self.route_name])
+            .inc();
+        metrics
+            .response_time
             .with_label_values(&[&self.route_name])
             .observe(resp_time);
-
-        #[cfg(test)]
-        tests::record_tests(&self.route_name);
 
         result
     }
@@ -230,13 +69,13 @@ struct RenderingTime {
     step: &'static str,
 }
 
-pub(crate) struct RenderingTimesRecorder {
-    metric: &'static HistogramVec,
+pub(crate) struct RenderingTimesRecorder<'a> {
+    metric: &'a HistogramVec,
     current: Option<RenderingTime>,
 }
 
-impl RenderingTimesRecorder {
-    pub(crate) fn new(metric: &'static HistogramVec) -> Self {
+impl<'a> RenderingTimesRecorder<'a> {
+    pub(crate) fn new(metric: &'a HistogramVec) -> Self {
         Self {
             metric,
             current: None,
@@ -260,7 +99,7 @@ impl RenderingTimesRecorder {
     }
 }
 
-impl Drop for RenderingTimesRecorder {
+impl Drop for RenderingTimesRecorder<'_> {
     fn drop(&mut self) {
         self.record_current();
     }
@@ -269,53 +108,34 @@ impl Drop for RenderingTimesRecorder {
 #[cfg(test)]
 mod tests {
     use crate::test::{assert_success, wrapper};
-    use once_cell::sync::Lazy;
-    use std::{
-        collections::HashMap,
-        sync::{
-            atomic::{AtomicUsize, Ordering},
-            Mutex,
-        },
-    };
-
-    static ROUTES_VISITED: AtomicUsize = AtomicUsize::new(0);
-    static RESPONSE_TIMES: Lazy<Mutex<HashMap<String, usize>>> =
-        Lazy::new(|| Mutex::new(HashMap::new()));
-
-    pub fn record_tests(route: &str) {
-        ROUTES_VISITED.fetch_add(1, Ordering::SeqCst);
-
-        let mut times = RESPONSE_TIMES.lock().unwrap();
-        if let Some(requests) = times.get_mut(route) {
-            *requests += 1;
-        } else {
-            times.insert(route.to_owned(), 1);
-        }
-    }
-
-    fn reset_records() {
-        ROUTES_VISITED.store(0, Ordering::SeqCst);
-        RESPONSE_TIMES.lock().unwrap().clear();
-    }
 
     #[test]
     fn home_page() {
         wrapper(|env| {
             let frontend = env.frontend();
-
-            reset_records();
+            let metrics = env.metrics();
 
             frontend.get("/").send()?;
             frontend.get("/").send()?;
-            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("/"), Some(&2));
-
-            reset_records();
+            assert_eq!(metrics.routes_visited.with_label_values(&["/"]).get(), 2);
+            assert_eq!(
+                metrics
+                    .response_time
+                    .with_label_values(&["/"])
+                    .get_sample_count(),
+                2
+            );
 
             frontend.get("").send()?;
             frontend.get("").send()?;
-            assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-            assert_eq!(RESPONSE_TIMES.lock().unwrap().get("/"), Some(&2));
+            assert_eq!(metrics.routes_visited.with_label_values(&["/"]).get(), 4);
+            assert_eq!(
+                metrics
+                    .response_time
+                    .with_label_values(&["/"])
+                    .get_sample_count(),
+                4
+            );
 
             Ok(())
         })
@@ -325,6 +145,7 @@ mod tests {
     fn resources() {
         wrapper(|env| {
             let frontend = env.frontend();
+            let metrics = env.metrics();
 
             let routes = [
                 "/style.css",
@@ -336,17 +157,24 @@ mod tests {
             ];
 
             for route in routes.iter() {
-                reset_records();
-
                 frontend.get(route).send()?;
                 frontend.get(route).send()?;
-
-                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-                assert_eq!(
-                    RESPONSE_TIMES.lock().unwrap().get("static resource"),
-                    Some(&2)
-                );
             }
+
+            assert_eq!(
+                metrics
+                    .routes_visited
+                    .with_label_values(&["static resource"])
+                    .get(),
+                12
+            );
+            assert_eq!(
+                metrics
+                    .response_time
+                    .with_label_values(&["static resource"])
+                    .get_sample_count(),
+                12
+            );
 
             Ok(())
         })
@@ -367,6 +195,7 @@ mod tests {
                 .create()?;
 
             let frontend = env.frontend();
+            let metrics = env.metrics();
 
             let routes = [
                 ("/releases", "/releases"),
@@ -381,13 +210,20 @@ mod tests {
             ];
 
             for (route, correct) in routes.iter() {
-                reset_records();
-
                 frontend.get(route).send()?;
                 frontend.get(route).send()?;
 
-                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-                assert_eq!(RESPONSE_TIMES.lock().unwrap().get(*correct), Some(&2));
+                assert_eq!(
+                    metrics.routes_visited.with_label_values(&[*correct]).get(),
+                    2
+                );
+                assert_eq!(
+                    metrics
+                        .response_time
+                        .with_label_values(&[*correct])
+                        .get_sample_count(),
+                    2
+                );
             }
 
             Ok(())
@@ -404,21 +240,29 @@ mod tests {
                 .create()?;
 
             let frontend = env.frontend();
+            let metrics = env.metrics();
 
             let routes = ["/crate/rcc/0.0.0", "/crate/hexponent/0.2.0"];
 
             for route in routes.iter() {
-                reset_records();
-
                 frontend.get(route).send()?;
                 frontend.get(route).send()?;
-
-                assert_eq!(ROUTES_VISITED.load(Ordering::SeqCst), 2);
-                assert_eq!(
-                    RESPONSE_TIMES.lock().unwrap().get("/crate/:name/:version"),
-                    Some(&2)
-                );
             }
+
+            assert_eq!(
+                metrics
+                    .routes_visited
+                    .with_label_values(&["/crate/:name/:version"])
+                    .get(),
+                4
+            );
+            assert_eq!(
+                metrics
+                    .response_time
+                    .with_label_values(&["/crate/:name/:version"])
+                    .get_sample_count(),
+                4
+            );
 
             Ok(())
         })

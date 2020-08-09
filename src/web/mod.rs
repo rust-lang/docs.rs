@@ -403,14 +403,6 @@ impl Server {
         template_data: Arc<TemplateData>,
         context: &dyn Context,
     ) -> Result<Self, Error> {
-        // poke all the metrics counters to instantiate and register them
-        metrics::TOTAL_BUILDS.inc_by(0);
-        metrics::SUCCESSFUL_BUILDS.inc_by(0);
-        metrics::FAILED_BUILDS.inc_by(0);
-        metrics::NON_LIBRARY_BUILDS.inc_by(0);
-        metrics::UPLOADED_FILES_TOTAL.inc_by(0);
-        metrics::FAILED_DB_CONNECTIONS.inc_by(0);
-
         let cratesfyi = CratesfyiHandler::new(template_data, context)?;
         let inner = Iron::new(cratesfyi)
             .http(addr)
