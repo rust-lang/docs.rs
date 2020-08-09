@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cratesfyi::db::{self, add_path_into_database, Pool};
+use cratesfyi::db::{self, add_path_into_database, Pool, PoolClient};
 use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
@@ -565,12 +565,7 @@ impl BinContext {
         }
     }
 
-    fn conn(
-        &self,
-    ) -> Result<
-        r2d2::PooledConnection<r2d2_postgres::PostgresConnectionManager<postgres::NoTls>>,
-        Error,
-    > {
+    fn conn(&self) -> Result<PoolClient, Error> {
         Ok(self.pool()?.get()?)
     }
 }

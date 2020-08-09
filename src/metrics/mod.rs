@@ -5,7 +5,7 @@ use self::macros::MetricFromOpts;
 use crate::db::Pool;
 use crate::BuildQueue;
 use failure::Error;
-use prometheus::{proto::MetricFamily, Opts, Registry};
+use prometheus::proto::MetricFamily;
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);

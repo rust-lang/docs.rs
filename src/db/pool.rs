@@ -4,7 +4,7 @@ use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 use std::sync::Arc;
 
-pub(crate) type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
+pub type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
 
 const DEFAULT_SCHEMA: &str = "public";
 
