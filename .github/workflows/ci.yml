@@ -61,7 +61,7 @@ jobs:
         run: cargo build --locked
 
       - name: Test
-        run: cargo test --locked -- --test-threads=1
+        run: cargo test --locked
 
       - name: Clean up the database
         run: docker-compose down --volumes
