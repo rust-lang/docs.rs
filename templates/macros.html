@@ -9,8 +9,8 @@
 
     {# Load the script for each provided language #}
     {%- for language in languages -%}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/languages/{{ language }}.min.js"
-        type="text/javascript" charset="utf-8"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/languages/{{ language }}.min.js"
+            type="text/javascript" charset="utf-8"></script>
     {%- endfor -%}
 
     {# Activate highlighting #}
@@ -132,7 +132,7 @@
             {# If the release has been yanked and failed to build, display a warning #}
             {%- elif release.yanked and release.build_status -%}
                 <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
-                    <i class="fa fa-fw fa-warning"></i> {{ release.version }}
+                    {{ fa::s(icon="exclamation-triangle") }} {{ release.version }}
                 </a>
 
             {# If the release has been yanked and failed to build, display a warning #}

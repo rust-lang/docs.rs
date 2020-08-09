@@ -24,14 +24,14 @@
                     <ul class="pure-menu-list">
                         <li class="pure-menu-item">
                             <a href="/releases" class="pure-menu-link{% if tab == 'recent' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-leaf"></i>
+                                {{ "leaf" | fas | safe }}
                                 <span class="title"> Recent</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
                             <a href="/releases/stars" class="pure-menu-link{% if tab == 'stars' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-star"></i>
+                                {{ "star" | fas | safe }}
                                 <span class="title"> Stars</span>
                             </a>
                         </li>
@@ -39,7 +39,7 @@
                         <li class="pure-menu-item">
                             <a href="/releases/recent-failures"
                                 class="pure-menu-link{% if tab == 'recent-failures' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-warning"></i>
+                                {{ "exclamation-triangle" | fas | safe }}
                                 <span class="title"> Recent Failures</span>
                             </a>
                         </li>
@@ -47,7 +47,7 @@
                         <li class="pure-menu-item">
                             <a href="/releases/failures"
                                 class="pure-menu-link{% if tab == 'failures' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-star-o"></i>
+                                {{ "star" | far | safe }}
                                 <span class="title"> Failures By Stars</span>
                             </a>
                         </li>
@@ -55,14 +55,14 @@
                         <li class="pure-menu-item">
                             <a href="/releases/activity"
                                 class="pure-menu-link{% if tab == 'activity' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-line-chart"></i>
+                                {{ "chart-line" | fas | safe }}
                                 <span class="title"> Activity</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
                             <a href="/releases/queue" class="pure-menu-link{% if tab == 'queue' %} pure-menu-active{% endif %}">
-                                <i class="fa fa-fw fa-list-ol"></i>
+                                {{ "list" | fas | safe }}
                                 <span class="title"> Queue</span>
                             </a>
                         </li>
@@ -70,7 +70,7 @@
                         {%- if author -%}
                             <li class="pure-menu-item">
                                 <a href="#" class="pure-menu-link{% if tab == 'author' %} pure-menu-active{% endif %}">
-                                    <i class="fa fa-fw fa-user"></i>
+                                    {{ "user" | fas | safe }}
                                     <span class="title"> {{ author }}</span>
                                 </a>
                             </li>

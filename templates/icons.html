@@ -1,0 +1,16 @@
+{# Icon creation macros #}
+
+{# Strong styled icons #}
+{% macro s(icon, extra="") %}
+    <span class="fas fa-{{ icon }}" aria-hidden="true" {{ extra }}></span>
+{% endmacro s %}
+
+{# Regular styled icons #}
+{% macro r(icon, extra="") %}
+    <span class="far fa-{{ icon }}" aria-hidden="true" {{ extra }}></span>
+{% endmacro r %}
+
+{# Brand styled icons #}
+{% macro b(icon, extra="") %}
+    <span class="fab fa-{{ icon }}" aria-hidden="true" {{ extra }}></span>
+{% endmacro b %}

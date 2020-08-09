@@ -10,7 +10,7 @@
                 {# The search bar #}
                 <div id="search-input-nav">
                     <label for="nav-search">
-                        <i class="fa fa-fw fa-search"></i>
+                        {{ "search" | fas | safe }}
                     </label>
 
                     {# If there is a search query, put it in the search bar #}
@@ -20,7 +20,7 @@
 
                 {# The top-left logo and name #}
                 <a href="/" class="pure-menu-heading pure-menu-link" aria-label="Docs.rs">
-                    <i class="fa fa-cubes fa-fw"></i> Docs.rs
+                    {{ "book" | fas | safe }} Docs.rs
                 </a>
 
                 <ul class="pure-menu-list">
