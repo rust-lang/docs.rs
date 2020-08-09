@@ -39,7 +39,7 @@
                         {%- if details.homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.homepage_url }}" class="pure-menu-link">
-                                    <i class="fa fa-home fa-fw"></i> Homepage
+                                    {{ "home" | fas | safe }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -48,7 +48,7 @@
                         {%- if details.documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    <i class="fa fa-fw fa-file-text"></i> Documentation
+                                    {{ "file-alt" | far | safe }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -60,14 +60,14 @@
                                     {# If the repo link is for github, show some github stats #}
                                     {# TODO: add support for hosts besides github (#35) #}
                                     {%- if details.github -%}
-                                        <i class="fa fa-github fa-fw"></i>
-                                        <i class="fa fa-star-o fa-fw"></i> {{ details.github_stars }}
-                                        <i class="fa fa-code-fork fa-fw"></i> {{ details.github_forks }}
-                                        <i class="fa fa-exclamation-circle fa-fw"></i> {{ details.github_issues }}
+                                        {{ "github" | fab| safe }}
+                                        {{ "star" | fas| safe }} {{ details.github_stars }}
+                                        {{ fa::s(icon="code-branch") }} {{ details.github_forks }}
+                                        {{ "exclamation-circle" | fas | safe }} {{ details.github_issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        <i class="fa fa-code-fork fa-fw"></i> Repository
+                                        {{ fa::s(icon="code-branch") }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -77,7 +77,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
                                 title="See {{ details.name }} on crates.io">
-                                <i class="fa fa-cube fa-fw"></i> Crates.io
+                                {{ "cube" | fas | safe }} Crates.io
                             </a>
                         </li>
 

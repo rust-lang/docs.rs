@@ -21,7 +21,7 @@
                     {{ title }}
                 {%- else -%}
                     {{ metadata.name }} {{ metadata.version }}
-                    <i class="fa fa-copy fa-1" id="clipboard" aria-label="Copy crate name and version information"></i>
+                    {{ "copy" | far(extra='id="clipboard" aria-label="Copy crate name and version information"') | safe }}
                 {%- endif -%}
             </h1>
 
@@ -61,7 +61,7 @@
                         <li class="pure-menu-item">
                             {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
                             <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="pure-menu-link">
-                                <i class="fa fa-fw fa-book"></i>
+                                {{ "book" | fas | safe }}
                                 <span class="title"> Documentation</span>
                             </a>
                         </li>
@@ -70,7 +70,7 @@
                     {# The crate information tab #}
                     <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
                             class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                            <i class="fa fa-fw fa-cube"></i>
+                            {{ "cube" | fas | safe }}
                             <span class="title"> Crate</span>
                         </a>
                     </li>
@@ -79,7 +79,7 @@
                     <li class="pure-menu-item">
                         <a href="/crate/{{ crate_path | safe }}/source/"
                             class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                            <i class="fa fa-fw fa-folder-open-o"></i>
+                            {{ "folder-open" | far | safe }}
                             <span class="title"> Source</span>
                         </a>
                     </li>
@@ -88,7 +88,7 @@
                     <li class="pure-menu-item">
                         <a href="/crate/{{ crate_path | safe }}/builds"
                             class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
-                            <i class="fa fa-cogs"></i>
+                            {{ "cogs" | fas | safe }}
                             <span class="title"> Builds</span>
                         </a>
                     </li>

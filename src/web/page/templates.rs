@@ -8,6 +8,7 @@ use postgres::Client;
 use serde_json::Value;
 use std::{
     collections::HashMap,
+    fmt,
     path::PathBuf,
     sync::{mpsc::channel, Arc},
     thread,
