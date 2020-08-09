@@ -3,77 +3,106 @@
 {%- block title -%} Builds {%- endblock title -%}
 
 {%- block body -%}
-	{%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
-	<h1>Builds</h1>
-	<div class="container about">
-	<p>
-		Docs.rs automatically builds crates' documentation released on
-		<a href="https://crates.io/">crates.io</a>
-		using the nightly release of the Rust compiler.
-		Builds can take a while depending how many crates are in <a href="/releases/queue">the queue</a>.
-	</p>
+    {%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
+    <h1>Builds</h1>
+    <div class="container about">
+    <p>
+        Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>.
+         
+        It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>.
+    </p>
 
-	<p>
-		{%- if rustc_version %}
-		The current version of the Rust compiler in use is <code>{{ rustc_version }}</code>.
-		{%- endif -%}
-	</p>
+    <p>
+        All crates are built in a sandbox using the nightly release of the Rust compiler.
+        {%- if rustc_version %}
+        The current version in use is <code>{{ rustc_version }}</code>.
+        {%- endif -%}
+    </p>
 
-	<p>
-		The README of a crate is taken from the <code>readme</code> field defined in
-		<code>Cargo.toml</code>. If a crate doesn't have this field,
-		no README will be displayed.
-	</p>
+    <h3>Notes on using Docs.rs</h3>
 
-	<h3>Diagnosing a failed build</h3>
+    <h4>Setting a README</h4>
+    <p>
+        The README of a crate is taken from the <code>readme</code> field defined in
+        <code>Cargo.toml</code>. If this field is not set, no README will be displayed.
+    </p>
 
-	<h4>Missing dependencies</h4>
-	<p>
-		Missing dependencies are a common reason for a failed build.
-		Docs.rs dependencies are managed through
-		<a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>;
-		see <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for instructions
-		on how to make a PR. You can always <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>
-		if you're having trouble.
-	</p>
+    <h4>Detecting Docs.rs</h4>
+    <p>
+        To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
+        {% filter dedent -%}
+        <pre>
+            <code>
+                if let Ok(_) = std::env::var("DOCS_RS") {
+                    // ... your code here ...
+                }        
+            </code>
+        </pre>
+        {%- endfilter %}
+        This approach can be helpful if you need dependencies for building the library, but not for building the documentation.
+    </p>
 
-	<h4>Detecting Docs.rs from <code>build.rs</code></h4>
-	<p>
-		Docs.rs builds crates with the environment variable <code>DOCS_RS</code> set to
-		<code>1</code>, which enables the crate to detect docs.rs and build the
-		crate differently. This can be helpful if you need
-		dependencies for building the library, but not for building the documentation.
-	</p>
+    <p>
+        You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
+        {% filter dedent -%}
+        <pre>
+            <code>
+                [package.metadata.docs.rs]
+                rustc-args = ["--cfg", "docsrs"]
+            </code>
+        </pre>
+        {%- endfilter %}
+        Here, the compiler arguments are set so that <code>#[cfg(docsrs)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
+        This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
+    </p>
 
-	<h4>Detecting Docs.rs from <code>#[cfg]</code> attributes</h4>
-	<p>
-		You can detect Docs.rs by having a <a href="https://doc.rust-lang.org/cargo/reference/features.html">feature</a>
-		which is only set by Docs.rs. See <a href="metadata">Metadata</a> for more information.
-	</p>
+    <h4>Testing documentation builds locally</h4>
+    {%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
+    <p>
+        The Docs.rs <a href="{{ build_subcommand | safe }}">README</a> describes how to build
+        unpublished crate documentation locally using the same build environment as the Docs.rs build agent.
+    </p>
 
-	<h4>Global sandbox limits</h4>
+    <h3>Diagnosing failed builds</h3>
 
-	<p>
-		All the builds on docs.rs are executed inside a sandbox with limited
-		resources. The current limits are the following:
-	</p>
+    <h4>Missing dependencies</h4>
+    <p>
+        Missing dependencies are a common reason for failed builds.
+        Docs.rs dependencies are managed through
+        <a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>.
+        See <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for how to add a dependency.
+    </p>
 
-	{{ macros::crate_limits(limits=limits) }}
+    <h4>Write attempt on read-only directories</h4>
+    <p>
+        Most of the sandbox is a read-only file system, including the source directory of your crate and its dependencies.
+        If your <code>build.rs</code> generates files that are relevant for documentation, consider writing to the
+        <a href="https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates">cargo output directory</a>,
+        passed in the environment variable <code>OUT_DIR</code>.
+    </p>
 
-	<p>
-		If a build fails because it hit one of those limits please
-		<a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
-		to get them increased for your crate.
-		Note that network access will not be enabled for any crate.
-	</p>
+    <h4>Hitting resource limits</h4>
+    <p>
+        All the builds are executed inside a sandbox with limited resources. The current limits are:
+    </p>
 
-	<h4>Test crate documentation build locally</h4>
-	{%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
-	<p>
-		The <a href="{{ build_subcommand | safe }}">docs.rs README</a> describes how to build an
-		unpublished crate's documentation locally using the same build environment as the build agent.
-	</p>
-	</div>
+    {{ macros::crate_limits(limits=limits) }}
+
+    <p>
+        If your build fails because it hit one of these limits, please
+        <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
+        to get them increased for your crate.
+        Since our build agent has finite resources, we have to consider each case individually.
+        However, network access will not be enabled for any crate.
+    </p>
+
+    <h4>Other failures and requesting rebuilds</h4>
+    <p>
+        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>.
+        Some build failures can be fixed by Docs.rs, e.g., by issuing a rebuild after a bug in Docs.rs has been fixed.
+    </p>
+
+    </div>
 {%- endblock body %}
 
 {% block css -%}
