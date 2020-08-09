@@ -8,10 +8,9 @@ macro_rules! metrics {
         $vis:vis struct $name:ident {
             $(
                 #[doc = $help:expr]
-                $metric:ident: $ty:ty $([$($label:expr),* $(,)?])?
+                $metric_vis:vis $metric:ident: $ty:ty $([$($label:expr),* $(,)?])?
             ),* $(,)?
         }
-        metrics visibility: $metric_vis:vis,
         namespace: $namespace:expr,
     ) => {
         $vis struct $name {

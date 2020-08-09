@@ -28,7 +28,7 @@ metrics! {
         /// The maximum number of database connections
         max_db_connections: IntGauge,
         /// Number of attempted and failed connections to the database
-        failed_db_connections: IntCounter,
+        pub(crate) failed_db_connections: IntCounter,
 
         /// The number of currently opened file descriptors
         open_file_descriptors: IntGauge,
@@ -36,29 +36,28 @@ metrics! {
         running_threads: IntGauge,
 
         /// The traffic of various docs.rs routes
-        routes_visited: IntCounterVec["route"],
+        pub(crate) routes_visited: IntCounterVec["route"],
         /// The response times of various docs.rs routes
-        response_time: HistogramVec["route"],
+        pub(crate) response_time: HistogramVec["route"],
         /// The time it takes to render a rustdoc page
-        rustdoc_rendering_times: HistogramVec["step"],
+        pub(crate) rustdoc_rendering_times: HistogramVec["step"],
 
         /// Number of crates built
-        total_builds: IntCounter,
+        pub(crate) total_builds: IntCounter,
         /// Number of builds that successfully generated docs
-        successful_builds: IntCounter,
+        pub(crate) successful_builds: IntCounter,
         /// Number of builds that generated a compiler error
-        failed_builds: IntCounter,
+        pub(crate) failed_builds: IntCounter,
         /// Number of builds that did not complete due to not being a library
-        non_library_builds: IntCounter,
+        pub(crate) non_library_builds: IntCounter,
 
         /// Number of files uploaded to the storage backend
-        uploaded_files_total: IntCounter,
+        pub(crate) uploaded_files_total: IntCounter,
 
         /// The number of attempted files that failed due to a memory limit
-        html_rewrite_ooms: IntCounter,
+        pub(crate) html_rewrite_ooms: IntCounter,
     }
 
-    metrics visibility: pub(crate),
     namespace: "docsrs",
 }
 
