@@ -218,7 +218,7 @@ impl TestEnvironment {
         self.storage_db
             .get_or_init(|| {
                 Arc::new(
-                    Storage::temp_new_db(self.db().pool())
+                    Storage::temp_new_db(self.db().pool(), self.metrics())
                         .expect("failed to initialize the storage"),
                 )
             })
