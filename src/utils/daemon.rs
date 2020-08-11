@@ -9,10 +9,10 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
+use std::process::Command;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use std::process::Command;
-
 
 fn run_git_gc() {
     Command::new("git")
@@ -69,8 +69,12 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(dbopts.clone(), db.clone(), build_queue.clone(),
-                               config.clone())?;
+        start_registry_watcher(
+            dbopts.clone(),
+            db.clone(),
+            build_queue.clone(),
+            config.clone(),
+        )?;
     }
 
     // build new crates every minute
