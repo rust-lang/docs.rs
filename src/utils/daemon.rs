@@ -15,10 +15,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 fn run_git_gc() {
-    Command::new("git")
-        .args(&["gc", "--auto"])
-        .output()
-        .expect("Failed to execute git gc");
+    let gc = Command::new("git")
+        .args(&["gc"])
+        .output();
+        
+    if let Err(err) = gc {
+        log::error!("failed to run `git gc`: {:?}", err);
+    }
 }
 
 fn start_registry_watcher(
