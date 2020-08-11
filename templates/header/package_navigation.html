@@ -61,7 +61,7 @@
                         <li class="pure-menu-item">
                             {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
                             <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="pure-menu-link">
-                                {{ "book" | fas | safe }}
+                                {{ "book" | fas }}
                                 <span class="title"> Documentation</span>
                             </a>
                         </li>
@@ -70,7 +70,7 @@
                     {# The crate information tab #}
                     <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
                             class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                            {{ "cube" | fas | safe }}
+                            {{ "cube" | fas }}
                             <span class="title"> Crate</span>
                         </a>
                     </li>
@@ -79,7 +79,7 @@
                     <li class="pure-menu-item">
                         <a href="/crate/{{ crate_path | safe }}/source/"
                             class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                            {{ "folder-open" | far | safe }}
+                            {{ "folder-open" | far }}
                             <span class="title"> Source</span>
                         </a>
                     </li>
@@ -88,7 +88,7 @@
                     <li class="pure-menu-item">
                         <a href="/crate/{{ crate_path | safe }}/builds"
                             class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
-                            {{ "cogs" | fas | safe }}
+                            {{ "cogs" | fas }}
                             <span class="title"> Builds</span>
                         </a>
                     </li>
