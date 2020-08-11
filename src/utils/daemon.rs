@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 fn run_git_gc() {
     let gc = Command::new("git")
-        .args(&["gc"])
+        .args(&["gc", "--auto"])
         .output();
         
     if let Err(err) = gc {
