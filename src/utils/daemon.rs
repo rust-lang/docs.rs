@@ -11,17 +11,30 @@ use failure::Error;
 use log::{debug, error, info};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::process::Command;
 
-fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Result<(), Error> {
-    let pool = context.pool()?;
-    let build_queue = context.build_queue()?;
-    let config = context.config()?;
+
+fn run_git_gc() {
+    Command::new("git")
+        .args(&["gc"])
+        .output()
+        .expect("Failed to execute git gc");
+}
+
+fn start_registry_watcher(
+    opts: DocBuilderOptions,
+    pool: Pool,
+    build_queue: Arc<BuildQueue>,
+    config: Arc<Config>,
+) -> Result<(), Error> {
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
             let mut last_gc = Instant::now();
+            run_git_gc();
+
             loop {
                 let mut doc_builder =
                     DocBuilder::new(opts.clone(), pool.clone(), build_queue.clone());
@@ -37,7 +50,7 @@ fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Res
                 }
 
                 if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-                    doc_builder.run_git_gc();
+                    run_git_gc();
                     last_gc = Instant::now();
                 }
                 thread::sleep(Duration::from_secs(60));
@@ -56,7 +69,8 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(dbopts.clone(), context)?;
+        start_registry_watcher(dbopts.clone(), db.clone(), build_queue.clone(),
+                               config.clone())?;
     }
 
     // build new crates every minute
