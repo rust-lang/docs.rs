@@ -19,7 +19,7 @@
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ "folder-open" | far | safe }} ..</a>
+                                <a href="../" class="pure-menu-link">{{ "folder-open" | far }} ..</a>
                             </li>
                         {%- endif -%}
 
@@ -32,23 +32,23 @@
                                 <a href="./{{ file.name }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
                                     {# Directories #}
                                     {%- if file.mime == "dir" -%}
-                                        {{ "folder-open" | far | safe }}
+                                        {{ "folder-open" | far }}
 
                                     {# Rust files #}
                                     {%- elif file.mime == "text/rust" -%}
-                                        {{ "rust" | fab | safe }}
+                                        {{ "rust" | fab }}
 
                                     {# Cargo.lock #}
                                     {%- elif file.mime == "text/plain" and file.name == "Cargo.lock" -%}
-                                        {{ "lock" | fas | safe }}
+                                        {{ "lock" | fas }}
 
                                     {# Markdown files #}
                                     {% elif file.mime == "text/markdown" %}
-                                        {{ "markdown" | fas | safe }}
+                                        {{ "markdown" | fab }}
 
                                     {# .gitignore #}
                                     {% elif file.mime == "text/plain" and file.name == ".gitignore" %}
-                                        {{ "git-alt" | fab | safe }}
+                                        {{ "git-alt" | fab }}
 
                                     {#
                                         More ideas
@@ -70,11 +70,11 @@
 
                                     {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" or file.mime | split(pat="/") | first == "text" -%}
-                                        {{ "file-alt" | far | safe }}
+                                        {{ "file-alt" | far }}
 
                                     {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ "file-archive" | far | safe }}
+                                        {{ "file-archive" | far }}
                                     {%- endif -%}
 
                                     {{ file.name }}

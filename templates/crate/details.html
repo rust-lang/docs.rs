@@ -39,7 +39,7 @@
                         {%- if details.homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.homepage_url }}" class="pure-menu-link">
-                                    {{ "home" | fas | safe }} Homepage
+                                    {{ "home" | fas }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -48,7 +48,7 @@
                         {%- if details.documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ "file-alt" | far | safe }} Documentation
+                                    {{ "file-alt" | far }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -60,14 +60,14 @@
                                     {# If the repo link is for github, show some github stats #}
                                     {# TODO: add support for hosts besides github (#35) #}
                                     {%- if details.github -%}
-                                        {{ "github" | fab| safe }}
-                                        {{ "star" | fas| safe }} {{ details.github_stars }}
-                                        {{ fa::s(icon="code-branch") }} {{ details.github_forks }}
-                                        {{ "exclamation-circle" | fas | safe }} {{ details.github_issues }}
+                                        {{ "github" | fab }}
+                                        {{ "star" | fas }} {{ details.github_stars }}
+                                        {{ "code-branch" | fas }} {{ details.github_forks }}
+                                        {{ "exclamation-circle" | fas }} {{ details.github_issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        {{ fa::s(icon="code-branch") }} Repository
+                                        {{ "code-branch" | fas }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -77,7 +77,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
                                 title="See {{ details.name }} on crates.io">
-                                {{ "cube" | fas | safe }} Crates.io
+                                {{ "cube" | fas }} Crates.io
                             </a>
                         </li>
 

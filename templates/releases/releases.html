@@ -42,7 +42,7 @@
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
                                         title="Published {{ release.release_time | timeformat(relative=true) }}">
                                         {{ release.stars }}
-                                        {{ "star" | fas | safe }}
+                                        {{ "star" | fas }}
                                     </div>
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
@@ -64,13 +64,13 @@
 
                 {%- if show_previous_page -%}
                     <a class="pure-button pure-button-normal" href="{{ page_link | safe }}/{{ page_number - 1 }}{{ query | default(value='') }}">
-                        {{ "arrow-left" | fas | safe }} Previous Page
+                        {{ "arrow-left" | fas }} Previous Page
                     </a>
                 {%- endif -%}
 
                 {%- if show_next_page -%}
                     <a class="pure-button pure-button-normal" href="{{ page_link | safe }}/{{ page_number + 1 }}{{ query | default(value='') }}">
-                        Next Page {{ "arrow-right" | fas | safe }}
+                        Next Page {{ "arrow-right" | fas }}
                     </a>
                 {%- endif -%}
             </div>

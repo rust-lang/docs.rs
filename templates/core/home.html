@@ -4,7 +4,7 @@
 
 {%- block body -%}
     <div class="container landing">
-        <h1 class="brand">{{ "cubes" | fas | safe }} Docs.rs</h1>
+        <h1 class="brand">{{ "cubes" | fas }} Docs.rs</h1>
 
         <form action="/releases/search" method="GET" class="landing-search-form">
             <div>
@@ -28,7 +28,7 @@
                     <strong>Recent Releases</strong>
                 </a>
                 <a href="/releases/feed" title="Atom feed">
-                    {{ "rss-square" | fas | safe }}
+                    {{ "rss-square" | fas }}
                 </a>
             </div>
 
@@ -54,7 +54,7 @@
                                 {%- if varsb.show_stars -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
                                         {{ release.stars }}
-                                        {{ "star" | fas | safe }}
+                                        {{ "star" | fas }}
                                     </div>
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"

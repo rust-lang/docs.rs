@@ -148,6 +148,9 @@ pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
     tera.register_filter("timeformat", timeformat);
     tera.register_filter("dbg", dbg);
     tera.register_filter("dedent", dedent);
+    tera.register_filter("fas", IconType::Strong);
+    tera.register_filter("far", IconType::Regular);
+    tera.register_filter("fab", IconType::Brand);
 
     Ok(tera)
 }
@@ -249,6 +252,43 @@ fn dedent(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
             .collect::<Vec<&str>>()
             .join("\n"),
     ))
+}
+
+enum IconType {
+    Strong,
+    Regular,
+    Brand,
+}
+
+impl fmt::Display for IconType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let icon = match self {
+            Self::Strong => "fas",
+            Self::Regular => "far",
+            Self::Brand => "fab",
+        };
+
+        f.write_str(icon)
+    }
+}
+
+impl tera::Filter for IconType {
+    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+        let icon = format!(
+            r#"<span class="{} fa-{}" aria-hidden="true" {}></span>"#,
+            self,
+            value.as_str().expect("Icons only take strings"),
+            args.get("extra")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        );
+
+        Ok(Value::String(icon))
+    }
+
+    fn is_safe(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

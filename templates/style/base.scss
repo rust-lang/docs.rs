@@ -191,10 +191,10 @@ div.recent-releases-container {
     .build {
         font-weight: 500;
 
-        i.fa-check {
+        span.fa-check {
             color: $color-macro;
         }
-        i.fa-close {
+        span.fa-times {
             color: $color-struct;
         }
     }
