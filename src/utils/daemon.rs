@@ -32,8 +32,8 @@ fn start_registry_watcher(
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
-            let mut last_gc = Instant::now();
             run_git_gc();
+            let mut last_gc = Instant::now();
 
             loop {
                 let mut doc_builder =
