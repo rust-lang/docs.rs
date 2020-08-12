@@ -286,7 +286,7 @@ impl tera::Filter for IconType {
             .and_then(|l| l.as_str())
             .map(|label| {
                 aria_hidden = false;
-                format!(r#" aria-label="{}""#, tera::escape_html(label))
+                format!(r#" aria_label="{}""#, tera::escape_html(label))
             })
             .unwrap_or_default();
         let id = args
