@@ -15,10 +15,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 fn run_git_gc() {
-    let gc = Command::new("git")
-        .args(&["gc", "--auto"])
-        .output();
-        
+    let gc = Command::new("git").args(&["gc", "--auto"]).output();
+
     if let Err(err) = gc {
         log::error!("failed to run `git gc`: {:?}", err);
     }
