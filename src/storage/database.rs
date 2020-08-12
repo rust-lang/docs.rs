@@ -1,16 +1,19 @@
 use super::{Blob, StorageTransaction};
 use crate::db::Pool;
+use crate::Metrics;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
 use postgres::Transaction;
+use std::sync::Arc;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
+    metrics: Arc<Metrics>,
 }
 
 impl DatabaseBackend {
-    pub(crate) fn new(pool: Pool) -> Self {
-        Self { pool }
+    pub(crate) fn new(pool: Pool, metrics: Arc<Metrics>) -> Self {
+        Self { pool, metrics }
     }
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
@@ -68,12 +71,14 @@ impl DatabaseBackend {
     pub(super) fn start_connection(&self) -> Result<DatabaseClient, Error> {
         Ok(DatabaseClient {
             conn: self.pool.get()?,
+            metrics: self.metrics.clone(),
         })
     }
 }
 
 pub(super) struct DatabaseClient {
     conn: crate::db::PoolClient,
+    metrics: Arc<Metrics>,
 }
 
 impl DatabaseClient {
@@ -82,12 +87,14 @@ impl DatabaseClient {
     ) -> Result<DatabaseStorageTransaction<'_>, Error> {
         Ok(DatabaseStorageTransaction {
             transaction: self.conn.transaction()?,
+            metrics: &self.metrics,
         })
     }
 }
 
 pub(super) struct DatabaseStorageTransaction<'a> {
     transaction: Transaction<'a>,
+    metrics: &'a Metrics,
 }
 
 impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
@@ -101,6 +108,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &[&blob.path, &blob.mime, &blob.content, &compression],
             )?;
+            self.metrics.uploaded_files_total.inc();
         }
         Ok(())
     }

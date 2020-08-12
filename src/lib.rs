@@ -4,18 +4,22 @@
 
 pub use self::build_queue::BuildQueue;
 pub use self::config::Config;
+pub use self::context::Context;
 pub use self::docbuilder::options::DocBuilderOptions;
 pub use self::docbuilder::DocBuilder;
 pub use self::docbuilder::RustwideBuilder;
+pub use self::metrics::Metrics;
 pub use self::storage::Storage;
 pub use self::web::Server;
 
 mod build_queue;
 mod config;
+mod context;
 pub mod db;
 mod docbuilder;
 mod error;
 pub mod index;
+mod metrics;
 pub mod storage;
 #[cfg(test)]
 mod test;

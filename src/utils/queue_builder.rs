@@ -1,5 +1,6 @@
 use crate::{
-    db::Pool, docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, DocBuilder, Storage,
+    db::Pool, docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, DocBuilder, Metrics,
+    Storage,
 };
 use failure::Error;
 use log::{debug, error, info, warn};
@@ -13,6 +14,7 @@ pub fn queue_builder(
     mut doc_builder: DocBuilder,
     db: Pool,
     build_queue: Arc<BuildQueue>,
+    metrics: Arc<Metrics>,
     storage: Arc<Storage>,
 ) -> Result<(), Error> {
     /// Represents the current state of the builder thread.
@@ -28,7 +30,7 @@ pub fn queue_builder(
         QueueInProgress(usize),
     }
 
-    let mut builder = RustwideBuilder::init(db, storage)?;
+    let mut builder = RustwideBuilder::init(db, metrics, storage)?;
 
     let mut status = BuilderState::Fresh;
 

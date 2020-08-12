@@ -3,8 +3,7 @@ mod fakes;
 use crate::db::{Pool, PoolClient};
 use crate::storage::Storage;
 use crate::web::Server;
-use crate::BuildQueue;
-use crate::Config;
+use crate::{BuildQueue, Config, Context, Metrics};
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
@@ -97,6 +96,7 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
+    metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
     s3: OnceCell<Arc<Storage>>,
     storage_db: OnceCell<Arc<Storage>>,
@@ -117,6 +117,7 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: OnceCell::new(),
             storage: OnceCell::new(),
+            metrics: OnceCell::new(),
             frontend: OnceCell::new(),
             s3: OnceCell::new(),
             storage_db: OnceCell::new(),
@@ -159,7 +160,13 @@ impl TestEnvironment {
 
     pub(crate) fn build_queue(&self) -> Arc<BuildQueue> {
         self.build_queue
-            .get_or_init(|| Arc::new(BuildQueue::new(self.db().pool(), &self.config())))
+            .get_or_init(|| {
+                Arc::new(BuildQueue::new(
+                    self.db().pool(),
+                    self.metrics(),
+                    &self.config(),
+                ))
+            })
             .clone()
     }
 
@@ -173,29 +180,34 @@ impl TestEnvironment {
         self.storage
             .get_or_init(|| {
                 Arc::new(
-                    Storage::new(self.db().pool(), &*self.config())
+                    Storage::new(self.db().pool(), self.metrics(), &*self.config())
                         .expect("failed to initialize the storage"),
                 )
             })
             .clone()
     }
 
+    pub(crate) fn metrics(&self) -> Arc<Metrics> {
+        self.metrics
+            .get_or_init(|| Arc::new(Metrics::new().expect("failed to initialize the metrics")))
+            .clone()
+    }
+
     pub(crate) fn db(&self) -> &TestDatabase {
-        self.db
-            .get_or_init(|| TestDatabase::new(&self.config()).expect("failed to initialize the db"))
+        self.db.get_or_init(|| {
+            TestDatabase::new(&self.config(), self.metrics()).expect("failed to initialize the db")
+        })
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend.get_or_init(|| {
-            TestFrontend::new(self.db(), self.config(), self.build_queue(), self.storage())
-        })
+        self.frontend.get_or_init(|| TestFrontend::new(&*self))
     }
 
     pub(crate) fn s3(&self) -> Arc<Storage> {
         self.s3
             .get_or_init(|| {
                 Arc::new(
-                    Storage::temp_new_s3(&*self.config())
+                    Storage::temp_new_s3(self.metrics(), &*self.config())
                         .expect("failed to initialize the storage"),
                 )
             })
@@ -206,7 +218,7 @@ impl TestEnvironment {
         self.storage_db
             .get_or_init(|| {
                 Arc::new(
-                    Storage::temp_new_db(self.db().pool())
+                    Storage::temp_new_db(self.db().pool(), self.metrics())
                         .expect("failed to initialize the storage"),
                 )
             })
@@ -218,13 +230,35 @@ impl TestEnvironment {
     }
 }
 
+impl Context for TestEnvironment {
+    fn config(&self) -> Result<Arc<Config>, Error> {
+        Ok(TestEnvironment::config(self))
+    }
+
+    fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
+        Ok(TestEnvironment::build_queue(self))
+    }
+
+    fn storage(&self) -> Result<Arc<Storage>, Error> {
+        Ok(TestEnvironment::storage(self))
+    }
+
+    fn pool(&self) -> Result<Pool, Error> {
+        Ok(self.db().pool())
+    }
+
+    fn metrics(&self) -> Result<Arc<Metrics>, Error> {
+        Ok(self.metrics())
+    }
+}
+
 pub(crate) struct TestDatabase {
     pool: Pool,
     schema: String,
 }
 
 impl TestDatabase {
-    fn new(config: &Config) -> Result<Self, Error> {
+    fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Self, Error> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
@@ -263,7 +297,7 @@ impl TestDatabase {
         conn.batch_execute(&query)?;
 
         Ok(TestDatabase {
-            pool: Pool::new_with_schema(config, &schema)?,
+            pool: Pool::new_with_schema(config, metrics, &schema)?,
             schema,
         })
     }
@@ -297,22 +331,10 @@ pub(crate) struct TestFrontend {
 }
 
 impl TestFrontend {
-    fn new(
-        db: &TestDatabase,
-        config: Arc<Config>,
-        build_queue: Arc<BuildQueue>,
-        storage: Arc<Storage>,
-    ) -> Self {
+    fn new(context: &dyn Context) -> Self {
         Self {
-            server: Server::start(
-                Some("127.0.0.1:0"),
-                false,
-                db.pool.clone(),
-                config,
-                build_queue,
-                storage,
-            )
-            .expect("failed to start the web server"),
+            server: Server::start(Some("127.0.0.1:0"), false, context)
+                .expect("failed to start the web server"),
             client: Client::new(),
         }
     }

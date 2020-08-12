@@ -1,18 +1,33 @@
-use crate::config::Config;
-use crate::db::Pool;
-use crate::storage::Storage;
 use crate::web::page::TemplateData;
-use crate::BuildQueue;
+use crate::{db::Pool, BuildQueue, Config, Context, Metrics, Storage};
+use failure::Error;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub(super) struct InjectExtensions {
-    pub(super) build_queue: Arc<BuildQueue>,
-    pub(super) pool: Pool,
-    pub(super) config: Arc<Config>,
-    pub(super) storage: Arc<Storage>,
-    pub(super) template_data: Arc<TemplateData>,
+    build_queue: Arc<BuildQueue>,
+    pool: Pool,
+    config: Arc<Config>,
+    storage: Arc<Storage>,
+    metrics: Arc<Metrics>,
+    template_data: Arc<TemplateData>,
+}
+
+impl InjectExtensions {
+    pub(super) fn new(
+        context: &dyn Context,
+        template_data: Arc<TemplateData>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            build_queue: context.build_queue()?,
+            pool: context.pool()?,
+            config: context.config()?,
+            storage: context.storage()?,
+            metrics: context.metrics()?,
+            template_data,
+        })
+    }
 }
 
 impl BeforeMiddleware for InjectExtensions {
@@ -22,6 +37,7 @@ impl BeforeMiddleware for InjectExtensions {
         req.extensions.insert::<Pool>(self.pool.clone());
         req.extensions.insert::<Config>(self.config.clone());
         req.extensions.insert::<Storage>(self.storage.clone());
+        req.extensions.insert::<Metrics>(self.metrics.clone());
         req.extensions
             .insert::<TemplateData>(self.template_data.clone());
 
@@ -41,4 +57,5 @@ key!(BuildQueue => Arc<BuildQueue>);
 key!(Pool => Pool);
 key!(Config => Arc<Config>);
 key!(Storage => Arc<Storage>);
+key!(Metrics => Arc<Metrics>);
 key!(TemplateData => Arc<TemplateData>);

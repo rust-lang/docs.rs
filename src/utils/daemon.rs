@@ -3,23 +3,18 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    db::Pool,
-    storage::Storage,
     utils::{queue_builder, update_release_activity, GithubUpdater},
-    BuildQueue, Config, DocBuilder, DocBuilderOptions,
+    Context, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-fn start_registry_watcher(
-    opts: DocBuilderOptions,
-    pool: Pool,
-    build_queue: Arc<BuildQueue>,
-) -> Result<(), Error> {
+fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Result<(), Error> {
+    let pool = context.pool()?;
+    let build_queue = context.build_queue()?;
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
@@ -46,13 +41,8 @@ fn start_registry_watcher(
     Ok(())
 }
 
-pub fn start_daemon(
-    config: Arc<Config>,
-    db: Pool,
-    build_queue: Arc<BuildQueue>,
-    storage: Arc<Storage>,
-    enable_registry_watcher: bool,
-) -> Result<(), Error> {
+pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Result<(), Error> {
+    let config = context.config()?;
     let dbopts = DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
 
     // check paths once
@@ -60,27 +50,24 @@ pub fn start_daemon(
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(dbopts.clone(), db.clone(), build_queue.clone())?;
+        start_registry_watcher(dbopts.clone(), context)?;
     }
 
     // build new crates every minute
-    let cloned_db = db.clone();
-    let cloned_build_queue = build_queue.clone();
-    let cloned_storage = storage.clone();
+    let pool = context.pool()?;
+    let build_queue = context.build_queue()?;
+    let storage = context.storage()?;
+    let metrics = context.metrics()?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
-            let doc_builder = DocBuilder::new(
-                dbopts.clone(),
-                cloned_db.clone(),
-                cloned_build_queue.clone(),
-            );
-            queue_builder(doc_builder, cloned_db, cloned_build_queue, cloned_storage).unwrap();
+            let doc_builder = DocBuilder::new(dbopts.clone(), pool.clone(), build_queue.clone());
+            queue_builder(doc_builder, pool, build_queue, metrics, storage).unwrap();
         })
         .unwrap();
 
     // update release activity everyday at 23:55
-    let cloned_db = db.clone();
+    let pool = context.pool()?;
     cron(
         "release activity updater",
         Duration::from_secs(60),
@@ -88,14 +75,14 @@ pub fn start_daemon(
             let now = Utc::now();
             if now.hour() == 23 && now.minute() == 55 {
                 info!("Updating release activity");
-                update_release_activity(&mut *cloned_db.get()?)?;
+                update_release_activity(&mut *pool.get()?)?;
             }
             Ok(())
         },
     )?;
 
     // update github stats every hour
-    let github_updater = GithubUpdater::new(&config, db.clone())?;
+    let github_updater = GithubUpdater::new(&config, context.pool()?)?;
     cron(
         "github stats updater",
         Duration::from_secs(60 * 60),
@@ -105,12 +92,10 @@ pub fn start_daemon(
         },
     )?;
 
-    // TODO: update ssl certificate every 3 months
-
     // at least start web server
     info!("Starting web server");
 
-    crate::Server::start(None, false, db, config, build_queue, storage)?;
+    crate::Server::start(None, false, context)?;
     Ok(())
 }
 

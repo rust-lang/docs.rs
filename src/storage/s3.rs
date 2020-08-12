@@ -1,5 +1,5 @@
 use super::{Blob, StorageTransaction};
-use crate::Config;
+use crate::{Config, Metrics};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
 use futures_util::{
@@ -13,19 +13,24 @@ use rusoto_s3::{
     DeleteObjectsRequest, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectRequest,
     ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
 };
-use std::{convert::TryInto, io::Write};
+use std::{convert::TryInto, io::Write, sync::Arc};
 use tokio::runtime::Runtime;
 
 pub(super) struct S3Backend {
     client: S3Client,
     runtime: Runtime,
     bucket: String,
+    metrics: Arc<Metrics>,
     #[cfg(test)]
     temporary: bool,
 }
 
 impl S3Backend {
-    pub(super) fn new(client: S3Client, config: &Config) -> Result<Self, Error> {
+    pub(super) fn new(
+        client: S3Client,
+        metrics: Arc<Metrics>,
+        config: &Config,
+    ) -> Result<Self, Error> {
         let runtime = Runtime::new()?;
 
         #[cfg(test)]
@@ -48,6 +53,7 @@ impl S3Backend {
         Ok(Self {
             client,
             runtime,
+            metrics,
             bucket: config.s3_bucket.clone(),
             #[cfg(test)]
             temporary: config.s3_bucket_is_temporary,
@@ -173,7 +179,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                 ..Default::default()
                             })
                             .map_ok(|_| {
-                                crate::web::metrics::UPLOADED_FILES_TOTAL.inc_by(1);
+                                self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
                                 log::error!("Failed to upload blob to S3: {:?}", err);

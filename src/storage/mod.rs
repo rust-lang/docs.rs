@@ -5,7 +5,7 @@ mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
-use crate::{db::Pool, Config};
+use crate::{db::Pool, Config, Metrics};
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use path_slash::PathExt;
@@ -14,6 +14,7 @@ use std::{
     ffi::OsStr,
     fmt, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
@@ -76,29 +77,30 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool, config: &Config) -> Result<Self, Error> {
+    pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(Box::new(S3Backend::new(c, config)?))
+            StorageBackend::S3(Box::new(S3Backend::new(c, metrics, config)?))
         } else {
-            StorageBackend::Database(DatabaseBackend::new(pool))
+            StorageBackend::Database(DatabaseBackend::new(pool, metrics))
         };
         Ok(Storage { backend })
     }
 
     #[cfg(test)]
-    pub(crate) fn temp_new_s3(config: &Config) -> Result<Self, Error> {
+    pub(crate) fn temp_new_s3(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         Ok(Storage {
             backend: StorageBackend::S3(Box::new(S3Backend::new(
                 s3::s3_client().unwrap(),
+                metrics,
                 config,
             )?)),
         })
     }
 
     #[cfg(test)]
-    pub(crate) fn temp_new_db(pool: Pool) -> Result<Self, Error> {
+    pub(crate) fn temp_new_db(pool: Pool, metrics: Arc<Metrics>) -> Result<Self, Error> {
         Ok(Storage {
-            backend: StorageBackend::Database(DatabaseBackend::new(pool)),
+            backend: StorageBackend::Database(DatabaseBackend::new(pool, metrics)),
         })
     }
 
@@ -389,7 +391,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_blobs(storage: &Storage) -> Result<(), Error> {
+    fn test_store_blobs(storage: &Storage, metrics: &Metrics) -> Result<(), Error> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -417,10 +419,12 @@ mod backend_tests {
             assert_eq!(blob.mime, actual.mime);
         }
 
+        assert_eq!(NAMES.len(), metrics.uploaded_files_total.get() as usize);
+
         Ok(())
     }
 
-    fn test_store_all(storage: &Storage) -> Result<(), Error> {
+    fn test_store_all(storage: &Storage, metrics: &Metrics) -> Result<(), Error> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -461,6 +465,8 @@ mod backend_tests {
         let mut expected_algs = HashSet::new();
         expected_algs.insert(CompressionAlgorithm::default());
         assert_eq!(algs, expected_algs);
+
+        assert_eq!(2, metrics.uploaded_files_total.get());
 
         Ok(())
     }
@@ -557,7 +563,11 @@ mod backend_tests {
     // Remember to add the test name to the macro below when adding a new one.
 
     macro_rules! backend_tests {
-        (backends($env:ident) { $($backend:ident => $create:expr,)* } tests $tests:tt ) => {
+        (
+            backends($env:ident) { $($backend:ident => $create:expr,)* }
+            tests $tests:tt
+            tests_with_metrics $tests_with_metrics:tt
+        ) => {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
@@ -569,6 +579,7 @@ mod backend_tests {
                     }
 
                     backend_tests!(@tests $tests);
+                    backend_tests!(@tests_with_metrics $tests_with_metrics);
                 }
             )*
         };
@@ -578,6 +589,16 @@ mod backend_tests {
                 fn $test() {
                     crate::test::wrapper(|env| {
                         super::$test(&*get_storage(env))
+                    });
+                }
+            )*
+        };
+        (@tests_with_metrics { $($test:ident,)* }) => {
+            $(
+                #[test]
+                fn $test() {
+                    crate::test::wrapper(|env| {
+                        super::$test(&*get_storage(env), &*env.metrics())
                     });
                 }
             )*
@@ -595,10 +616,13 @@ mod backend_tests {
             test_exists,
             test_get_object,
             test_get_too_big,
-            test_store_blobs,
-            test_store_all,
             test_delete_prefix,
             test_delete_percent,
+        }
+
+        tests_with_metrics {
+            test_store_blobs,
+            test_store_all,
         }
     }
 }
