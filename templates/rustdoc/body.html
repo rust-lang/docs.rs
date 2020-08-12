@@ -117,21 +117,7 @@
                                 </div>
                             </div>
 
-                            {%- if krate.documented_items and krate.total_items -%}
-                                {% set percent = krate.documented_items * 100 / krate.total_items %}
-                                <div class="pure-g menu-item-divided">
-                                    <div class="pure-u-1">
-                                        <ul class="pure-menu-list">
-                                            <li class="pure-menu-heading">Coverage</li>
-                                            <li class="pure-menu-link"><b>{{ percent | round(precision=2) }} %</b><br>
-                                                <span><b>{{ krate.documented_items }}</b> out of <b>{{ krate.total_items }}</b> items documented</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            {%- endif -%}
-
-                            <div class="pure-g">
+                            <div class="pure-g menu-item-divided">
                                 <div class="pure-u-1-2 right-border">
                                     <ul class="pure-menu-list">
                                         <li class="pure-menu-heading">Dependencies</li>
@@ -169,6 +155,21 @@
                                     </ul>
                                 </div>
                             </div>
+                            {%- if krate.documented_items and krate.total_items -%}
+                                {% set percent = krate.documented_items * 100 / krate.total_items %}
+                                <div class="pure-g">
+                                    <div class="pure-u-1">
+                                        <ul class="pure-menu-list">
+                                            <li>
+                                                <a href="{{ crate_url | safe }}" class="pure-menu-link">
+                                                    <b>{{ percent | round(precision=2) }}%</b>
+                                                    of the crate is documented
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            {%- endif -%}
                         </div>
                     </li>
 
