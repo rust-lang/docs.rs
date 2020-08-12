@@ -63,7 +63,7 @@ impl Config {
             // LOL HTML only uses as much memory as the size of the start tag!
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
-            registry_gc_interval: env("REGISTRY_GC_INTERVAL", 60 * 60)?,
+            registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
         })
     }
 
