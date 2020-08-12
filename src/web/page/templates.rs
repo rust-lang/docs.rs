@@ -274,13 +274,39 @@ impl fmt::Display for IconType {
 
 impl tera::Filter for IconType {
     fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+        let mut aria_hidden = true;
+        let class = tera::escape_html(value.as_str().expect("Icons only take strings"));
+        let fixed_width = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
+            " fa-fw"
+        } else {
+            ""
+        };
+        let aria_label = args
+            .get("aria-label")
+            .and_then(|l| l.as_str())
+            .map(|label| {
+                aria_hidden = false;
+                format!(r#" aria-label="{}""#, tera::escape_html(label))
+            })
+            .unwrap_or_default();
+        let id = args
+            .get("id")
+            .and_then(|l| l.as_str())
+            .map(|id| format!(r#" id="{}""#, tera::escape_html(id)))
+            .unwrap_or_default();
+        aria_hidden = args
+            .get("aria-hidden")
+            .and_then(|l| l.as_bool())
+            .unwrap_or(aria_hidden);
+
         let icon = format!(
-            r#"<span class="{} fa-{}" aria-hidden="true" {}></span>"#,
-            self,
-            value.as_str().expect("Icons only take strings"),
-            args.get("extra")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
+            r#"<span aria-hidden="{aria_hidden}" class="{icon_class} fa-{fa_class}{fw}"{aria_label}{id}></span>"#,
+            aria_hidden = aria_hidden,
+            icon_class = self,
+            fa_class = class,
+            fw = fixed_width,
+            aria_label = aria_label,
+            id = id,
         );
 
         Ok(Value::String(icon))

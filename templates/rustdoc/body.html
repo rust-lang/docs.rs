@@ -9,7 +9,7 @@
             <form action="/releases/search" method="GET" class="landing-search-form-nav">
                 <div id="search-input-nav">
                     <label for="nav-search">
-                        {{ "search" | fas }}
+                        {{ "search" | fas(fw=true) }}
                     </label>
 
                     <input id="nav-search" name="query" tabindex="-1" type="text"
@@ -17,13 +17,13 @@
                 </div>
 
                 <a href="/" class="pure-menu-heading pure-menu-link">
-                    {{ "cube" | fas }} <span class="title">Docs.rs</span>
+                    {{ "cube" | fas(fw=true) }} <span class="title">Docs.rs</span>
                 </a>
 
                 <ul class="pure-menu-list">
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                         <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ krate.description }}">
-                            {{ "cube" | fas }}
+                            {{ "cube" | fas(fw=true) }}
                             <span class="title"> {{ krate.name }}-{{ krate.version }}</span>
                         </a>
 
@@ -33,18 +33,18 @@
                             <ul class="pure-menu-list menu-item-divided">
                                 <li class="pure-menu-heading" id="crate-title">
                                     {{ krate.name }} {{ krate.version }}
-                                    {{ "copy" | far(extra='id="clipboard" aria-label="Copy crate name and version information"') | safe }}
+                                    {{ "copy" | far(id="clipboard", aria-label="Copy crate name and version information", fw=true) }}
                                 </li>
 
                                 <li class="pure-menu-item">
                                     <a href="{{ crate_url | safe }}" class="pure-menu-link" class="description">
-                                        {{ "cube" | fas }} {{ krate.description }}
+                                        {{ "cube" | fas(fw=true) }} {{ krate.description }}
                                     </a>
                                 </li>
 
                                 <li class="pure-menu-item">
                                     <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                                        {{ "balance-scale-right" | fas }} {{ krate.license }}
+                                        {{ "balance-scale-right" | fas(fw=true) }} {{ krate.license }}
                                     </a>
                                 </li>
                             </ul>
@@ -58,7 +58,7 @@
                                         {%- if krate.homepage_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.homepage_url }}" class="pure-menu-link">
-                                                    {{ "home" | fas }} Homepage
+                                                    {{ "home" | fas(fw=true) }} Homepage
                                                 </a>
                                             </li>
                                         {%- endif -%}
@@ -67,7 +67,7 @@
                                         {%- if krate.documentation_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                                    {{ "file-alt" | far }} Documentation
+                                                    {{ "file-alt" | far(fw=true) }} Documentation
                                                 </a>
                                             </li>
                                         {%- endif -%}
@@ -76,10 +76,10 @@
                                         {%- if krate.github -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.repository_url }}" class="pure-menu-link">
-                                                    {{ "github" | fab }}
-                                                    {{ "star" | fas }} {{ krate.github_stars }}
-                                                    {{ "code-branch" | fas }} {{ krate.github_forks }}
-                                                    {{ "exclamation-circle" | fas }} {{ krate.github_issues }}
+                                                    {{ "github" | fab(fw=true) }}
+                                                    {{ "star" | fas(fw=true) }} {{ krate.github_stars }}
+                                                    {{ "code-branch" | fas(fw=true) }} {{ krate.github_forks }}
+                                                    {{ "exclamation-circle" | fas(fw=true) }} {{ krate.github_issues }}
                                                 </a>
                                             </li>
 
@@ -87,14 +87,14 @@
                                         {%- elif repository_url -%}
                                             <li class="pure-menu-item">
                                                 <a href="{{ krate.repository_url }}" class="pure-menu-link">
-                                                    {{ "code-branch" | fas }} Repository
+                                                    {{ "code-branch" | fas(fw=true) }} Repository
                                                 </a>
                                             </li>
                                         {%- endif -%}
 
                                         <li class="pure-menu-item">
                                             <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
-                                                {{ "cube" | fas }} Crates.io
+                                                {{ "cube" | fas(fw=true) }} Crates.io
                                             </a>
                                         </li>
                                     </ul>
@@ -108,7 +108,7 @@
                                         {%- for author in krate.authors -%}
                                             <li class="pure-menu-item">
                                                 <a href="/releases/{{ author[1] }}" class="pure-menu-link">
-                                                    {{ "user" | fas }} {{ author[0] }}
+                                                    {{ "user" | fas(fw=true) }} {{ author[0] }}
                                                 </a>
                                             </li>
                                         {%- endfor -%}
@@ -176,7 +176,7 @@
                     {%- if is_latest_version and krate.yanked -%}
                         <li class="pure-menu-item">
                             <span class="pure-menu-link warn">
-                                {{ "exclamation-triangle" | fas }}
+                                {{ "exclamation-triangle" | fas(fw=true) }}
                                 <span class="title"> This release has been yanked</span>
                             </span>
                         </li>
@@ -186,7 +186,7 @@
                         <li class="pure-menu-item">
                             <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
                                 title="You are seeing a yanked version of {{ krate.name }} crate. Click here to go to latest version.">
-                                {{ "exclamation-triangle" | fas }}
+                                {{ "exclamation-triangle" | fas(fw=true) }}
                                 <span class="title"> This release has been yanked, go to latest version</span>
                             </a>
                         </li>
@@ -196,7 +196,7 @@
                         <li class="pure-menu-item">
                             <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
                                 title="You are seeing an outdated version of {{ krate.name }} crate. Click here to go to latest version.">
-                                {{ "exclamation-triangle" | fas }}
+                                {{ "exclamation-triangle" | fas(fw=true) }}
                                 <span class="title"> Go to latest version</span>
                             </a>
                         </li>
@@ -205,7 +205,7 @@
                     {# A link to the release's source view #}
                     <li class="pure-menu-item">
                         <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ krate.name }}-{{ krate.version }}" class="pure-menu-link">
-                            {{ "folder-open" | far }}
+                            {{ "folder-open" | far(fw=true) }}
                             <span class="title"> Source</span>
                         </a>
                     </li>
@@ -213,7 +213,7 @@
                     {# Display the platforms that the release has been built for #}
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                         <a href="#" class="pure-menu-link" aria-label="Platform">
-                            {{ "cogs" | fas }}
+                            {{ "cogs" | fas(fw=true) }}
                             <span class="title"> Platform</span>
                         </a>
 
