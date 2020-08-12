@@ -126,26 +126,26 @@
             {# If the release isn't a library, then display that warning #}
             {% if not release.is_library -%}
                 <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is not a library">
-                    {{ "exclamation-triangle" | fas }} {{ release.version }}
+                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
                 </a>
 
             {# If the release has been yanked and failed to build, display a warning #}
             {%- elif release.yanked and release.build_status -%}
                 <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
-                    {{ "exclamation-triangle" | fas }} {{ release.version }}
+                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
                 </a>
 
             {# If the release has been yanked and failed to build, display a warning #}
             {%- elif release.yanked and not release.build_status -%}
                 <a href="{{ release_url | safe }}" class="pure-menu-link warn"
                     title="{{ release_name }} is yanked and docs.rs failed to build it">
-                    {{ "exclamation-triangle" | fas }} {{ release.version }}
+                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
                 </a>
 
             {# If the release failed to build, display a warning #}
             {%- elif not release.build_status -%}
                 <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
-                    {{ "exclamation-triangle" | fas }} {{ release.version }}
+                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
                 </a>
 
             {# Otherwise just display the version #}

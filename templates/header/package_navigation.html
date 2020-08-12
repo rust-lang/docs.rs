@@ -21,7 +21,7 @@
                     {{ title }}
                 {%- else -%}
                     {{ metadata.name }} {{ metadata.version }}
-                    {{ "copy" | far(extra='id="clipboard" aria-label="Copy crate name and version information"') | safe }}
+                    {{ "copy" | far(id="clipboard", aria-label="Copy crate name and version information", fa=true) }}
                 {%- endif -%}
             </h1>
 
@@ -61,7 +61,7 @@
                         <li class="pure-menu-item">
                             {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
                             <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="pure-menu-link">
-                                {{ "book" | fas }}
+                                {{ "book" | fas(fw=true) }}
                                 <span class="title"> Documentation</span>
                             </a>
                         </li>
@@ -70,7 +70,7 @@
                     {# The crate information tab #}
                     <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
                             class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                            {{ "cube" | fas }}
+                            {{ "cube" | fas(fw=true) }}
                             <span class="title"> Crate</span>
                         </a>
                     </li>
@@ -79,7 +79,7 @@
                     <li class="pure-menu-item">
                         <a href="/crate/{{ crate_path | safe }}/source/"
                             class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                            {{ "folder-open" | far }}
+                            {{ "folder-open" | far(fw=true) }}
                             <span class="title"> Source</span>
                         </a>
                     </li>

@@ -5,7 +5,7 @@
 {%- if global_alert -%}
     <li class="pure-menu-item">
         <a href="{{ global_alert.url | safe }}" class="pure-menu-link {{ global_alert.css_class }}">
-            <i class="{{ global_alert.fa_icon | fas }}"></i>
+            <i class="{{ global_alert.fa_icon | fas(fw=true) }}"></i>
             {{ global_alert.text }}
         </a>
     </li>
