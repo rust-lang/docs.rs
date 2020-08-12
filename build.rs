@@ -56,21 +56,16 @@ fn get_git_hash() -> Option<String> {
 }
 
 fn compile_sass() -> Result<(), Box<dyn Error>> {
-    use sass_rs::{Context, Options, OutputStyle};
+    use grass::{Options, OutputStyle};
 
-    const STYLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style");
+    let options = Options::default().style(OutputStyle::Compressed);
+    let sass = grass::from_path(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style/base.scss"),
+        &options,
+    )?;
 
-    let mut context = Context::new_file(format!("{}/base.scss", STYLE_DIR))?;
-    context.set_options(Options {
-        output_style: OutputStyle::Compressed,
-        include_paths: vec![STYLE_DIR.to_owned()],
-        ..Default::default()
-    });
-
-    let css = context.compile()?;
     let dest_path = Path::new(&env::var("OUT_DIR")?).join("style.css");
-    let mut file = File::create(&dest_path)?;
-    file.write_all(css.as_bytes())?;
+    fs::write(&dest_path, sass)?;
 
     Ok(())
 }

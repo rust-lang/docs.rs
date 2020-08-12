@@ -87,7 +87,7 @@ rand = "0.7.3"
 [build-dependencies]
 time = "0.1"
 git2 = { version = "0.13", default-features = false }
-sass-rs = "0.2.2"
+grass = "0.10.0"
 
 [[bench]]
 name = "html_parsing"
