@@ -22,6 +22,12 @@ The recommended way to develop docs.rs is a combination of `cargo run` for
 the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
 This gives you reasonable incremental build times without having to add new users and packages to your host machine.
 
+### Git Hooks
+For ease of use, `git_hooks` directory contains useful `git hooks` to make your development easier.
+```bash
+cp git_hooks/* .git/hooks/
+```
+
 ### Dependencies
 
 Docs.rs requires at least the following native C dependencies.
