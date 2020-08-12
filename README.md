@@ -25,7 +25,7 @@ This gives you reasonable incremental build times without having to add new user
 ### Git Hooks
 For ease of use, `git_hooks` directory contains useful `git hooks` to make your development easier.
 ```bash
-cd .git/hooks && ln -s ../../.git_hooks/* . && cd ../..
+cp git_hooks/* .git/hooks/
 ```
 
 ### Dependencies
