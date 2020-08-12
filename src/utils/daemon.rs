@@ -17,10 +17,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 fn run_git_gc() {
-    Command::new("git")
+    let gc = Command::new("git")
         .args(&["gc", "--auto"])
-        .output()
-        .expect("Failed to execute git gc");
+        .output();
+        
+    if let Err(err) = gc {
+        log::error!("failed to run `git gc`: {:?}", err);
+    }
 }
 
 fn start_registry_watcher(
@@ -34,8 +37,8 @@ fn start_registry_watcher(
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
-            let mut last_gc = Instant::now();
             run_git_gc();
+            let mut last_gc = Instant::now();
 
             loop {
                 let mut doc_builder =
