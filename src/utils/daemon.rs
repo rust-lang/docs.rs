@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 fn run_git_gc() {
     Command::new("git")
-        .args(&["gc"])
+        .args(&["gc", "--auto"])
         .output()
         .expect("Failed to execute git gc");
 }
