@@ -125,8 +125,7 @@ pub static MAX_DB_CONNECTIONS: Lazy<IntGauge> = Lazy::new(|| {
     .unwrap()
 });
 
-#[cfg(not(windows))]
-#[allow(dead_code)]
+#[cfg(target_os = "linux")]
 pub static OPEN_FILE_DESCRIPTORS: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(
         "docsrs_open_file_descriptors",
@@ -135,8 +134,7 @@ pub static OPEN_FILE_DESCRIPTORS: Lazy<IntGauge> = Lazy::new(|| {
     .unwrap()
 });
 
-#[cfg(not(windows))]
-#[allow(dead_code)]
+#[cfg(target_os = "linux")]
 pub static CURRENTLY_RUNNING_THREADS: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(
         "docsrs_running_threads",
