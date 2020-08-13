@@ -31,10 +31,8 @@ metrics! {
         failed_db_connections: IntCounter,
 
         /// The number of currently opened file descriptors
-        #[cfg(linux)]
         open_file_descriptors: IntGauge,
         /// The number of threads being used by docs.rs
-        #[cfg(linux)]
         running_threads: IntGauge,
 
         /// The traffic of various docs.rs routes
@@ -86,7 +84,7 @@ impl Metrics {
     #[cfg(not(linux))]
     fn gather_system_performance(&self) {}
 
-    #[cfg(linux)]
+    #[cfg(target_os = "linux")]
     fn gather_system_performance(&self) {
         use procfs::process::Process;
 
