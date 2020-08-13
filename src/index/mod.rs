@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use url::Url;
 
@@ -48,6 +49,14 @@ impl Index {
         let config = load_config(diff.repository()).context("loading registry config")?;
         let api = Api::new(config.api).context("initialising registry api client")?;
         Ok(Self { path, api })
+    }
+
+    pub fn run_git_gc(&self) {
+        let cmd = format!("cd {} && gc --auto", self.path.to_str().unwrap());
+        let gc = Command::new("sh").args(&["-c", cmd.as_str()]).output();
+        if let Err(err) = gc {
+            log::error!("Failed to run `{}`: {:?}", cmd, err);
+        }
     }
 
     pub(crate) fn diff(&self) -> Result<crates_index_diff::Index> {
