@@ -1,6 +1,8 @@
+use crate::metrics::Metrics;
 use crate::Config;
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
+use std::sync::Arc;
 
 pub(crate) type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
 
@@ -9,21 +11,25 @@ const DEFAULT_SCHEMA: &str = "public";
 #[derive(Debug, Clone)]
 pub struct Pool {
     pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
+    metrics: Arc<Metrics>,
+    max_size: u32,
 }
 
 impl Pool {
-    pub fn new(config: &Config) -> Result<Pool, PoolError> {
-        Self::new_inner(config, DEFAULT_SCHEMA)
+    pub fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Pool, PoolError> {
+        Self::new_inner(config, metrics, DEFAULT_SCHEMA)
     }
 
     #[cfg(test)]
-    pub(crate) fn new_with_schema(config: &Config, schema: &str) -> Result<Pool, PoolError> {
-        Self::new_inner(config, schema)
+    pub(crate) fn new_with_schema(
+        config: &Config,
+        metrics: Arc<Metrics>,
+        schema: &str,
+    ) -> Result<Pool, PoolError> {
+        Self::new_inner(config, metrics, schema)
     }
 
-    fn new_inner(config: &Config, schema: &str) -> Result<Pool, PoolError> {
-        crate::web::metrics::MAX_DB_CONNECTIONS.set(config.max_pool_size as i64);
-
+    fn new_inner(config: &Config, metrics: Arc<Metrics>, schema: &str) -> Result<Pool, PoolError> {
         let url = config
             .database_url
             .parse()
@@ -36,14 +42,18 @@ impl Pool {
             .build(manager)
             .map_err(PoolError::PoolCreationFailed)?;
 
-        Ok(Pool { pool })
+        Ok(Pool {
+            pool,
+            metrics,
+            max_size: config.max_pool_size,
+        })
     }
 
     pub fn get(&self) -> Result<PoolClient, PoolError> {
         match self.pool.get() {
             Ok(conn) => Ok(conn),
             Err(err) => {
-                crate::web::metrics::FAILED_DB_CONNECTIONS.inc();
+                self.metrics.failed_db_connections.inc();
                 Err(PoolError::ClientError(err))
             }
         }
@@ -55,6 +65,10 @@ impl Pool {
 
     pub(crate) fn idle_connections(&self) -> u32 {
         self.pool.state().idle_connections
+    }
+
+    pub(crate) fn max_size(&self) -> u32 {
+        self.max_size
     }
 }
 

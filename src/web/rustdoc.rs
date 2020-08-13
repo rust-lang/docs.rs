@@ -4,10 +4,10 @@ use crate::{
     db::Pool,
     utils,
     web::{
-        crate_details::CrateDetails, error::Nope, file::File, match_version, metrics,
-        redirect_base, MatchSemver,
+        crate_details::CrateDetails, error::Nope, file::File, match_version,
+        metrics::RenderingTimesRecorder, redirect_base, MatchSemver,
     },
-    Config, Storage,
+    Config, Metrics, Storage,
 };
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
@@ -207,13 +207,18 @@ impl RustdocPage {
             .get::<super::TemplateData>()
             .expect("missing TemplateData from the request extensions");
 
+        let metrics = req
+            .extensions
+            .get::<crate::Metrics>()
+            .expect("missing Metrics from the request extensions");
+
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self));
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting
         let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
-                crate::web::metrics::HTML_REWRITE_OOMS.inc();
+                metrics.html_rewrite_ooms.inc();
 
                 let config = extension!(req, Config);
                 let err = failure::err_msg(format!(
@@ -238,8 +243,8 @@ impl RustdocPage {
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
 pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
-    let mut rendering_time =
-        metrics::RenderingTimesRecorder::new(&metrics::RUSTDOC_RENDERING_TIMES);
+    let metrics = extension!(req, Metrics).clone();
+    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_rendering_times);
 
     // Get the request parameters
     let router = extension!(req, Router);

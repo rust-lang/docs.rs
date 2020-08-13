@@ -7,7 +7,8 @@ use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
-    BuildQueue, Config, Context, DocBuilder, DocBuilderOptions, RustwideBuilder, Server, Storage,
+    BuildQueue, Config, Context, DocBuilder, DocBuilderOptions, Metrics, RustwideBuilder, Server,
+    Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -316,7 +317,8 @@ impl BuildSubcommand {
             Self::World => {
                 docbuilder.load_cache().context("Failed to load cache")?;
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
+                let mut builder =
+                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
                 builder
                     .build_world(&mut docbuilder)
                     .context("Failed to build world")?;
@@ -330,8 +332,9 @@ impl BuildSubcommand {
                 local,
             } => {
                 docbuilder.load_cache().context("Failed to load cache")?;
-                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)
-                    .context("failed to initialize rustwide")?;
+                let mut builder =
+                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)
+                        .context("failed to initialize rustwide")?;
 
                 if let Some(path) = local {
                     builder
@@ -367,14 +370,16 @@ impl BuildSubcommand {
                     }
                 }
 
-                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
+                let mut builder =
+                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
                 builder
                     .update_toolchain()
                     .context("failed to update toolchain")?;
             }
 
             Self::AddEssentialFiles => {
-                let mut builder = RustwideBuilder::init(ctx.pool()?, ctx.storage()?)?;
+                let mut builder =
+                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
                 builder
                     .add_essential_files()
                     .context("failed to add essential files")?;
@@ -546,6 +551,7 @@ struct BinContext {
     storage: OnceCell<Arc<Storage>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
+    metrics: OnceCell<Arc<Metrics>>,
 }
 
 impl BinContext {
@@ -555,6 +561,7 @@ impl BinContext {
             storage: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
+            metrics: OnceCell::new(),
         }
     }
 
@@ -573,7 +580,11 @@ impl Context for BinContext {
         Ok(self
             .build_queue
             .get_or_try_init::<_, Error>(|| {
-                Ok(Arc::new(BuildQueue::new(self.pool()?, &*self.config()?)))
+                Ok(Arc::new(BuildQueue::new(
+                    self.pool()?,
+                    self.metrics()?,
+                    &*self.config()?,
+                )))
             })?
             .clone())
     }
@@ -582,7 +593,11 @@ impl Context for BinContext {
         Ok(self
             .storage
             .get_or_try_init::<_, Error>(|| {
-                Ok(Arc::new(Storage::new(self.pool()?, &*self.config()?)?))
+                Ok(Arc::new(Storage::new(
+                    self.pool()?,
+                    self.metrics()?,
+                    &*self.config()?,
+                )?))
             })?
             .clone())
     }
@@ -597,7 +612,14 @@ impl Context for BinContext {
     fn pool(&self) -> Result<Pool, Error> {
         Ok(self
             .pool
-            .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?)?))?
+            .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?, self.metrics()?)?))?
+            .clone())
+    }
+
+    fn metrics(&self) -> Result<Arc<Metrics>, Error> {
+        Ok(self
+            .metrics
+            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Metrics::new()?)))?
             .clone())
     }
 }

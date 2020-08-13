@@ -1,7 +1,8 @@
-use crate::config::Config;
 use crate::db::Pool;
 use crate::error::Result;
+use crate::{Config, Metrics};
 use log::error;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -15,13 +16,15 @@ pub(crate) struct QueuedCrate {
 #[derive(Debug)]
 pub struct BuildQueue {
     db: Pool,
+    metrics: Arc<Metrics>,
     max_attempts: i32,
 }
 
 impl BuildQueue {
-    pub fn new(db: Pool, config: &Config) -> Self {
+    pub fn new(db: Pool, metrics: Arc<Metrics>, config: &Config) -> Self {
         BuildQueue {
             db,
+            metrics,
             max_attempts: config.build_attempts.into(),
         }
     }
@@ -91,7 +94,7 @@ impl BuildQueue {
         };
 
         let res = f(&to_process);
-        crate::web::metrics::TOTAL_BUILDS.inc();
+        self.metrics.total_builds.inc();
         match res {
             Ok(()) => {
                 conn.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
@@ -105,7 +108,7 @@ impl BuildQueue {
                 let attempt: i32 = rows[0].get(0);
 
                 if attempt >= self.max_attempts {
-                    crate::web::metrics::FAILED_BUILDS.inc();
+                    self.metrics.failed_builds.inc();
                 }
 
                 error!(
@@ -195,6 +198,11 @@ mod tests {
                 Ok(())
             })?;
             assert!(!called, "there were still items in the queue");
+
+            // Ensure metrics were recorded correctly
+            let metrics = env.metrics();
+            assert_eq!(metrics.total_builds.get(), 9);
+            assert_eq!(metrics.failed_builds.get(), 1);
 
             Ok(())
         })

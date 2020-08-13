@@ -5,7 +5,7 @@ mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
-use crate::{db::Pool, Config};
+use crate::{db::Pool, Config, Metrics};
 use chrono::{DateTime, Utc};
 use failure::{err_msg, Error};
 use path_slash::PathExt;
@@ -14,6 +14,7 @@ use std::{
     ffi::OsStr,
     fmt, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
@@ -76,9 +77,9 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool, config: &Config) -> Result<Self, Error> {
+    pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         let backend = if let Some(c) = s3::s3_client() {
-            StorageBackend::S3(Box::new(S3Backend::new(c, config)?))
+            StorageBackend::S3(Box::new(S3Backend::new(c, metrics, config)?))
         } else {
             StorageBackend::Database(DatabaseBackend::new(pool))
         };
@@ -86,10 +87,11 @@ impl Storage {
     }
 
     #[cfg(test)]
-    pub(crate) fn temp_new_s3(config: &Config) -> Result<Self, Error> {
+    pub(crate) fn temp_new_s3(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         Ok(Storage {
             backend: StorageBackend::S3(Box::new(S3Backend::new(
                 s3::s3_client().unwrap(),
+                metrics,
                 config,
             )?)),
         })

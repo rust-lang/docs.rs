@@ -1,5 +1,5 @@
 use crate::web::page::TemplateData;
-use crate::{db::Pool, BuildQueue, Config, Context, Storage};
+use crate::{db::Pool, BuildQueue, Config, Context, Metrics, Storage};
 use failure::Error;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
@@ -10,6 +10,7 @@ pub(super) struct InjectExtensions {
     pool: Pool,
     config: Arc<Config>,
     storage: Arc<Storage>,
+    metrics: Arc<Metrics>,
     template_data: Arc<TemplateData>,
 }
 
@@ -23,6 +24,7 @@ impl InjectExtensions {
             pool: context.pool()?,
             config: context.config()?,
             storage: context.storage()?,
+            metrics: context.metrics()?,
             template_data,
         })
     }
@@ -35,6 +37,7 @@ impl BeforeMiddleware for InjectExtensions {
         req.extensions.insert::<Pool>(self.pool.clone());
         req.extensions.insert::<Config>(self.config.clone());
         req.extensions.insert::<Storage>(self.storage.clone());
+        req.extensions.insert::<Metrics>(self.metrics.clone());
         req.extensions
             .insert::<TemplateData>(self.template_data.clone());
 
@@ -54,4 +57,5 @@ key!(BuildQueue => Arc<BuildQueue>);
 key!(Pool => Pool);
 key!(Config => Arc<Config>);
 key!(Storage => Arc<Storage>);
+key!(Metrics => Arc<Metrics>);
 key!(TemplateData => Arc<TemplateData>);
