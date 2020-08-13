@@ -59,10 +59,7 @@ impl<'a> FakeRelease<'a> {
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
                 build_log: "It works!".into(),
                 successful: true,
-                doc_coverage: Some(DocCoverage {
-                    total_items: 10,
-                    documented_items: 6,
-                }),
+                doc_coverage: None,
             },
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
@@ -186,6 +183,14 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn coverage(mut self, documented_items: i32, total_items: i32) -> Self {
+        self.build_result.doc_coverage = Some(DocCoverage {
+            total_items,
+            documented_items,
+        });
+        self
+    }
+
     /// Returns the release_id
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::fs;
@@ -277,11 +282,9 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )?;
         crate::db::add_build_into_database(&mut db.conn(), release_id, &self.build_result)?;
-        crate::db::add_doc_coverage(
-            &mut db.conn(),
-            release_id,
-            self.build_result.doc_coverage.clone().unwrap(),
-        )?;
+        if let Some(coverage) = self.build_result.doc_coverage {
+            crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;
+        }
 
         Ok(release_id)
     }
