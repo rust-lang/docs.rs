@@ -6,42 +6,27 @@ pub(super) trait MetricFromOpts: Sized {
 macro_rules! metrics {
     (
         $vis:vis struct $name:ident {
-            $(
-                #[doc = $help:expr]
-                $(#[$meta:meta])*
-                $metric_vis:vis $metric:ident: $ty:ty $([$($label:expr),* $(,)?])?
-            ),* $(,)?
+            $(#[doc = $help:expr] $metric:ident: $ty:ty $([$($label:expr),*])?,)*
         }
         metrics visibility: $metric_vis:vis,
         namespace: $namespace:expr,
     ) => {
         $vis struct $name {
-            registry: prometheus::Registry,
-            $(
-                $(#[$meta])*
-                $metric_vis $metric: $ty,
-            )*
+            registry: Registry,
+            $($metric_vis $metric: $ty,)*
         }
         impl $name {
             $vis fn new() -> Result<Self, Error> {
                 let registry = Registry::new();
                 $(
-                    $(#[$meta])*
                     let $metric = <$ty>::from_opts(
                         Opts::new(stringify!($metric), $help)
                             .namespace($namespace)
                             $(.variable_labels(vec![$($label.into()),*]))?
                     )?;
-                    $(#[$meta])*
                     registry.register(Box::new($metric.clone()))?;
                 )*
-                Ok(Self {
-                    registry,
-                    $(
-                        $(#[$meta])*
-                        $metric,
-                    )*
-                })
+                Ok(Self { registry, $($metric,)* })
             }
         }
         impl std::fmt::Debug for $name {
