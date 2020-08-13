@@ -16,3 +16,4 @@ fi
 printf "\n"
 printf "\033[0;32mpre-commit hook succeeded\033[0m\n"
 exit 0
+
