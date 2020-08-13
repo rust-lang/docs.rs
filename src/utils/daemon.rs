@@ -9,16 +9,13 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn start_registry_watcher(
-    opts: DocBuilderOptions,
-    pool: Pool,
-    build_queue: Arc<BuildQueue>,
-    config: Arc<Config>,
-) -> Result<(), Error> {
+fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Result<(), Error> {
+    let pool = context.pool()?;
+    let build_queue = context.build_queue()?;
+    let config = context.config()?;
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
@@ -60,24 +57,18 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(
-            dbopts.clone(),
-            db.clone(),
-            build_queue.clone(),
-            config.clone(),
-        )?;
+        start_registry_watcher(dbopts.clone(), context)?;
     }
 
     // build new crates every minute
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
     let storage = context.storage()?;
-    let metrics = context.metrics()?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
             let doc_builder = DocBuilder::new(dbopts.clone(), pool.clone(), build_queue.clone());
-            queue_builder(doc_builder, pool, build_queue, metrics, storage).unwrap();
+            queue_builder(doc_builder, pool, build_queue, storage).unwrap();
         })
         .unwrap();
 
