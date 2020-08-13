@@ -52,7 +52,7 @@ impl Index {
     }
 
     pub fn run_git_gc(&self) {
-        let cmd = format!("cd {} && git gc --auto", self.path.to_str().unwrap());
+        let cmd = format!("cd {} && gc --auto", self.path.to_str().unwrap());
         let gc = Command::new("sh").args(&["-c", cmd.as_str()]).output();
         if let Err(err) = gc {
             log::error!("Failed to run `{}`: {:?}", cmd, err);
