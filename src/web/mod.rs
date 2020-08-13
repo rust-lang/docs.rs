@@ -638,14 +638,6 @@ mod test {
         node.select("#clipboard").unwrap().count() == 1
     }
 
-    fn check_doc_coverage_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
-        let data = web.get(path).send().unwrap().text().unwrap();
-        let node = kuchiki::parse_html().one(data);
-        node.select(".pure-menu-heading")
-            .unwrap()
-            .any(|e| e.text_contents().contains("Coverage"))
-    }
-
     #[test]
     fn test_index_returns_success() {
         wrapper(|env| {
@@ -659,20 +651,27 @@ mod test {
     fn test_doc_coverage_for_crate_pages() {
         wrapper(|env| {
             env.fake_release()
-                .name("fake_crate")
+                .name("foo")
                 .version("0.0.1")
                 .source_file("test.rs", &[])
-                .create()
-                .unwrap();
+                .coverage(6, 10)
+                .create()?;
             let web = env.frontend();
-            assert!(check_doc_coverage_is_present_for_path(
-                "/crate/fake_crate/0.0.1",
-                web
-            ));
-            assert!(check_doc_coverage_is_present_for_path(
-                "/fake_crate/0.0.1/fake_crate",
-                web
-            ));
+
+            let foo_crate = kuchiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
+            for value in &["60%", "6", "10"] {
+                assert!(foo_crate
+                    .select(".pure-menu-item b")
+                    .unwrap()
+                    .any(|e| e.text_contents().contains(value)));
+            }
+
+            let foo_doc = kuchiki::parse_html().one(web.get("/foo/0.0.1/foo").send()?.text()?);
+            assert!(foo_doc
+                .select(".pure-menu-link b")
+                .unwrap()
+                .any(|e| e.text_contents().contains("60%")));
+
             Ok(())
         });
     }
