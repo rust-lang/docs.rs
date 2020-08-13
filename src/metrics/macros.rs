@@ -8,6 +8,7 @@ macro_rules! metrics {
         $vis:vis struct $name:ident {
             $(
                 #[doc = $help:expr]
+                $(#[$meta:meta])*
                 $metric_vis:vis $metric:ident: $ty:ty $([$($label:expr),* $(,)?])?
             ),* $(,)?
         }
@@ -15,20 +16,31 @@ macro_rules! metrics {
     ) => {
         $vis struct $name {
             registry: prometheus::Registry,
-            $($metric_vis $metric: $ty,)*
+            $(
+                $(#[$meta])*
+                $metric_vis $metric: $ty,
+            )*
         }
         impl $name {
             $vis fn new() -> Result<Self, prometheus::Error> {
                 let registry = prometheus::Registry::new();
                 $(
+                    $(#[$meta])*
                     let $metric = <$ty>::from_opts(
                         prometheus::Opts::new(stringify!($metric), $help)
                             .namespace($namespace)
                             $(.variable_labels(vec![$($label.into()),*]))?
                     )?;
+                    $(#[$meta])*
                     registry.register(Box::new($metric.clone()))?;
                 )*
-                Ok(Self { registry, $($metric,)* })
+                Ok(Self {
+                    registry,
+                    $(
+                        $(#[$meta])*
+                        $metric,
+                    )*
+                })
             }
         }
         impl std::fmt::Debug for $name {
