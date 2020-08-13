@@ -30,7 +30,7 @@ pub struct Config {
     pub(crate) max_file_size_html: usize,
     // The most memory that can be used to parse an HTML file
     pub(crate) max_parse_memory: usize,
-    // Time between 'git gc' calls in seconds
+    // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 }
 
