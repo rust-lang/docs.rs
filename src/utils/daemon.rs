@@ -11,18 +11,9 @@ use crate::{
 use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
-use std::process::Command;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-
-fn run_git_gc() {
-    let gc = Command::new("git").args(&["gc", "--auto"]).output();
-
-    if let Err(err) = gc {
-        log::error!("failed to run `git gc`: {:?}", err);
-    }
-}
 
 fn start_registry_watcher(
     opts: DocBuilderOptions,
@@ -35,7 +26,6 @@ fn start_registry_watcher(
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
-            run_git_gc();
             let mut last_gc = Instant::now();
 
             loop {
@@ -53,7 +43,7 @@ fn start_registry_watcher(
                 }
 
                 if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-                    run_git_gc();
+                    doc_builder.run_git_gc();
                     last_gc = Instant::now();
                 }
                 thread::sleep(Duration::from_secs(60));

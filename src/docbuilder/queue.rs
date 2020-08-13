@@ -7,6 +7,10 @@ use crates_index_diff::ChangeKind;
 use log::{debug, error};
 
 impl DocBuilder {
+    pub fn run_git_gc(&self) {
+        self.index.run_git_gc();
+    }
+
     /// Updates registry index repository and adds new crates into build queue.
     /// Returns the number of crates added
     pub fn get_new_crates(&mut self) -> Result<usize> {
