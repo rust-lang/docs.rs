@@ -5,7 +5,7 @@ use self::macros::MetricFromOpts;
 use crate::db::Pool;
 use crate::BuildQueue;
 use failure::Error;
-use prometheus::proto::MetricFamily;
+use prometheus::{proto::MetricFamily, Opts, Registry};
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -28,42 +28,37 @@ metrics! {
         /// The maximum number of database connections
         max_db_connections: IntGauge,
         /// Number of attempted and failed connections to the database
-        pub(crate) failed_db_connections: IntCounter,
+        failed_db_connections: IntCounter,
 
         /// The number of currently opened file descriptors
-        #[cfg(target_os = "linux")]
         open_file_descriptors: IntGauge,
         /// The number of threads being used by docs.rs
-        #[cfg(target_os = "linux")]
         running_threads: IntGauge,
 
         /// The traffic of various docs.rs routes
-        pub(crate) routes_visited: IntCounterVec["route"],
+        routes_visited: IntCounterVec["route"],
         /// The response times of various docs.rs routes
-        pub(crate) response_time: HistogramVec["route"],
+        response_time: HistogramVec["route"],
         /// The time it takes to render a rustdoc page
-        pub(crate) rustdoc_rendering_times: HistogramVec["step"],
+        rustdoc_rendering_times: HistogramVec["step"],
 
         /// Number of crates built
-        pub(crate) total_builds: IntCounter,
+        total_builds: IntCounter,
         /// Number of builds that successfully generated docs
-        pub(crate) successful_builds: IntCounter,
+        successful_builds: IntCounter,
         /// Number of builds that generated a compiler error
-        pub(crate) failed_builds: IntCounter,
+        failed_builds: IntCounter,
         /// Number of builds that did not complete due to not being a library
-        pub(crate) non_library_builds: IntCounter,
+        non_library_builds: IntCounter,
 
         /// Number of files uploaded to the storage backend
-        pub(crate) uploaded_files_total: IntCounter,
+        uploaded_files_total: IntCounter,
 
         /// The number of attempted files that failed due to a memory limit
-        pub(crate) html_rewrite_ooms: IntCounter,
+        html_rewrite_ooms: IntCounter,
     }
 
-    // The Rust prometheus library treats the namespace as the "prefix" of the metric name: a
-    // metric named `foo` with a prefix of `docsrs` will expose a metric called `docsrs_foo`.
-    //
-    // https://docs.rs/prometheus/0.9.0/prometheus/struct.Opts.html#structfield.namespace
+    metrics visibility: pub(crate),
     namespace: "docsrs",
 }
 
@@ -86,7 +81,7 @@ impl Metrics {
         Ok(self.registry.gather())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(linux))]
     fn gather_system_performance(&self) {}
 
     #[cfg(target_os = "linux")]
