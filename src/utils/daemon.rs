@@ -22,7 +22,6 @@ fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Res
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
             let mut last_gc = Instant::now();
-
             loop {
                 let mut doc_builder =
                     DocBuilder::new(opts.clone(), pool.clone(), build_queue.clone());
