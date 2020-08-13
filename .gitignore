@@ -8,3 +8,4 @@ target
 .vagrant
 .rustwide
 .rustwide-docker
+.idea/
