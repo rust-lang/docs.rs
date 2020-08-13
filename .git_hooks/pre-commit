@@ -1,13 +1,12 @@
 #!/usr/bin/env sh
-cargo fmt -- --check
-if [ "$?" != "0" ] ; then
+if ! cargo fmt -- --check ; then
   printf "\n"
   printf "\033[0;31mpre-commit hook failed during:\033[0m\n"
   printf "\033[0;31m\tcargo fmt -- --check\033[0m\n"
   exit 1
 fi
-cargo clippy --locked -- -D warnings
-if [ "$?" != "0" ] ; then
+
+if ! cargo clippy --locked -- -D warnings ; then
   printf "\n"
   printf "\033[0;31mpre-commit hook failed during:\033[0m\n"
   printf "\033[0;31m\tclippy --locked -- -D warning\033[0m\n"
