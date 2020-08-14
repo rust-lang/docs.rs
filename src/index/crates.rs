@@ -25,14 +25,14 @@ impl Crates {
                     if let Ok(krate) = Crate::from_slice(blob.content()) {
                         f(krate);
                     } else {
-                        log::warn!("Not a crate '{}'", entry.name().unwrap());
+                        log::warn!("not a crate '{}'", entry.name().unwrap());
                     }
                 }
                 Result::<(), failure::Error>::Ok(())
             })()
             .with_context(|_| {
                 format!(
-                    "Loading crate details from '{}'",
+                    "loading crate details from '{}'",
                     entry.name().unwrap_or("<unknown>")
                 )
             });

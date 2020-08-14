@@ -3,7 +3,6 @@
 #![allow(clippy::cognitive_complexity)]
 
 pub use self::build_queue::BuildQueue;
-
 pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::options::DocBuilderOptions;
