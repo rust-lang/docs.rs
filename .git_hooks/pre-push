@@ -1,11 +1,4 @@
 #!/usr/bin/env sh
-if ! docker-compose up -d db s3 ; then
-  printf "\n"
-  printf "\033[0;31mpre-push hook failed during:\033[0m\n"
-  printf "\033[0;31m\tdocker-compose up -d db s3\033[0m\n"
-  exit 1
-fi
-
 if ! cargo test ; then
   printf "\n"
   printf "\033[0;31mpre-push hook failed during:\033[0m\n"
