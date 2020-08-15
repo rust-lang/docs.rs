@@ -84,4 +84,8 @@ impl DocBuilder {
 
         Ok(processed)
     }
+
+    pub fn run_git_gc(&self) {
+        self.index.run_git_gc();
+    }
 }

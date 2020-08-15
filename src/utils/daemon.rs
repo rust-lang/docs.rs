@@ -10,16 +10,20 @@ use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Result<(), Error> {
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
+    let config = context.config()?;
+
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
+
+            let mut last_gc = Instant::now();
             loop {
                 let mut doc_builder =
                     DocBuilder::new(opts.clone(), pool.clone(), build_queue.clone());
@@ -34,6 +38,10 @@ fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Res
                     }
                 }
 
+                if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+                    doc_builder.run_git_gc();
+                    last_gc = Instant::now();
+                }
                 thread::sleep(Duration::from_secs(60));
             }
         })?;
