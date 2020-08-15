@@ -15,10 +15,7 @@ macro_rules! ctry {
                 let request: &::iron::Request = $req;
 
                 ::log::error!(
-                    "called ctry!() on an `Err` value in {}:{}:{}: {}\nclient attempted to fetch the route {:?}\n{:?}",
-                    file!(),
-                    line!(),
-                    column!(),
+                    "called ctry!() on an `Err` value while attempting to fetch the route {:?}\n{:?}",
                     error,
                     request.url,
                     ::backtrace::Backtrace::new(),
@@ -50,10 +47,7 @@ macro_rules! cexpect {
                 let request: &::iron::Request = $req;
 
                 ::log::error!(
-                    "called cexpect!() on a `None` value in {}:{}:{}\nclient attempted to fetch the route {:?}\n{:?}",
-                    file!(),
-                    line!(),
-                    column!(),
+                    "called cexpect!() on a `None` value while attempting to fetch the route {:?}\n{:?}",
                     request.url,
                     ::backtrace::Backtrace::new(),
                 );
