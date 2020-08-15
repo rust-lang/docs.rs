@@ -3,7 +3,7 @@ fd_hard_limit="$(ulimit -n -H)"
 if [ "$fd_hard_limit" = "unlimited" ] ; then
   ulimit -n 4096
 else
-  ulimit -n "$(ulimit -n -H)"
+  ulimit -n "$fd_hard_limit"
 fi
 
 if ! cargo test ; then
