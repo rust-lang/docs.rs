@@ -46,6 +46,8 @@ git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
 # Configure the default settings for external services
 cp .env.sample .env
+# Create the CRATESFYI_PREFIX directory
+mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 cargo build
 # Start the extenal services
@@ -53,7 +55,7 @@ docker-compose up -d db s3
 # Build a sample crate to make sure it works
 # This sets up the docs.rs build environment, including installing the nightly
 # Rust toolchain. This will take a while the first time but will be cached afterwards.
-cargo run web build crate regex 1.3.1
+cargo run -- build crate regex 1.3.1
 # This starts the web server but does not build any crates.
 cargo run start-web-server
 ```
@@ -158,13 +160,13 @@ cargo run -- build crate --local /path/to/source
 
 ```sh
 # Adds a directory into database to serve with `staticfile` crate.
-docker-compose run web database add-directory <DIRECTORY> [PREFIX]
+docker-compose run -- database add-directory <DIRECTORY> [PREFIX]
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # You can set this environment variables in ~/.cratesfyi.env file.
-docker-compose run web database update-github-fields
+docker-compose run -- database update-github-fields
 ```
 
 If you want to explore or edit database manually, you can connect to the database
