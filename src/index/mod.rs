@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use url::Url;
 
@@ -70,6 +73,21 @@ impl Index {
 
     pub fn api(&self) -> &Api {
         &self.api
+    }
+
+    pub fn run_git_gc(&self) {
+        let gc = Command::new("git")
+            .arg("-C")
+            .arg(&self.path)
+            .args(&["gc", "--auto"])
+            .output();
+        if let Err(err) = gc {
+            log::error!(
+                "Failed to run `git gc --auto`\nPath: {:#?}\nError:{:#?}",
+                &self.path,
+                err
+            );
+        }
     }
 }
 
