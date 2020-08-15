@@ -16,6 +16,7 @@ fn start_registry_watcher(opts: DocBuilderOptions, context: &dyn Context) -> Res
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
     let config = context.config()?;
+
     thread::Builder::new()
         .name("registry index reader".to_string())
         .spawn(move || {
