@@ -6,12 +6,23 @@ use log::{debug, info};
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
+#[macro_export]
 macro_rules! ctry {
     ($req:expr, $result:expr $(,)?) => {
         match $result {
             Ok(success) => success,
             Err(error) => {
-                ::log::error!("{}\n{:?}", error, ::backtrace::Backtrace::new());
+                let request: &::iron::Request = $req;
+
+                ::log::error!(
+                    "called ctry!() on an `Err` value in {}:{}:{}: {}\nclient attempted to fetch the route {:?}\n{:?}",
+                    file!(),
+                    line!(),
+                    column!(),
+                    error,
+                    request.url,
+                    ::backtrace::Backtrace::new(),
+                );
 
                 // This is very ugly, but it makes it impossible to get a type inference error
                 // from this macro
@@ -23,7 +34,7 @@ macro_rules! ctry {
                     status: ::iron::status::BadRequest,
                 };
 
-                return $crate::web::page::WebPage::into_response(error, $req);
+                return $crate::web::page::WebPage::into_response(error, request);
             }
         }
     };
@@ -36,8 +47,14 @@ macro_rules! cexpect {
         match $option {
             Some(success) => success,
             None => {
+                let request: &::iron::Request = $req;
+
                 ::log::error!(
-                    "called cexpect!() on a `None` value\n{:?}",
+                    "called cexpect!() on a `None` value in {}:{}:{}\nclient attempted to fetch the route {:?}\n{:?}",
+                    file!(),
+                    line!(),
+                    column!(),
+                    request.url,
                     ::backtrace::Backtrace::new(),
                 );
 
@@ -49,7 +66,7 @@ macro_rules! cexpect {
                     status: ::iron::status::BadRequest,
                 };
 
-                return $crate::web::page::WebPage::into_response(error, $req);
+                return $crate::web::page::WebPage::into_response(error, request);
             }
         }
     };
