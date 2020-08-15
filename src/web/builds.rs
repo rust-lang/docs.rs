@@ -26,7 +26,7 @@ pub(crate) struct Build {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BuildsPage {
-    metadata: Option<MetaData>,
+    metadata: MetaData,
     builds: Vec<Build>,
     build_details: Option<Build>,
     limits: Limits,
@@ -59,11 +59,11 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                 builds.build_status,
                 builds.build_time,
                 builds.output
-         FROM builds
-         INNER JOIN releases ON releases.id = builds.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE crates.name = $1 AND releases.version = $2
-         ORDER BY id DESC",
+             FROM builds
+             INNER JOIN releases ON releases.id = builds.rid
+             INNER JOIN crates ON releases.crate_id = crates.id
+             WHERE crates.name = $1 AND releases.version = $2
+             ORDER BY id DESC",
             &[&name, &version]
         )
     );
@@ -111,7 +111,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     } else {
         BuildsPage {
-            metadata: MetaData::from_crate(&mut conn, &name, &version),
+            metadata: cexpect!(req, MetaData::from_crate(&mut conn, &name, &version)),
             builds,
             build_details,
             limits,

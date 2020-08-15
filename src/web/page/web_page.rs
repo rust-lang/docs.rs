@@ -1,4 +1,5 @@
 use super::TemplateData;
+use crate::ctry;
 use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
 use serde::Serialize;
 use std::borrow::Cow;
@@ -10,6 +11,7 @@ macro_rules! impl_webpage {
     ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
     };
+
     ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl $crate::web::page::WebPage for $page {
             fn template(&self) -> ::std::borrow::Cow<'static, str> {
@@ -39,14 +41,15 @@ pub trait WebPage: Serialize + Sized {
     // TODO: We could cache similar pages using the `&Context`
     fn into_response(self, req: &Request) -> IronResult<Response> {
         let ctx = Context::from_serialize(&self).unwrap();
-        let rendered = req
-            .extensions
-            .get::<TemplateData>()
-            .expect("missing TemplateData from the request extensions")
-            .templates
-            .load()
-            .render(&self.template(), &ctx)
-            .unwrap();
+        let rendered = ctry!(
+            req,
+            req.extensions
+                .get::<TemplateData>()
+                .expect("missing TemplateData from the request extensions")
+                .templates
+                .load()
+                .render(&self.template(), &ctx)
+        );
 
         let mut response = Response::with((self.get_status(), rendered));
         response.headers.set(Self::content_type());
