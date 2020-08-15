@@ -46,6 +46,8 @@ git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
 # Configure the default settings for external services
 cp .env.sample .env
+# Create the CRATESFYI_PREFIX directory
+mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 cargo build
 # Start the extenal services
@@ -53,7 +55,7 @@ docker-compose up -d db s3
 # Build a sample crate to make sure it works
 # This sets up the docs.rs build environment, including installing the nightly
 # Rust toolchain. This will take a while the first time but will be cached afterwards.
-cargo run web build crate regex 1.3.1
+cargo run build crate regex 1.3.1
 # This starts the web server but does not build any crates.
 cargo run start-web-server
 ```
