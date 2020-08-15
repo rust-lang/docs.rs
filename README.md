@@ -55,7 +55,7 @@ docker-compose up -d db s3
 # Build a sample crate to make sure it works
 # This sets up the docs.rs build environment, including installing the nightly
 # Rust toolchain. This will take a while the first time but will be cached afterwards.
-cargo run build crate regex 1.3.1
+cargo run -- build crate regex 1.3.1
 # This starts the web server but does not build any crates.
 cargo run start-web-server
 ```
