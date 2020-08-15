@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+if ! cargo fmt -- --check ; then
+  printf "\n"
+  printf "\033[0;31mpre-commit hook failed during:\033[0m\n"
+  printf "\033[0;31m\tcargo fmt -- --check\033[0m\n"
+  exit 1
+fi
+
+if ! cargo clippy --locked -- -D warnings ; then
+  printf "\n"
+  printf "\033[0;31mpre-commit hook failed during:\033[0m\n"
+  printf "\033[0;31m\tclippy --locked -- -D warning\033[0m\n"
+  exit 1
+fi
+
+printf "\n"
+printf "\033[0;32mpre-commit hook succeeded\033[0m\n"
