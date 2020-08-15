@@ -81,6 +81,7 @@ impl Index {
             .arg(&self.path)
             .args(&["gc", "--auto"])
             .output();
+
         if let Err(err) = gc {
             log::error!(
                 "Failed to run `git gc --auto`\nPath: {:#?}\nError:{:#?}",
