@@ -160,13 +160,13 @@ cargo run -- build crate --local /path/to/source
 
 ```sh
 # Adds a directory into database to serve with `staticfile` crate.
-docker-compose run web database add-directory <DIRECTORY> [PREFIX]
+docker-compose run -- database add-directory <DIRECTORY> [PREFIX]
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # You can set this environment variables in ~/.cratesfyi.env file.
-docker-compose run web database update-github-fields
+docker-compose run -- database update-github-fields
 ```
 
 If you want to explore or edit database manually, you can connect to the database
