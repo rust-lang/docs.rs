@@ -86,11 +86,11 @@ serve_static_files! {
 fn static_file_that_doesnt_exist() {
     crate::test::wrapper(|env| {
         let web = env.frontend();
-        assert!(web
+        assert_eq!(web
             .get("/-/static/whoop-de-do.png")
             .send()?
             .status()
-            .is_client_error());
+            .as_u16(), 404);
 
         Ok(())
     });
