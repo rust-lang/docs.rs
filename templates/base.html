@@ -9,20 +9,11 @@
         <meta name="generator" content="docs.rs {{ docsrs_version() }}">
         {%- block meta -%}{%- endblock meta -%}
 
-        {# External styles #}
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/pure-min.css" type="text/css"
-            media="all" />
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/grids-responsive-min.css"
-            type="text/css" media="all" />
-        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.14.0/css/all.css" />
-
         {# Docs.rs styles #}
         <link rel="stylesheet" href="/normalize-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
         <link rel="stylesheet" href="/rustdoc-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
         <link rel="stylesheet" href="/light-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
         <link rel="stylesheet" href="/style.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
-
-        {%- block css -%}{%- endblock css -%}
 
         <link rel="search" href="/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs">
 
@@ -30,16 +21,20 @@
     </head>
 
     <body>
+        {# External styles, loaded in the body so the site will be available even if these don't load #}
+        {%- block css -%}{%- endblock css -%}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/pure-min.css" type="text/css"
+            media="all" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/grids-responsive-min.css"
+            type="text/css" media="all" />
+        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.14.0/css/all.css" />
+
         {%- include "header/topbar.html" -%}
-
         {%- block header %}{% endblock header -%}
-
         {%- block body -%}{%- endblock body -%}
+
+        <script type="text/javascript" src="/menu.js?{{ docsrs_version() | slugify }}"></script>
+        <script type="text/javascript" src="/index.js?{{ docsrs_version() | slugify }}"></script>
+        {%- block javascript -%}{%- endblock javascript -%}
     </body>
-
-    <script type="text/javascript" src="/menu.js?{{ docsrs_version() | slugify }}"></script>
-    <script type="text/javascript" src="/index.js?{{ docsrs_version() | slugify }}"></script>
-
-    {%- block javascript -%}{%- endblock javascript -%}
-
 </html>

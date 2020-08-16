@@ -3,6 +3,13 @@
 {# The url of the current release, `/crate/:name/:version` #}
 {%- set crate_url = "/crate/" ~ krate.name ~ "/" ~ krate.version -%}
 
+{# Load CSS in the body, not the head, so that pages will still be visible even if the external provider goes down #}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/menus-min.css" type="text/css"
+    media="all" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pure/0.6.0/grids-min.css" type="text/css"
+    media="all" />
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.14.0/css/all.css" />
+
 <div class="nav-container nav-container-rustdoc">
     <div class="container-rustdoc rustdoc-navigation">
         <div class="pure-menu pure-menu-horizontal">
