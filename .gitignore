@@ -4,6 +4,7 @@
 target
 *.css
 *.css.map
+!vendor/**/*.css
 .sass-cache
 .vagrant
 .rustwide

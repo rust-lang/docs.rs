@@ -663,7 +663,7 @@ mod tests {
                 .create()?;
 
             let details = CrateDetails::new(&mut db.conn(), "foo", "0.0.1").unwrap();
-            let mut owners = details.owners.clone();
+            let mut owners = details.owners;
             owners.sort();
             assert_eq!(
                 owners,

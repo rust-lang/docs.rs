@@ -18,6 +18,7 @@ pub(super) fn build_routes() -> Routes {
     routes.static_resource("/robots.txt", super::sitemap::robots_txt_handler);
     routes.static_resource("/sitemap.xml", super::sitemap::sitemap_handler);
     routes.static_resource("/opensearch.xml", super::opensearch_xml_handler);
+    routes.static_resource("/-/static/:file", super::statics::static_handler);
 
     routes.internal_page("/", super::releases::home_page);
 

@@ -190,7 +190,7 @@ impl Storage {
 
     #[cfg(test)]
     pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<(), Error> {
-        self.store_inner(blobs.into_iter().map(|blob| Ok(blob)))
+        self.store_inner(blobs.into_iter().map(Ok))
     }
 
     fn store_inner(
@@ -276,7 +276,7 @@ mod test {
         crate::test::init_logger();
         let files = get_file_list(env::current_dir().unwrap());
         assert!(files.is_ok());
-        assert!(files.unwrap().len() > 0);
+        assert!(!files.unwrap().is_empty());
 
         let files = get_file_list(env::current_dir().unwrap().join("Cargo.toml")).unwrap();
         assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
@@ -375,7 +375,7 @@ mod backend_tests {
             compression: None,
         };
 
-        storage.store_blobs(vec![small_blob.clone(), big_blob.clone()])?;
+        storage.store_blobs(vec![small_blob.clone(), big_blob])?;
 
         let blob = storage.get("small-blob.bin", MAX_SIZE)?;
         assert_eq!(blob.content.len(), small_blob.content.len());
@@ -480,7 +480,7 @@ mod backend_tests {
                     mime: "text/rust".into(),
                     content,
                     path: format!("{}.rs", i),
-                    date_updated: now.clone(),
+                    date_updated: now,
                     compression: None,
                 }
             })

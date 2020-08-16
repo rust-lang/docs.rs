@@ -87,6 +87,7 @@ mod routes;
 mod rustdoc;
 mod sitemap;
 mod source;
+mod statics;
 
 use crate::{impl_webpage, Context};
 use chrono::{DateTime, Utc};
