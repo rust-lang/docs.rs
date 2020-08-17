@@ -62,7 +62,7 @@ where
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Release {
-    pub version: String,
+    pub version: semver::Version,
     pub build_status: bool,
     pub yanked: bool,
     pub is_library: bool,
@@ -129,8 +129,8 @@ impl CrateDetails {
             versions.sort();
             versions.reverse();
             versions
-                .iter()
-                .map(|version| map_to_release(conn, crate_id, version.to_string()))
+                .into_iter()
+                .map(|version| map_to_release(conn, crate_id, version))
                 .collect()
         };
 
@@ -234,24 +234,24 @@ impl CrateDetails {
                 .releases
                 .iter()
                 .filter(|release| release.build_status && !release.yanked)
-                .map(|release| release.version.to_owned())
+                .map(|release| release.version.to_string())
                 .next();
         }
 
         Some(crate_details)
     }
 
-    /// Returns the latest non-yanked release of this crate (or latest yanked if they are all
-    /// yanked).
+    /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
+    /// yanked/prereleased if that is all that exist).
     pub fn latest_release(&self) -> &Release {
         self.releases
             .iter()
-            .find(|release| !release.yanked)
+            .find(|release| !release.version.is_prerelease() && !release.yanked)
             .unwrap_or(&self.releases[0])
     }
 }
 
-fn map_to_release(conn: &mut Client, crate_id: i32, version: String) -> Release {
+fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) -> Release {
     let rows = conn
         .query(
             "SELECT build_status,
@@ -259,7 +259,7 @@ fn map_to_release(conn: &mut Client, crate_id: i32, version: String) -> Release 
                     is_library
              FROM releases
              WHERE releases.crate_id = $1 and releases.version = $2;",
-            &[&crate_id, &version],
+            &[&crate_id, &version.to_string()],
         )
         .unwrap();
 
@@ -469,49 +469,49 @@ mod tests {
                 details.releases,
                 vec![
                     Release {
-                        version: "1.0.0".to_string(),
+                        version: semver::Version::parse("1.0.0")?,
                         build_status: true,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.12.0".to_string(),
+                        version: semver::Version::parse("0.12.0")?,
                         build_status: true,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.3.0".to_string(),
+                        version: semver::Version::parse("0.3.0")?,
                         build_status: false,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.2.0".to_string(),
+                        version: semver::Version::parse("0.2.0")?,
                         build_status: true,
                         yanked: true,
                         is_library: true,
                     },
                     Release {
-                        version: "0.2.0-alpha".to_string(),
+                        version: semver::Version::parse("0.2.0-alpha")?,
                         build_status: true,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.1.1".to_string(),
+                        version: semver::Version::parse("0.1.1")?,
                         build_status: true,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.1.0".to_string(),
+                        version: semver::Version::parse("0.1.0")?,
                         build_status: true,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
-                        version: "0.0.1".to_string(),
+                        version: semver::Version::parse("0.0.1")?,
                         build_status: false,
                         yanked: false,
                         is_library: false,
@@ -534,7 +534,25 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, "0.0.3");
+                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.3")?);
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_latest_version_ignores_prerelease() {
+        wrapper(|env| {
+            let db = env.db();
+
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release().name("foo").version("0.0.3-pre.1").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
+
+            for version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
+                let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
+                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.2")?);
             }
 
             Ok(())
@@ -556,7 +574,7 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, "0.0.2");
+                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.2")?);
             }
 
             Ok(())
@@ -586,7 +604,7 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, "0.0.3");
+                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.3")?);
             }
 
             Ok(())
