@@ -20,6 +20,7 @@ pub(crate) fn rewrite_lol(
     let templates = templates.templates.load();
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
     let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();
+    let tera_rustdoc_header = templates.render("rustdoc/header.html", &ctx).unwrap();
 
     let head_handler = |head: &mut Element| {
         head.append(&tera_head, ContentType::Html);
@@ -51,8 +52,11 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.set_tag_name("div")?;
         // Prepend the tera content
         rustdoc_body_class.prepend(&tera_body, ContentType::Html);
-        // Now, make this a full <body> tag
+        // Wrap the tranformed body and rustdoc header into a <body> element
         rustdoc_body_class.before("<body>", ContentType::Html);
+        // Insert the header outside of the rustdoc div
+        rustdoc_body_class.before(&tera_rustdoc_header, ContentType::Html);
+        // Finalize body with </body>
         rustdoc_body_class.after("</body>", ContentType::Html);
 
         Ok(())
