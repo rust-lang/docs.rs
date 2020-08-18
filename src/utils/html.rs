@@ -54,7 +54,7 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.prepend(&tera_body, ContentType::Html);
         // Wrap the tranformed body and rustdoc header into a <body> element
         rustdoc_body_class.before("<body>", ContentType::Html);
-        // Insert rustdoc's header
+        // Insert the header outside of the rustdoc div
         rustdoc_body_class.before(&tera_rustdoc_header, ContentType::Html);
         // Finalize body with </body>
         rustdoc_body_class.after("</body>", ContentType::Html);
