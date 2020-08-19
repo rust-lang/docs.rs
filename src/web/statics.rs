@@ -8,7 +8,7 @@ use iron::{
 };
 use mime_guess::MimeGuess;
 use router::Router;
-use std::{fs, path::Path};
+use std::{ffi::OsStr, fs, path::Path};
 
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
@@ -49,9 +49,22 @@ fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
     let contents = ctry!(req, fs::read(&path));
 
     // If we can detect the file's mime type, set it
-    let content_type = MimeGuess::from_path(&path)
-        .first()
-        .map(|mime| ContentType(mime.as_ref().parse().unwrap()));
+    // MimeGuess misses a lot of the file types we need, so there's a small wrapper
+    // around it
+    let content_type = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .and_then(|ext| match ext {
+            "eot" => Some(ContentType(
+                "application/vnd.ms-fontobject".parse().unwrap(),
+            )),
+            "woff2" => Some(ContentType("application/font-woff2".parse().unwrap())),
+            "ttf" => Some(ContentType("application/x-font-ttf".parse().unwrap())),
+
+            _ => MimeGuess::from_path(&path)
+                .first()
+                .map(|mime| ContentType(mime.as_ref().parse().unwrap())),
+        });
 
     serve_resource(contents, content_type)
 }
@@ -200,8 +213,38 @@ mod tests {
                     .send()?
                     .status()
                     .as_u16(),
-                404
+                404,
             );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn static_mime_types() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let files = &[
+                ("pure-min.css", "text/css"),
+                ("fa-brands-400.eot", "application/vnd.ms-fontobject"),
+                ("fa-brands-400.svg", "image/svg+xml"),
+                ("fa-brands-400.ttf", "application/x-font-ttf"),
+                ("fa-brands-400.woff", "application/font-woff"),
+                ("fa-brands-400.woff2", "application/font-woff2"),
+            ];
+
+            for (file, mime) in files {
+                let url = format!("/-/static/{}", file);
+                let resp = web.get(&url).send()?;
+
+                assert_eq!(
+                    resp.headers().get("Content-Type"),
+                    Some(&mime.parse().unwrap()),
+                    "{:?} has an incorrect content type",
+                    url,
+                );
+            }
 
             Ok(())
         });
