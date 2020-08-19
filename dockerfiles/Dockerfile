@@ -50,6 +50,7 @@ RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style templates/style
 COPY templates/index.js templates/
 COPY templates/menu.js templates/
+COPY vendor vendor/
 
 RUN cargo build --release
 

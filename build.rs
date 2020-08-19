@@ -67,7 +67,7 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
         include_paths: vec![
             STYLE_DIR.to_owned(),
             concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/fontawesome/scss").to_owned(),
-            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css").to_owned(),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned(),
         ],
         ..Default::default()
     });
