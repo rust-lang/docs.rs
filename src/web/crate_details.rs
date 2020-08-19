@@ -534,7 +534,10 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.3")?);
+                assert_eq!(
+                    details.latest_release().version,
+                    semver::Version::parse("0.0.3")?
+                );
             }
 
             Ok(())
@@ -547,12 +550,18 @@ mod tests {
             let db = env.db();
 
             env.fake_release().name("foo").version("0.0.1").create()?;
-            env.fake_release().name("foo").version("0.0.3-pre.1").create()?;
+            env.fake_release()
+                .name("foo")
+                .version("0.0.3-pre.1")
+                .create()?;
             env.fake_release().name("foo").version("0.0.2").create()?;
 
             for version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.2")?);
+                assert_eq!(
+                    details.latest_release().version,
+                    semver::Version::parse("0.0.2")?
+                );
             }
 
             Ok(())
@@ -574,7 +583,10 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.2")?);
+                assert_eq!(
+                    details.latest_release().version,
+                    semver::Version::parse("0.0.2")?
+                );
             }
 
             Ok(())
@@ -604,7 +616,10 @@ mod tests {
 
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = CrateDetails::new(&mut db.conn(), "foo", version).unwrap();
-                assert_eq!(details.latest_release().version, semver::Version::parse("0.0.3")?);
+                assert_eq!(
+                    details.latest_release().version,
+                    semver::Version::parse("0.0.3")?
+                );
             }
 
             Ok(())
