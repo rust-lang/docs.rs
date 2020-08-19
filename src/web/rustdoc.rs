@@ -366,7 +366,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let latest_release = krate.latest_release();
 
     // Get the latest version of the crate
-    let latest_version = latest_release.version.to_owned();
+    let latest_version = latest_release.version.to_string();
     let is_latest_version = latest_version == version;
 
     // If the requested crate version is the most recent, use it to build the url
