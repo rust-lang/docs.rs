@@ -689,6 +689,7 @@ mod tests {
     use chrono::TimeZone;
     use failure::Error;
     use kuchiki::traits::TendrilSink;
+    use std::collections::HashSet;
 
     #[test]
     fn database_search() {
@@ -1169,5 +1170,48 @@ mod tests {
                 .create()?;
             assert_success("/releases/frankenstein", web)
         })
+    }
+
+    #[test]
+    fn home_page_links() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release()
+                .name("some_random_crate")
+                .author("frankenstein <frankie@stein.com>")
+                .create()?;
+
+            let mut urls = vec![];
+            let mut seen = HashSet::new();
+            seen.insert("".to_owned());
+
+            let resp = web.get("").send()?;
+            assert!(resp.status().is_success());
+
+            let html = kuchiki::parse_html().one(resp.text()?);
+            for link in html.select("a").unwrap() {
+                let link = link.as_node().as_element().unwrap();
+
+                urls.push(link.attributes.borrow().get("href").unwrap().to_owned());
+            }
+
+            while let Some(url) = urls.pop() {
+                // Skip urls we've already checked
+                if !seen.insert(url.clone()) {
+                    continue;
+                }
+
+                let resp = if url.starts_with("http://") || url.starts_with("https://") {
+                    // Skip external links
+                    continue;
+                } else {
+                    web.get(&url).send()?
+                };
+                let status = resp.status();
+                assert!(status.is_success(), "failed to GET {}: {}", url, status);
+            }
+
+            Ok(())
+        });
     }
 }
