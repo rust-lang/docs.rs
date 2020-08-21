@@ -125,7 +125,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
-        return super::statics::ico_handler(req);
+        return super::ico_handler(req);
     }
 
     let router = extension!(req, Router);

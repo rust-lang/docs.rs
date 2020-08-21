@@ -210,21 +210,6 @@ cargo run -- daemon --registry-watcher=disabled
 cargo run -- queue add <CRATE> <VERSION>
 ```
 
-### Updating vendored sources
-
-The instructions & links for updating Font Awesome can be found [on their website](https://fontawesome.com/how-to-use/on-the-web/using-with/sass). Similarly, Pure-CSS also [explains on theirs](https://purecss.io/start/).
-
-When updating Font Awesome, make sure to change `$fa-font-path` in `scss/_variables.scss` (it should be at the top of the file) to `../-/static`. This will point font awesome at the correct path from which to request font and icon resources.
-<!--
-    TODO: Whenever scss modules are avaliable, use [scss modules](https://sass-lang.com/documentation/at-rules/use#configuration)
-    instead of manually editing the `_variables.scss` file. Something like this should work:
-    ```scss
-    @use "fontawesome" with (
-        $fa-font-path: "../-/static"
-    );
-    ```
--->
-
 ### Contact
 
 Docs.rs is run and maintained by the [docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#docs-rs).

@@ -117,8 +117,8 @@ mod tests {
             ("/", "/"),
             ("/crate/hexponent/0.2.0", "/crate/:name/:version"),
             ("/crate/rcc/0.0.0", "/crate/:name/:version"),
-            ("/-/static/index.js", "static resource"),
-            ("/-/static/menu.js", "static resource"),
+            ("/index.js", "static resource"),
+            ("/menu.js", "static resource"),
             ("/opensearch.xml", "static resource"),
             ("/releases", "/releases"),
             ("/releases/feed", "static resource"),
@@ -131,7 +131,7 @@ mod tests {
             ("/releases/recent/1", "/releases/recent/:page"),
             ("/robots.txt", "static resource"),
             ("/sitemap.xml", "static resource"),
-            ("/-/static/style.css", "static resource"),
+            ("/style.css", "static resource"),
         ];
 
         wrapper(|env| {

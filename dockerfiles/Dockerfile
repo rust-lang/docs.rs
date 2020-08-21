@@ -50,7 +50,6 @@ RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style templates/style
 COPY templates/index.js templates/
 COPY templates/menu.js templates/
-COPY vendor vendor/
 
 RUN cargo build --release
 
@@ -76,7 +75,6 @@ COPY --from=build /build/target/release/cratesfyi /usr/local/bin
 COPY static /opt/docsrs/prefix/public_html
 COPY templates /opt/docsrs/templates
 COPY dockerfiles/entrypoint.sh /opt/docsrs/
-COPY vendor vendor/
 
 WORKDIR /opt/docsrs
 ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
