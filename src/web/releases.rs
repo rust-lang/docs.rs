@@ -85,7 +85,9 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             crates.github_stars
         FROM crates
         INNER JOIN releases ON crates.id = releases.crate_id
-        WHERE (NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)
+        WHERE
+            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
+            AND crates.latest_version_id = releases.id
         ORDER BY {} DESC
         LIMIT $1 OFFSET $2",
         ordering,
@@ -1024,6 +1026,11 @@ mod tests {
             .name("crate_that_succeeded")
             .version("0.1.0")
             .create()?;
+        // make sure that crates get at most one release shown, so they don't crowd the page
+        env.fake_release()
+            .name("crate_that_succeeded")
+            .version("0.2.0")
+            .create()?;
         env.fake_release()
             .name("crate_that_failed")
             .version("0.1.0")
@@ -1046,7 +1053,7 @@ mod tests {
             let url = attributes.get("href").unwrap();
             if url.contains("crate_that_succeeded") {
                 assert_eq!(
-                    url, "/crate_that_succeeded/0.1.0/crate_that_succeeded",
+                    url, "/crate_that_succeeded/0.2.0/crate_that_succeeded",
                     "for path {}",
                     path
                 );
