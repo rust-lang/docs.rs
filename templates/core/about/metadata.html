@@ -16,3 +16,11 @@
 	<pre><code>{%- include "core/Cargo.toml.example" -%}</code></pre>
 	</div>
 {%- endblock body %}
+
+{% block css -%}
+    {{ macros::highlight_css() }}
+{%- endblock css %}
+
+{% block javascript -%}
+    {{ macros::highlight_js(languages=["ini"]) }}
+{%- endblock javascript %}
