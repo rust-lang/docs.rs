@@ -1,7 +1,5 @@
 use super::metrics::RequestRecorder;
-use crate::web::{INDEX_JS, MENU_JS};
 use iron::middleware::Handler;
-use iron::Request;
 use router::Router;
 use std::collections::HashSet;
 
@@ -12,12 +10,10 @@ pub(super) const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] =
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
 
-    routes.static_resource("/style.css", super::style_css_handler);
-    routes.static_resource("/index.js", |_: &mut Request| super::load_js(INDEX_JS));
-    routes.static_resource("/menu.js", |_: &mut Request| super::load_js(MENU_JS));
     routes.static_resource("/robots.txt", super::sitemap::robots_txt_handler);
     routes.static_resource("/sitemap.xml", super::sitemap::sitemap_handler);
     routes.static_resource("/opensearch.xml", super::opensearch_xml_handler);
+    routes.static_resource("/-/static/:file", super::statics::static_handler);
 
     routes.internal_page("/", super::releases::home_page);
 

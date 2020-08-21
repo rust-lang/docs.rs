@@ -22,6 +22,7 @@ fn main() {
     println!("cargo:rerun-if-changed=templates/style/_navbar.scss");
     println!("cargo:rerun-if-changed=templates/menu.js");
     println!("cargo:rerun-if-changed=templates/index.js");
+    println!("cargo:rerun-if-changed=vendor/");
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
@@ -63,7 +64,11 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
     let mut context = Context::new_file(format!("{}/base.scss", STYLE_DIR))?;
     context.set_options(Options {
         output_style: OutputStyle::Compressed,
-        include_paths: vec![STYLE_DIR.to_owned()],
+        include_paths: vec![
+            STYLE_DIR.to_owned(),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/fontawesome/scss").to_owned(),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned(),
+        ],
         ..Default::default()
     });
 

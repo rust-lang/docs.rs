@@ -87,6 +87,7 @@ mod routes;
 mod rustdoc;
 mod sitemap;
 mod source;
+mod statics;
 
 use crate::{impl_webpage, Context};
 use chrono::{DateTime, Utc};
@@ -110,9 +111,6 @@ use std::{borrow::Cow, env, fmt, net::SocketAddr, path::PathBuf, sync::Arc, time
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
-const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
-const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
 const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
@@ -495,35 +493,6 @@ fn redirect_base(req: &Request) -> String {
     }
 }
 
-fn style_css_handler(_: &mut Request) -> IronResult<Response> {
-    let mut response = Response::with((status::Ok, STYLE_CSS));
-    let cache = vec![
-        CacheDirective::Public,
-        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
-    ];
-
-    response
-        .headers
-        .set(ContentType("text/css".parse().unwrap()));
-    response.headers.set(CacheControl(cache));
-
-    Ok(response)
-}
-
-fn load_js(file_path_str: &'static str) -> IronResult<Response> {
-    let mut response = Response::with((status::Ok, file_path_str));
-    let cache = vec![
-        CacheDirective::Public,
-        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
-    ];
-    response
-        .headers
-        .set(ContentType("application/javascript".parse().unwrap()));
-    response.headers.set(CacheControl(cache));
-
-    Ok(response)
-}
-
 fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     let mut response = Response::with((status::Ok, OPENSEARCH_XML));
     let cache = vec![
@@ -537,26 +506,6 @@ fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
     response.headers.set(CacheControl(cache));
 
     Ok(response)
-}
-
-fn ico_handler(req: &mut Request) -> IronResult<Response> {
-    if let Some(&"favicon.ico") = req.url.path().last() {
-        // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
-        // from `public_html`, so return a 404 here to make the main handler carry on
-        Err(IronError::new(
-            error::Nope::ResourceNotFound,
-            status::NotFound,
-        ))
-    } else {
-        // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
-        // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/favicon.ico", redirect_base(req))),
-        );
-
-        Ok(redirect(url))
-    }
 }
 
 /// MetaData used in header
