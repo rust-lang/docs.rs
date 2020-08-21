@@ -242,16 +242,40 @@ fn dbg(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
 }
 
 /// Dedent a string by removing all leading whitespace
-fn dedent(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
+fn dedent(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let string = value.as_str().expect("dedent takes a string");
 
-    Ok(Value::String(
+    let unindented = if let Some(levels) = args
+        .get("levels")
+        .map(|l| l.as_i64().expect("`levels` must be an integer"))
+    {
+        string
+            .lines()
+            .map(|mut line| {
+                for _ in 0..levels {
+                    // `.strip_prefix` returns `Some(suffix without prefix)` if it's successful. If it fails
+                    // to strip the prefix (meaning there's less than `levels` levels of indentation),
+                    // we can just quit early
+                    if let Some(suffix) = line.strip_prefix("    ") {
+                        line = suffix;
+                    } else {
+                        break;
+                    }
+                }
+
+                line
+            })
+            .collect::<Vec<&str>>()
+            .join("\n")
+    } else {
         string
             .lines()
             .map(|l| l.trim_start())
             .collect::<Vec<&str>>()
-            .join("\n"),
-    ))
+            .join("\n")
+    };
+
+    Ok(Value::String(unindented))
 }
 
 enum IconType {
