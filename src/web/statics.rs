@@ -249,4 +249,26 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn directory_traversal() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let urls = &[
+                "../LICENSE.txt",
+                "%2e%2e%2fLICENSE.txt",
+                "%2e%2e/LICENSE.txt",
+                "..%2fLICENSE.txt",
+                "%2e%2e%5cLICENSE.txt",
+            ];
+
+            for url in urls {
+                let req = web.get(&format!("/-/static/{}", url)).send()?;
+                assert_eq!(req.status().as_u16(), 404);
+            }
+
+            Ok(())
+        });
+    }
 }

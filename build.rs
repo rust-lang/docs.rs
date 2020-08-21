@@ -23,6 +23,7 @@ fn main() {
     println!("cargo:rerun-if-changed=templates/menu.js");
     println!("cargo:rerun-if-changed=templates/index.js");
     println!("cargo:rerun-if-changed=vendor/");
+    println!("cargo:rerun-if-changed=vendor/fontawesome/scss/_variables.scss");
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
