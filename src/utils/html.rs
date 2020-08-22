@@ -19,9 +19,11 @@ pub(crate) fn rewrite_lol(
 
     let templates = templates.templates.load();
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
+    let tera_vendored_css = templates.render("rustdoc/vendored.html", &ctx).unwrap();
     let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();
     let tera_rustdoc_header = templates.render("rustdoc/header.html", &ctx).unwrap();
 
+    // Append `style.css` stylesheet after all head elements.
     let head_handler = |head: &mut Element| {
         head.append(&tera_head, ContentType::Html);
 
@@ -62,17 +64,34 @@ pub(crate) fn rewrite_lol(
         Ok(())
     };
 
-    let (head_selector, body_selector) = ("head".parse().unwrap(), "body".parse().unwrap());
-    let head = (
-        &head_selector,
-        ElementContentHandlers::default().element(head_handler),
+    // Append `vendored.css` before the first stylesheet (rustdoc's first stylesheet is `normalize.css`).
+    let first_stylesheet_handler = |head: &mut Element| {
+        head.before(&tera_vendored_css, ContentType::Html);
+
+        Ok(())
+    };
+
+    let (head_selector, body_selector, first_stylesheet_selector) = (
+        "head".parse().unwrap(),
+        "body".parse().unwrap(),
+        "link[type='text/css'][href*='normalize']".parse().unwrap(),
     );
-    let body = (
-        &body_selector,
-        ElementContentHandlers::default().element(body_handler),
-    );
+    let element_content_handlers = vec![
+        (
+            &head_selector,
+            ElementContentHandlers::default().element(head_handler),
+        ),
+        (
+            &body_selector,
+            ElementContentHandlers::default().element(body_handler),
+        ),
+        (
+            &first_stylesheet_selector,
+            ElementContentHandlers::default().element(first_stylesheet_handler),
+        ),
+    ];
     let settings = Settings {
-        element_content_handlers: vec![head, body],
+        element_content_handlers,
         memory_settings: MemorySettings {
             max_allowed_memory_usage,
             ..MemorySettings::default()
