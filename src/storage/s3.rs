@@ -6,7 +6,6 @@ use futures_util::{
     future::TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
 };
-use log::warn;
 use rusoto_core::{region::Region, RusotoError};
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{
@@ -26,12 +25,22 @@ pub(super) struct S3Backend {
 }
 
 impl S3Backend {
-    pub(super) fn new(
-        client: S3Client,
-        metrics: Arc<Metrics>,
-        config: &Config,
-    ) -> Result<Self, Error> {
+    pub(super) fn new(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         let runtime = Runtime::new()?;
+
+        // Connect to S3
+        let client = S3Client::new_with(
+            rusoto_core::request::HttpClient::new()?,
+            DefaultCredentialsProvider::new()?,
+            config
+                .s3_endpoint
+                .as_deref()
+                .map(|endpoint| Region::Custom {
+                    name: config.s3_region.name().to_string(),
+                    endpoint: endpoint.to_string(),
+                })
+                .unwrap_or(config.s3_region.clone()),
+        );
 
         #[cfg(test)]
         {
@@ -272,34 +281,6 @@ fn parse_timespec(mut raw: &str) -> Result<DateTime<Utc>, Error> {
     Ok(DateTime::from_utc(
         NaiveDateTime::parse_from_str(raw, "%a, %d %b %Y %H:%M:%S")?,
         Utc,
-    ))
-}
-
-pub(super) fn s3_client() -> Option<S3Client> {
-    // If AWS keys aren't configured, then presume we should use the DB exclusively
-    // for file storage.
-    if std::env::var_os("AWS_ACCESS_KEY_ID").is_none() && std::env::var_os("FORCE_S3").is_none() {
-        return None;
-    }
-
-    let creds = match DefaultCredentialsProvider::new() {
-        Ok(creds) => creds,
-        Err(err) => {
-            warn!("failed to retrieve AWS credentials: {}", err);
-            return None;
-        }
-    };
-
-    Some(S3Client::new_with(
-        rusoto_core::request::HttpClient::new().unwrap(),
-        creds,
-        std::env::var("S3_ENDPOINT")
-            .ok()
-            .map(|e| Region::Custom {
-                name: std::env::var("S3_REGION").unwrap_or_else(|_| "us-west-1".to_owned()),
-                endpoint: e,
-            })
-            .unwrap_or(Region::UsWest1),
     ))
 }
 
