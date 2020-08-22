@@ -10,6 +10,7 @@ use mime_guess::MimeGuess;
 use router::Router;
 use std::{ffi::OsStr, fs, path::Path};
 
+const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
 const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
@@ -20,6 +21,7 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
     let file = cexpect!(req, router.find("file"));
 
     match file {
+        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap())),
         "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap())),
         "index.js" => serve_resource(
             INDEX_JS,
@@ -119,7 +121,7 @@ pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 #[cfg(test)]
 mod tests {
-    use super::{INDEX_JS, MENU_JS, STATIC_SEARCH_PATHS, STYLE_CSS};
+    use super::{INDEX_JS, MENU_JS, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
     use crate::test::wrapper;
     use std::fs;
 
@@ -136,6 +138,24 @@ mod tests {
             );
             assert_eq!(resp.content_length().unwrap(), STYLE_CSS.len() as u64);
             assert_eq!(resp.text()?, STYLE_CSS);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn vendored_css() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let resp = web.get("/-/static/vendored.css").send()?;
+            assert!(resp.status().is_success());
+            assert_eq!(
+                resp.headers().get("Content-Type"),
+                Some(&"text/css".parse().unwrap()),
+            );
+            assert_eq!(resp.content_length().unwrap(), VENDORED_CSS.len() as u64);
+            assert_eq!(resp.text()?, VENDORED_CSS);
 
             Ok(())
         });

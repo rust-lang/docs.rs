@@ -132,6 +132,7 @@ mod tests {
             ("/robots.txt", "static resource"),
             ("/sitemap.xml", "static resource"),
             ("/-/static/style.css", "static resource"),
+            ("/-/static/vendored.css", "static resource"),
         ];
 
         wrapper(|env| {
