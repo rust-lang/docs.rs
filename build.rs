@@ -15,6 +15,7 @@ fn main() {
     );
 
     // Don't rerun anytime a single change is made
+    println!("cargo:rerun-if-changed=templates/style/vendored.scss");
     println!("cargo:rerun-if-changed=templates/style/base.scss");
     println!("cargo:rerun-if-changed=templates/style/_rustdoc.scss");
     println!("cargo:rerun-if-changed=templates/style/_vars.scss");
@@ -57,26 +58,50 @@ fn get_git_hash() -> Option<String> {
     })
 }
 
-fn compile_sass() -> Result<(), Box<dyn Error>> {
+fn compile_sass_file(
+    name: &str,
+    target: &str,
+    include_paths: &[String],
+) -> Result<(), Box<dyn Error>> {
     use sass_rs::{Context, Options, OutputStyle};
 
     const STYLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style");
 
-    let mut context = Context::new_file(format!("{}/base.scss", STYLE_DIR))?;
+    let include_paths = {
+        let mut paths = vec![STYLE_DIR.to_owned()];
+        paths.extend_from_slice(include_paths);
+        paths
+    };
+
+    // Compile base.scss
+    let mut context = Context::new_file(format!("{}/{}.scss", STYLE_DIR, name))?;
     context.set_options(Options {
         output_style: OutputStyle::Compressed,
-        include_paths: vec![
-            STYLE_DIR.to_owned(),
-            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/fontawesome/scss").to_owned(),
-            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned(),
-        ],
+        include_paths,
         ..Default::default()
     });
 
     let css = context.compile()?;
-    let dest_path = Path::new(&env::var("OUT_DIR")?).join("style.css");
+    let dest_path = Path::new(&env::var("OUT_DIR")?).join(format!("{}.css", target));
     let mut file = File::create(&dest_path)?;
     file.write_all(css.as_bytes())?;
+
+    Ok(())
+}
+
+fn compile_sass() -> Result<(), Box<dyn Error>> {
+    // Compile base.scss -> style.css
+    compile_sass_file("base", "style", &[])?;
+
+    // Compile vendored.scss -> vendored.css
+    compile_sass_file(
+        "vendored",
+        "vendored",
+        &[
+            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/fontawesome/scss").to_owned(),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned(),
+        ],
+    )?;
 
     Ok(())
 }
