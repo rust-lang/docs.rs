@@ -22,4 +22,7 @@ function copyTextHandler() {
     crateTitleAndVersion.style.textTransform = oldTransform;
 }
 
-document.getElementById("clipboard").addEventListener("click", copyTextHandler);
+(function() {
+    const clipboard = document.getElementById("clipboard");
+    if (clipboard != null) clipboard.addEventListener("click", copyTextHandler);
+})();
