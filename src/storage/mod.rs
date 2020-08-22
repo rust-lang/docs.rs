@@ -105,11 +105,9 @@ impl Storage {
                 StorageBackendKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
                 }
-                StorageBackendKind::S3 => StorageBackend::S3(Box::new(S3Backend::new(
-                    s3::s3_client().unwrap(),
-                    metrics,
-                    config,
-                )?)),
+                StorageBackendKind::S3 => {
+                    StorageBackend::S3(Box::new(S3Backend::new(metrics, config)?))
+                }
             },
         })
     }

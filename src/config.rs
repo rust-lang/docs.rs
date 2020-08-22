@@ -1,5 +1,6 @@
 use crate::storage::StorageBackendKind;
 use failure::{bail, format_err, Error, Fail, ResultExt};
+use rusoto_core::Region;
 use std::env::VarError;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -22,6 +23,8 @@ pub struct Config {
 
     // S3 params
     pub(crate) s3_bucket: String,
+    pub(crate) s3_region: Region,
+    pub(crate) s3_endpoint: Option<String>,
     #[cfg(test)]
     pub(crate) s3_bucket_is_temporary: bool,
 
@@ -55,6 +58,8 @@ impl Config {
             storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageBackendKind::Database)?,
 
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
+            s3_region: env("S3_REGION", Region::UsWest1)?,
+            s3_endpoint: maybe_env("S3_ENDPOINT")?,
             // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
             // Accidentally turning this on outside of the test suite might cause data loss in the
             // production environment.
