@@ -11,6 +11,7 @@ path = "lib.rs"
 
 [dependencies]
 toml = { version = "0.5", default-features = false }
+thiserror = "1"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--document-private-items"]
