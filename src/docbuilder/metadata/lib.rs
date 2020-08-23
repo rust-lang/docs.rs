@@ -3,8 +3,19 @@ use std::io;
 use std::path::Path;
 use toml::{map::Map, Value};
 
+/// The target that this crate is being built for.
+///
+/// This is directly passed on from the Cargo [`TARGET`] variable.
+///
+/// [`TARGET`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 pub const HOST_TARGET: &str = env!("DOCS_RS_METADATA_HOST_TARGET");
-pub const TARGETS: &[&str] = &[
+/// The targets that are built if no `targets` section is specified.
+///
+/// Currently, this is guaranteed to have only [tier one] targets.
+/// However, it may not contain all tier one targets.
+///
+/// [tier one]: https://doc.rust-lang.org/nightly/rustc/platform-support.html#tier-1
+pub const DEFAULT_TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
     "x86_64-apple-darwin",
@@ -12,10 +23,27 @@ pub const TARGETS: &[&str] = &[
     "x86_64-unknown-linux-gnu",
 ];
 
-/// Metadata for custom builds
+/// The possible errors for `Metadata::from_crate_root`.
+pub enum MetadataError {
+    IO(io::Error),
+    Parse(toml::de::Error),
+}
+
+impl From<io::Error> for MetadataError {
+    fn from(err: io::Error) -> Self {
+        Self::IO(err)
+    }
+}
+
+impl From<toml::de::Error> for MetadataError {
+    fn from(err: toml::de::Error) -> Self {
+        Self::Parse(err)
+    }
+}
+
+/// Metadata to set for custom builds.
 ///
-/// You can customize docs.rs builds by defining `[package.metadata.docs.rs]` table in your
-/// crates' `Cargo.toml`.
+/// This metadata is read from `[package.metadata.docs.rs]` table in `Cargo.toml`.
 ///
 /// An example metadata:
 ///
@@ -35,35 +63,37 @@ pub const TARGETS: &[&str] = &[
 ///
 /// You can define one or more fields in your `Cargo.toml`.
 pub struct Metadata {
-    /// List of features docs.rs will build.
+    /// List of features to pass on to `cargo`.
     ///
     /// By default, docs.rs will only build default features.
     pub features: Option<Vec<String>>,
 
-    /// Set `all-features` to true if you want docs.rs to build all features for your crate
+    /// Whether to pass `--all-features` to `cargo`.
     pub all_features: bool,
 
-    /// Docs.rs will always build default features.
-    ///
+    /// Whether to pass `--no-default-features` to `cargo`.
+    //
+    /// By default, Docs.rs will build default features.
     /// Set `no-default-fatures` to `false` if you want to build only certain features.
     pub no_default_features: bool,
 
-    /// docs.rs runs on `x86_64-unknown-linux-gnu`, which is the default target for documentation by default.
-    ///
-    /// You can change the default target by setting this.
+    /// The 'default' target that shoud be built.
     ///
     /// If `default_target` is unset and `targets` is non-empty,
     /// the first element of `targets` will be used as the `default_target`.
-    pub default_target: Option<String>,
+    /// Otherwise, this defaults to `x86_64-unknown-linux-gnu`.
+    default_target: Option<String>,
 
+    /// Which targets should be built.
+    ///
     /// If you want a crate to build only for specific targets,
     /// set `targets` to the list of targets to build, in addition to `default-target`.
     ///
-    /// If you do not set `targets`, all of the tier 1 supported targets will be built.
+    /// If you do not set `targets`, all `DEFAULT_TARGETS` will be built.
     /// If you set `targets` to an empty array, only the default target will be built.
     /// If you set `targets` to a non-empty array but do not set `default_target`,
-    ///   the first element will be treated as the default.
-    pub targets: Option<Vec<String>>,
+    ///    the first element will be treated as the default.
+    targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
     pub rustc_args: Option<Vec<String>>,
@@ -78,61 +108,74 @@ pub struct Metadata {
 ///
 /// # See also
 /// - [`Metadata::targets`](struct.Metadata.html#method.targets)
+/// - [`Metadata.default_target`](struct.Metadata.html#field.default_target)
 pub struct BuildTargets<'a> {
     pub default_target: &'a str,
     pub other_targets: HashSet<&'a str>,
 }
 
 impl Metadata {
-    pub fn from_source_dir(source_dir: &Path) -> Result<Metadata, io::Error> {
+    /// Read the `Cargo.toml` from a source directory, then parse the build metadata.
+    ///
+    /// If both `Cargo.toml` and `Cargo.toml.orig` exist in the directory,
+    /// `Cargo.toml.orig` will take precedence.
+    pub fn from_crate_root<P: AsRef<Path>>(source_dir: P) -> Result<Metadata, MetadataError> {
+        let source_dir = source_dir.as_ref();
         for &c in &["Cargo.toml.orig", "Cargo.toml"] {
             let manifest_path = source_dir.join(c);
             if manifest_path.exists() {
-                return Ok(Metadata::from_manifest(manifest_path));
+                return Metadata::from_manifest(manifest_path);
             }
         }
 
-        Err(io::Error::new(io::ErrorKind::NotFound, "no Cargo.toml"))
+        Err(io::Error::new(io::ErrorKind::NotFound, "no Cargo.toml").into())
     }
 
-    fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
-        use std::{fs::File, io::Read};
+    /// Read the given file into a string, then parse the build metadata.
+    pub fn from_manifest<P: AsRef<Path>>(path: P) -> Result<Metadata, MetadataError> {
+        use std::{str::FromStr, fs};
+        let buf = fs::read_to_string(path)?;
+        Metadata::from_str(&buf).map_err(Into::into)
+    }
 
-        let mut file = if let Ok(file) = File::open(path) {
-            file
-        } else {
-            return Metadata::default();
-        };
+    /// Return the targets that should be built.
+    ///
+    /// The `default_target` will never be one of the `other_targets`.
+    pub fn targets(&self) -> BuildTargets<'_> {
+        let default_target = self
+            .default_target
+            .as_deref()
+            // Use the first element of `targets` if `default_target` is unset and `targets` is non-empty
+            .or_else(|| {
+                self.targets
+                    .as_ref()
+                    .and_then(|targets| targets.iter().next().map(String::as_str))
+            })
+            .unwrap_or(HOST_TARGET);
 
-        let mut meta = String::new();
-        if file.read_to_string(&mut meta).is_err() {
-            return Metadata::default();
+        // Let people opt-in to only having specific targets
+        let mut targets: HashSet<_> = self
+            .targets
+            .as_ref()
+            .map(|targets| targets.iter().map(String::as_str).collect())
+            .unwrap_or_else(|| DEFAULT_TARGETS.iter().copied().collect());
+
+        targets.remove(&default_target);
+        BuildTargets {
+            default_target,
+            other_targets: targets,
         }
-
-        Metadata::from_str(&meta)
     }
+}
 
-    // This is similar to Default trait but it's private
-    fn default() -> Metadata {
-        Metadata {
-            features: None,
-            all_features: false,
-            no_default_features: false,
-            default_target: None,
-            rustc_args: None,
-            rustdoc_args: None,
-            targets: None,
-        }
-    }
+impl std::str::FromStr for Metadata {
+    type Err = toml::de::Error;
 
-    fn from_str(manifest: &str) -> Metadata {
+    /// Parse the given manifest as TOML.
+    fn from_str(manifest: &str) -> Result<Metadata, Self::Err> {
         let mut metadata = Metadata::default();
 
-        let manifest = if let Ok(manifest) = manifest.parse::<Value>() {
-            manifest
-        } else {
-            return metadata;
-        };
+        let manifest = manifest.parse::<Value>()?;
 
         fn fetch_manifest_tables<'a>(manifest: &'a Value) -> Option<&'a Map<String, Value>> {
             manifest
@@ -147,6 +190,7 @@ impl Metadata {
         }
 
         if let Some(table) = fetch_manifest_tables(&manifest) {
+            // TODO: all this `to_owned` is inefficient, this should use explicit matches instead.
             let collect_into_array =
                 |f: &Vec<Value>| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
 
@@ -186,38 +230,28 @@ impl Metadata {
                 .and_then(collect_into_array);
         }
 
-        metadata
+        Ok(metadata)
     }
+}
 
-    pub fn targets(&self) -> BuildTargets<'_> {
-        let default_target = self
-            .default_target
-            .as_deref()
-            // Use the first element of `targets` if `default_target` is unset and `targets` is non-empty
-            .or_else(|| {
-                self.targets
-                    .as_ref()
-                    .and_then(|targets| targets.iter().next().map(String::as_str))
-            })
-            .unwrap_or(HOST_TARGET);
-
-        // Let people opt-in to only having specific targets
-        let mut targets: HashSet<_> = self
-            .targets
-            .as_ref()
-            .map(|targets| targets.iter().map(String::as_str).collect())
-            .unwrap_or_else(|| TARGETS.iter().copied().collect());
-
-        targets.remove(&default_target);
-        BuildTargets {
-            default_target,
-            other_targets: targets,
+impl Default for Metadata {
+    /// The metadata that is used if there is no `[package.metadata.docs.rs]` in `Cargo.toml`.
+    fn default() -> Metadata {
+        Metadata {
+            features: None,
+            all_features: false,
+            no_default_features: false,
+            default_target: None,
+            rustc_args: None,
+            rustdoc_args: None,
+            targets: None,
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
     use super::*;
 
     #[test]
@@ -236,7 +270,7 @@ mod test {
             rustdoc-args = [ "--example-rustdoc-arg" ]
         "#;
 
-        let metadata = Metadata::from_str(manifest);
+        let metadata = Metadata::from_str(manifest).unwrap();
 
         assert!(metadata.features.is_some());
         assert!(metadata.all_features);
@@ -278,7 +312,7 @@ mod test {
             [package.metadata.docs.rs]
             features = [ "feature1", "feature2" ]
         "#;
-        let metadata = Metadata::from_str(manifest);
+        let metadata = Metadata::from_str(manifest).unwrap();
         assert!(metadata.targets.is_none());
 
         // no package.metadata.docs.rs section
@@ -287,7 +321,7 @@ mod test {
             [package]
             name = "test"
         "#,
-        );
+        ).unwrap();
         assert!(metadata.targets.is_none());
 
         // targets explicitly set to empty array
@@ -296,7 +330,7 @@ mod test {
             [package.metadata.docs.rs]
             targets = []
         "#,
-        );
+        ).unwrap();
         assert!(metadata.targets.unwrap().is_empty());
     }
     #[test]
@@ -314,10 +348,10 @@ mod test {
 
         // should be equal to TARGETS \ {HOST_TARGET}
         for actual in &tier_one {
-            assert!(TARGETS.contains(actual));
+            assert!(DEFAULT_TARGETS.contains(actual));
         }
 
-        for expected in TARGETS {
+        for expected in DEFAULT_TARGETS {
             if *expected == HOST_TARGET {
                 assert!(!tier_one.contains(&HOST_TARGET));
             } else {
@@ -404,7 +438,7 @@ mod test {
         } = metadata.targets();
 
         assert_eq!(default, "i686-apple-darwin");
-        let tier_one_targets_no_default = TARGETS
+        let tier_one_targets_no_default = DEFAULT_TARGETS
             .iter()
             .filter(|&&t| t != "i686-apple-darwin")
             .copied()
