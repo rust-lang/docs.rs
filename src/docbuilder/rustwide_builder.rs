@@ -14,6 +14,7 @@ use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use crate::{Metrics, Storage};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
+use metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
@@ -26,18 +27,6 @@ use std::sync::Arc;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
-
-// It is crucial that this be the same as the host that `docs.rs` is being run on.
-// Other values may cause strange and hard-to-debug errors.
-pub(super) const HOST_TARGET: &str = env!("CRATESFYI_HOST_TARGET"); // Set in build.rs
-pub(super) const TARGETS: &[&str] = &[
-    "i686-pc-windows-msvc",
-    "i686-unknown-linux-gnu",
-    "x86_64-apple-darwin",
-    "x86_64-pc-windows-msvc",
-    "x86_64-unknown-linux-gnu",
-];
-
 const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
     "wheel.svg",
@@ -133,7 +122,7 @@ impl RustwideBuilder {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 
-        let mut targets_to_install = TARGETS
+        let mut targets_to_install = DEFAULT_TARGETS
             .iter()
             .map(|&t| t.to_string()) // &str has a specialized ToString impl, while &&str goes through Display
             .collect::<HashSet<_>>();
@@ -609,7 +598,7 @@ impl RustwideBuilder {
 
         // Add docs.rs specific arguments
         if let Some(cpu_limit) = self.cpu_limit {
-            cargo_args.push(format!("-j{}", cpu_limit).into());
+            cargo_args.push(format!("-j{}", cpu_limit));
         }
         if target != HOST_TARGET {
             cargo_args.push("--target".into());
@@ -618,7 +607,7 @@ impl RustwideBuilder {
 
         let mut env_vars = metadata.environment_variables();
         let rustdoc_flags = env_vars.entry("RUSTDOCFLAGS").or_default();
-        rustdoc_flags.push_str(" -Z unstable-options --static-root-path / --cap-lints warn");
+        rustdoc_flags.push_str(" -Z unstable-options --static-root-path / --cap-lints warn ");
         rustdoc_flags.push_str(&rustdoc_flags_extras.join(" "));
 
         let mut command = build
@@ -629,7 +618,7 @@ impl RustwideBuilder {
             command = command.env(key, val);
         }
 
-        Ok(command)
+        Ok(command.args(&cargo_args))
     }
 
     fn copy_docs(

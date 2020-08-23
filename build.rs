@@ -8,12 +8,6 @@ use std::{
 };
 
 fn main() {
-    // Set the host target
-    println!(
-        "cargo:rustc-env=CRATESFYI_HOST_TARGET={}",
-        env::var("TARGET").unwrap(),
-    );
-
     // Don't rerun anytime a single change is made
     println!("cargo:rerun-if-changed=templates/style/vendored.scss");
     println!("cargo:rerun-if-changed=templates/style/base.scss");
