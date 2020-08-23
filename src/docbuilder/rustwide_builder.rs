@@ -616,38 +616,18 @@ impl RustwideBuilder {
             cargo_args.push(target.into());
         };
 
-        let mut rustdoc_flags = vec![
-            "-Z".to_string(),
-            "unstable-options".to_string(),
-            "--static-root-path".to_string(),
-            "/".to_string(),
-            "--cap-lints".to_string(),
-            "warn".to_string(),
-        ];
+        let mut env_vars = metadata.environment_variables();
+        let rustdoc_flags = env_vars.entry("RUSTDOCFLAGS").or_default();
+        rustdoc_flags.push_str(" -Z unstable-options --static-root-path / --cap-lints warn");
+        rustdoc_flags.push_str(&rustdoc_flags_extras.join(" "));
 
-        if let Some(package_rustdoc_args) = &metadata.rustdoc_args {
-            rustdoc_flags.append(&mut package_rustdoc_args.clone());
-        }
-
-        rustdoc_flags.extend(rustdoc_flags_extras);
-
-        let command = build
+        let mut command = build
             .cargo()
             .timeout(Some(limits.timeout()))
-            .no_output_timeout(None)
-            .env(
-                "RUSTFLAGS",
-                metadata
-                    .rustc_args
-                    .as_ref()
-                    .map(|args| args.join(" "))
-                    .unwrap_or_default(),
-            )
-            .env("RUSTDOCFLAGS", rustdoc_flags.join(" "))
-            // For docs.rs detection from build script:
-            // https://github.com/rust-lang/docs.rs/issues/147
-            .env("DOCS_RS", "1")
-            .args(&cargo_args.iter().map(|c| c.as_ref()).collect::<Vec<_>>());
+            .no_output_timeout(None);
+        for (key, val) in env_vars {
+            command = command.env(key, val);
+        }
 
         Ok(command)
     }
