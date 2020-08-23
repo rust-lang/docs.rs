@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::io;
 use std::path::Path;
 
@@ -185,8 +185,20 @@ impl Metadata {
         cargo_args
     }
 
-    pub fn environment_variables(&self) -> Vec<(String, String)> {
-        unimplemented!()
+    /// Return the environment variables that should be set when building this crate.
+    pub fn environment_variables(&self) -> HashMap<&'static str, String> {
+        let joined = |v: &Option<Vec<_>>| v.as_ref()
+            .map(|args| args.join(" "))
+            .unwrap_or_default();
+
+        let mut map = HashMap::new();
+        map.insert("RUSTFLAGS", joined(&self.rustc_args));
+        map.insert("RUSTDOCFLAGS", joined(&self.rustdoc_args));
+        // For docs.rs detection from build scripts:
+        // https://github.com/rust-lang/docs.rs/issues/147
+        map.insert("DOCS_RS", "1".into());
+
+        map
     }
 }
 
