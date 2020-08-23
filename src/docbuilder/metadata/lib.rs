@@ -1,9 +1,12 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io;
 use std::path::Path;
+
+use thiserror::Error;
 use toml::{map::Map, Value};
 
-/// The target that this crate is being built for.
+/// The target that `metadata` is being built for.
 ///
 /// This is directly passed on from the Cargo [`TARGET`] variable.
 ///
@@ -24,21 +27,12 @@ pub const DEFAULT_TARGETS: &[&str] = &[
 ];
 
 /// The possible errors for `Metadata::from_crate_root`.
+#[derive(Debug, Error)]
 pub enum MetadataError {
-    IO(io::Error),
-    Parse(toml::de::Error),
-}
-
-impl From<io::Error> for MetadataError {
-    fn from(err: io::Error) -> Self {
-        Self::IO(err)
-    }
-}
-
-impl From<toml::de::Error> for MetadataError {
-    fn from(err: toml::de::Error) -> Self {
-        Self::Parse(err)
-    }
+    #[error("failed to read manifest from disk")]
+    IO(#[from] io::Error),
+    #[error("failed to parse manifest")]
+    Parse(#[from] toml::de::Error),
 }
 
 /// Metadata to set for custom builds.
@@ -165,6 +159,34 @@ impl Metadata {
             default_target,
             other_targets: targets,
         }
+    }
+
+    /// Given the `target` to build for, return the arguments that should be passed to `cargo`.
+    ///
+    // TODO: maybe it shouldn't?
+    /// This will always include `doc --lib --no-deps`.
+    /// If the target is the same as the host, this will not include `--target`.
+    pub fn cargo_args(&self) -> Vec<Cow<'static, str>> {
+        let mut cargo_args: Vec<Cow<_>> = vec!["doc".into(), "--lib".into(), "--no-deps".into()];
+
+        if let Some(features) = &self.features {
+            cargo_args.push("--features".into());
+            cargo_args.push(features.join(" ").into());
+        }
+
+        if self.all_features {
+            cargo_args.push("--all-features".into());
+        }
+
+        if self.no_default_features {
+            cargo_args.push("--no-default-features".into());
+        }
+
+        cargo_args
+    }
+
+    pub fn environment_variables(&self) -> Vec<(String, String)> {
+        unimplemented!()
     }
 }
 

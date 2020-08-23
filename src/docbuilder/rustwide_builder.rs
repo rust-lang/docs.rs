@@ -599,35 +599,22 @@ impl RustwideBuilder {
         limits: &Limits,
         rustdoc_flags_extras: Vec<String>,
     ) -> Result<Command<'ws, 'pl>> {
-        let mut cargo_args = vec!["doc", "--lib", "--no-deps"];
-        if target != HOST_TARGET {
-            // If the explicit target is not a tier one target, we need to install it.
-            if !TARGETS.contains(&target) {
-                // This is a no-op if the target is already installed.
-                self.toolchain.add_target(&self.workspace, target)?;
-            }
-            cargo_args.push("--target");
-            cargo_args.push(target);
-        };
+        // If the explicit target is not a tier one target, we need to install it.
+        if !metadata::DEFAULT_TARGETS.contains(&target) {
+            // This is a no-op if the target is already installed.
+            self.toolchain.add_target(&self.workspace, target)?;
+        }
 
-        let tmp;
+        let mut cargo_args = metadata.cargo_args();
+
+        // Add docs.rs specific arguments
         if let Some(cpu_limit) = self.cpu_limit {
-            tmp = format!("-j{}", cpu_limit);
-            cargo_args.push(&tmp);
+            cargo_args.push(format!("-j{}", cpu_limit).into());
         }
-
-        let tmp;
-        if let Some(features) = &metadata.features {
-            cargo_args.push("--features");
-            tmp = features.join(" ");
-            cargo_args.push(&tmp);
-        }
-        if metadata.all_features {
-            cargo_args.push("--all-features");
-        }
-        if metadata.no_default_features {
-            cargo_args.push("--no-default-features");
-        }
+        if target != HOST_TARGET {
+            cargo_args.push("--target".into());
+            cargo_args.push(target.into());
+        };
 
         let mut rustdoc_flags = vec![
             "-Z".to_string(),
@@ -660,7 +647,7 @@ impl RustwideBuilder {
             // For docs.rs detection from build script:
             // https://github.com/rust-lang/docs.rs/issues/147
             .env("DOCS_RS", "1")
-            .args(&cargo_args);
+            .args(&cargo_args.iter().map(|c| c.as_ref()).collect::<Vec<_>>());
 
         Ok(command)
     }
