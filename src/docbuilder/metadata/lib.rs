@@ -1,8 +1,16 @@
-use crate::error::Result;
-use failure::err_msg;
 use std::collections::HashSet;
+use std::io;
 use std::path::Path;
 use toml::{map::Map, Value};
+
+pub const HOST_TARGET: &str = env!("DOCS_RS_METADATA_HOST_TARGET");
+pub const TARGETS: &[&str] = &[
+    "i686-pc-windows-msvc",
+    "i686-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+];
 
 /// Metadata for custom builds
 ///
@@ -70,13 +78,13 @@ pub struct Metadata {
 ///
 /// # See also
 /// - [`Metadata::targets`](struct.Metadata.html#method.targets)
-pub(super) struct BuildTargets<'a> {
-    pub(super) default_target: &'a str,
-    pub(super) other_targets: HashSet<&'a str>,
+pub struct BuildTargets<'a> {
+    pub default_target: &'a str,
+    pub other_targets: HashSet<&'a str>,
 }
 
 impl Metadata {
-    pub(crate) fn from_source_dir(source_dir: &Path) -> Result<Metadata> {
+    pub fn from_source_dir(source_dir: &Path) -> Result<Metadata, io::Error> {
         for &c in &["Cargo.toml.orig", "Cargo.toml"] {
             let manifest_path = source_dir.join(c);
             if manifest_path.exists() {
@@ -84,7 +92,7 @@ impl Metadata {
             }
         }
 
-        Err(err_msg("Manifest not found"))
+        Err(io::Error::new(io::ErrorKind::NotFound, "no Cargo.toml"))
     }
 
     fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {
@@ -181,9 +189,7 @@ impl Metadata {
         metadata
     }
 
-    pub(super) fn targets(&self) -> BuildTargets<'_> {
-        use super::rustwide_builder::{HOST_TARGET, TARGETS};
-
+    pub fn targets(&self) -> BuildTargets<'_> {
         let default_target = self
             .default_target
             .as_deref()
@@ -212,11 +218,10 @@ impl Metadata {
 
 #[cfg(test)]
 mod test {
-    use super::Metadata;
+    use super::*;
 
     #[test]
     fn test_cratesfyi_metadata() {
-        crate::test::init_logger();
         let manifest = r#"
             [package]
             name = "test"
@@ -297,7 +302,6 @@ mod test {
     #[test]
     fn test_select_targets() {
         use super::BuildTargets;
-        use crate::docbuilder::rustwide_builder::{HOST_TARGET, TARGETS};
 
         let mut metadata = Metadata::default();
 

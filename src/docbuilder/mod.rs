@@ -1,14 +1,13 @@
 mod crates;
 mod limits;
-mod metadata;
 pub(crate) mod options;
 mod queue;
 mod rustwide_builder;
 
 pub(crate) use self::limits::Limits;
-pub(self) use self::metadata::Metadata;
 pub use self::rustwide_builder::RustwideBuilder;
 pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
+use metadata::Metadata;
 
 use crate::db::Pool;
 use crate::error::Result;
