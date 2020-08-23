@@ -349,7 +349,7 @@ impl RustwideBuilder {
         let res = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                use crate::docbuilder::metadata::BuildTargets;
+                use metadata::BuildTargets;
 
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
