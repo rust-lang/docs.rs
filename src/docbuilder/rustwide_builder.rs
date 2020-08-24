@@ -1,5 +1,4 @@
 use super::DocBuilder;
-use super::Metadata;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{
@@ -12,9 +11,9 @@ use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
 use crate::{Metrics, Storage};
+use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
-use metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
@@ -338,7 +337,7 @@ impl RustwideBuilder {
         let res = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                use metadata::BuildTargets;
+                use docsrs_metadata::BuildTargets;
 
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
@@ -589,7 +588,7 @@ impl RustwideBuilder {
         rustdoc_flags_extras: Vec<String>,
     ) -> Result<Command<'ws, 'pl>> {
         // If the explicit target is not a tier one target, we need to install it.
-        if !metadata::DEFAULT_TARGETS.contains(&target) {
+        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
             // This is a no-op if the target is already installed.
             self.toolchain.add_target(&self.workspace, target)?;
         }
