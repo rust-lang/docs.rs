@@ -5,6 +5,9 @@
 //! This library is intended for use in docs.rs and crater, but might be helpful to others.
 //! See <https://docs.rs/about/metadata> for more information about the flags that can be set.
 //!
+//! This crate can only be used with nightly versions of `cargo` and `rustdoc`, because it
+//! will always have the flag `-Z unstable-options`.
+//!
 //! Here is an example use of the crate:
 //!
 //! ```
@@ -95,7 +98,7 @@ pub enum MetadataError {
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
     /// List of features to pass on to `cargo`.
@@ -122,7 +125,8 @@ pub struct Metadata {
     rustc_args: Option<Vec<String>>,
 
     /// List of command line arguments for `rustdoc`.
-    rustdoc_args: Option<Vec<String>>,
+    #[serde(default)]
+    rustdoc_args: Vec<String>,
 }
 
 /// The targets that should be built for a crate.
@@ -240,12 +244,14 @@ impl Metadata {
     }
 
     /// Return the environment variables that should be set when building this crate.
+    ///
+    /// This will always contain at least `RUSTDOCFLAGS="-Z unstable-options"`.
     pub fn environment_variables(&self) -> HashMap<&'static str, String> {
         let joined = |v: &Option<Vec<_>>| v.as_ref().map(|args| args.join(" ")).unwrap_or_default();
 
         let mut map = HashMap::new();
         map.insert("RUSTFLAGS", joined(&self.rustc_args));
-        map.insert("RUSTDOCFLAGS", joined(&self.rustdoc_args));
+        map.insert("RUSTDOCFLAGS", self.rustdoc_args.join(" "));
         // For docs.rs detection from build scripts:
         // https://github.com/rust-lang/docs.rs/issues/147
         map.insert("DOCS_RS", "1".into());
@@ -278,28 +284,16 @@ impl std::str::FromStr for Metadata {
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs"))
             .and_then(|t| table(t, "rs"));
-        let metadata = if let Some(table) = table {
+        let mut metadata = if let Some(table) = table {
             Value::Table(table).try_into()?
         } else {
             Metadata::default()
         };
 
-        Ok(metadata)
-    }
-}
+        metadata.rustdoc_args.push("-Z".into());
+        metadata.rustdoc_args.push("unstable-options".into());
 
-impl Default for Metadata {
-    /// The metadata that is used if there is no `[package.metadata.docs.rs]` in `Cargo.toml`.
-    fn default() -> Metadata {
-        Metadata {
-            features: None,
-            all_features: false,
-            no_default_features: false,
-            default_target: None,
-            rustc_args: None,
-            rustdoc_args: None,
-            targets: None,
-        }
+        Ok(metadata)
     }
 }
 
@@ -330,7 +324,6 @@ mod test_parsing {
         assert!(metadata.all_features);
         assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
-        assert!(metadata.rustdoc_args.is_some());
 
         let features = metadata.features.unwrap();
         assert_eq!(features.len(), 2);
@@ -351,9 +344,11 @@ mod test_parsing {
         assert_eq!(rustc_args.len(), 1);
         assert_eq!(rustc_args[0], "--example-rustc-arg".to_owned());
 
-        let rustdoc_args = metadata.rustdoc_args.unwrap();
-        assert_eq!(rustdoc_args.len(), 1);
+        let rustdoc_args = metadata.rustdoc_args;
+        assert_eq!(rustdoc_args.len(), 3);
         assert_eq!(rustdoc_args[0], "--example-rustdoc-arg".to_owned());
+        assert_eq!(rustdoc_args[1], "-Z".to_owned());
+        assert_eq!(rustdoc_args[2], "unstable-options".to_owned());
     }
 
     #[test]
@@ -591,14 +586,14 @@ mod test_calculations {
 
         // rustdocflags
         let metadata = Metadata {
-            rustdoc_args: Some(vec![
+            rustdoc_args: vec![
                 "-Z".into(),
                 "unstable-options".into(),
                 "--static-root-path".into(),
                 "/".into(),
                 "--cap-lints".into(),
                 "warn".into(),
-            ]),
+            ],
             ..Metadata::default()
         };
         assert_eq!(
