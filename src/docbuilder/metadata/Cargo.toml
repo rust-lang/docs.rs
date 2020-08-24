@@ -1,5 +1,5 @@
 [package]
-name = "metadata"
+name = "docsrs-metadata"
 version = "0.1.0"
 authors = ["Joshua Nelson <jyn514@gmail.com>"]
 edition = "2018"
