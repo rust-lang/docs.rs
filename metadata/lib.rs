@@ -1,15 +1,16 @@
-#![deny(missing_docs)]
-
+#![warn(missing_docs)]
 // N.B. requires nightly rustdoc to document until intra-doc links are stabilized.
 //! Collect information that allows you to build a crate the same way that docs.rs would.
 //!
 //! This library is intended for use in docs.rs and crater, but might be helpful to others.
+//! See <https://docs.rs/about/metadata> for more information about the flags that can be set.
+//!
 //! Here is an example use of the crate:
 //!
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use std::process::Command;
-//! use metadata::Metadata;
+//! use docsrs_metadata::Metadata;
 //!
 //! // First, we need to parse Cargo.toml.
 //! let source_root = env!("CARGO_MANIFEST_DIR");
@@ -33,12 +34,13 @@
 //! # }
 //! ```
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::Path;
 
+use serde::Deserialize;
 use thiserror::Error;
-use toml::{map::Map, Value};
+use toml::Value;
 
 /// The target that `metadata` is being built for.
 ///
@@ -62,6 +64,7 @@ pub const DEFAULT_TARGETS: &[&str] = &[
 
 /// The possible errors for [`Metadata::from_crate_root`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum MetadataError {
     /// The error returned when the manifest could not be read.
     #[error("failed to read manifest from disk")]
@@ -92,30 +95,34 @@ pub enum MetadataError {
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Metadata {
     /// List of features to pass on to `cargo`.
     ///
     /// By default, docs.rs will only build default features.
-    pub features: Option<Vec<String>>,
+    features: Option<Vec<String>>,
 
     /// Whether to pass `--all-features` to `cargo`.
-    pub all_features: bool,
+    #[serde(default)]
+    all_features: bool,
 
     /// Whether to pass `--no-default-features` to `cargo`.
     //
     /// By default, Docs.rs will build default features.
-    /// Set `no-default-fatures` to `false` if you want to build only certain features.
-    pub no_default_features: bool,
+    /// Set `no-default-fatures` to `true` if you want to build only certain features.
+    #[serde(default)]
+    no_default_features: bool,
 
     /// See [`BuildTargets`].
     default_target: Option<String>,
     targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
-    pub rustc_args: Option<Vec<String>>,
+    rustc_args: Option<Vec<String>>,
 
     /// List of command line arguments for `rustdoc`.
-    pub rustdoc_args: Option<Vec<String>>,
+    rustdoc_args: Option<Vec<String>>,
 }
 
 /// The targets that should be built for a crate.
@@ -170,7 +177,7 @@ impl Metadata {
     ///
     /// [`from_str`]: std::str::FromStr
     pub fn from_manifest<P: AsRef<Path>>(path: P) -> Result<Metadata, MetadataError> {
-        use std::{str::FromStr, fs};
+        use std::{fs, str::FromStr};
         let buf = fs::read_to_string(path)?;
         Metadata::from_str(&buf).map_err(Into::into)
     }
@@ -234,9 +241,7 @@ impl Metadata {
 
     /// Return the environment variables that should be set when building this crate.
     pub fn environment_variables(&self) -> HashMap<&'static str, String> {
-        let joined = |v: &Option<Vec<_>>| v.as_ref()
-            .map(|args| args.join(" "))
-            .unwrap_or_default();
+        let joined = |v: &Option<Vec<_>>| v.as_ref().map(|args| args.join(" ")).unwrap_or_default();
 
         let mut map = HashMap::new();
         map.insert("RUSTFLAGS", joined(&self.rustc_args));
@@ -254,62 +259,30 @@ impl std::str::FromStr for Metadata {
 
     /// Parse the given manifest as TOML.
     fn from_str(manifest: &str) -> Result<Metadata, Self::Err> {
-        let mut metadata = Metadata::default();
+        use toml::value::Table;
 
-        let manifest = manifest.parse::<Value>()?;
+        let manifest = match manifest.parse::<Value>()? {
+            Value::Table(t) => Some(t),
+            _ => None,
+        };
 
-        fn fetch_manifest_tables<'a>(manifest: &'a Value) -> Option<&'a Map<String, Value>> {
-            manifest
-                .get("package")?
-                .as_table()?
-                .get("metadata")?
-                .as_table()?
-                .get("docs")?
-                .as_table()?
-                .get("rs")?
-                .as_table()
+        fn table(mut manifest: Table, table_name: &str) -> Option<Table> {
+            match manifest.remove(table_name) {
+                Some(Value::Table(table)) => Some(table),
+                _ => None,
+            }
         }
 
-        if let Some(table) = fetch_manifest_tables(&manifest) {
-            // TODO: all this `to_owned` is inefficient, this should use explicit matches instead.
-            let collect_into_array =
-                |f: &Vec<Value>| f.iter().map(|v| v.as_str().map(|v| v.to_owned())).collect();
-
-            metadata.features = table
-                .get("features")
-                .and_then(|f| f.as_array())
-                .and_then(collect_into_array);
-
-            metadata.no_default_features = table
-                .get("no-default-features")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(metadata.no_default_features);
-
-            metadata.all_features = table
-                .get("all-features")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(metadata.all_features);
-
-            metadata.default_target = table
-                .get("default-target")
-                .and_then(|v| v.as_str())
-                .map(|v| v.to_owned());
-
-            metadata.targets = table
-                .get("targets")
-                .and_then(|f| f.as_array())
-                .and_then(collect_into_array);
-
-            metadata.rustc_args = table
-                .get("rustc-args")
-                .and_then(|f| f.as_array())
-                .and_then(collect_into_array);
-
-            metadata.rustdoc_args = table
-                .get("rustdoc-args")
-                .and_then(|f| f.as_array())
-                .and_then(collect_into_array);
-        }
+        let table = manifest
+            .and_then(|t| table(t, "package"))
+            .and_then(|t| table(t, "metadata"))
+            .and_then(|t| table(t, "docs"))
+            .and_then(|t| table(t, "rs"));
+        let metadata = if let Some(table) = table {
+            Value::Table(table).try_into()?
+        } else {
+            Metadata::default()
+        };
 
         Ok(metadata)
     }
@@ -332,8 +305,8 @@ impl Default for Metadata {
 
 #[cfg(test)]
 mod test_parsing {
-    use std::str::FromStr;
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_cratesfyi_metadata() {
@@ -402,7 +375,8 @@ mod test_parsing {
             [package]
             name = "test"
         "#,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(metadata.targets.is_none());
 
         // targets explicitly set to empty array
@@ -411,7 +385,8 @@ mod test_parsing {
             [package.metadata.docs.rs]
             targets = []
         "#,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(metadata.targets.unwrap().is_empty());
     }
 }
@@ -616,16 +591,42 @@ mod test_calculations {
 
         // rustdocflags
         let metadata = Metadata {
-            rustdoc_args: Some(vec!["-Z".into(), "unstable-options".into(), "--static-root-path".into(), "/".into(), "--cap-lints".into(), "warn".into()]),
+            rustdoc_args: Some(vec![
+                "-Z".into(),
+                "unstable-options".into(),
+                "--static-root-path".into(),
+                "/".into(),
+                "--cap-lints".into(),
+                "warn".into(),
+            ]),
             ..Metadata::default()
         };
-        assert_eq!(metadata.environment_variables().get("RUSTDOCFLAGS").map(String::as_str), Some("-Z unstable-options --static-root-path / --cap-lints warn"));
+        assert_eq!(
+            metadata
+                .environment_variables()
+                .get("RUSTDOCFLAGS")
+                .map(String::as_str),
+            Some("-Z unstable-options --static-root-path / --cap-lints warn")
+        );
 
         // rustdocflags
         let metadata = Metadata {
-            rustc_args: Some(vec!["-Z".into(), "unstable-options".into(), "--static-root-path".into(), "/".into(), "--cap-lints".into(), "warn".into()]),
+            rustc_args: Some(vec![
+                "-Z".into(),
+                "unstable-options".into(),
+                "--static-root-path".into(),
+                "/".into(),
+                "--cap-lints".into(),
+                "warn".into(),
+            ]),
             ..Metadata::default()
         };
-        assert_eq!(metadata.environment_variables().get("RUSTFLAGS").map(String::as_str), Some("-Z unstable-options --static-root-path / --cap-lints warn"));
+        assert_eq!(
+            metadata
+                .environment_variables()
+                .get("RUSTFLAGS")
+                .map(String::as_str),
+            Some("-Z unstable-options --static-root-path / --cap-lints warn")
+        );
     }
 }

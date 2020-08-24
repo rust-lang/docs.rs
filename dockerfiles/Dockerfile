@@ -31,7 +31,7 @@ WORKDIR /build
 COPY benches benches
 COPY Cargo.lock Cargo.toml ./
 COPY src/web/badge src/web/badge/
-COPY src/docbuilder/metadata src/docbuilder/metadata/
+COPY metadata metadata/
 RUN echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > build.rs
 

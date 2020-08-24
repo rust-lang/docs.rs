@@ -8,6 +8,8 @@ repository = "https://github.com/rust-lang/docs.rs"
 build = "build.rs"
 edition = "2018"
 
+[workspace]
+
 [dependencies]
 log = "0.4"
 regex = "1"
