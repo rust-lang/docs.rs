@@ -13,5 +13,6 @@ description = "Document crates the same way docs.rs would"
 path = "lib.rs"
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
 toml = { version = "0.5", default-features = false }
 thiserror = "1"

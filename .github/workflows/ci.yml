@@ -58,10 +58,10 @@ jobs:
           psql "${CRATESFYI_DATABASE_URL}"
 
       - name: Build
-        run: cargo build --locked
+        run: cargo build --workspace --locked
 
       - name: Test
-        run: cargo test --locked
+        run: cargo test --workspace --locked
 
       - name: Clean up the database
         run: docker-compose down --volumes
@@ -134,7 +134,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --locked -- -D warnings
+          args: --workspace --locked -- -D warnings
 
       - name: Clean unused artifacts
         uses: actions-rs/cargo@v1
