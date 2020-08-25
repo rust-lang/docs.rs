@@ -37,11 +37,14 @@ impl Limits {
             if let Some(memory) = row.get::<_, Option<i64>>("max_memory_bytes") {
                 limits.memory = memory as usize;
             }
-            if let Some(timeout) = row.get::<_, Option<i32>>("timeout_seconds") {
+            let timeout = row.get::<_, Option<i32>>("timeout_seconds");
+            if let Some(timeout) = timeout {
                 limits.timeout = Duration::from_secs(timeout as u64);
             }
             if let Some(targets) = row.get::<_, Option<i32>>("max_targets") {
                 limits.targets = targets as usize;
+            } else if timeout.is_some() {
+                limits.targets = 1;
             }
         }
 
@@ -112,6 +115,22 @@ mod test {
                 &[&krate, &(limits.memory as i64), &(limits.timeout.as_secs() as i32), &(limits.targets as i32)]
             )?;
             assert_eq!(limits, Limits::for_crate(&mut db.conn(), krate)?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn targets_default_to_one_with_timeout() {
+        wrapper(|env| {
+            let db = env.db();
+            let krate = "hexponent";
+            db.conn().query(
+                "INSERT INTO sandbox_overrides (crate_name, timeout_seconds) VALUES ($1, 20*60);",
+                &[&krate],
+            )?;
+            let limits = Limits::for_crate(&mut db.conn(), krate)?;
+            assert_eq!(limits.targets, 1);
+
             Ok(())
         });
     }
