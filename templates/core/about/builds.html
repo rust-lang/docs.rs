@@ -92,8 +92,11 @@
         If your build fails because it hit one of these limits, please
         <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
         to get them increased for your crate.
-        Since our build agent has finite resources, we have to consider each case individually.
-        However, network access will not be enabled for any crate.
+        Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies:
+        <ul>
+          <li>Network access will not be enabled for any crate.</li>
+          <li>Any crate that requests a time extension will be limited to one target.</li>
+        </ul>
     </p>
 
     <h4 id="failures-and-rebuilds">Other failures and requesting rebuilds</h4>
