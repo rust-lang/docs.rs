@@ -273,8 +273,7 @@ fn get_search_results(
 
     // Each row contains the total number of possible/valid results, just get it once
     let total_results = rows
-        .iter()
-        .next()
+        .get(0)
         .map(|row| row.get::<_, i64>("total"))
         .unwrap_or_default();
     let packages: Vec<Release> = rows

@@ -14,7 +14,7 @@ pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
     )?;
 
     // If no match is found, return the default priority
-    if let Some(row) = query.iter().next() {
+    if let Some(row) = query.get(0) {
         Ok(row.get(0))
     } else {
         Ok(DEFAULT_PRIORITY)
@@ -43,7 +43,7 @@ pub fn remove_crate_priority(conn: &mut Client, pattern: &str) -> Result<Option<
         &[&pattern],
     )?;
 
-    Ok(query.iter().next().map(|row| row.get(0)))
+    Ok(query.get(0).map(|row| row.get(0)))
 }
 
 #[cfg(test)]

@@ -263,14 +263,13 @@ fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) ->
         )
         .unwrap();
 
-    let (build_status, yanked, is_library) =
-        rows.iter().next().map_or_else(Default::default, |row| {
-            (
-                row.get("build_status"),
-                row.get("yanked"),
-                row.get("is_library"),
-            )
-        });
+    let (build_status, yanked, is_library) = rows.get(0).map_or_else(Default::default, |row| {
+        (
+            row.get("build_status"),
+            row.get("yanked"),
+            row.get("is_library"),
+        )
+    });
 
     Release {
         version,
