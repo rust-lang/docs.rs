@@ -1,6 +1,6 @@
 # Summary
 
-This RFC proposes moving away from the current model of fetching new releases
+This MCP proposes moving away from the current model of fetching new releases
 to build, moving from using a timer to receiving webhooks.
 
 # Motivation
