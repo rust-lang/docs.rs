@@ -536,7 +536,7 @@ impl MetaData {
             )
             .unwrap();
 
-        let row = rows.iter().next()?;
+        let row = rows.get(0)?;
 
         Some(MetaData {
             name: row.get(0),

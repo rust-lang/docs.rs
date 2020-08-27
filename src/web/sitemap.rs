@@ -74,7 +74,7 @@ pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
         conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]),
     );
 
-    let rustc_version = res.iter().next().and_then(|row| {
+    let rustc_version = res.get(0).and_then(|row| {
         if let Ok(Some(Value::String(version))) = row.try_get(0) {
             Some(version)
         } else {
