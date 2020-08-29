@@ -13,8 +13,6 @@ use crate::error::Result;
 use crate::index::Index;
 use crate::BuildQueue;
 use crate::DocBuilderOptions;
-use log::debug;
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,7 +23,6 @@ pub struct DocBuilder {
     index: Index,
     db: Pool,
     build_queue: Arc<BuildQueue>,
-    db_cache: BTreeSet<String>,
 }
 
 impl DocBuilder {
@@ -36,26 +33,7 @@ impl DocBuilder {
             options,
             index,
             db,
-            db_cache: BTreeSet::new(),
         }
-    }
-
-    fn load_database_cache(&mut self) -> Result<()> {
-        debug!("Loading database cache");
-
-        let mut conn = self.db.get()?;
-        for row in &mut conn.query(
-            "SELECT name, version FROM crates, releases \
-             WHERE crates.id = releases.crate_id",
-            &[],
-        )? {
-            let name: String = row.get(0);
-            let version: String = row.get(1);
-
-            self.db_cache.insert(format!("{}-{}", name, version));
-        }
-
-        Ok(())
     }
 
     fn lock_path(&self) -> PathBuf {
@@ -90,11 +68,5 @@ impl DocBuilder {
     /// Returns a reference of options
     pub fn options(&self) -> &DocBuilderOptions {
         &self.options
-    }
-
-    fn should_build(&mut self, name: &str, version: &str) -> Result<bool> {
-        self.load_database_cache()?;
-        Ok(!(self.options.skip_if_exists
-            && self.db_cache.contains(&format!("{}-{}", name, version))))
     }
 }

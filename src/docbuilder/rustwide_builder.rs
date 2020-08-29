@@ -14,6 +14,7 @@ use crate::{Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
+use postgres::Client;
 use rustwide::cmd::{Command, SandboxBuilder};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
@@ -297,15 +298,15 @@ impl RustwideBuilder {
         version: &str,
         local: Option<&Path>,
     ) -> Result<bool> {
-        if !doc_builder.should_build(name, version)? {
+        let mut conn = self.db.get()?;
+
+        if !self.should_build(&mut conn, &doc_builder, name, version)? {
             return Ok(false);
         }
 
         self.update_toolchain()?;
 
         info!("building package {} {}", name, version);
-
-        let mut conn = self.db.get()?;
 
         if is_blacklisted(&mut conn, name)? {
             info!("skipping build of {}, crate has been blacklisted", name);
@@ -647,6 +648,29 @@ impl RustwideBuilder {
             local_storage,
         )
         .map(|t| t.1)
+    }
+
+    fn should_build(
+        &self,
+        conn: &mut Client,
+        docbuilder: &DocBuilder,
+        name: &str,
+        version: &str,
+    ) -> Result<bool> {
+        if docbuilder.options().skip_if_exists {
+            // Check whether no successful builds are present in the database.
+            Ok(conn
+                .query(
+                    "SELECT 1 FROM crates, releases, builds
+                     WHERE crates.id = releases.crate_id AND releases.id = builds.rid
+                       AND crates.name = $1 AND releases.version = $2
+                       AND builds.build_status = TRUE;",
+                    &[&name, &version],
+                )?
+                .is_empty())
+        } else {
+            Ok(true)
+        }
     }
 }
 
