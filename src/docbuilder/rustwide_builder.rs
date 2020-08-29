@@ -64,6 +64,7 @@ pub struct RustwideBuilder {
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
     rustc_version: String,
+    skip_build_if_exists: bool,
 }
 
 impl RustwideBuilder {
@@ -92,7 +93,12 @@ impl RustwideBuilder {
             storage,
             metrics,
             rustc_version: String::new(),
+            skip_build_if_exists: false,
         })
+    }
+
+    pub fn set_skip_build_if_exists(&mut self, should: bool) {
+        self.skip_build_if_exists = should;
     }
 
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
@@ -252,7 +258,7 @@ impl RustwideBuilder {
 
     pub fn build_world(&mut self, doc_builder: &mut DocBuilder) -> Result<()> {
         crates_from_path(
-            &doc_builder.options().registry_index_path.clone(),
+            &self.config.registry_index_path.clone(),
             &mut |name, version| {
                 if let Err(err) = self.build_package(doc_builder, name, version, None) {
                     warn!("failed to build package {} {}: {}", name, version, err);
@@ -284,7 +290,7 @@ impl RustwideBuilder {
     ) -> Result<bool> {
         let mut conn = self.db.get()?;
 
-        if !self.should_build(&mut conn, &doc_builder, name, version)? {
+        if !self.should_build(&mut conn, name, version)? {
             return Ok(false);
         }
 
@@ -634,14 +640,8 @@ impl RustwideBuilder {
         .map(|t| t.1)
     }
 
-    fn should_build(
-        &self,
-        conn: &mut Client,
-        docbuilder: &DocBuilder,
-        name: &str,
-        version: &str,
-    ) -> Result<bool> {
-        if docbuilder.options().skip_if_exists {
+    fn should_build(&self, conn: &mut Client, name: &str, version: &str) -> Result<bool> {
+        if self.skip_build_if_exists {
             // Check whether no successful builds are present in the database.
             Ok(conn
                 .query(
