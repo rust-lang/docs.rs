@@ -234,14 +234,6 @@ struct Build {
     #[structopt(name = "SKIP_IF_LOG_EXISTS", long = "skip-if-log-exists")]
     skip_if_log_exists: bool,
 
-    /// Keeps build directory after build.
-    #[structopt(
-        name = "KEEP_BUILD_DIRECTORY",
-        short = "k",
-        long = "keep-build-directory"
-    )]
-    keep_build_directory: bool,
-
     #[structopt(subcommand)]
     subcommand: BuildSubcommand,
 }
@@ -255,7 +247,6 @@ impl Build {
 
             doc_options.skip_if_exists = self.skip_if_exists;
             doc_options.skip_if_log_exists = self.skip_if_log_exists;
-            doc_options.keep_build_directory = self.keep_build_directory;
 
             doc_options
                 .check_paths()
