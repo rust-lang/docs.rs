@@ -48,20 +48,12 @@ pub fn queue_builder(
 
         if status.count() >= 10 {
             // periodically, we need to flush our caches and ping the hubs
-            debug!("10 builds in a row; flushing caches");
+            debug!("10 builds in a row; pinging pubsubhubhub");
             status = BuilderState::QueueInProgress(0);
 
             match pubsubhubbub::ping_hubs() {
                 Err(e) => error!("Failed to ping hub: {}", e),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
-            }
-
-            if let Err(e) = doc_builder.load_cache() {
-                error!("Failed to load cache: {}", e);
-            }
-
-            if let Err(e) = doc_builder.save_cache() {
-                error!("Failed to save cache: {}", e);
             }
         }
 
@@ -80,10 +72,6 @@ pub fn queue_builder(
                         Err(e) => error!("Failed to ping hub: {}", e),
                         Ok(n) => debug!("Succesfully pinged {} hubs", n),
                     }
-
-                    if let Err(e) = doc_builder.save_cache() {
-                        error!("Failed to save cache: {}", e);
-                    }
                 }
                 debug!("Queue is empty, going back to sleep");
                 status = BuilderState::EmptyQueue;
@@ -96,14 +84,6 @@ pub fn queue_builder(
                     queue_count,
                     status.count()
                 );
-            }
-        }
-
-        // if we're starting a new batch, reload our caches and sources
-        if !status.is_in_progress() {
-            if let Err(e) = doc_builder.load_cache() {
-                error!("Failed to load cache: {}", e);
-                continue;
             }
         }
 

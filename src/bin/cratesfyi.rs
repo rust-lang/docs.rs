@@ -246,7 +246,6 @@ impl Build {
                 DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
 
             doc_options.skip_if_exists = self.skip_if_exists;
-            doc_options.skip_if_log_exists = self.skip_if_log_exists;
 
             doc_options
                 .check_paths()
@@ -306,15 +305,11 @@ impl BuildSubcommand {
     pub fn handle_args(self, ctx: BinContext, mut docbuilder: DocBuilder) -> Result<(), Error> {
         match self {
             Self::World => {
-                docbuilder.load_cache().context("Failed to load cache")?;
-
                 let mut builder =
                     RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
                 builder
                     .build_world(&mut docbuilder)
                     .context("Failed to build world")?;
-
-                docbuilder.save_cache().context("Failed to save cache")?;
             }
 
             Self::Crate {
@@ -322,7 +317,6 @@ impl BuildSubcommand {
                 crate_version,
                 local,
             } => {
-                docbuilder.load_cache().context("Failed to load cache")?;
                 let mut builder =
                     RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)
                         .context("failed to initialize rustwide")?;
@@ -342,8 +336,6 @@ impl BuildSubcommand {
                         )
                         .context("Building documentation failed")?;
                 }
-
-                docbuilder.save_cache().context("Failed to save cache")?;
             }
 
             Self::UpdateToolchain { only_first_time } => {

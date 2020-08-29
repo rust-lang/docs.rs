@@ -266,20 +266,12 @@ impl RustwideBuilder {
     }
 
     pub fn build_world(&mut self, doc_builder: &mut DocBuilder) -> Result<()> {
-        let mut count = 0;
         crates_from_path(
             &doc_builder.options().registry_index_path.clone(),
             &mut |name, version| {
-                match self.build_package(doc_builder, name, version, None) {
-                    Ok(status) => {
-                        count += 1;
-                        if status && count % 10 == 0 {
-                            let _ = doc_builder.save_cache();
-                        }
-                    }
-                    Err(err) => warn!("failed to build package {} {}: {}", name, version, err),
+                if let Err(err) = self.build_package(doc_builder, name, version, None) {
+                    warn!("failed to build package {} {}: {}", name, version, err);
                 }
-                doc_builder.add_to_cache(name, version);
             },
         )
     }
@@ -305,7 +297,7 @@ impl RustwideBuilder {
         version: &str,
         local: Option<&Path>,
     ) -> Result<bool> {
-        if !doc_builder.should_build(name, version) {
+        if !doc_builder.should_build(name, version)? {
             return Ok(false);
         }
 
@@ -430,7 +422,6 @@ impl RustwideBuilder {
                     Err(err) => warn!("{:#?}", err),
                 }
 
-                doc_builder.add_to_cache(name, version);
                 Ok(res)
             })?;
 

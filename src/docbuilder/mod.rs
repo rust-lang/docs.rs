@@ -16,8 +16,6 @@ use crate::DocBuilderOptions;
 use log::debug;
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,7 +25,6 @@ pub struct DocBuilder {
     index: Index,
     db: Pool,
     build_queue: Arc<BuildQueue>,
-    cache: BTreeSet<String>,
     db_cache: BTreeSet<String>,
 }
 
@@ -39,27 +36,8 @@ impl DocBuilder {
             options,
             index,
             db,
-            cache: BTreeSet::new(),
             db_cache: BTreeSet::new(),
         }
-    }
-
-    /// Loads build cache
-    pub fn load_cache(&mut self) -> Result<()> {
-        debug!("Loading cache");
-
-        let path = PathBuf::from(&self.options.prefix).join("cache");
-        let reader = fs::File::open(path).map(BufReader::new);
-
-        if let Ok(reader) = reader {
-            for line in reader.lines() {
-                self.cache.insert(line?);
-            }
-        }
-
-        self.load_database_cache()?;
-
-        Ok(())
     }
 
     fn load_database_cache(&mut self) -> Result<()> {
@@ -75,20 +53,6 @@ impl DocBuilder {
             let version: String = row.get(1);
 
             self.db_cache.insert(format!("{}-{}", name, version));
-        }
-
-        Ok(())
-    }
-
-    /// Saves build cache
-    pub fn save_cache(&self) -> Result<()> {
-        debug!("Saving cache");
-
-        let path = PathBuf::from(&self.options.prefix).join("cache");
-        let mut file = fs::OpenOptions::new().write(true).create(true).open(path)?;
-
-        for krate in &self.cache {
-            writeln!(file, "{}", krate)?;
         }
 
         Ok(())
@@ -128,15 +92,9 @@ impl DocBuilder {
         &self.options
     }
 
-    fn add_to_cache(&mut self, name: &str, version: &str) {
-        self.cache.insert(format!("{}-{}", name, version));
-    }
-
-    fn should_build(&self, name: &str, version: &str) -> bool {
-        let name = format!("{}-{}", name, version);
-        let local = self.options.skip_if_log_exists && self.cache.contains(&name);
-        let db = self.options.skip_if_exists && self.db_cache.contains(&name);
-
-        !(local || db)
+    fn should_build(&mut self, name: &str, version: &str) -> Result<bool> {
+        self.load_database_cache()?;
+        Ok(!(self.options.skip_if_exists
+            && self.db_cache.contains(&format!("{}-{}", name, version))))
     }
 }

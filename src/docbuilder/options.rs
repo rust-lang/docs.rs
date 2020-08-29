@@ -6,7 +6,6 @@ pub struct DocBuilderOptions {
     pub(crate) prefix: PathBuf,
     pub(crate) registry_index_path: PathBuf,
     pub skip_if_exists: bool,
-    pub skip_if_log_exists: bool,
 }
 
 impl DocBuilderOptions {
@@ -16,7 +15,6 @@ impl DocBuilderOptions {
             registry_index_path,
 
             skip_if_exists: false,
-            skip_if_log_exists: false,
         }
     }
 
