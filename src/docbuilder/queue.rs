@@ -3,15 +3,16 @@
 use super::{DocBuilder, RustwideBuilder};
 use crate::error::Result;
 use crate::utils::get_crate_priority;
+use crate::Index;
 use crates_index_diff::ChangeKind;
 use log::{debug, error};
 
 impl DocBuilder {
     /// Updates registry index repository and adds new crates into build queue.
     /// Returns the number of crates added
-    pub fn get_new_crates(&mut self) -> Result<usize> {
+    pub fn get_new_crates(&mut self, index: &Index) -> Result<usize> {
         let mut conn = self.db.get()?;
-        let diff = self.index.diff()?;
+        let diff = index.diff()?;
         let (mut changes, oid) = diff.peek_changes()?;
         let mut crates_added = 0;
 
@@ -78,14 +79,10 @@ impl DocBuilder {
         queue.process_next_crate(|krate| {
             processed = true;
 
-            builder.build_package(self, &krate.name, &krate.version, None)?;
+            builder.build_package(&krate.name, &krate.version, None)?;
             Ok(())
         })?;
 
         Ok(processed)
-    }
-
-    pub fn run_git_gc(&self) {
-        self.index.run_git_gc();
     }
 }

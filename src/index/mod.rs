@@ -1,12 +1,9 @@
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{path::PathBuf, process::Command};
 
 use url::Url;
 
 use self::{api::Api, crates::Crates};
-use crate::error::Result;
+use crate::{error::Result, Config};
 use failure::ResultExt;
 
 pub(crate) mod api;
@@ -43,8 +40,8 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().to_owned();
+    pub fn new(app_config: &Config) -> Result<Self> {
+        let path = app_config.registry_index_path.clone();
         // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
         // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
@@ -89,11 +86,5 @@ impl Index {
                 err
             );
         }
-    }
-}
-
-impl Clone for Index {
-    fn clone(&self) -> Self {
-        Self::new(&self.path).expect("we already loaded this registry successfully once")
     }
 }

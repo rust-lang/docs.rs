@@ -1,5 +1,5 @@
 use self::diff::{Diff, Diffable};
-use crate::config::Config;
+use crate::Index;
 use failure::ResultExt;
 
 mod data;
@@ -8,8 +8,8 @@ mod diff;
 mod index;
 
 pub fn run_check(
-    config: &Config,
     conn: &mut postgres::Client,
+    index: &Index,
     dry_run: bool,
 ) -> Result<(), failure::Error> {
     if !dry_run {
@@ -25,7 +25,7 @@ pub fn run_check(
     log::info!("Loading data from index...");
     let timer = std::time::Instant::now();
     let index_data =
-        self::index::load(config).context("Loading crate data from index for consistency check")?;
+        self::index::load(index).context("Loading crate data from index for consistency check")?;
     log::info!("...loaded in {:?}", timer.elapsed());
 
     let diff = db_data.diff(index_data);

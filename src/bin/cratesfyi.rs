@@ -4,10 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cratesfyi::db::{self, add_path_into_database, Pool, PoolClient};
-use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
-    BuildQueue, Config, Context, DocBuilder, Metrics, RustwideBuilder, Server, Storage,
+    BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server, Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -282,11 +281,10 @@ enum BuildSubcommand {
 
 impl BuildSubcommand {
     pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<(), Error> {
-        let mut docbuilder = DocBuilder::new(ctx.config()?, ctx.pool()?, ctx.build_queue()?);
+        let docbuilder = DocBuilder::new(ctx.config()?, ctx.pool()?, ctx.build_queue()?);
 
         let rustwide_builder = || -> Result<RustwideBuilder, Error> {
-            let mut builder =
-                RustwideBuilder::init(ctx.config()?, ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
+            let mut builder = RustwideBuilder::init(&ctx)?;
             builder.set_skip_build_if_exists(skip_if_exists);
             Ok(builder)
         };
@@ -294,7 +292,7 @@ impl BuildSubcommand {
         match self {
             Self::World => {
                 rustwide_builder()?
-                    .build_world(&mut docbuilder)
+                    .build_world()
                     .context("Failed to build world")?;
             }
 
@@ -307,12 +305,11 @@ impl BuildSubcommand {
 
                 if let Some(path) = local {
                     builder
-                        .build_local_package(&mut docbuilder, &path)
+                        .build_local_package(&path)
                         .context("Building documentation failed")?;
                 } else {
                     builder
                         .build_package(
-                            &mut docbuilder,
                             &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
                             &crate_version
                                 .ok_or_else(|| err_msg("must specify version if not local"))?,
@@ -420,7 +417,7 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateCrateRegistryFields { name } => {
-                let index = Index::new(&ctx.config()?.registry_index_path)?;
+                let index = ctx.index()?;
 
                 db::update_crate_data_in_database(
                     &mut *ctx.conn()?,
@@ -452,8 +449,8 @@ impl DatabaseSubcommand {
 
             Self::Synchronize { dry_run } => {
                 cratesfyi::utils::consistency::run_check(
-                    &*ctx.config()?,
                     &mut *ctx.conn()?,
+                    &*ctx.index()?,
                     dry_run,
                 )?;
             }
@@ -529,6 +526,7 @@ struct BinContext {
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
     metrics: OnceCell<Arc<Metrics>>,
+    index: OnceCell<Arc<Index>>,
 }
 
 impl BinContext {
@@ -539,6 +537,7 @@ impl BinContext {
             config: OnceCell::new(),
             pool: OnceCell::new(),
             metrics: OnceCell::new(),
+            index: OnceCell::new(),
         }
     }
 
@@ -592,6 +591,13 @@ impl Context for BinContext {
         Ok(self
             .metrics
             .get_or_try_init::<_, Error>(|| Ok(Arc::new(Metrics::new()?)))?
+            .clone())
+    }
+
+    fn index(&self) -> Result<Arc<Index>, Error> {
+        Ok(self
+            .index
+            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Index::new(&*self.config()?)?)))?
             .clone())
     }
 }

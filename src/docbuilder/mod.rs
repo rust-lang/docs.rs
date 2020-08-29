@@ -9,7 +9,6 @@ pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
 
 use crate::db::Pool;
 use crate::error::Result;
-use crate::index::Index;
 use crate::{BuildQueue, Config};
 use std::fs;
 use std::path::PathBuf;
@@ -18,18 +17,15 @@ use std::sync::Arc;
 /// chroot based documentation builder
 pub struct DocBuilder {
     config: Arc<Config>,
-    index: Index,
     db: Pool,
     build_queue: Arc<BuildQueue>,
 }
 
 impl DocBuilder {
     pub fn new(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
-        let index = Index::new(&config.registry_index_path).expect("valid index");
         DocBuilder {
             config,
             build_queue,
-            index,
             db,
         }
     }
