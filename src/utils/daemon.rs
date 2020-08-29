@@ -4,7 +4,7 @@
 
 use crate::{
     utils::{queue_builder, update_release_activity, GithubUpdater},
-    Context, DocBuilder,
+    Context, DocBuilder, RustwideBuilder,
 };
 use chrono::{Timelike, Utc};
 use failure::Error;
@@ -16,6 +16,7 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
     let config = context.config()?;
+    let index = context.index()?;
 
     thread::Builder::new()
         .name("registry index reader".to_string())
@@ -32,14 +33,14 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
                     debug!("Lock file exists, skipping checking new crates");
                 } else {
                     debug!("Checking new crates");
-                    match doc_builder.get_new_crates() {
+                    match doc_builder.get_new_crates(&index) {
                         Ok(n) => debug!("{} crates added to queue", n),
                         Err(e) => error!("Failed to get new crates: {}", e),
                     }
                 }
 
                 if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-                    doc_builder.run_git_gc();
+                    index.run_git_gc();
                     last_gc = Instant::now();
                 }
                 thread::sleep(Duration::from_secs(60));
@@ -60,23 +61,14 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     // build new crates every minute
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
-    let storage = context.storage()?;
-    let metrics = context.metrics()?;
     let cloned_config = config.clone();
+    let rustwide_builder = RustwideBuilder::init(context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
             let doc_builder =
                 DocBuilder::new(cloned_config.clone(), pool.clone(), build_queue.clone());
-            queue_builder(
-                doc_builder,
-                cloned_config,
-                pool,
-                build_queue,
-                metrics,
-                storage,
-            )
-            .unwrap();
+            queue_builder(doc_builder, rustwide_builder, build_queue).unwrap();
         })
         .unwrap();
 

@@ -1,9 +1,7 @@
 use super::data::{Crate, CrateName, Data, Release, Version};
-use crate::{config::Config, index::Index};
+use crate::Index;
 
-pub(crate) fn load(config: &Config) -> Result<Data, failure::Error> {
-    let index = Index::new(&config.registry_index_path)?;
-
+pub(crate) fn load(index: &Index) -> Result<Data, failure::Error> {
     let mut data = Data::default();
 
     index.crates()?.walk(|krate| {

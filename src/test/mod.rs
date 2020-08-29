@@ -3,7 +3,7 @@ mod fakes;
 use crate::db::{Pool, PoolClient};
 use crate::storage::Storage;
 use crate::web::Server;
-use crate::{BuildQueue, Config, Context, Metrics};
+use crate::{BuildQueue, Config, Context, Index, Metrics};
 use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
@@ -96,6 +96,7 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
+    index: OnceCell<Arc<Index>>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
     s3: OnceCell<Arc<Storage>>,
@@ -117,6 +118,7 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: OnceCell::new(),
             storage: OnceCell::new(),
+            index: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
             s3: OnceCell::new(),
@@ -193,6 +195,14 @@ impl TestEnvironment {
             .clone()
     }
 
+    pub(crate) fn index(&self) -> Arc<Index> {
+        self.index
+            .get_or_init(|| {
+                Arc::new(Index::new(&*self.config()).expect("failed to initialize the index"))
+            })
+            .clone()
+    }
+
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db.get_or_init(|| {
             TestDatabase::new(&self.config(), self.metrics()).expect("failed to initialize the db")
@@ -249,6 +259,10 @@ impl Context for TestEnvironment {
 
     fn metrics(&self) -> Result<Arc<Metrics>, Error> {
         Ok(self.metrics())
+    }
+
+    fn index(&self) -> Result<Arc<Index>, Error> {
+        Ok(self.index())
     }
 }
 

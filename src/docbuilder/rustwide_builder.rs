@@ -1,4 +1,3 @@
-use super::DocBuilder;
 use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{
@@ -10,7 +9,7 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use crate::{Config, Metrics, Storage};
+use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
@@ -63,17 +62,15 @@ pub struct RustwideBuilder {
     db: Pool,
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
+    index: Arc<Index>,
     rustc_version: String,
     skip_build_if_exists: bool,
 }
 
 impl RustwideBuilder {
-    pub fn init(
-        config: Arc<Config>,
-        db: Pool,
-        metrics: Arc<Metrics>,
-        storage: Arc<Storage>,
-    ) -> Result<Self> {
+    pub fn init(context: &dyn Context) -> Result<Self> {
+        let config = context.config()?;
+
         let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
             .running_inside_docker(config.inside_docker);
         if let Some(custom_image) = &config.local_docker_image {
@@ -89,9 +86,10 @@ impl RustwideBuilder {
             workspace,
             toolchain,
             config,
-            db,
-            storage,
-            metrics,
+            db: context.pool()?,
+            storage: context.storage()?,
+            metrics: context.metrics()?,
+            index: context.index()?,
             rustc_version: String::new(),
             skip_build_if_exists: false,
         })
@@ -256,34 +254,29 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    pub fn build_world(&mut self, doc_builder: &mut DocBuilder) -> Result<()> {
+    pub fn build_world(&mut self) -> Result<()> {
         crates_from_path(
             &self.config.registry_index_path.clone(),
             &mut |name, version| {
-                if let Err(err) = self.build_package(doc_builder, name, version, None) {
+                if let Err(err) = self.build_package(name, version, None) {
                     warn!("failed to build package {} {}: {}", name, version, err);
                 }
             },
         )
     }
 
-    pub fn build_local_package(
-        &mut self,
-        doc_builder: &mut DocBuilder,
-        path: &Path,
-    ) -> Result<bool> {
+    pub fn build_local_package(&mut self, path: &Path) -> Result<bool> {
         self.update_toolchain()?;
         let metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, path).map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
-        self.build_package(doc_builder, &package.name, &package.version, Some(path))
+        self.build_package(&package.name, &package.version, Some(path))
     }
 
     pub fn build_package(
         &mut self,
-        doc_builder: &mut DocBuilder,
         name: &str,
         version: &str,
         local: Option<&Path>,
@@ -379,7 +372,7 @@ impl RustwideBuilder {
                     self.metrics.non_library_builds.inc();
                 }
 
-                let release_data = match doc_builder.index.api().get_release_data(name, version) {
+                let release_data = match self.index.api().get_release_data(name, version) {
                     Ok(data) => data,
                     Err(err) => {
                         warn!("{:#?}", err);
@@ -408,7 +401,7 @@ impl RustwideBuilder {
                 add_build_into_database(&mut conn, release_id, &res.result)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
-                match doc_builder.index.api().get_crate_data(name) {
+                match self.index.api().get_crate_data(name) {
                     Ok(crate_data) => update_crate_data_in_database(&mut conn, name, &crate_data)?,
                     Err(err) => warn!("{:#?}", err),
                 }

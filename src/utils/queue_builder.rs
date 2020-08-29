@@ -1,7 +1,4 @@
-use crate::{
-    db::Pool, docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, Config, DocBuilder,
-    Metrics, Storage,
-};
+use crate::{docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, DocBuilder};
 use failure::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -12,11 +9,8 @@ use std::time::Duration;
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
 pub fn queue_builder(
     mut doc_builder: DocBuilder,
-    config: Arc<Config>,
-    db: Pool,
+    mut builder: RustwideBuilder,
     build_queue: Arc<BuildQueue>,
-    metrics: Arc<Metrics>,
-    storage: Arc<Storage>,
 ) -> Result<(), Error> {
     /// Represents the current state of the builder thread.
     enum BuilderState {
@@ -30,8 +24,6 @@ pub fn queue_builder(
         /// crates built since the caches have been refreshed.
         QueueInProgress(usize),
     }
-
-    let mut builder = RustwideBuilder::init(config, db, metrics, storage)?;
 
     let mut status = BuilderState::Fresh;
 
