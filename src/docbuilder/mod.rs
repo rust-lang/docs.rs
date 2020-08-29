@@ -1,6 +1,5 @@
 mod crates;
 mod limits;
-pub(crate) mod options;
 mod queue;
 mod rustwide_builder;
 
@@ -11,33 +10,32 @@ pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
 use crate::db::Pool;
 use crate::error::Result;
 use crate::index::Index;
-use crate::BuildQueue;
-use crate::DocBuilderOptions;
+use crate::{BuildQueue, Config};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 /// chroot based documentation builder
 pub struct DocBuilder {
-    options: DocBuilderOptions,
+    config: Arc<Config>,
     index: Index,
     db: Pool,
     build_queue: Arc<BuildQueue>,
 }
 
 impl DocBuilder {
-    pub fn new(options: DocBuilderOptions, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
-        let index = Index::new(&options.registry_index_path).expect("valid index");
+    pub fn new(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
+        let index = Index::new(&config.registry_index_path).expect("valid index");
         DocBuilder {
+            config,
             build_queue,
-            options,
             index,
             db,
         }
     }
 
     fn lock_path(&self) -> PathBuf {
-        self.options.prefix.join("cratesfyi.lock")
+        self.config.prefix.join("cratesfyi.lock")
     }
 
     /// Creates a lock file. Daemon will check this lock file and stop operating if its exists.
@@ -63,10 +61,5 @@ impl DocBuilder {
     /// Checks for the lock file and returns whether it currently exists.
     pub fn is_locked(&self) -> bool {
         self.lock_path().exists()
-    }
-
-    /// Returns a reference of options
-    pub fn options(&self) -> &DocBuilderOptions {
-        &self.options
     }
 }

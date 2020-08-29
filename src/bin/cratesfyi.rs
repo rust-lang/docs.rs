@@ -7,8 +7,7 @@ use cratesfyi::db::{self, add_path_into_database, Pool, PoolClient};
 use cratesfyi::index::Index;
 use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
 use cratesfyi::{
-    BuildQueue, Config, Context, DocBuilder, DocBuilderOptions, Metrics, RustwideBuilder, Server,
-    Storage,
+    BuildQueue, Config, Context, DocBuilder, Metrics, RustwideBuilder, Server, Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -230,31 +229,13 @@ struct Build {
     #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
     skip_if_exists: bool,
 
-    /// Skips building documentation if build log exists
-    #[structopt(name = "SKIP_IF_LOG_EXISTS", long = "skip-if-log-exists")]
-    skip_if_log_exists: bool,
-
     #[structopt(subcommand)]
     subcommand: BuildSubcommand,
 }
 
 impl Build {
     pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
-        let docbuilder = {
-            let config = ctx.config()?;
-            let mut doc_options =
-                DocBuilderOptions::new(config.prefix.clone(), config.registry_index_path.clone());
-
-            doc_options.skip_if_exists = self.skip_if_exists;
-
-            doc_options
-                .check_paths()
-                .context("The given paths were invalid")?;
-
-            DocBuilder::new(doc_options, ctx.pool()?, ctx.build_queue()?)
-        };
-
-        self.subcommand.handle_args(ctx, docbuilder)
+        self.subcommand.handle_args(ctx, self.skip_if_exists)
     }
 }
 
@@ -297,19 +278,17 @@ enum BuildSubcommand {
 
     /// Unlocks cratesfyi daemon to continue building new crates
     Unlock,
-
-    PrintOptions,
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: BinContext, mut docbuilder: DocBuilder) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<(), Error> {
+        let mut docbuilder = DocBuilder::new(ctx.config()?, ctx.pool()?, ctx.build_queue()?);
+
         let rustwide_builder = || -> Result<RustwideBuilder, Error> {
-            Ok(RustwideBuilder::init(
-                ctx.config()?,
-                ctx.pool()?,
-                ctx.metrics()?,
-                ctx.storage()?,
-            )?)
+            let mut builder =
+                RustwideBuilder::init(ctx.config()?, ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
+            builder.set_skip_build_if_exists(skip_if_exists);
+            Ok(builder)
         };
 
         match self {
@@ -371,7 +350,6 @@ impl BuildSubcommand {
 
             Self::Lock => docbuilder.lock().context("Failed to lock")?,
             Self::Unlock => docbuilder.unlock().context("Failed to unlock")?,
-            Self::PrintOptions => println!("{:?}", docbuilder.options()),
         }
 
         Ok(())
