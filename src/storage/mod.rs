@@ -72,18 +72,18 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
 pub(crate) struct InvalidStorageBackendError;
 
 #[derive(Debug)]
-pub(crate) enum StorageBackendKind {
+pub(crate) enum StorageKind {
     Database,
     S3,
 }
 
-impl std::str::FromStr for StorageBackendKind {
+impl std::str::FromStr for StorageKind {
     type Err = InvalidStorageBackendError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input {
-            "database" => Ok(StorageBackendKind::Database),
-            "s3" => Ok(StorageBackendKind::S3),
+            "database" => Ok(StorageKind::Database),
+            "s3" => Ok(StorageKind::S3),
             _ => Err(InvalidStorageBackendError),
         }
     }
@@ -102,12 +102,10 @@ impl Storage {
     pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         Ok(Storage {
             backend: match config.storage_backend {
-                StorageBackendKind::Database => {
+                StorageKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
                 }
-                StorageBackendKind::S3 => {
-                    StorageBackend::S3(Box::new(S3Backend::new(metrics, config)?))
-                }
+                StorageKind::S3 => StorageBackend::S3(Box::new(S3Backend::new(metrics, config)?)),
             },
         })
     }
@@ -579,7 +577,7 @@ mod backend_tests {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
-                    use crate::storage::{Storage, StorageBackendKind};
+                    use crate::storage::{Storage, StorageKind};
                     use std::sync::Arc;
 
                     fn get_storage(env: &TestEnvironment) -> Arc<Storage> {
@@ -618,8 +616,8 @@ mod backend_tests {
 
     backend_tests! {
         backends {
-            s3 => StorageBackendKind::S3,
-            database => StorageBackendKind::Database,
+            s3 => StorageKind::S3,
+            database => StorageKind::Database,
         }
 
         tests {
