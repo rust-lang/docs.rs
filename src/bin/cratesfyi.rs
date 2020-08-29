@@ -303,11 +303,17 @@ enum BuildSubcommand {
 
 impl BuildSubcommand {
     pub fn handle_args(self, ctx: BinContext, mut docbuilder: DocBuilder) -> Result<(), Error> {
+        let rustwide_builder = || -> Result<RustwideBuilder, Error> {
+            Ok(RustwideBuilder::init(
+                ctx.pool()?,
+                ctx.metrics()?,
+                ctx.storage()?,
+            )?)
+        };
+
         match self {
             Self::World => {
-                let mut builder =
-                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
-                builder
+                rustwide_builder()?
                     .build_world(&mut docbuilder)
                     .context("Failed to build world")?;
             }
@@ -317,9 +323,7 @@ impl BuildSubcommand {
                 crate_version,
                 local,
             } => {
-                let mut builder =
-                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)
-                        .context("failed to initialize rustwide")?;
+                let mut builder = rustwide_builder()?;
 
                 if let Some(path) = local {
                     builder
@@ -353,17 +357,13 @@ impl BuildSubcommand {
                     }
                 }
 
-                let mut builder =
-                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
-                builder
+                rustwide_builder()?
                     .update_toolchain()
                     .context("failed to update toolchain")?;
             }
 
             Self::AddEssentialFiles => {
-                let mut builder =
-                    RustwideBuilder::init(ctx.pool()?, ctx.metrics()?, ctx.storage()?)?;
-                builder
+                rustwide_builder()?
                     .add_essential_files()
                     .context("failed to add essential files")?;
             }
