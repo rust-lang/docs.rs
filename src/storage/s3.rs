@@ -39,7 +39,7 @@ impl S3Backend {
                     name: config.s3_region.name().to_string(),
                     endpoint: endpoint.to_string(),
                 })
-                .unwrap_or(config.s3_region.clone()),
+                .unwrap_or_else(|| config.s3_region.clone()),
         );
 
         #[cfg(test)]

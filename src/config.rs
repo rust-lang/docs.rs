@@ -1,4 +1,4 @@
-use crate::storage::StorageBackendKind;
+use crate::storage::StorageKind;
 use failure::{bail, format_err, Error, Fail, ResultExt};
 use rusoto_core::Region;
 use std::env::VarError;
@@ -19,7 +19,7 @@ pub struct Config {
     pub(crate) min_pool_idle: u32,
 
     // Storage params
-    pub(crate) storage_backend: StorageBackendKind,
+    pub(crate) storage_backend: StorageKind,
 
     // S3 params
     pub(crate) s3_bucket: String,
@@ -55,7 +55,7 @@ impl Config {
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
-            storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageBackendKind::Database)?,
+            storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?,
 
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
             s3_region: env("S3_REGION", Region::UsWest1)?,
