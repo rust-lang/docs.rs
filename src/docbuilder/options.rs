@@ -3,14 +3,10 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct DocBuilderOptions {
-    pub keep_build_directory: bool,
-    pub prefix: PathBuf,
-    pub registry_index_path: PathBuf,
+    pub(crate) prefix: PathBuf,
+    pub(crate) registry_index_path: PathBuf,
     pub skip_if_exists: bool,
     pub skip_if_log_exists: bool,
-    pub skip_oldest_versions: bool,
-    pub build_only_latest_version: bool,
-    pub debug: bool,
 }
 
 impl DocBuilderOptions {
@@ -19,12 +15,8 @@ impl DocBuilderOptions {
             prefix,
             registry_index_path,
 
-            keep_build_directory: false,
             skip_if_exists: false,
             skip_if_log_exists: false,
-            skip_oldest_versions: false,
-            build_only_latest_version: false,
-            debug: false,
         }
     }
 
