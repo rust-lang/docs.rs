@@ -10,23 +10,21 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use crate::{Metrics, Storage};
+use crate::{Config, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
-use rustwide::cmd::{Command, SandboxBuilder};
+use rustwide::cmd::{Command, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-const DEFAULT_RUSTWIDE_WORKSPACE: &str = ".rustwide";
 const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
     "wheel.svg",
@@ -61,59 +59,45 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
+    config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
     rustc_version: String,
-    cpu_limit: Option<u32>,
 }
 
 impl RustwideBuilder {
-    pub fn init(db: Pool, metrics: Arc<Metrics>, storage: Arc<Storage>) -> Result<Self> {
-        use rustwide::cmd::SandboxImage;
-        let env_workspace_path = ::std::env::var("CRATESFYI_RUSTWIDE_WORKSPACE");
-        let workspace_path = env_workspace_path
-            .as_ref()
-            .map(|v| v.as_str())
-            .unwrap_or(DEFAULT_RUSTWIDE_WORKSPACE);
-        let is_docker = std::env::var("DOCS_RS_DOCKER")
-            .map(|s| s == "true")
-            .unwrap_or(false);
-        let mut builder = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
-            .running_inside_docker(is_docker);
-        if let Ok(custom_image) = std::env::var("DOCS_RS_LOCAL_DOCKER_IMAGE") {
+    pub fn init(
+        config: Arc<Config>,
+        db: Pool,
+        metrics: Arc<Metrics>,
+        storage: Arc<Storage>,
+    ) -> Result<Self> {
+        let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
+            .running_inside_docker(config.inside_docker);
+        if let Some(custom_image) = &config.local_docker_image {
             builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
         }
 
         let workspace = builder.init()?;
         workspace.purge_all_build_dirs()?;
 
-        let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
-            .map(Cow::Owned)
-            .unwrap_or_else(|_| Cow::Borrowed("nightly"));
-
-        let cpu_limit = std::env::var("DOCS_RS_BUILD_CPU_LIMIT").ok().map(|limit| {
-            limit
-                .parse::<u32>()
-                .expect("invalid DOCS_RS_BUILD_CPU_LIMIT")
-        });
-
-        let toolchain = Toolchain::dist(&toolchain_name);
+        let toolchain = Toolchain::dist(&config.toolchain);
 
         Ok(RustwideBuilder {
             workspace,
             toolchain,
+            config,
             db,
             storage,
             metrics,
             rustc_version: String::new(),
-            cpu_limit,
         })
     }
 
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
         SandboxBuilder::new()
-            .cpu_limit(self.cpu_limit.map(|limit| limit as f32))
+            .cpu_limit(self.config.build_cpu_limit.map(|limit| limit as f32))
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking())
     }
@@ -588,7 +572,7 @@ impl RustwideBuilder {
         let mut cargo_args = metadata.cargo_args();
 
         // Add docs.rs specific arguments
-        if let Some(cpu_limit) = self.cpu_limit {
+        if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
         }
         if target != HOST_TARGET {

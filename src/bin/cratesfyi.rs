@@ -305,6 +305,7 @@ impl BuildSubcommand {
     pub fn handle_args(self, ctx: BinContext, mut docbuilder: DocBuilder) -> Result<(), Error> {
         let rustwide_builder = || -> Result<RustwideBuilder, Error> {
             Ok(RustwideBuilder::init(
+                ctx.config()?,
                 ctx.pool()?,
                 ctx.metrics()?,
                 ctx.storage()?,
