@@ -39,6 +39,12 @@ pub struct Config {
     pub(crate) max_parse_memory: usize,
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
+
+    pub(crate) rustwide_workspace: PathBuf,
+    pub(crate) inside_docker: bool,
+    pub(crate) local_docker_image: Option<String>,
+    pub(crate) toolchain: String,
+    pub(crate) build_cpu_limit: Option<u32>,
 }
 
 impl Config {
@@ -75,6 +81,12 @@ impl Config {
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
+
+            rustwide_workspace: env("CRATESFYI_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
+            inside_docker: env("DOCS_RS_DOCKER", false)?,
+            local_docker_image: maybe_env("DOCS_RS_LOCAL_DOCKER_IMAGE")?,
+            toolchain: env("CRATESFYI_TOOLCHAIN", "nightly".to_string())?,
+            build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
         })
     }
 

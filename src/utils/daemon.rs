@@ -66,11 +66,12 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     let build_queue = context.build_queue()?;
     let storage = context.storage()?;
     let metrics = context.metrics()?;
+    let cloned_config = config.clone();
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
             let doc_builder = DocBuilder::new(dbopts.clone(), pool.clone(), build_queue.clone());
-            queue_builder(doc_builder, pool, build_queue, metrics, storage).unwrap();
+            queue_builder(doc_builder, cloned_config, pool, build_queue, metrics, storage).unwrap();
         })
         .unwrap();
 

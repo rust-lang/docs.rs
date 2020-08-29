@@ -1,6 +1,6 @@
 use crate::{
-    db::Pool, docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, DocBuilder, Metrics,
-    Storage,
+    db::Pool, docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, Config, DocBuilder,
+    Metrics, Storage,
 };
 use failure::Error;
 use log::{debug, error, info, warn};
@@ -12,6 +12,7 @@ use std::time::Duration;
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
 pub fn queue_builder(
     mut doc_builder: DocBuilder,
+    config: Arc<Config>,
     db: Pool,
     build_queue: Arc<BuildQueue>,
     metrics: Arc<Metrics>,
@@ -30,7 +31,7 @@ pub fn queue_builder(
         QueueInProgress(usize),
     }
 
-    let mut builder = RustwideBuilder::init(db, metrics, storage)?;
+    let mut builder = RustwideBuilder::init(config, db, metrics, storage)?;
 
     let mut status = BuilderState::Fresh;
 
