@@ -262,7 +262,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     failure::bail!("deleting from s3 failed");
                 }
 
-                continuation_token = list.continuation_token;
+                continuation_token = list.next_continuation_token;
                 if continuation_token.is_none() {
                     return Ok(());
                 }
