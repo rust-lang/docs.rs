@@ -415,14 +415,20 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 .iter()
                 .any(|s| s == inner_path[0])
         {
-            let mut target = inner_path.remove(0).to_string();
-            target.push('/');
-            target
+            inner_path.remove(0)
         } else {
-            String::new()
+            ""
         };
 
         (target, inner_path.join("/"))
+    };
+
+    metrics.recent_releases.record(&name, &version, target);
+
+    let target = if target == "" {
+        String::new()
+    } else {
+        format!("{}/", target)
     };
 
     rendering_time.step("rewrite html");
