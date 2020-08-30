@@ -6,10 +6,16 @@ use crate::db::Pool;
 use crate::BuildQueue;
 use failure::Error;
 use prometheus::proto::MetricFamily;
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
 load_metric_type!(IntCounterVec as vec);
+load_metric_type!(IntGaugeVec as vec);
 load_metric_type!(HistogramVec as vec);
 
 metrics! {
@@ -44,6 +50,13 @@ metrics! {
         /// The time it takes to render a rustdoc page
         pub(crate) rustdoc_rendering_times: HistogramVec["step"],
 
+        /// Count of recently accessed crates
+        pub(crate) recent_krates: IntGaugeVec["duration"],
+        /// Count of recently accessed versions of crates
+        pub(crate) recent_versions: IntGaugeVec["duration"],
+        /// Count of recently accessed platforms of versions of crates
+        pub(crate) recent_platforms: IntGaugeVec["duration"],
+
         /// Number of crates built
         pub(crate) total_builds: IntCounter,
         /// Number of builds that successfully generated docs
@@ -67,6 +80,82 @@ metrics! {
     namespace: "docsrs",
 }
 
+#[derive(Debug)]
+pub(crate) struct RecentReleases {
+    krates: Mutex<HashMap<String, Instant>>,
+    versions: Mutex<HashMap<String, Instant>>,
+    platforms: Mutex<HashMap<String, Instant>>,
+}
+
+impl RecentReleases {
+    pub(crate) fn new() -> Self {
+        Self {
+            krates: Mutex::new(HashMap::new()),
+            versions: Mutex::new(HashMap::new()),
+            platforms: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(crate) fn record(&self, krate: &str, version: &str, target: &str) {
+        self.krates
+            .lock()
+            .unwrap()
+            .insert(krate.to_owned(), Instant::now());
+        self.versions
+            .lock()
+            .unwrap()
+            .insert(format!("{}/{}", krate, version), Instant::now());
+        self.platforms
+            .lock()
+            .unwrap()
+            .insert(format!("{}/{}/{}", krate, version, target), Instant::now());
+    }
+
+    pub(crate) fn gather(&self, metrics: &Metrics) {
+        fn inner(map: &mut HashMap<String, Instant>, metric: &IntGaugeVec) {
+            let mut hour_count = 0;
+            let mut half_hour_count = 0;
+            let mut five_minute_count = 0;
+            map.retain(|_, instant| {
+                let elapsed = instant.elapsed();
+                if elapsed > Duration::from_secs(60 * 60) {
+                    return false;
+                }
+                hour_count += 1;
+                if elapsed > Duration::from_secs(30 * 60) {
+                    return true;
+                }
+                half_hour_count += 1;
+                if elapsed > Duration::from_secs(5 * 60) {
+                    return true;
+                }
+                five_minute_count += 1;
+                true
+            });
+
+            metric.with_label_values(&["one hour"]).set(hour_count);
+
+            metric
+                .with_label_values(&["half hour"])
+                .set(half_hour_count);
+
+            metric
+                .with_label_values(&["five minutes"])
+                .set(five_minute_count);
+        }
+
+        inner(&mut *self.krates.lock().unwrap(), &metrics.recent_krates);
+        inner(
+            &mut *self.versions.lock().unwrap(),
+            &metrics.recent_versions,
+        );
+        inner(
+            &mut *self.platforms.lock().unwrap(),
+            &metrics.recent_platforms,
+        );
+    }
+}
+
 impl Metrics {
     pub(crate) fn gather(
         &self,
@@ -82,6 +171,7 @@ impl Metrics {
             .set(queue.prioritized_count()? as i64);
         self.failed_crates_count.set(queue.failed_count()? as i64);
 
+        self.recent_releases.gather(self);
         self.gather_system_performance();
         Ok(self.registry.gather())
     }
