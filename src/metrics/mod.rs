@@ -4,13 +4,10 @@ mod macros;
 use self::macros::MetricFromOpts;
 use crate::db::Pool;
 use crate::BuildQueue;
+use dashmap::DashMap;
 use failure::Error;
 use prometheus::proto::MetricFamily;
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -80,39 +77,28 @@ metrics! {
     namespace: "docsrs",
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct RecentReleases {
-    krates: Mutex<HashMap<String, Instant>>,
-    versions: Mutex<HashMap<String, Instant>>,
-    platforms: Mutex<HashMap<String, Instant>>,
+    krates: DashMap<String, Instant>,
+    versions: DashMap<String, Instant>,
+    platforms: DashMap<String, Instant>,
 }
 
 impl RecentReleases {
     pub(crate) fn new() -> Self {
-        Self {
-            krates: Mutex::new(HashMap::new()),
-            versions: Mutex::new(HashMap::new()),
-            platforms: Mutex::new(HashMap::new()),
-        }
+        Self::default()
     }
 
     pub(crate) fn record(&self, krate: &str, version: &str, target: &str) {
-        self.krates
-            .lock()
-            .unwrap()
-            .insert(krate.to_owned(), Instant::now());
+        self.krates.insert(krate.to_owned(), Instant::now());
         self.versions
-            .lock()
-            .unwrap()
             .insert(format!("{}/{}", krate, version), Instant::now());
         self.platforms
-            .lock()
-            .unwrap()
             .insert(format!("{}/{}/{}", krate, version, target), Instant::now());
     }
 
     pub(crate) fn gather(&self, metrics: &Metrics) {
-        fn inner(map: &mut HashMap<String, Instant>, metric: &IntGaugeVec) {
+        fn inner(map: &DashMap<String, Instant>, metric: &IntGaugeVec) {
             let mut hour_count = 0;
             let mut half_hour_count = 0;
             let mut five_minute_count = 0;
@@ -144,15 +130,9 @@ impl RecentReleases {
                 .set(five_minute_count);
         }
 
-        inner(&mut *self.krates.lock().unwrap(), &metrics.recent_krates);
-        inner(
-            &mut *self.versions.lock().unwrap(),
-            &metrics.recent_versions,
-        );
-        inner(
-            &mut *self.platforms.lock().unwrap(),
-            &metrics.recent_platforms,
-        );
+        inner(&self.krates, &metrics.recent_krates);
+        inner(&self.versions, &metrics.recent_versions);
+        inner(&self.platforms, &metrics.recent_platforms);
     }
 }
 
