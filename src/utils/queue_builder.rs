@@ -40,7 +40,7 @@ pub fn queue_builder(
         }
 
         if status.count() >= 10 {
-            // periodically, we need to flush our caches and ping the hubs
+            // periodically, ping the hubs
             debug!("10 builds in a row; pinging pubsubhubhub");
             status = BuilderState::QueueInProgress(0);
 
