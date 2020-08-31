@@ -423,7 +423,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         (target, inner_path.join("/"))
     };
 
-    metrics.recent_releases.record(&name, &version, target);
+    metrics
+        .recently_accessed_releases
+        .record(&name, &version, target);
 
     let target = if target == "" {
         String::new()

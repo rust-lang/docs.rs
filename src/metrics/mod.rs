@@ -78,13 +78,13 @@ metrics! {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct RecentReleases {
+pub(crate) struct RecentlyAccessedReleases {
     krates: DashMap<String, Instant>,
     versions: DashMap<String, Instant>,
     platforms: DashMap<String, Instant>,
 }
 
-impl RecentReleases {
+impl RecentlyAccessedReleases {
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -151,7 +151,7 @@ impl Metrics {
             .set(queue.prioritized_count()? as i64);
         self.failed_crates_count.set(queue.failed_count()? as i64);
 
-        self.recent_releases.gather(self);
+        self.recently_accessed_releases.gather(self);
         self.gather_system_performance();
         Ok(self.registry.gather())
     }

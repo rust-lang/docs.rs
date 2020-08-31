@@ -20,7 +20,7 @@ macro_rules! metrics {
                 $(#[$meta])*
                 $metric_vis $metric: $ty,
             )*
-            pub(crate) recent_releases: RecentReleases,
+            pub(crate) recently_accessed_releases: RecentlyAccessedReleases,
         }
         impl $name {
             $vis fn new() -> Result<Self, prometheus::Error> {
@@ -37,7 +37,7 @@ macro_rules! metrics {
                 )*
                 Ok(Self {
                     registry,
-                    recent_releases: RecentReleases::new(),
+                    recently_accessed_releases: RecentlyAccessedReleases::new(),
                     $(
                         $(#[$meta])*
                         $metric,
