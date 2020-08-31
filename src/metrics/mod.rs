@@ -48,7 +48,7 @@ metrics! {
         pub(crate) rustdoc_rendering_times: HistogramVec["step"],
 
         /// Count of recently accessed crates
-        pub(crate) recent_krates: IntGaugeVec["duration"],
+        pub(crate) recent_crates: IntGaugeVec["duration"],
         /// Count of recently accessed versions of crates
         pub(crate) recent_versions: IntGaugeVec["duration"],
         /// Count of recently accessed platforms of versions of crates
@@ -130,7 +130,7 @@ impl RecentReleases {
                 .set(five_minute_count);
         }
 
-        inner(&self.krates, &metrics.recent_krates);
+        inner(&self.krates, &metrics.recent_crates);
         inner(&self.versions, &metrics.recent_versions);
         inner(&self.platforms, &metrics.recent_platforms);
     }
