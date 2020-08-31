@@ -425,7 +425,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     metrics
         .recently_accessed_releases
-        .record(&name, &version, target);
+        .record(krate.crate_id, krate.release_id, target);
 
     let target = if target == "" {
         String::new()

@@ -45,6 +45,10 @@ pub struct CrateDetails {
     documented_items: Option<f32>,
     total_items_needing_examples: Option<f32>,
     items_with_examples: Option<f32>,
+    /// Database id for this crate
+    pub(crate) crate_id: i32,
+    /// Database id for this release
+    pub(crate) release_id: i32,
 }
 
 fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
@@ -183,6 +187,8 @@ impl CrateDetails {
             total_items: total_items.map(|v| v as f32),
             total_items_needing_examples: total_items_needing_examples.map(|v| v as f32),
             items_with_examples: items_with_examples.map(|v| v as f32),
+            crate_id,
+            release_id,
         };
 
         if let Some(repository_url) = crate_details.repository_url.clone() {

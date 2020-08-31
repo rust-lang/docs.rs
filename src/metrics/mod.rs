@@ -79,9 +79,9 @@ metrics! {
 
 #[derive(Debug, Default)]
 pub(crate) struct RecentlyAccessedReleases {
-    krates: DashMap<String, Instant>,
-    versions: DashMap<String, Instant>,
-    platforms: DashMap<String, Instant>,
+    krates: DashMap<i32, Instant>,
+    versions: DashMap<i32, Instant>,
+    platforms: DashMap<(i32, String), Instant>,
 }
 
 impl RecentlyAccessedReleases {
@@ -89,16 +89,15 @@ impl RecentlyAccessedReleases {
         Self::default()
     }
 
-    pub(crate) fn record(&self, krate: &str, version: &str, target: &str) {
-        self.krates.insert(krate.to_owned(), Instant::now());
-        self.versions
-            .insert(format!("{}/{}", krate, version), Instant::now());
+    pub(crate) fn record(&self, krate: i32, version: i32, target: &str) {
+        self.krates.insert(krate, Instant::now());
+        self.versions.insert(version, Instant::now());
         self.platforms
-            .insert(format!("{}/{}/{}", krate, version, target), Instant::now());
+            .insert((version, target.to_owned()), Instant::now());
     }
 
     pub(crate) fn gather(&self, metrics: &Metrics) {
-        fn inner(map: &DashMap<String, Instant>, metric: &IntGaugeVec) {
+        fn inner<K: std::hash::Hash + Eq>(map: &DashMap<K, Instant>, metric: &IntGaugeVec) {
             let mut hour_count = 0;
             let mut half_hour_count = 0;
             let mut five_minute_count = 0;
