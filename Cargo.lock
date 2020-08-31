@@ -709,6 +709,8 @@ dependencies = [
  "serde",
  "serde_json",
  "slug",
+ "string_cache",
+ "string_cache_codegen",
  "structopt",
  "strum",
  "systemstat",

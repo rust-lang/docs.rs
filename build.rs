@@ -19,6 +19,7 @@ fn main() {
     if let Err(sass_err) = compile_sass() {
         panic!("Error compiling sass: {}", sass_err);
     }
+    write_known_targets().unwrap();
 }
 
 fn write_git_version() {
@@ -84,6 +85,24 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
         "vendored",
         &[concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned()],
     )?;
+
+    Ok(())
+}
+
+fn write_known_targets() -> std::io::Result<()> {
+    use std::io::BufRead;
+
+    let targets: Vec<String> = std::process::Command::new("rustc")
+        .args(&["--print", "target-list"])
+        .output()?
+        .stdout
+        .lines()
+        .filter(|s| s.as_ref().map_or(true, |s| !s.is_empty()))
+        .collect::<std::io::Result<_>>()?;
+
+    string_cache_codegen::AtomType::new("target::TargetAtom", "target_atom!")
+        .atoms(&targets)
+        .write_to_file(&Path::new(&env::var("OUT_DIR").unwrap()).join("target_atom.rs"))?;
 
     Ok(())
 }
