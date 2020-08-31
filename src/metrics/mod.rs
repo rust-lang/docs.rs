@@ -3,6 +3,7 @@ mod macros;
 
 use self::macros::MetricFromOpts;
 use crate::db::Pool;
+use crate::target::TargetAtom;
 use crate::BuildQueue;
 use dashmap::DashMap;
 use failure::Error;
@@ -81,7 +82,7 @@ metrics! {
 pub(crate) struct RecentlyAccessedReleases {
     krates: DashMap<i32, Instant>,
     versions: DashMap<i32, Instant>,
-    platforms: DashMap<(i32, String), Instant>,
+    platforms: DashMap<(i32, TargetAtom), Instant>,
 }
 
 impl RecentlyAccessedReleases {
@@ -93,7 +94,7 @@ impl RecentlyAccessedReleases {
         self.krates.insert(krate, Instant::now());
         self.versions.insert(version, Instant::now());
         self.platforms
-            .insert((version, target.to_owned()), Instant::now());
+            .insert((version, TargetAtom::from(target)), Instant::now());
     }
 
     pub(crate) fn gather(&self, metrics: &Metrics) {

@@ -52,6 +52,7 @@ strum = { version = "0.18.0", features = ["derive"] }
 lol_html = "0.2"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "3.11.10"
+string_cache = "0.8.0"
 
 # Async
 tokio = { version = "0.2.22", features = ["rt-threaded"] }
@@ -98,6 +99,7 @@ rand = "0.7.3"
 time = "0.1"
 git2 = { version = "0.13", default-features = false }
 sass-rs = "0.2.2"
+string_cache_codegen = "0.5.1"
 
 [[bench]]
 name = "html_parsing"
