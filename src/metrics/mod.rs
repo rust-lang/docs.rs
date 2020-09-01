@@ -80,7 +80,7 @@ metrics! {
 
 #[derive(Debug, Default)]
 pub(crate) struct RecentlyAccessedReleases {
-    krates: DashMap<i32, Instant>,
+    crates: DashMap<i32, Instant>,
     versions: DashMap<i32, Instant>,
     platforms: DashMap<(i32, TargetAtom), Instant>,
 }
@@ -91,7 +91,7 @@ impl RecentlyAccessedReleases {
     }
 
     pub(crate) fn record(&self, krate: i32, version: i32, target: &str) {
-        self.krates.insert(krate, Instant::now());
+        self.crates.insert(krate, Instant::now());
         self.versions.insert(version, Instant::now());
         self.platforms
             .insert((version, TargetAtom::from(target)), Instant::now());
@@ -130,7 +130,7 @@ impl RecentlyAccessedReleases {
                 .set(five_minute_count);
         }
 
-        inner(&self.krates, &metrics.recent_crates);
+        inner(&self.crates, &metrics.recent_crates);
         inner(&self.versions, &metrics.recent_versions);
         inner(&self.platforms, &metrics.recent_platforms);
     }
