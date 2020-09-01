@@ -68,6 +68,8 @@ docker-compose up -d db s3
 # including running the migrations and installing the nightly Rust toolchain.
 # This will take a while the first time but will be cached afterwards.
 cargo run -- build crate regex 1.3.1
+# Generate important files for the web navigation
+cargo run -- build add-essential-files
 # This starts the web server but does not build any crates.
 # It does not automatically run the migrations, so you need to do that manually.
 cargo run database migrate
