@@ -9,6 +9,10 @@ build = "build.rs"
 edition = "2018"
 
 [workspace]
+exclude = [
+    "ignored",
+    ".workspace",
+]
 
 [dependencies]
 log = "0.4"
