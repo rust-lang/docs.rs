@@ -12,6 +12,7 @@ edition = "2018"
 exclude = [
     "ignored",
     ".workspace",
+    ".rustwide-docker",
 ]
 
 [dependencies]
