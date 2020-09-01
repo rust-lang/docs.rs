@@ -104,19 +104,19 @@ impl RecentlyAccessedReleases {
             let mut five_minute_count = 0;
             map.retain(|_, instant| {
                 let elapsed = instant.elapsed();
-                if elapsed > Duration::from_secs(60 * 60) {
-                    return false;
+
+                if elapsed < Duration::from_secs(60 * 60) {
+                    hour_count += 1;
                 }
-                hour_count += 1;
-                if elapsed > Duration::from_secs(30 * 60) {
-                    return true;
+                if elapsed < Duration::from_secs(30 * 60) {
+                    half_hour_count += 1;
                 }
-                half_hour_count += 1;
-                if elapsed > Duration::from_secs(5 * 60) {
-                    return true;
+                if elapsed < Duration::from_secs(5 * 60) {
+                    five_minute_count += 1;
                 }
-                five_minute_count += 1;
-                true
+
+                // Only retain items accessed within the last hour
+                return elapsed < Duration::from_secs(60 * 60);
             });
 
             metric.with_label_values(&["one hour"]).set(hour_count);
