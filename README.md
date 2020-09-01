@@ -61,7 +61,7 @@ cp .env.sample .env
 mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 cargo build
-# Start the extenal services
+# Start the external services
 docker-compose up -d db s3
 # Build a sample crate to make sure it works
 # This sets up the docs.rs build environment,
