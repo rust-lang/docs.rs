@@ -431,7 +431,6 @@ div.package-page-container {
     pre {
         background-color: inherit;
         padding: 0;
-        margin: 0;
 
         code {
             white-space: pre;
@@ -487,6 +486,12 @@ div.cratesfyi-package-container {
         .pure-menu-active {
             color: $color-standard;
             background-color: #fff;
+            border-top: 1px solid $color-border;
+            border-left: 1px solid $color-border;
+            border-right: 1px solid $color-border;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            border-bottom: 2px solid #fff;
         }
 
         .pure-menu-active:hover {
