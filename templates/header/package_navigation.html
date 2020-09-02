@@ -12,7 +12,7 @@
     Note: `false` here is acting as a pseudo-null value since you can't directly construct null values
            and tera requires all parameters without defaults to be filled
 #}
-{% macro package_navigation(title=false, metadata, show_description=true, platforms=false, active_tab) %}
+{% macro package_navigation(title=false, metadata, platforms=false, active_tab) %}
     <div class="cratesfyi-package-container">
         <div class="container">
             {# Page title #}
@@ -26,13 +26,13 @@
             </h1>
 
             {# Page description #}
-            {%- if metadata.description -%}
-                {%- if show_description -%}
-                    <div class="description">{{ metadata.description }}</div>
+            <div class="description">
+                {%- if metadata.description -%}
+                    {{ metadata.description }}
                 {%- endif -%}
-            {%- endif -%}
+            </div>
 
-            <div class="pure-menu" {% if active_tab %} style="margin-top: 13px;"{% endif %}>
+            <div class="pure-menu pure-menu-horizontal">
                 {# If there are platforms, show a dropdown with them #}
                 {%- if platforms -%}
                     <ul class="pure-menu-list platforms-menu">
