@@ -476,7 +476,11 @@ div.cratesfyi-package-container {
             padding: 0.4em 1em 0.3em 1em;
 
             .title {
-                display: inline;
+                display: none;
+
+                @media #{$media-sm} {
+                    display: inline;
+                }
             }
         }
 
