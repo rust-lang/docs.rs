@@ -93,3 +93,33 @@ impl From<PoolError> for IronError {
         IronError::new(err.compat(), Status::InternalServerError)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::wrapper;
+    use kuchiki::traits::TendrilSink;
+
+    #[test]
+    fn check_404_page_content() {
+        wrapper(|env| {
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/page-which-doesnt-exist")
+                    .send()?
+                    .text()?,
+            );
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested resource does not exist",
+            );
+
+            Ok(())
+        });
+    }
+}
