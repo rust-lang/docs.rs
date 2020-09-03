@@ -287,9 +287,9 @@ enum IconType {
 impl fmt::Display for IconType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let icon = match self {
-            Self::Strong => "fas",
-            Self::Regular => "far",
-            Self::Brand => "fab",
+            Self::Strong => "solid",
+            Self::Regular => "regular",
+            Self::Brand => "brands",
         };
 
         f.write_str(icon)
@@ -299,11 +299,11 @@ impl fmt::Display for IconType {
 impl tera::Filter for IconType {
     fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
         let mut aria_hidden = true;
-        let class = tera::escape_html(value.as_str().expect("Icons only take strings"));
-        let fixed_width = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
-            " fa-fw"
+        let icon_name = tera::escape_html(value.as_str().expect("Icons only take strings"));
+        let class = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
+            "class=\"fa-svg fa-svg-fw\""
         } else {
-            ""
+            "class=\"fa-svg\""
         };
         let aria_label = args
             .get("aria-label")
@@ -323,12 +323,19 @@ impl tera::Filter for IconType {
             .and_then(|l| l.as_bool())
             .unwrap_or(aria_hidden);
 
+        let type_ = match self {
+            IconType::Strong => font_awesome_as_a_crate::Type::Solid,
+            IconType::Regular => font_awesome_as_a_crate::Type::Regular,
+            IconType::Brand => font_awesome_as_a_crate::Type::Brands,
+        };
+
+        let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
+
         let icon = format!(
-            r#"<span aria-hidden="{aria_hidden}" class="{icon_class} fa-{fa_class}{fw}"{aria_label}{id}></span>"#,
+            r#"<span {class} aria-hidden="{aria_hidden}"{aria_label}{id}>{icon_file_string}</span>"#,
+            icon_file_string = icon_file_string,
+            class = class,
             aria_hidden = aria_hidden,
-            icon_class = self,
-            fa_class = class,
-            fw = fixed_width,
             aria_label = aria_label,
             id = id,
         );

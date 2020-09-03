@@ -315,11 +315,6 @@ div.package-page-container {
             margin-top: 0;
         }
 
-        li i.fa {
-            display: inline-block;
-            width: 20px;
-        }
-
         a.pure-menu-link {
             font-size: 14px;
             color: $color-standard;
@@ -634,3 +629,18 @@ h3 > code,
 h4 > code {
     display: inline-block;
 }
+
+.fa-svg-fw {
+    width: 1.25em;
+    text-align: center;
+    display: inline-block;
+}
+
+.fa-svg svg {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+    /* pull icon about one stroke width into the descenders */
+    margin-bottom: -0.1em;
+}
+

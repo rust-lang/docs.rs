@@ -18,7 +18,6 @@ fn main() {
     println!("cargo:rerun-if-changed=templates/menu.js");
     println!("cargo:rerun-if-changed=templates/index.js");
     println!("cargo:rerun-if-changed=vendor/");
-    println!("cargo:rerun-if-changed=vendor/fontawesome/scss/_variables.scss");
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
@@ -91,10 +90,7 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
     compile_sass_file(
         "vendored",
         "vendored",
-        &[
-            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/fontawesome/scss").to_owned(),
-            concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned(),
-        ],
+        &[concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned()],
     )?;
 
     Ok(())
