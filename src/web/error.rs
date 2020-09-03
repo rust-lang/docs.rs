@@ -96,7 +96,6 @@ impl From<PoolError> for IronError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::test::wrapper;
     use kuchiki::traits::TendrilSink;
 

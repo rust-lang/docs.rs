@@ -1213,4 +1213,58 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn check_releases_page_content() {
+        // NOTE: this is a little fragile and may have to be updated if the HTML layout changes
+        let sel = ".pure-menu-horizontal>.pure-menu-list>.pure-menu-item>.pure-menu-link>.title";
+        wrapper(|env| {
+            let tester = |url| {
+                let page = kuchiki::parse_html()
+                    .one(env.frontend().get(url).send().unwrap().text().unwrap());
+                assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+                let not_matching = page
+                    .select(sel)
+                    .unwrap()
+                    .map(|node| node.text_contents())
+                    .zip(
+                        [
+                            "Recent",
+                            "Stars",
+                            "Recent Failures",
+                            "Failures By Stars",
+                            "Activity",
+                            "Queue",
+                        ]
+                        .iter(),
+                    )
+                    .filter(|(a, b)| a.as_str() != **b)
+                    .collect::<Vec<_>>();
+                if not_matching.len() > 0 {
+                    let not_found = not_matching.iter().map(|(_, b)| b).collect::<Vec<_>>();
+                    let found = not_matching.iter().map(|(a, _)| a).collect::<Vec<_>>();
+                    assert!(
+                        not_matching.is_empty(),
+                        "Titles did not match for URL `{}`: not found: {:?}, found: {:?}",
+                        url,
+                        not_found,
+                        found,
+                    );
+                }
+            };
+
+            for url in &[
+                "/releases",
+                "/releases/stars",
+                "/releases/recent-failures",
+                "/releases/failures",
+                "/releases/activity",
+                "/releases/queue",
+            ] {
+                tester(url);
+            }
+
+            Ok(())
+        });
+    }
 }
