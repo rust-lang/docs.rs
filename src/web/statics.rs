@@ -14,7 +14,7 @@ const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
 const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const STATIC_SEARCH_PATHS: &[&str] = &["vendor/fontawesome/webfonts", "vendor/pure-css/css"];
+const STATIC_SEARCH_PATHS: &[&str] = &["vendor/pure-css/css"];
 
 pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
@@ -245,14 +245,7 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
 
-            let files = &[
-                ("pure-min.css", "text/css"),
-                ("fa-brands-400.eot", "application/vnd.ms-fontobject"),
-                ("fa-brands-400.svg", "image/svg+xml"),
-                ("fa-brands-400.ttf", "application/x-font-ttf"),
-                ("fa-brands-400.woff", "application/font-woff"),
-                ("fa-brands-400.woff2", "application/font-woff2"),
-            ];
+            let files = &[("pure-min.css", "text/css")];
 
             for (file, mime) in files {
                 let url = format!("/-/static/{}", file);
