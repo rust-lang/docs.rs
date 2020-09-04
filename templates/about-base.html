@@ -1,32 +1,34 @@
 {% extends "base.html" %}
 
 {% block header %}
-	<div class="cratesfyi-package-container">
+    <div class="cratesfyi-package-container">
         <div class="container">
-            <h1 id="crate-title" class="no-description">Docs.rs documentation</h1>
-            <div class="pure-menu pure-menu-horizontal">
-                <ul class="pure-menu-list">
-                    {% set text = "info-circle" | fas(fw=true) %}
-                    {% set text = text ~ ' <span class="title">About</span>' %}
-                    {{ macros::active_link(expected="index", href="/about", text=text) }}
+            <div class="description-container">
+                <h1 id="crate-title" class="no-description">Docs.rs documentation</h1>
+                <div class="pure-menu pure-menu-horizontal">
+                    <ul class="pure-menu-list">
+                        {% set text = "info-circle" | fas(fw=true) %}
+                        {% set text = text ~ ' <span class="title">About</span>' %}
+                        {{ macros::active_link(expected="index", href="/about", text=text) }}
 
-                    {% set text = "fonticons" | fab(fw=true) %}
-                    {% set text = text ~ ' <span class="title">Badges</span>' %}
-                    {{ macros::active_link(expected="badges", href="/about/badges", text=text) }}
+                        {% set text = "fonticons" | fab(fw=true) %}
+                        {% set text = text ~ ' <span class="title">Badges</span>' %}
+                        {{ macros::active_link(expected="badges", href="/about/badges", text=text) }}
 
-                    {% set text = "cogs" | fas(fw=true) %}
-                    {% set text = text ~ ' <span class="title">Builds</span>' %}
-                    {{ macros::active_link(expected="builds", href="/about/builds", text=text) }}
+                        {% set text = "cogs" | fas(fw=true) %}
+                        {% set text = text ~ ' <span class="title">Builds</span>' %}
+                        {{ macros::active_link(expected="builds", href="/about/builds", text=text) }}
 
-                    {% set text = "table" | fas(fw=true) %}
-                    {% set text = text ~ ' <span class="title">Metadata</span>' %}
-                    {{ macros::active_link(expected="metadata", href="/about/metadata", text=text) }}
+                        {% set text = "table" | fas(fw=true) %}
+                        {% set text = text ~ ' <span class="title">Metadata</span>' %}
+                        {{ macros::active_link(expected="metadata", href="/about/metadata", text=text) }}
 
-                    {% set text = "road" | fas(fw=true) %}
-                    {% set text = text ~ ' <span class="title">Shorthand URLs</span>' %}
-                    {{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
-                </ul>
+                        {% set text = "road" | fas(fw=true) %}
+                        {% set text = text ~ ' <span class="title">Shorthand URLs</span>' %}
+                        {{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
+                    </ul>
+                </div>
             </div>
         </div>
-	</div>
+    </div>
 {% endblock %}
