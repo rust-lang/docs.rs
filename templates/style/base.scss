@@ -447,6 +447,10 @@ div.cratesfyi-package-container {
     h1 {
         margin: 0;
         padding: 15px 0 0 14px;
+
+        &.no-description {
+            padding-bottom: 15px;
+        }
     }
 
     div.description {
@@ -553,14 +557,9 @@ div.search-page-search-form {
 
 .about {
     font-family: $font-family-serif;
-    padding: 0.4em 1em;
 
-    a {
-        color: $color-url;
-
-        :hover {
-            text-decoration: underline;
-        }
+    .pure-menu a:hover span {
+        text-decoration: none;
     }
 
     table {
