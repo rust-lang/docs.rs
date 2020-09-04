@@ -15,69 +15,71 @@
 {% macro header(title, description, tab, author=false) %}
     <div class="cratesfyi-package-container">
         <div class="container">
-            <h1 id="crate-title">{{ title }}</h1>
-            <div class="description">{{ description | default(value="") }}</div>
+            <div class="description-container">
+                <h1 id="crate-title">{{ title }}</h1>
+                <div class="description">{{ description | default(value="") }}</div>
 
-            {# This does double-duty as the search, so hide all tabs when we're searching something #}
-            {%- if tab != "search" -%}
-                <div class="pure-menu pure-menu-horizontal">
-                    <ul class="pure-menu-list">
-                        <li class="pure-menu-item">
-                            <a href="/releases" class="pure-menu-link{% if tab == 'recent' %} pure-menu-active{% endif %}">
-                                {{ "leaf" | fas(fw=true) }}
-                                <span class="title">Recent</span>
-                            </a>
-                        </li>
-
-                        <li class="pure-menu-item">
-                            <a href="/releases/stars" class="pure-menu-link{% if tab == 'stars' %} pure-menu-active{% endif %}">
-                                {{ "star" | fas(fw=true) }}
-                                <span class="title">Stars</span>
-                            </a>
-                        </li>
-
-                        <li class="pure-menu-item">
-                            <a href="/releases/recent-failures"
-                                class="pure-menu-link{% if tab == 'recent-failures' %} pure-menu-active{% endif %}">
-                                {{ "exclamation-triangle" | fas(fw=true) }}
-                                <span class="title">Recent Failures</span>
-                            </a>
-                        </li>
-
-                        <li class="pure-menu-item">
-                            <a href="/releases/failures"
-                                class="pure-menu-link{% if tab == 'failures' %} pure-menu-active{% endif %}">
-                                {{ "star" | far(fw=true) }}
-                                <span class="title">Failures By Stars</span>
-                            </a>
-                        </li>
-
-                        <li class="pure-menu-item">
-                            <a href="/releases/activity"
-                                class="pure-menu-link{% if tab == 'activity' %} pure-menu-active{% endif %}">
-                                {{ "chart-line" | fas(fw=true) }}
-                                <span class="title">Activity</span>
-                            </a>
-                        </li>
-
-                        <li class="pure-menu-item">
-                            <a href="/releases/queue" class="pure-menu-link{% if tab == 'queue' %} pure-menu-active{% endif %}">
-                                {{ "list" | fas(fw=true) }}
-                                <span class="title">Queue</span>
-                            </a>
-                        </li>
-
-                        {%- if author -%}
+                {# This does double-duty as the search, so hide all tabs when we're searching something #}
+                {%- if tab != "search" -%}
+                    <div class="pure-menu pure-menu-horizontal">
+                        <ul class="pure-menu-list">
                             <li class="pure-menu-item">
-                                <a href="#" class="pure-menu-link{% if tab == 'author' %} pure-menu-active{% endif %}">
-                                    {{ "user" | fas(fw=true) }}
-                                    <span class="title">{{ author }}</span>
+                                <a href="/releases" class="pure-menu-link{% if tab == 'recent' %} pure-menu-active{% endif %}">
+                                    {{ "leaf" | fas(fw=true) }}
+                                    <span class="title">Recent</span>
                                 </a>
                             </li>
-                        {%- endif -%}
-                    </ul>
-                </div>
-            {%- endif -%}
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/stars" class="pure-menu-link{% if tab == 'stars' %} pure-menu-active{% endif %}">
+                                    {{ "star" | fas(fw=true) }}
+                                    <span class="title">Stars</span>
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/recent-failures"
+                                    class="pure-menu-link{% if tab == 'recent-failures' %} pure-menu-active{% endif %}">
+                                    {{ "exclamation-triangle" | fas(fw=true) }}
+                                    <span class="title">Recent Failures</span>
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/failures"
+                                    class="pure-menu-link{% if tab == 'failures' %} pure-menu-active{% endif %}">
+                                    {{ "star" | far(fw=true) }}
+                                    <span class="title">Failures By Stars</span>
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/activity"
+                                    class="pure-menu-link{% if tab == 'activity' %} pure-menu-active{% endif %}">
+                                    {{ "chart-line" | fas(fw=true) }}
+                                    <span class="title">Activity</span>
+                                </a>
+                            </li>
+
+                            <li class="pure-menu-item">
+                                <a href="/releases/queue" class="pure-menu-link{% if tab == 'queue' %} pure-menu-active{% endif %}">
+                                    {{ "list" | fas(fw=true) }}
+                                    <span class="title">Queue</span>
+                                </a>
+                            </li>
+
+                            {%- if author -%}
+                                <li class="pure-menu-item">
+                                    <a href="#" class="pure-menu-link{% if tab == 'author' %} pure-menu-active{% endif %}">
+                                        {{ "user" | fas(fw=true) }}
+                                        <span class="title">{{ author }}</span>
+                                    </a>
+                                </li>
+                            {%- endif -%}
+                        </ul>
+                    </div>
+                {%- endif -%}
+            </div>
         </div>
     </div>
 {% endmacro header %}

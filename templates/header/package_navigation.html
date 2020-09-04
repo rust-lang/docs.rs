@@ -15,85 +15,85 @@
 {% macro package_navigation(title=false, metadata, platforms=false, active_tab) %}
     <div class="cratesfyi-package-container">
         <div class="container">
-            {# Page title #}
-            <h1 id="crate-title">
-                {%- if title -%}
-                    {{ title }}
-                {%- else -%}
-                    {{ metadata.name }} {{ metadata.version }}
-                    {{ "copy" | far(id="clipboard", aria_label="Copy crate name and version information", fa=true) }}
-                {%- endif -%}
-            </h1>
+            <div class="description-container">
+                {# The partial path of the crate, `:name/:release` #}
+                {%- set crate_path = metadata.name ~ "/" ~ metadata.version -%}
 
-            {# Page description #}
-            <div class="description">
-                {%- if metadata.description -%}
-                    {{ metadata.description }}
-                {%- endif -%}
-            </div>
+                {# If docs are built, show a button for them #}
 
-            <div class="pure-menu pure-menu-horizontal">
-                {# If there are platforms, show a dropdown with them #}
-                {%- if platforms -%}
-                    <ul class="pure-menu-list platforms-menu">
-                        <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                            <a href="#" class="pure-menu-link">Platform</a>
-                            <ul class="pure-menu-children">
-                                {%- for platform in platforms -%}
-                                    <li class="pure-menu-item">
-                                        <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
-                                            class="pure-menu-link">
-                                            {{ platform }}
-                                        </a>
-                                    </li>
-                                {%- endfor -%}
-                            </ul>
-                        </li>
-                    </ul>
-                {%- endif -%}
+                {# Page title #}
+                <h1 id="crate-title">
+                    {%- if title -%}
+                        {{ title }}
+                    {%- else -%}
+                        {{ metadata.name }} {{ metadata.version }}
+                        {{ "copy" | far(id="clipboard", aria_label="Copy crate name and version information", fa=true) }}
+                    {%- endif -%}
+                </h1>
 
-                <ul class="pure-menu-list">
-                    {# The partial path of the crate, `:name/:release` #}
-                    {%- set crate_path = metadata.name ~ "/" ~ metadata.version -%}
+                {# Page description #}
+                <div class="description">
+                    {%- if metadata.description -%}
+                        {{ metadata.description }}
+                    {%- endif -%}
+                </div>
 
-                    {# If docs are built, show a tab for them #}
-                    {%- if metadata.rustdoc_status -%}
-                        <li class="pure-menu-item">
-                            {# The docs tab redirects to the docs, so the tab will never be selected and seen #}
-                            <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="pure-menu-link">
-                                {{ "book" | fas(fw=true) }}
-                                <span class="title"> Documentation</span>
-                            </a>
-                        </li>
+
+                <div class="pure-menu pure-menu-horizontal">
+                    {# If there are platforms, show a dropdown with them #}
+                    {%- if platforms -%}
+                        <ul class="pure-menu-list platforms-menu">
+                            <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+                                <a href="#" class="pure-menu-link">Platform</a>
+                                <ul class="pure-menu-children">
+                                    {%- for platform in platforms -%}
+                                        <li class="pure-menu-item">
+                                            <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
+                                                class="pure-menu-link">
+                                                {{ platform }}
+                                            </a>
+                                        </li>
+                                    {%- endfor -%}
+                                </ul>
+                            </li>
+                        </ul>
                     {%- endif -%}
 
-                    {# The crate information tab #}
-                    <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
-                            class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                            {{ "cube" | fas(fw=true) }}
-                            <span class="title"> Crate</span>
-                        </a>
-                    </li>
+                    <ul class="pure-menu-list">
+                        {# The crate information tab #}
+                        <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
+                                class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
+                                {{ "cube" | fas(fw=true) }}
+                                <span class="title"> Crate</span>
+                            </a>
+                        </li>
 
-                    {# The source view tab #}
-                    <li class="pure-menu-item">
-                        <a href="/crate/{{ crate_path | safe }}/source/"
-                            class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                            {{ "folder-open" | far(fw=true) }}
-                            <span class="title"> Source</span>
-                        </a>
-                    </li>
+                        {# The source view tab #}
+                        <li class="pure-menu-item">
+                            <a href="/crate/{{ crate_path | safe }}/source/"
+                                class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
+                                {{ "folder-open" | far(fw=true) }}
+                                <span class="title"> Source</span>
+                            </a>
+                        </li>
 
-                    {# The builds tab #}
-                    <li class="pure-menu-item">
-                        <a href="/crate/{{ crate_path | safe }}/builds"
-                            class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
-                            {{ "cogs" | fas }}
-                            <span class="title"> Builds</span>
-                        </a>
-                    </li>
-                </ul>
+                        {# The builds tab #}
+                        <li class="pure-menu-item">
+                            <a href="/crate/{{ crate_path | safe }}/builds"
+                                class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
+                                {{ "cogs" | fas }}
+                                <span class="title"> Builds</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
+
+            {%- if metadata.rustdoc_status -%}
+                <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="doc-link">
+                    {{ "book" | fas(fw=true) }} Documentation
+                </a>
+            {%- endif -%}
         </div>
     </div>
 {% endmacro package_navigation %}
