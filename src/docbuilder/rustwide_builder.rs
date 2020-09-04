@@ -532,7 +532,8 @@ impl RustwideBuilder {
         // cargo will put the output in `target/<target>/doc`.
         // However, if this is the default build, we don't want it there,
         // we want it in `target/doc`.
-        if target != HOST_TARGET && is_default_target {
+        // NOTE: don't rename this if the build failed, because `target/<target>/doc` won't exist.
+        if successful && target != HOST_TARGET && is_default_target {
             // mv target/$target/doc target/doc
             let target_dir = build.host_target_dir();
             let old_dir = target_dir.join(target).join("doc");
