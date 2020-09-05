@@ -581,7 +581,9 @@ impl RustwideBuilder {
 
         let mut env_vars = metadata.environment_variables();
         let rustdoc_flags = env_vars.entry("RUSTDOCFLAGS").or_default();
-        rustdoc_flags.push_str(" --static-root-path / --cap-lints warn --disable-per-crate-search");
+        // WARNING: this *must* end with a space or it will cause rustdoc to give an error
+        rustdoc_flags
+            .push_str(" --static-root-path / --cap-lints warn --disable-per-crate-search ");
         rustdoc_flags.push_str(&rustdoc_flags_extras.join(" "));
 
         let mut command = build
