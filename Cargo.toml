@@ -1,5 +1,5 @@
 [package]
-name = "cratesfyi"
+name = "docs-rs"
 version = "0.6.0"
 authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
 readme = "README.md"

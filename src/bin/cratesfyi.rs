@@ -3,9 +3,9 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use cratesfyi::db::{self, add_path_into_database, Pool, PoolClient};
-use cratesfyi::utils::{remove_crate_priority, set_crate_priority};
-use cratesfyi::{
+use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
+use docs_rs::utils::{remove_crate_priority, set_crate_priority};
+use docs_rs::{
     BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server, Storage,
 };
 use failure::{err_msg, Error, ResultExt};
@@ -33,7 +33,7 @@ pub fn main() {
 fn logger_init() {
     use std::io::Write;
 
-    let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "cratesfyi=info");
+    let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "docs_rs=info");
     let logger = env_logger::from_env(env)
         .format(|buf, record| {
             writeln!(
@@ -61,7 +61,7 @@ enum Toggle {
 #[structopt(
     name = "cratesfyi",
     about = env!("CARGO_PKG_DESCRIPTION"),
-    version = cratesfyi::BUILD_VERSION,
+    version = docs_rs::BUILD_VERSION,
     rename_all = "kebab-case",
 )]
 enum CommandLine {
@@ -125,7 +125,7 @@ impl CommandLine {
                     log::warn!("--foreground was passed, but there is no need for it anymore");
                 }
 
-                cratesfyi::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
+                docs_rs::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
@@ -412,7 +412,7 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateGithubFields => {
-                cratesfyi::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
+                docs_rs::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
                     .update_all_crates()?;
             }
 
@@ -433,7 +433,7 @@ impl DatabaseSubcommand {
 
             // FIXME: This is actually util command not database
             Self::UpdateReleaseActivity => {
-                cratesfyi::utils::update_release_activity(&mut *ctx.conn()?)
+                docs_rs::utils::update_release_activity(&mut *ctx.conn()?)
                     .context("Failed to update release activity")?
             }
 
@@ -448,11 +448,7 @@ impl DatabaseSubcommand {
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
             Self::Synchronize { dry_run } => {
-                cratesfyi::utils::consistency::run_check(
-                    &mut *ctx.conn()?,
-                    &*ctx.index()?,
-                    dry_run,
-                )?;
+                docs_rs::utils::consistency::run_check(&mut *ctx.conn()?, &*ctx.index()?, dry_run)?;
             }
         }
         Ok(())
