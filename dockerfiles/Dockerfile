@@ -32,7 +32,8 @@ COPY benches benches
 COPY Cargo.lock Cargo.toml ./
 COPY src/web/badge src/web/badge/
 COPY metadata metadata/
-RUN echo "fn main() {}" > src/main.rs && \
+RUN mkdir src/bin && \
+    echo "fn main() {}" > src/bin/cratesfyi.rs && \
     echo "fn main() {}" > build.rs
 
 RUN cargo fetch
