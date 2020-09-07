@@ -1,4 +1,4 @@
-//! Errors used in cratesfyi
+//! Errors used in docs.rs
 
 use std::result::Result as StdResult;
 

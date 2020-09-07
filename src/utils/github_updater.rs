@@ -17,7 +17,7 @@ const APP_USER_AGENT: &str = concat!(
     include_str!(concat!(env!("OUT_DIR"), "/git_version"))
 );
 
-/// Fields we need use in cratesfyi
+/// Fields we need in docs.rs
 #[derive(Debug)]
 struct GitHubFields {
     description: String,
