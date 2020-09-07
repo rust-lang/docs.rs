@@ -1,4 +1,4 @@
-//! Various utilities for cratesfyi
+//! Various utilities for docs.rs
 
 pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
 pub(crate) use self::copy::copy_doc_dir;

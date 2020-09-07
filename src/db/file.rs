@@ -1,6 +1,6 @@
 //! Simple module to store files in database.
 //!
-//! cratesfyi is generating more than 5 million files, they are small and mostly html files.
+//! docs.rs is generating more than 5 million files, they are small and mostly html files.
 //! They are using so many inodes and it is better to store them in database instead of
 //! filesystem. This module is adding files into database and retrieving them.
 

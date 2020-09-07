@@ -1,4 +1,4 @@
-//! Web interface of cratesfyi
+//! Web interface of docs.rs
 
 pub(crate) mod page;
 
