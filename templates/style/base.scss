@@ -542,9 +542,10 @@ div.cratesfyi-package-container {
         .doc-link {
             margin: 0 10px;
             height: min-content;
-            background: #fff;
+            background: #333;
+            color: #fff;
             padding: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #333;
             border-radius: 5px;
             display: flex;
 
@@ -554,7 +555,7 @@ div.cratesfyi-package-container {
             }
 
             &:hover {
-                border-color: #81c5ee;
+                border-color: #3061f3;
             }
         }
     }
