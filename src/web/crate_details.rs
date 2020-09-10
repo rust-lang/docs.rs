@@ -1,4 +1,3 @@
-use super::error::Nope;
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
 use crate::{db::Pool, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -297,13 +296,13 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
 
     match match_version(&mut conn, &name, req_version).and_then(|m| m.assume_exact()) {
-        Some(MatchSemver::Exact((version, _))) => {
+        Ok(MatchSemver::Exact((version, _))) => {
             let details = cexpect!(req, CrateDetails::new(&mut conn, &name, &version));
 
             CrateDetailsPage { details }.into_response(req)
         }
 
-        Some(MatchSemver::Semver((version, _))) => {
+        Ok(MatchSemver::Semver((version, _))) => {
             let url = ctry!(
                 req,
                 Url::parse(&format!(
@@ -317,7 +316,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
             Ok(super::redirect(url))
         }
 
-        None => Err(IronError::new(Nope::CrateNotFound, status::NotFound)),
+        Err(err) => Err(IronError::new(err, status::NotFound)),
     }
 }
 

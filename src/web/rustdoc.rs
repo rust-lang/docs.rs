@@ -143,7 +143,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     let (version, id) = match match_version(&mut conn, &crate_name, req_version) {
-        Some(v) => {
+        Ok(v) => {
             if let Some(new_name) = v.corrected_name {
                 // `match_version` checked against -/_ typos, so if we have a name here we should
                 // use that instead
@@ -151,8 +151,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             }
             v.version.into_parts()
         }
-        None => {
-            return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
+        Err(err) => {
+            return Err(IronError::new(err, status::NotFound));
         }
     };
 
@@ -286,28 +286,29 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
     // * Otherwise, return a 404.
-    let version = if let Some(match_vers) = match_version(&mut conn, &name, url_version) {
-        match match_vers.version {
-            MatchSemver::Exact((version, _)) => {
-                // Redirect when the requested crate name isn't correct
-                if let Some(name) = match_vers.corrected_name {
-                    return redirect(&name, &version, &req_path);
+    let version = match match_version(&mut conn, &name, url_version) {
+        Ok(match_vers) => {
+            match match_vers.version {
+                MatchSemver::Exact((version, _)) => {
+                    // Redirect when the requested crate name isn't correct
+                    if let Some(name) = match_vers.corrected_name {
+                        return redirect(&name, &version, &req_path);
+                    }
+
+                    version
                 }
 
-                version
-            }
-
-            // Redirect when the requested version isn't correct
-            MatchSemver::Semver((v, _)) => {
-                // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-                // versions, redirect the browser to the returned version instead of loading it
-                // immediately
-                return redirect(&name, &v, &req_path);
+                // Redirect when the requested version isn't correct
+                MatchSemver::Semver((v, _)) => {
+                    // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+                    // versions, redirect the browser to the returned version instead of loading it
+                    // immediately
+                    return redirect(&name, &v, &req_path);
+                }
             }
         }
-    } else {
-        // Return a 404, as a crate by that name and version doesn't exist
-        return Err(IronError::new(Nope::ResourceNotFound, status::NotFound));
+        // Return a 404, as a crate by that name and version requirement doesn't exist
+        Err(err) => return Err(IronError::new(err, status::NotFound)),
     };
 
     rendering_time.step("crate details");
@@ -527,7 +528,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
 
     let options =
         match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
-            Some(MatchSemver::Exact((version, id))) => {
+            Ok(MatchSemver::Exact((version, id))) => {
                 let rows = ctry!(
                     req,
                     conn.query(
@@ -552,7 +553,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 }
             }
 
-            Some(MatchSemver::Semver((version, _))) => {
+            Ok(MatchSemver::Semver((version, _))) => {
                 let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
                 let url = ctry!(
                     req,
@@ -562,7 +563,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 return Ok(super::redirect(iron_url));
             }
 
-            None => BadgeOptions {
+            Err(_) => BadgeOptions {
                 subject: "docs".to_owned(),
                 status: "no builds".to_owned(),
                 color: "#e05d44".to_owned(),
