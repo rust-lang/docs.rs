@@ -10,6 +10,7 @@ use std::{error::Error, fmt};
 pub enum Nope {
     ResourceNotFound,
     CrateNotFound,
+    VersionNotFound,
     NoResults,
     InternalServerError,
 }
@@ -19,6 +20,7 @@ impl fmt::Display for Nope {
         f.write_str(match *self {
             Nope::ResourceNotFound => "Requested resource not found",
             Nope::CrateNotFound => "Requested crate not found",
+            Nope::VersionNotFound => "Requested crate does not have specified version",
             Nope::NoResults => "Search yielded no results",
             Nope::InternalServerError => "Internal server error",
         })
@@ -47,6 +49,17 @@ impl Handler for Nope {
                 ErrorPage {
                     title: "The requested crate does not exist",
                     message: Some("no such crate".into()),
+                    status: Status::NotFound,
+                }
+                .into_response(req)
+            }
+
+            Nope::VersionNotFound => {
+                // user tried to navigate to a crate with a version that does not exist
+                // TODO: Display the attempted crate and version
+                ErrorPage {
+                    title: "The requested version does not exist",
+                    message: Some("no such version for this crate".into()),
                     status: Status::NotFound,
                 }
                 .into_response(req)

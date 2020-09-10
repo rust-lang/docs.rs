@@ -91,6 +91,7 @@ mod statics;
 
 use crate::{impl_webpage, Context};
 use chrono::{DateTime, Utc};
+use error::Nope;
 use extensions::InjectExtensions;
 use failure::Error;
 use iron::{
@@ -177,13 +178,14 @@ impl Handler for CratesfyiHandler {
             }
         };
 
-        // try serving shared rustdoc resources first, then router, then db/static file handler
-        // return 404 if none of them return Ok
+        // try serving shared rustdoc resources first, then db/static file handler and last router
+        // return 404 if none of them return Ok. It is important that the router comes last,
+        // because it gives the most specific errors, e.g. CrateNotFound or VersionNotFound
         self.shared_resource_handler
             .handle(req)
-            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| if_404(e, || self.static_handler.handle(req)))
+            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
@@ -245,12 +247,12 @@ struct MatchVersion {
 impl MatchVersion {
     /// If the matched version was an exact match to the requested crate name, returns the
     /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
-    /// `None`.
-    fn assume_exact(self) -> Option<MatchSemver> {
+    /// `Nope::CrateNotFound`.
+    fn assume_exact(self) -> Result<MatchSemver, Nope> {
         if self.corrected_name.is_none() {
-            Some(self.version)
+            Ok(self.version)
         } else {
-            None
+            Err(Nope::CrateNotFound)
         }
     }
 }
@@ -284,7 +286,11 @@ impl MatchSemver {
 /// This function will also check for crates where dashes in the name (`-`) have been replaced with
 /// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
-fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option<MatchVersion> {
+fn match_version(
+    conn: &mut Client,
+    name: &str,
+    version: Option<&str>,
+) -> Result<MatchVersion, Nope> {
     // version is an Option<&str> from router::Router::get, need to decode first
     use iron::url::percent_encoding::percent_decode;
 
@@ -320,16 +326,20 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
             .collect()
     };
 
+    if versions.is_empty() {
+        return Err(Nope::CrateNotFound);
+    }
+
     // first check for exact match, we can't expect users to use semver in query
     if let Some((version, id, _)) = versions.iter().find(|(vers, _, _)| vers == &req_version) {
-        return Some(MatchVersion {
+        return Ok(MatchVersion {
             corrected_name,
             version: MatchSemver::Exact((version.to_owned(), *id)),
         });
     }
 
     // Now try to match with semver
-    let req_sem_ver = VersionReq::parse(&req_version).ok()?;
+    let req_sem_ver = VersionReq::parse(&req_version).map_err(|_| Nope::CrateNotFound)?;
 
     // we need to sort versions first
     let versions_sem = {
@@ -337,7 +347,10 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
 
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version, but check result just in case
-            versions_sem.push((Version::parse(&version.0).ok()?, version.1));
+            versions_sem.push((
+                Version::parse(&version.0).map_err(|_| Nope::InternalServerError)?,
+                version.1,
+            ));
         }
 
         versions_sem.sort();
@@ -349,7 +362,7 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
         .iter()
         .find(|(vers, _)| req_sem_ver.matches(vers))
     {
-        return Some(MatchVersion {
+        return Ok(MatchVersion {
             corrected_name,
             version: MatchSemver::Semver((version.to_string(), *id)),
         });
@@ -358,13 +371,18 @@ fn match_version(conn: &mut Client, name: &str, version: Option<&str>) -> Option
     // semver is acting weird for '*' (any) range if a crate only have pre-release versions
     // return first non-yanked version if requested version is '*'
     if req_version == "*" {
-        return versions_sem.first().map(|v| MatchVersion {
-            corrected_name,
-            version: MatchSemver::Semver((v.0.to_string(), v.1)),
-        });
+        return versions_sem
+            .first()
+            .map(|v| MatchVersion {
+                corrected_name,
+                version: MatchSemver::Semver((v.0.to_string(), v.1)),
+            })
+            .ok_or(Nope::CrateNotFound);
     }
 
-    None
+    // Since we return with a CrateNotFound earlier if the db reply is empty,
+    // we know that versions were returned but none satisfied the version requirement
+    Err(Nope::VersionNotFound)
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
@@ -581,7 +599,13 @@ mod test {
 
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
         match_version(&mut db.conn(), "foo", v)
-            .and_then(|version| version.assume_exact().map(|semver| semver.into_parts().0))
+            .ok()
+            .and_then(|version| {
+                version
+                    .assume_exact()
+                    .ok()
+                    .map(|semver| semver.into_parts().0)
+            })
     }
 
     fn semver(version: &'static str) -> Option<String> {

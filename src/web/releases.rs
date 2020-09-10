@@ -557,7 +557,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             // since we never pass a version into `match_version` here, we'll never get
             // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
             // matter
-            if let Some(matchver) = match_version(&mut conn, &query, None) {
+            if let Ok(matchver) = match_version(&mut conn, &query, None) {
                 let (version, id) = matchver.version.into_parts();
                 let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
 
