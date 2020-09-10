@@ -1,8 +1,11 @@
 //! Simple module to store files in database.
 //!
-//! docs.rs is generating more than 5 million files, they are small and mostly html files.
-//! They are using so many inodes and it is better to store them in database instead of
-//! filesystem. This module is adding files into database and retrieving them.
+//! docs.rs supports two ways of storing files: in a postgres database and in an S3 bucket.
+//! It does not support storing files on disk because of the sheer number of files:
+//! doing so would quickly run into file descriptor limits when running the web server.
+//!
+//! It's recommended that you use the S3 bucket in production to avoid running out of disk space.
+//! However, postgres is still available for testing and backwards compatibility.
 
 use crate::error::Result;
 use crate::storage::{CompressionAlgorithms, Storage};
