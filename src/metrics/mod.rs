@@ -91,6 +91,11 @@ impl RecentlyAccessedReleases {
     }
 
     pub(crate) fn record(&self, krate: i32, version: i32, target: &str) {
+        if self.platforms.len() > 100_000 {
+            // Avoid filling the maps _too_ much, we should never get anywhere near this limit
+            return;
+        }
+
         let now = Instant::now();
         self.crates.insert(krate, now);
         self.versions.insert(version, now);
