@@ -282,33 +282,31 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     rendering_time.step("match version");
 
     // Check the database for releases with the requested version while doing the following:
+    // * If no matching releases are found, return a 404 with the underlying error
+    // Then:
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
-    // * Otherwise, return a 404.
-    let version = match match_version(&mut conn, &name, url_version) {
-        Ok(match_vers) => {
-            match match_vers.version {
-                MatchSemver::Exact((version, _)) => {
-                    // Redirect when the requested crate name isn't correct
-                    if let Some(name) = match_vers.corrected_name {
-                        return redirect(&name, &version, &req_path);
-                    }
+    let release_found = match_version(&mut conn, &name, url_version)
+        .map_err(|err| IronError::new(err, status::NotFound))?;
 
-                    version
-                }
-
-                // Redirect when the requested version isn't correct
-                MatchSemver::Semver((v, _)) => {
-                    // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-                    // versions, redirect the browser to the returned version instead of loading it
-                    // immediately
-                    return redirect(&name, &v, &req_path);
-                }
+    let version = match release_found.version {
+        MatchSemver::Exact((version, _)) => {
+            // Redirect when the requested crate name isn't correct
+            if let Some(name) = release_found.corrected_name {
+                return redirect(&name, &version, &req_path);
             }
+
+            version
         }
-        // Return a 404, as a crate by that name and version requirement doesn't exist
-        Err(err) => return Err(IronError::new(err, status::NotFound)),
+
+        // Redirect when the requested version isn't correct
+        MatchSemver::Semver((v, _)) => {
+            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+            // versions, redirect the browser to the returned version instead of loading it
+            // immediately
+            return redirect(&name, &v, &req_path);
+        }
     };
 
     rendering_time.step("crate details");
@@ -562,6 +560,12 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
                 let iron_url = ctry!(req, Url::from_generic_url(url));
                 return Ok(super::redirect(iron_url));
             }
+
+            Err(Nope::VersionNotFound) => BadgeOptions {
+                subject: "docs".to_owned(),
+                status: "version not found".to_owned(),
+                color: "#e05d44".to_owned(),
+            },
 
             Err(_) => BadgeOptions {
                 subject: "docs".to_owned(),
