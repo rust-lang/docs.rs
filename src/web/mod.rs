@@ -247,7 +247,7 @@ struct MatchVersion {
 impl MatchVersion {
     /// If the matched version was an exact match to the requested crate name, returns the
     /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
-    /// `Nope::CrateNotFound`.
+    /// `CrateNotFound`.
     fn assume_exact(self) -> Result<MatchSemver, Nope> {
         if self.corrected_name.is_none() {
             Ok(self.version)
@@ -339,7 +339,7 @@ fn match_version(
     }
 
     // Now try to match with semver
-    let req_sem_ver = VersionReq::parse(&req_version).map_err(|_| Nope::CrateNotFound)?;
+    let req_sem_ver = VersionReq::parse(&req_version).map_err(|_| Nope::VersionNotFound)?;
 
     // we need to sort versions first
     let versions_sem = {
@@ -348,7 +348,14 @@ fn match_version(
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version, but check result just in case
             versions_sem.push((
-                Version::parse(&version.0).map_err(|_| Nope::InternalServerError)?,
+                Version::parse(&version.0).map_err(|_| {
+                    log::error!(
+                        "invalid semver in database for crate {}: {}",
+                        name,
+                        version.0
+                    );
+                    Nope::InternalServerError
+                })?,
                 version.1,
             ));
         }
@@ -377,7 +384,7 @@ fn match_version(
                 corrected_name,
                 version: MatchSemver::Semver((v.0.to_string(), v.1)),
             })
-            .ok_or(Nope::CrateNotFound);
+            .ok_or(Nope::VersionNotFound);
     }
 
     // Since we return with a CrateNotFound earlier if the db reply is empty,
@@ -598,14 +605,13 @@ mod test {
     }
 
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        match_version(&mut db.conn(), "foo", v)
-            .ok()
-            .and_then(|version| {
-                version
-                    .assume_exact()
-                    .ok()
-                    .map(|semver| semver.into_parts().0)
-            })
+        let version = match_version(&mut db.conn(), "foo", v)
+            .ok()?
+            .assume_exact()
+            .ok()?
+            .into_parts()
+            .0;
+        Some(version)
     }
 
     fn semver(version: &'static str) -> Option<String> {
