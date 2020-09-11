@@ -91,10 +91,11 @@ impl RecentlyAccessedReleases {
     }
 
     pub(crate) fn record(&self, krate: i32, version: i32, target: &str) {
-        self.crates.insert(krate, Instant::now());
-        self.versions.insert(version, Instant::now());
+        let now = Instant::now();
+        self.crates.insert(krate, now);
+        self.versions.insert(version, now);
         self.platforms
-            .insert((version, TargetAtom::from(target)), Instant::now());
+            .insert((version, TargetAtom::from(target)), now);
     }
 
     pub(crate) fn gather(&self, metrics: &Metrics) {
@@ -116,7 +117,7 @@ impl RecentlyAccessedReleases {
                 }
 
                 // Only retain items accessed within the last hour
-                return elapsed < Duration::from_secs(60 * 60);
+                elapsed < Duration::from_secs(60 * 60)
             });
 
             metric.with_label_values(&["one hour"]).set(hour_count);
