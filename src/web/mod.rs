@@ -346,18 +346,17 @@ fn match_version(
         let mut versions_sem: Vec<(Version, i32)> = Vec::with_capacity(versions.len());
 
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
-            // in theory a crate must always have a semver compatible version, but check result just in case
-            versions_sem.push((
-                Version::parse(&version.0).map_err(|_| {
-                    log::error!(
-                        "invalid semver in database for crate {}: {}",
-                        name,
-                        version.0
-                    );
-                    Nope::InternalServerError
-                })?,
-                version.1,
-            ));
+            // in theory a crate must always have a semver compatible version,
+            // but check result just in case
+            let version_sem = Version::parse(&version.0).map_err(|_| {
+                log::error!(
+                    "invalid semver in database for crate {}: {}",
+                    name,
+                    version.0
+                );
+                Nope::InternalServerError
+            })?;
+            versions_sem.push((version_sem, version.1));
         }
 
         versions_sem.sort();
@@ -375,7 +374,7 @@ fn match_version(
         });
     }
 
-    // semver is acting weird for '*' (any) range if a crate only have pre-release versions
+    // semver is acting weird for '*' (any) range if a crate only has pre-release versions
     // return first non-yanked version if requested version is '*'
     if req_version == "*" {
         return versions_sem

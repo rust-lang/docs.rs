@@ -113,11 +113,37 @@ mod tests {
     use kuchiki::traits::TendrilSink;
 
     #[test]
-    fn check_404_page_content() {
+    fn check_404_page_content_crate() {
         wrapper(|env| {
             let page = kuchiki::parse_html().one(
                 env.frontend()
-                    .get("/page-which-doesnt-exist")
+                    .get("/crate-which-doesnt-exist")
+                    .send()?
+                    .text()?,
+            );
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested crate does not exist",
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_404_page_content_resource() {
+        // Resources with a `.js` and `.ico` extension are special cased in the
+        // routes_handler which is currently run last. This means that `get("resource.exe")` will
+        // fail with a `no so such crate` instead of 'no such resource'
+        wrapper(|env| {
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/resource-which-doesnt-exist.js")
                     .send()?
                     .text()?,
             );
@@ -129,6 +155,68 @@ mod tests {
                     .unwrap()
                     .text_contents(),
                 "The requested resource does not exist",
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_404_page_content_not_semver_version() {
+        wrapper(|env| {
+            env.fake_release().name("dummy").create()?;
+            let page =
+                kuchiki::parse_html().one(env.frontend().get("/dummy/not-semver").send()?.text()?);
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested version does not exist",
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_404_page_content_nonexistent_version() {
+        wrapper(|env| {
+            env.fake_release().name("dummy").version("1.0.0").create()?;
+            let page = kuchiki::parse_html().one(env.frontend().get("/dummy/2.0").send()?.text()?);
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested version does not exist",
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_404_page_content_any_version_all_yanked() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("1.0.0")
+                .yanked(true)
+                .create()?;
+            let page = kuchiki::parse_html().one(env.frontend().get("/dummy/*").send()?.text()?);
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested version does not exist",
             );
 
             Ok(())
