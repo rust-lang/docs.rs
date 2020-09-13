@@ -348,11 +348,12 @@ fn match_version(
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version,
             // but check result just in case
-            let version_sem = Version::parse(&version.0).map_err(|_| {
+            let version_sem = Version::parse(&version.0).map_err(|err| {
                 log::error!(
-                    "invalid semver in database for crate {}: {}",
+                    "invalid semver in database for crate {}: {}. Err: {}",
                     name,
-                    version.0
+                    version.0,
+                    err
                 );
                 Nope::InternalServerError
             })?;

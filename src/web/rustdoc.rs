@@ -189,6 +189,7 @@ struct RustdocPage {
     latest_version: String,
     inner_path: String,
     is_latest_version: bool,
+    is_prerelease: bool,
     krate: CrateDetails,
 }
 
@@ -367,6 +368,19 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // Get the latest version of the crate
     let latest_version = latest_release.version.to_string();
     let is_latest_version = latest_version == version;
+    let is_prerelease = semver::Version::parse(&version)
+        // should be impossible unless there is a semver incompatible version in the db
+        // Note that there is a redirect earlier for semver matches to the exact version
+        .map_err(|err| {
+            log::error!(
+                "invalid semver in database for crate {}: {}. Err: {}",
+                name,
+                &version,
+                err
+            );
+            IronError::new(Nope::InternalServerError, status::InternalServerError)
+        })?
+        .is_prerelease();
 
     // If the requested crate version is the most recent, use it to build the url
     let latest_path = if is_latest_version {
@@ -408,6 +422,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         latest_version,
         inner_path,
         is_latest_version,
+        is_prerelease,
         krate,
     }
     .into_response(&file.0.content, config.max_parse_memory, req, &path)

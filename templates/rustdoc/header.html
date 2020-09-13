@@ -181,23 +181,24 @@
                             </span>
                         </li>
 
-                    {# If the crate isn't the latest & is yanked, display a warning and offer a link to the latest release #}
-                    {%- elif not is_latest_version and krate.yanked -%}
-                        <li class="pure-menu-item">
-                            <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
-                                title="You are seeing a yanked version of {{ krate.name }} crate. Click here to go to latest version.">
-                                {{ "exclamation-triangle" | fas(fw=true) }}
-                                <span class="title"> This release has been yanked, go to latest version</span>
-                            </a>
-                        </li>
-
-                    {# If this isn't the most recent release, offer a link to the latest #}
+                    {# If this isn't the most recent stable release, offer a link to the latest #}
                     {%- elif not is_latest_version -%}
+                        {%- if krate.yanked -%}
+                            {%- set tooltip = "You are seeing a yanked version of the " ~ krate.name ~ "crate. Click here to go to the latest version." -%}
+                            {%- set title = "This release has been yanked, go to latest version" -%}
+                        {%- elif is_prerelease -%}
+                            {%- set tooltip = "You are seeing a pre-release version of the " ~ krate.name ~ "crate. Click here to go to the latest stable version." -%}
+                            {%- set title = "Go to latest stable release" -%}
+                        {%- else -%}
+                            {%- set tooltip = "You are seeing an outdated version of the " ~ krate.name ~ "crate. Click here to go to the latest version." -%}
+                            {%- set title = "Go to latest version" -%}
+                        {%- endif -%}
+
                         <li class="pure-menu-item">
                             <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
-                                title="You are seeing an outdated version of {{ krate.name }} crate. Click here to go to latest version.">
+                                title="{{ tooltip }}">
                                 {{ "exclamation-triangle" | fas(fw=true) }}
-                                <span class="title"> Go to latest version</span>
+                                <span class="title">{{ title }}</span>
                             </a>
                         </li>
                     {%- endif -%}
