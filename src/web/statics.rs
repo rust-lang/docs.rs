@@ -4,7 +4,7 @@ use iron::{
     headers::CacheDirective,
     headers::{CacheControl, ContentLength, ContentType, LastModified},
     status::Status,
-    IronError, IronResult, Request, Response, Url,
+    IronResult, Request, Response, Url,
 };
 use mime_guess::MimeGuess;
 use router::Router;
@@ -39,7 +39,7 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
 fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
     // Filter out files that attempt to traverse directories
     if file.contains("..") || file.contains('/') || file.contains('\\') {
-        return Err(IronError::new(Nope::ResourceNotFound, Status::NotFound));
+        return Err(Nope::ResourceNotFound.into());
     }
 
     // Find the first path that actually exists
@@ -47,7 +47,7 @@ fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
         .iter()
         .map(|p| Path::new(p).join(file))
         .find(|p| p.exists())
-        .ok_or_else(|| IronError::new(Nope::ResourceNotFound, Status::NotFound))?;
+        .ok_or(Nope::ResourceNotFound)?;
     let contents = ctry!(req, fs::read(&path));
 
     // If we can detect the file's mime type, set it
@@ -106,7 +106,7 @@ pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
     if let Some(&"favicon.ico") = req.url.path().last() {
         // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
         // from `public_html`, so return a 404 here to make the main handler carry on
-        Err(IronError::new(Nope::ResourceNotFound, Status::NotFound))
+        Err(Nope::ResourceNotFound.into())
     } else {
         // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
         // redirect to the plain one so that the above branch can trigger with the correct filename

@@ -2,7 +2,7 @@ use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData
 use crate::{db::Pool, impl_webpage, web::page::WebPage};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
-use iron::{status, Url};
+use iron::Url;
 use postgres::Client;
 use router::Router;
 use serde::{ser::Serializer, Serialize};
@@ -295,14 +295,14 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut conn = extension!(req, Pool).get()?;
 
-    match match_version(&mut conn, &name, req_version).and_then(|m| m.assume_exact()) {
-        Ok(MatchSemver::Exact((version, _))) => {
+    match match_version(&mut conn, &name, req_version).and_then(|m| m.assume_exact())? {
+        MatchSemver::Exact((version, _)) => {
             let details = cexpect!(req, CrateDetails::new(&mut conn, &name, &version));
 
             CrateDetailsPage { details }.into_response(req)
         }
 
-        Ok(MatchSemver::Semver((version, _))) => {
+        MatchSemver::Semver((version, _)) => {
             let url = ctry!(
                 req,
                 Url::parse(&format!(
@@ -315,8 +315,6 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
             Ok(super::redirect(url))
         }
-
-        Err(err) => Err(IronError::new(err, status::NotFound)),
     }
 }
 

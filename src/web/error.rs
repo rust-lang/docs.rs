@@ -29,6 +29,22 @@ impl fmt::Display for Nope {
 
 impl Error for Nope {}
 
+impl From<Nope> for IronError {
+    fn from(err: Nope) -> IronError {
+        use iron::status;
+
+        let status = match err {
+            Nope::ResourceNotFound
+            | Nope::CrateNotFound
+            | Nope::VersionNotFound
+            | Nope::NoResults => status::NotFound,
+            Nope::InternalServerError => status::InternalServerError,
+        };
+
+        IronError::new(err, status)
+    }
+}
+
 impl Handler for Nope {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         match *self {

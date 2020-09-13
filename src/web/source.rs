@@ -6,7 +6,7 @@ use crate::{
     web::{error::Nope, file::File as DbFile, page::WebPage, MetaData},
     Config, Storage,
 };
-use iron::{status::Status, IronError, IronResult, Request, Response};
+use iron::{IronResult, Request, Response};
 use postgres::Client;
 use router::Router;
 use serde::Serialize;
@@ -213,8 +213,8 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (None, false)
     };
 
-    let file_list = FileList::from_path(&mut conn, &name, &version, &req_path)
-        .ok_or_else(|| IronError::new(Nope::NoResults, Status::NotFound))?;
+    let file_list =
+        FileList::from_path(&mut conn, &name, &version, &req_path).ok_or(Nope::NoResults)?;
 
     SourcePage {
         file_list,
