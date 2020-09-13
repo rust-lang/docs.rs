@@ -12,7 +12,7 @@ use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
     modifiers::Redirect,
-    status, IronError, IronResult, Request, Response, Url,
+    status, IronResult, Request, Response, Url,
 };
 use postgres::Client;
 use router::Router;
@@ -420,7 +420,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
     let author = router
         .find("author")
         // TODO: Accurate error here, the author wasn't provided
-        .ok_or_else(|| IronError::new(Nope::CrateNotFound, status::NotFound))?;
+        .ok_or(Nope::CrateNotFound)?;
 
     let (author_name, releases) = {
         let mut conn = extension!(req, Pool).get()?;
@@ -442,7 +442,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     if releases.is_empty() {
         // TODO: Accurate error here, the author wasn't found
-        return Err(IronError::new(Nope::CrateNotFound, status::NotFound));
+        return Err(Nope::CrateNotFound.into());
     }
 
     // Show next and previous page buttons
@@ -621,7 +621,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         }
         .into_response(req)
     } else {
-        Err(IronError::new(Nope::NoResults, status::NotFound))
+        Err(Nope::NoResults.into())
     }
 }
 

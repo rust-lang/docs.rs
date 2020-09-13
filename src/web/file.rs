@@ -2,7 +2,7 @@
 
 use crate::storage::{Blob, Storage};
 use crate::{error::Result, Config};
-use iron::{status, Handler, IronError, IronResult, Request, Response};
+use iron::{status, Handler, IronResult, Request, Response};
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
@@ -62,10 +62,7 @@ impl Handler for DatabaseFileHandler {
         if let Ok(file) = File::from_path(&storage, &path, &config) {
             Ok(file.serve())
         } else {
-            Err(IronError::new(
-                super::error::Nope::CrateNotFound,
-                status::NotFound,
-            ))
+            Err(super::error::Nope::CrateNotFound.into())
         }
     }
 }

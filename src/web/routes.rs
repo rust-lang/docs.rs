@@ -284,10 +284,7 @@ impl Handler for BlockBlacklistedPrefixes {
     fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         if let Some(prefix) = req.url.path().get(0) {
             if self.blacklist.contains(*prefix) {
-                return Err(iron::IronError::new(
-                    super::error::Nope::CrateNotFound,
-                    iron::status::NotFound,
-                ));
+                return Err(super::error::Nope::CrateNotFound.into());
             }
         }
         self.handler.handle(req)

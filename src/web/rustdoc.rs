@@ -12,7 +12,7 @@ use crate::{
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
-    status, Handler, IronError, IronResult, Request, Response, Url,
+    status, Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
 use router::Router;
@@ -110,10 +110,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
             let path = req.url.path();
             let path = path.join("/");
-            match File::from_path(&storage, &path, &config) {
-                Ok(f) => return Ok(f.serve()),
-                Err(..) => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
-            }
+            return match File::from_path(&storage, &path, &config) {
+                Ok(f) => Ok(f.serve()),
+                Err(..) => Err(Nope::ResourceNotFound.into()),
+            };
         }
     } else if req
         .url
@@ -142,19 +142,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    let (version, id) = match match_version(&mut conn, &crate_name, req_version) {
-        Ok(v) => {
-            if let Some(new_name) = v.corrected_name {
-                // `match_version` checked against -/_ typos, so if we have a name here we should
-                // use that instead
-                crate_name = new_name;
-            }
-            v.version.into_parts()
-        }
-        Err(err) => {
-            return Err(IronError::new(err, status::NotFound));
-        }
-    };
+    let v = match_version(&mut conn, &crate_name, req_version)?;
+    if let Some(new_name) = v.corrected_name {
+        // `match_version` checked against -/_ typos, so if we have a name here we should
+        // use that instead
+        crate_name = new_name;
+    }
+    let (version, id) = v.version.into_parts();
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
@@ -288,8 +282,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
-    let release_found = match_version(&mut conn, &name, url_version)
-        .map_err(|err| IronError::new(err, status::NotFound))?;
+    let release_found = match_version(&mut conn, &name, url_version)?;
 
     let version = match release_found.version {
         MatchSemver::Exact((version, _)) => {
@@ -349,7 +342,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             return if ctry!(req, storage.exists(&path)) {
                 redirect(&name, &version, &req_path[3..])
             } else {
-                Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
+                Err(Nope::ResourceNotFound.into())
             };
         }
     };
@@ -489,7 +482,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let crate_details = match CrateDetails::new(&mut conn, &name, &version) {
         Some(krate) => krate,
-        None => return Err(IronError::new(Nope::ResourceNotFound, status::NotFound)),
+        None => return Err(Nope::ResourceNotFound.into()),
     };
 
     //   [crate, :name, :version, target-redirect, :target, *path]
@@ -623,7 +616,7 @@ impl Handler for SharedResourceHandler {
         }
 
         // Just always return a 404 here - the main handler will then try the other handlers
-        Err(IronError::new(Nope::ResourceNotFound, status::NotFound))
+        Err(Nope::ResourceNotFound.into())
     }
 }
 
