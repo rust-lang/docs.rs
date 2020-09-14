@@ -183,9 +183,9 @@ impl Handler for CratesfyiHandler {
         // because it gives the most specific errors, e.g. CrateNotFound or VersionNotFound
         self.shared_resource_handler
             .handle(req)
+            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| if_404(e, || self.static_handler.handle(req)))
-            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err

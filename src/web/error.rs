@@ -144,7 +144,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested crate does not exist",
+                "The requested resource does not exist",
             );
 
             Ok(())
@@ -190,7 +190,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested version does not exist",
+                "The requested resource does not exist",
             );
 
             Ok(())
@@ -209,7 +209,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested version does not exist",
+                "The requested resource does not exist",
             );
 
             Ok(())
@@ -232,7 +232,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested version does not exist",
+                "The requested resource does not exist",
             );
 
             Ok(())
