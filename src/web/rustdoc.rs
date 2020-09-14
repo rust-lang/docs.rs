@@ -371,7 +371,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 &version,
                 err
             );
-            IronError::new(Nope::InternalServerError, status::InternalServerError)
+            Nope::InternalServerError
         })?
         .is_prerelease();
 
