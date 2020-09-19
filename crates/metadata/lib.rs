@@ -21,7 +21,7 @@
 //!
 //! // Next, learn what arguments we need to pass to `cargo`.
 //! let targets = metadata.targets();
-//! let mut cargo_args = metadata.cargo_args();
+//! let mut cargo_args = metadata.cargo_args(&[], &[]);
 //! cargo_args.push(targets.default_target.into());
 //!
 //! // Now, set up the `Command`
@@ -228,11 +228,7 @@ impl Metadata {
     /// Note that this does not necessarily reproduce the HTML _output_ of docs.rs exactly.
     /// For example, the links may point somewhere different than they would on docs.rs.
     /// However, rustdoc will see exactly the same code as it would on docs.rs, even counting `cfg`s.
-    pub fn cargo_args(
-        &self,
-        additional_args: &[impl AsRef<str>],
-        rustdoc_args: &[impl AsRef<str>],
-    ) -> Vec<String> {
+    pub fn cargo_args(&self, additional_args: &[String], rustdoc_args: &[String]) -> Vec<String> {
         let mut cargo_args: Vec<String> = vec!["rustdoc".into(), "--lib".into()];
 
         if let Some(features) = &self.features {
@@ -258,16 +254,14 @@ impl Metadata {
             cargo_args.push(format!("build.rustflags={}", rustflags));
         }
 
-        cargo_args.extend(additional_args.iter().map(|s| s.as_ref().to_owned()));
+        cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
         cargo_args.push("--".into());
         cargo_args.extend_from_slice(&self.rustdoc_args);
-        cargo_args.extend(rustdoc_args.iter().map(|s| s.as_ref().to_owned()));
+        cargo_args.extend(rustdoc_args.iter().map(|s| s.to_owned()));
         cargo_args
     }
 
     /// Return the environment variables that should be set when building this crate.
-    ///
-    /// This will always contain at least `RUSTDOCFLAGS="-Z unstable-options"`.
     pub fn environment_variables(&self) -> HashMap<&'static str, String> {
         let mut map = HashMap::new();
         // For docs.rs detection from build scripts:
@@ -357,7 +351,7 @@ mod test_parsing {
         assert_eq!(targets[0], "x86_64-apple-darwin");
         assert_eq!(targets[1], "x86_64-pc-windows-msvc");
 
-        let rustc_args = metadata.rustc_args.unwrap();
+        let rustc_args = metadata.rustc_args;
         assert_eq!(rustc_args.len(), 1);
         assert_eq!(rustc_args[0], "--example-rustc-arg".to_owned());
 
@@ -527,17 +521,17 @@ mod test_calculations {
     use super::*;
 
     fn default_cargo_args() -> Vec<String> {
-        vec!["doc".into(), "--lib".into(), "--no-deps".into()]
+        vec!["rustdoc".into(), "--lib".into(), "--".into()]
     }
 
     #[test]
     fn test_defaults() {
         let metadata = Metadata::default();
-        assert_eq!(metadata.cargo_args(), default_cargo_args());
+        assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args());
         let env = metadata.environment_variables();
         assert_eq!(env.get("DOCS_RS").map(String::as_str), Some("1"));
-        assert_eq!(env.get("RUSTDOCFLAGS").map(String::as_str), Some(""));
-        assert_eq!(env.get("RUSTFLAGS").map(String::as_str), Some(""));
+        assert!(env.get("RUSTDOCFLAGS").is_none());
+        assert!(env.get("RUSTFLAGS").is_none());
     }
 
     #[test]
@@ -548,8 +542,8 @@ mod test_calculations {
             ..Metadata::default()
         };
         let mut expected_args = default_cargo_args();
-        expected_args.push("--all-features".into());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        expected_args.insert(expected_args.len() - 1, "--all-features".into());
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // no default features
         let metadata = Metadata {
@@ -557,8 +551,8 @@ mod test_calculations {
             ..Metadata::default()
         };
         let mut expected_args = default_cargo_args();
-        expected_args.push("--no-default-features".into());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        expected_args.insert(expected_args.len() - 1, "--no-default-features".into());
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // allow passing both even though it's nonsense; cargo will give an error anyway
         let metadata = Metadata {
@@ -567,39 +561,52 @@ mod test_calculations {
             ..Metadata::default()
         };
         let mut expected_args = default_cargo_args();
-        expected_args.push("--all-features".into());
-        expected_args.push("--no-default-features".into());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        let idx = expected_args.len() - 1;
+        expected_args.insert(idx, "--all-features".into());
+        expected_args.insert(idx + 1, "--no-default-features".into());
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // explicit empty vec
         let metadata = Metadata {
             features: Some(vec![]),
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--features".into());
-        expected_args.push(String::new());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        let expected_args = vec![
+            "rustdoc".into(),
+            "--lib".into(),
+            "--features".into(),
+            String::new(),
+            "--".into(),
+        ];
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // one feature
         let metadata = Metadata {
             features: Some(vec!["some_feature".into()]),
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--features".into());
-        expected_args.push("some_feature".into());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        let expected_args = vec![
+            String::from("rustdoc"),
+            "--lib".into(),
+            "--features".into(),
+            "some_feature".into(),
+            "--".into(),
+        ];
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // multiple features
         let metadata = Metadata {
             features: Some(vec!["feature1".into(), "feature2".into()]),
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--features".into());
-        expected_args.push("feature1 feature2".into());
-        assert_eq!(metadata.cargo_args(), expected_args);
+        let expected_args = vec![
+            String::from("rustdoc"),
+            "--lib".into(),
+            "--features".into(),
+            "feature1 feature2".into(),
+            "--".into(),
+        ];
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // rustdocflags
         let metadata = Metadata {
@@ -613,32 +620,33 @@ mod test_calculations {
             ],
             ..Metadata::default()
         };
-        assert_eq!(
-            metadata
-                .environment_variables()
-                .get("RUSTDOCFLAGS")
-                .map(String::as_str),
-            Some("-Z unstable-options --static-root-path / --cap-lints warn")
-        );
+        let expected_args = vec![
+            String::from("rustdoc"),
+            "--lib".into(),
+            "--".into(),
+            "-Z".into(),
+            "unstable-options".into(),
+            "--static-root-path".into(),
+            "/".into(),
+            "--cap-lints".into(),
+            "warn".into(),
+        ];
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // rustdocflags
         let metadata = Metadata {
-            rustc_args: Some(vec![
-                "-Z".into(),
-                "unstable-options".into(),
-                "--static-root-path".into(),
-                "/".into(),
-                "--cap-lints".into(),
-                "warn".into(),
-            ]),
+            rustc_args: vec!["--cfg".into(), "x".into()],
             ..Metadata::default()
         };
-        assert_eq!(
-            metadata
-                .environment_variables()
-                .get("RUSTFLAGS")
-                .map(String::as_str),
-            Some("-Z unstable-options --static-root-path / --cap-lints warn")
-        );
+        let expected_args = vec![
+            String::from("rustdoc"),
+            "--lib".into(),
+            "-Z".into(),
+            "unstable-options".into(),
+            "--config".into(),
+            "build.rustflags=[\"--cfg\", \"x\"]".into(),
+            "--".into(),
+        ];
+        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
     }
 }
