@@ -122,7 +122,8 @@ pub struct Metadata {
     targets: Option<Vec<String>>,
 
     /// List of command line arguments for `rustc`.
-    rustc_args: Option<Vec<String>>,
+    #[serde(default)]
+    rustc_args: Vec<String>,
 
     /// List of command line arguments for `rustdoc`.
     #[serde(default)]
@@ -217,15 +218,22 @@ impl Metadata {
 
     /// Return the arguments that should be passed to `cargo`.
     ///
-    // TODO: maybe it shouldn't?
-    /// This will always include `doc --lib --no-deps`.
+    /// This will always include `rustdoc --lib --`.
     /// This will never include `--target`.
+    ///
+    /// You can pass `additional_args` to cargo, as well as `rustdoc_args` to `rustdoc`.
+    /// Do not depend on modifying the `Vec` after it's returned; additional arguments
+    /// appended may be passed to rustdoc instead.
     ///
     /// Note that this does not necessarily reproduce the HTML _output_ of docs.rs exactly.
     /// For example, the links may point somewhere different than they would on docs.rs.
     /// However, rustdoc will see exactly the same code as it would on docs.rs, even counting `cfg`s.
-    pub fn cargo_args(&self) -> Vec<String> {
-        let mut cargo_args: Vec<String> = vec!["doc".into(), "--lib".into(), "--no-deps".into()];
+    pub fn cargo_args(
+        &self,
+        additional_args: &[impl AsRef<str>],
+        rustdoc_args: &[impl AsRef<str>],
+    ) -> Vec<String> {
+        let mut cargo_args: Vec<String> = vec!["rustdoc".into(), "--lib".into()];
 
         if let Some(features) = &self.features {
             cargo_args.push("--features".into());
@@ -240,6 +248,20 @@ impl Metadata {
             cargo_args.push("--no-default-features".into());
         }
 
+        // Pass `RUSTFLAGS` using `cargo --config`, which handles whitespace correctly.
+        if !self.rustc_args.is_empty() {
+            cargo_args.push("-Z".into());
+            cargo_args.push("unstable-options".into());
+            cargo_args.push("--config".into());
+            let rustflags =
+                toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
+            cargo_args.push(format!("build.rustflags={}", rustflags));
+        }
+
+        cargo_args.extend(additional_args.iter().map(|s| s.as_ref().to_owned()));
+        cargo_args.push("--".into());
+        cargo_args.extend_from_slice(&self.rustdoc_args);
+        cargo_args.extend(rustdoc_args.iter().map(|s| s.as_ref().to_owned()));
         cargo_args
     }
 
@@ -247,15 +269,10 @@ impl Metadata {
     ///
     /// This will always contain at least `RUSTDOCFLAGS="-Z unstable-options"`.
     pub fn environment_variables(&self) -> HashMap<&'static str, String> {
-        let joined = |v: &Option<Vec<_>>| v.as_ref().map(|args| args.join(" ")).unwrap_or_default();
-
         let mut map = HashMap::new();
-        map.insert("RUSTFLAGS", joined(&self.rustc_args));
-        map.insert("RUSTDOCFLAGS", self.rustdoc_args.join(" "));
         // For docs.rs detection from build scripts:
         // https://github.com/rust-lang/docs.rs/issues/147
         map.insert("DOCS_RS", "1".into());
-
         map
     }
 }

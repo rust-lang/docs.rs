@@ -561,7 +561,7 @@ impl RustwideBuilder {
         target: &str,
         metadata: &Metadata,
         limits: &Limits,
-        rustdoc_flags_extras: Vec<String>,
+        mut rustdoc_flags_extras: Vec<String>,
     ) -> Result<Command<'ws, 'pl>> {
         // If the explicit target is not a tier one target, we need to install it.
         if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
@@ -569,9 +569,8 @@ impl RustwideBuilder {
             self.toolchain.add_target(&self.workspace, target)?;
         }
 
-        let mut cargo_args = metadata.cargo_args();
-
         // Add docs.rs specific arguments
+        let mut cargo_args = Vec::new();
         if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
         }
@@ -580,18 +579,22 @@ impl RustwideBuilder {
             cargo_args.push(target.into());
         };
 
-        let mut env_vars = metadata.environment_variables();
-        let rustdoc_flags = env_vars.entry("RUSTDOCFLAGS").or_default();
-        // WARNING: this *must* end with a space or it will cause rustdoc to give an error
-        rustdoc_flags
-            .push_str(" --static-root-path / --cap-lints warn --disable-per-crate-search ");
-        rustdoc_flags.push_str(&rustdoc_flags_extras.join(" "));
+        #[rustfmt::skip]
+        const UNCONDITIONAL_ARGS: &[&str] = &[
+            "--static-root-path", "/",
+            "--cap-lints", "warn",
+            "--disable-per-crate-search",
+        ];
+
+        rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
+        let cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
 
         let mut command = build
             .cargo()
             .timeout(Some(limits.timeout()))
             .no_output_timeout(None);
-        for (key, val) in env_vars {
+
+        for (key, val) in metadata.environment_variables() {
             command = command.env(key, val);
         }
 
