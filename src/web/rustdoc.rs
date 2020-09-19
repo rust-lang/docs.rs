@@ -376,7 +376,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .is_prerelease();
 
     // If the requested crate version is the most recent, use it to build the url
-    let latest_path = if is_latest_version {
+    let mut latest_path = if is_latest_version {
         format!("/{}/{}", name, latest_version)
 
     // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
@@ -394,6 +394,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     } else {
         format!("/crate/{}/{}", name, latest_version)
     };
+    if let Some(query) = req.url.query() {
+        latest_path.push('?');
+        latest_path.push_str(query);
+    }
 
     // The path within this crate version's rustdoc output
     let inner_path = {
@@ -1540,5 +1544,29 @@ mod test {
                 env.frontend(),
             )
         })
+    }
+
+    #[test]
+    fn test_latest_version_keeps_query() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("tungstenite")
+                .version("0.10.0")
+                .rustdoc_file("tungstenite/index.html")
+                .create()?;
+            env.fake_release()
+                .name("tungstenite")
+                .version("0.11.0")
+                .rustdoc_file("tungstenite/index.html")
+                .create()?;
+            assert_eq!(
+                latest_version_redirect(
+                    "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
+                    env.frontend()
+                )?,
+                "/tungstenite/0.11.0/tungstenite/index.html?search=String%20-%3E%20Message",
+            );
+            Ok(())
+        });
     }
 }
