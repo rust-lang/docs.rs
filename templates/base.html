@@ -11,9 +11,6 @@
 
         {# Docs.rs styles #}
         <link rel="stylesheet" href="/-/static/vendored.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
-        <link rel="stylesheet" href="/normalize-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
-        <link rel="stylesheet" href="/rustdoc-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
-        <link rel="stylesheet" href="/light-{{ rustc_resource_suffix() }}.css" type="text/css" media="all" />
         <link rel="stylesheet" href="/-/static/style.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
 
         {%- block css -%}{%- endblock css -%}
