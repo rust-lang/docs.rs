@@ -64,7 +64,8 @@ pub(crate) fn rewrite_lol(
         Ok(())
     };
 
-    // Append `vendored.css` before the first stylesheet (rustdoc's first stylesheet is `normalize.css`).
+    // Append `vendored.css` before `rustdoc.css`, so that the duplicate copy of
+    // `normalize.css` will be overridden by the later version.
     let first_stylesheet_handler = |head: &mut Element| {
         head.before(&tera_vendored_css, ContentType::Html);
 
@@ -74,7 +75,7 @@ pub(crate) fn rewrite_lol(
     let (head_selector, body_selector, first_stylesheet_selector) = (
         "head".parse().unwrap(),
         "body".parse().unwrap(),
-        "link[type='text/css'][href*='normalize']".parse().unwrap(),
+        "link[type='text/css'][href*='rustdoc']".parse().unwrap(),
     );
     let element_content_handlers = vec![
         (
