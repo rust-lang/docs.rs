@@ -586,6 +586,10 @@ impl RustwideBuilder {
         rustdoc_flags
             .push_str(" --static-root-path / --cap-lints warn --disable-per-crate-search ");
         rustdoc_flags.push_str(&rustdoc_flags_extras.join(" "));
+        // Works around bugs in the rust compiler when cross-compiling for iOS
+        // https://github.com/rust-lang/docs.rs/issues/1040
+        build.cmd("mkdir").args(&["iPhoneOS.platform"]).run()?;
+        env_vars.insert("SDKROOT", "iPhoneOS.platform".into());
 
         let mut command = build
             .cargo()
