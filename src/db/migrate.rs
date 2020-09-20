@@ -398,6 +398,52 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             // downgrade query
             "DROP TABLE doc_coverage;"
         ),
+        migration!(
+            context,
+            // version
+            17,
+            // description
+            "Create a new table for dependencies",
+            // upgrade query
+            "
+            -- Create the new table to hold dependencies
+            CREATE TABLE dependencies (
+                release_id INT UNIQUE REFERENCES releases(id),
+                name TEXT NOT NULL,
+                optional BOOL,
+                version_requirement TEXT,
+                default_features BOOL,
+                features TEXT[],
+                target TEXT,
+                -- The version of the dependency schema, everything pre-existing in the
+                -- database is given 'v0' while new additions get 'v1'
+                dependency_version TEXT NOT NULL
+            );
+
+            -- Migrate over old dependencies into the new table database
+            INSERT INTO dependencies
+            SELECT
+                dependency[0] AS name,
+                dependency[1] AS version_requirement,
+                'v0' as dependency_version
+            FROM releases
+            CROSS JOIN LATERAL json_array_elements(releases.dependencies) AS dependency;
+
+            -- Remove the old dependency column from the releases table
+            ALTER TABLE releases DROP COLUMN dependencies;
+            ",
+            // downgrade query
+            "
+            -- Add the dependency column back
+            ALTER TABLE releases ADD COLUMN dependencies;
+
+            -- Collapse the dependencies table into json and re-insert it into releases
+            -- TODO
+
+            -- Drop the dependencies table
+            DROP TABLE dependencies;
+            "
+        ),
     ];
 
     for migration in migrations {

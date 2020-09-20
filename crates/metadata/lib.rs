@@ -51,6 +51,7 @@ use toml::Value;
 ///
 /// [`TARGET`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 pub const HOST_TARGET: &str = env!("DOCS_RS_METADATA_HOST_TARGET");
+
 /// The targets that are built if no `targets` section is specified.
 ///
 /// Currently, this is guaranteed to have only [tier one] targets.
@@ -88,17 +89,17 @@ pub enum MetadataError {
 /// name = "test"
 ///
 /// [package.metadata.docs.rs]
-/// features = [ "feature1", "feature2" ]
+/// features = ["feature1", "feature2"]
 /// all-features = true
 /// no-default-features = true
 /// default-target = "x86_64-unknown-linux-gnu"
-/// targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
-/// rustc-args = [ "--example-rustc-arg" ]
-/// rustdoc-args = [ "--example-rustdoc-arg" ]
+/// targets = ["x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+/// rustc-args = ["--example-rustc-arg"]
+/// rustdoc-args = ["--example-rustdoc-arg"]
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
-#[derive(Default, Deserialize)]
+#[derive(Default, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
     /// List of features to pass on to `cargo`.
@@ -113,7 +114,7 @@ pub struct Metadata {
     /// Whether to pass `--no-default-features` to `cargo`.
     //
     /// By default, Docs.rs will build default features.
-    /// Set `no-default-fatures` to `true` if you want to build only certain features.
+    /// Set `no-default-features` to `true` if you want to build only certain features.
     #[serde(default)]
     no_default_features: bool,
 
@@ -249,7 +250,7 @@ impl Metadata {
     pub fn environment_variables(&self) -> HashMap<&'static str, String> {
         let joined = |v: &Option<Vec<_>>| v.as_ref().map(|args| args.join(" ")).unwrap_or_default();
 
-        let mut map = HashMap::new();
+        let mut map = HashMap::with_capacity(3);
         map.insert("RUSTFLAGS", joined(&self.rustc_args));
         map.insert("RUSTDOCFLAGS", self.rustdoc_args.join(" "));
         // For docs.rs detection from build scripts:

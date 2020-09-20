@@ -5,7 +5,10 @@ use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
 use failure::Error;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
+
+const DEFAULT_CONTENT: &[u8] =
+    b"<html><head></head><body>default content for test/fakes</body></html>";
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {
@@ -27,9 +30,6 @@ pub(crate) struct FakeRelease<'a> {
     readme: Option<&'a str>,
 }
 
-const DEFAULT_CONTENT: &[u8] =
-    b"<html><head></head><body>default content for test/fakes</body></html>";
-
 impl<'a> FakeRelease<'a> {
     pub(super) fn new(db: &'a TestDatabase, storage: Arc<Storage>) -> Self {
         FakeRelease {
@@ -40,19 +40,29 @@ impl<'a> FakeRelease<'a> {
                 name: "fake-package".into(),
                 version: "1.0.0".into(),
                 license: Some("MIT".into()),
+                license_file: None,
                 repository: Some("https://git.example.com".into()),
                 homepage: Some("https://www.example.com".into()),
                 description: Some("Fake package".into()),
                 documentation: Some("https://docs.example.com".into()),
                 dependencies: vec![Dependency {
                     name: "fake-dependency".into(),
-                    req: "^1.0.0".into(),
+                    version_requirement: "^1.0.0".into(),
                     kind: None,
+                    rename: None,
+                    optional: false,
+                    default_features: true,
+                    features: Vec::new(),
+                    target: None,
                 }],
                 targets: vec![Target::dummy_lib("fake_package".into(), None)],
                 readme: None,
                 keywords: vec!["fake".into(), "package".into()],
                 authors: vec!["Fake Person <fake@example.com>".into()],
+                features: HashMap::new(),
+                categories: Vec::new(),
+                edition: "2018".to_owned(),
+                metadata: None,
             },
             build_result: BuildResult {
                 rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),

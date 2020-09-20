@@ -9,7 +9,7 @@ use crate::{
     error::Result,
     index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::MetadataPackage,
+    utils::{Dependency, MetadataPackage},
 };
 use log::{debug, info};
 use postgres::Client;
@@ -115,9 +115,10 @@ pub(crate) fn add_package_into_database(
 
     let release_id: i32 = rows[0].get(0);
 
-    add_keywords_into_database(conn, &metadata_pkg, release_id)?;
-    add_authors_into_database(conn, &metadata_pkg, release_id)?;
+    add_keywords_into_database(conn, metadata_pkg, release_id)?;
+    add_authors_into_database(conn, metadata_pkg, release_id)?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
+    add_dependencies_into_database(conn, metadata_pkg.dependencies.iter(), release_id)?;
 
     // Update the crates table with the new release
     conn.execute(
@@ -195,7 +196,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
         .iter()
         .map(|dependency| {
             let name = dependency.name.clone();
-            let version = dependency.req.clone();
+            let version = dependency.version_requirement.clone();
             let kind = dependency
                 .kind
                 .clone()
@@ -442,5 +443,47 @@ where
     for alg in algorithms {
         conn.query(&prepared, &[&release_id, &(alg as i32)])?;
     }
+    Ok(())
+}
+
+fn add_dependencies_into_database<'a, I>(
+    conn: &mut Client,
+    dependencies: I,
+    release_id: i32,
+) -> Result<()>
+where
+    I: Iterator<Item = &'a Dependency> + 'a,
+{
+    let statement = conn.prepare(
+        "
+        INSERT INTO dependencies (
+            release_id,
+            name,
+            version_requirement,
+            optional,
+            default_features,
+            features,
+            target
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT DO NOTHING;
+        ",
+    )?;
+
+    for dependency in dependencies {
+        conn.query(
+            &statement,
+            &[
+                &release_id,
+                &dependency.name,
+                &dependency.version_requirement,
+                &dependency.optional,
+                &dependency.default_features,
+                &dependency.features,
+                &dependency.target,
+            ],
+        )?;
+    }
+
     Ok(())
 }

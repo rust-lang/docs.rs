@@ -1,6 +1,6 @@
 //! Various utilities for docs.rs
 
-pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
+pub(crate) use self::cargo_metadata::{CargoMetadata, Dependency, Package as MetadataPackage};
 pub(crate) use self::copy::copy_doc_dir;
 pub use self::daemon::start_daemon;
 pub use self::github_updater::GithubUpdater;
@@ -11,7 +11,7 @@ pub use self::release_activity_updater::update_release_activity;
 pub(crate) use self::rustc_version::parse_rustc_version;
 
 #[cfg(test)]
-pub(crate) use self::cargo_metadata::{Dependency, Target};
+pub(crate) use self::cargo_metadata::Target;
 
 mod cargo_metadata;
 pub mod consistency;

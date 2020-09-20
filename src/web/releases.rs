@@ -1223,6 +1223,7 @@ mod tests {
                 let page = kuchiki::parse_html()
                     .one(env.frontend().get(url).send().unwrap().text().unwrap());
                 assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+
                 let not_matching = page
                     .select(sel)
                     .unwrap()
@@ -1240,9 +1241,11 @@ mod tests {
                     )
                     .filter(|(a, b)| a.as_str() != **b)
                     .collect::<Vec<_>>();
-                if not_matching.len() > 0 {
+
+                if !not_matching.is_empty() {
                     let not_found = not_matching.iter().map(|(_, b)| b).collect::<Vec<_>>();
                     let found = not_matching.iter().map(|(a, _)| a).collect::<Vec<_>>();
+
                     assert!(
                         not_matching.is_empty(),
                         "Titles did not match for URL `{}`: not found: {:?}, found: {:?}",
