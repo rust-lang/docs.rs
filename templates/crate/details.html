@@ -103,7 +103,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {{ macros::releases_list(name=details.name, releases=details.releases) }}
+                                    {{ macros::releases_list(name=details.name, releases=details.releases, target="", inner_path="") }}
                                 </ul>
                             </div>
                         </li>
