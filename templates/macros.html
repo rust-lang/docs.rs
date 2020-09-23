@@ -114,11 +114,18 @@
         * `yanked` A boolean of the release's yanked status
         * `build_status` A boolean of the crate's build status (true for built, false for failed build)
         * `is_library` A boolean that's true if the crate is a library and false if it's a binary
+    * `target` The target platform (empty string if the default or a `/crate` page)
+    * `inner_path` The current rustdoc page (empty string if a `/crate` page)
 #}
-{% macro releases_list(name, releases) %}
+{% macro releases_list(name, releases, target, inner_path) %}
     {%- for release in releases -%}
         {# The url for the release, `/crate/:name/:version` #}
-        {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
+        {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
+        {% if inner_path == "" %} {# /crate #}
+            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
+        {% else %}
+            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version ~ "/target-redirect/" ~ target ~ inner_path -%}
+        {% endif %}
         {# The release's name and version, `:name-:version` #}
         {%- set release_name = name ~ "-" ~ release.version -%}
 

@@ -181,6 +181,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 struct RustdocPage {
     latest_path: String,
     latest_version: String,
+    target: String,
     inner_path: String,
     is_latest_version: bool,
     is_prerelease: bool,
@@ -400,23 +401,29 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // The path within this crate version's rustdoc output
-    let inner_path = {
+    let (target, inner_path) = {
         let mut inner_path = req_path.clone();
 
         // Drop the `rustdoc/:crate/:version[/:platform]` prefix
         inner_path.drain(..3).for_each(drop);
 
-        if inner_path.len() > 1 && krate.doc_targets.iter().any(|s| s == inner_path[0]) {
-            inner_path.remove(0);
-        }
+        let target = if inner_path.len() > 1 && krate.doc_targets.iter().any(|s| s == inner_path[0])
+        {
+            let mut target = inner_path.remove(0).to_string();
+            target.push('/');
+            target
+        } else {
+            String::new()
+        };
 
-        inner_path.join("/")
+        (target, inner_path.join("/"))
     };
 
     rendering_time.step("rewrite html");
     RustdocPage {
         latest_path,
         latest_version,
+        target,
         inner_path,
         is_latest_version,
         is_prerelease,
@@ -1513,7 +1520,7 @@ mod test {
             let status = |version| -> Result<_, failure::Error> {
                 let page =
                     kuchiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
-                let selector = format!(r#"ul > li a[href="/crate/hexponent/{}""#, version);
+                let selector = format!(r#"ul > li a[href="/crate/hexponent/{}"]"#, version);
                 let anchor = page
                     .select(&selector)
                     .unwrap()
@@ -1568,5 +1575,53 @@ mod test {
             );
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_version_link_goes_to_docs() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("hexponent")
+                .version("0.3.0")
+                .rustdoc_file("hexponent/index.html")
+                .create()?;
+            env.fake_release()
+                .name("hexponent")
+                .version("0.3.1")
+                .rustdoc_file("hexponent/index.html")
+                .create()?;
+
+            // test rustdoc pages stay on the documentation
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/hexponent/0.3.0/hexponent/")
+                    .send()?
+                    .text()?,
+            );
+            let selector = format!(
+                r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
+            );
+            assert_eq!(
+                page.select(&selector).unwrap().count(),
+                1,
+                "link to /target-redirect/ not found"
+            );
+
+            // test /crate pages stay on /crate
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/hexponent/0.3.0/")
+                    .send()?
+                    .text()?,
+            );
+            let selector = format!(r#"ul > li a[href="/crate/hexponent/0.3.1"]"#);
+            assert_eq!(
+                page.select(&selector).unwrap().count(),
+                1,
+                "link to /crate not found"
+            );
+
+            Ok(())
+        })
     }
 }
