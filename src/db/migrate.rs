@@ -398,6 +398,47 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             // downgrade query
             "DROP TABLE doc_coverage;"
         ),
+        migration!(
+            context,
+            // version
+            17,
+            // description
+            "Make many more fields non-null",
+            // upgrade query
+            "
+            ALTER TABLE queue ALTER COLUMN name SET NOT NULL;
+            ALTER TABLE queue ALTER COLUMN version SET NOT NULL;
+            ALTER TABLE queue ALTER COLUMN priority SET NOT NULL;
+            ALTER TABLE queue ALTER COLUMN attempt SET NOT NULL;
+            ALTER TABLE doc_coverage ALTER COLUMN release_id SET NOT NULL;
+            ALTER TABLE releases ALTER COLUMN version SET NOT NULL;
+            ALTER TABLE releases ALTER COLUMN rustdoc_status SET NOT NULL;
+            ALTER TABLE releases ALTER COLUMN build_status SET NOT NULL;
+            ALTER TABLE releases ALTER COLUMN have_examples SET NOT NULL;
+            ALTER TABLE releases ALTER COLUMN is_library SET NOT NULL;
+            ALTER TABLE authors ALTER COLUMN name SET NOT NULL;
+            ALTER TABLE owners ALTER COLUMN avatar SET NOT NULL;
+            ALTER TABLE owners ALTER COLUMN name SET NOT NULL;
+            ALTER TABLE crates ALTER COLUMN github_stars SET NOT NULL;
+            ",
+            // downgrade query
+            "
+            ALTER TABLE queue ALTER COLUMN name DROP NOT NULL;
+            ALTER TABLE queue ALTER COLUMN version DROP NOT NULL;
+            ALTER TABLE queue ALTER COLUMN priority DROP NOT NULL;
+            ALTER TABLE queue ALTER COLUMN attempt DROP NOT NULL;
+            ALTER TABLE doc_coverage ALTER COLUMN release_id DROP NOT NULL;
+            ALTER TABLE releases ALTER COLUMN version DROP NOT NULL;
+            ALTER TABLE releases ALTER COLUMN rustdoc_status DROP NOT NULL;
+            ALTER TABLE releases ALTER COLUMN build_status DROP NOT NULL;
+            ALTER TABLE releases ALTER COLUMN have_examples DROP NOT NULL;
+            ALTER TABLE releases ALTER COLUMN is_library DROP NOT NULL;
+            ALTER TABLE authors ALTER COLUMN name DROP NOT NULL;
+            ALTER TABLE owners ALTER COLUMN avatar DROP NOT NULL;
+            ALTER TABLE owners ALTER COLUMN name DROP NOT NULL;
+            ALTER TABLE crates ALTER COLUMN github_stars DROP NOT NULL;
+            "
+        )
     ];
 
     for migration in migrations {
