@@ -137,17 +137,24 @@ pub(crate) fn add_doc_coverage(
 ) -> Result<i32> {
     debug!("Adding doc coverage into database");
     let rows = conn.query(
-        "INSERT INTO doc_coverage (release_id, total_items, documented_items)
-            VALUES ($1, $2, $3)
+        "INSERT INTO doc_coverage (
+            release_id, total_items, documented_items,
+            total_items_needing_examples, items_with_examples
+        )
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (release_id) DO UPDATE
                 SET
                     total_items = $2,
-                    documented_items = $3
+                    documented_items = $3,
+                    total_items_needing_examples = $4,
+                    items_with_examples = $5
             RETURNING release_id",
         &[
             &release_id,
             &doc_coverage.total_items,
             &doc_coverage.documented_items,
+            &doc_coverage.total_items_needing_examples,
+            &doc_coverage.items_with_examples,
         ],
     )?;
     Ok(rows[0].get(0))

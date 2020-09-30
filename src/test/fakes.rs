@@ -183,10 +183,18 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn coverage(mut self, documented_items: i32, total_items: i32) -> Self {
+    pub(crate) fn coverage(
+        mut self,
+        documented_items: i32,
+        total_items: i32,
+        total_items_needing_examples: i32,
+        items_with_examples: i32,
+    ) -> Self {
         self.build_result.doc_coverage = Some(DocCoverage {
             total_items,
             documented_items,
+            total_items_needing_examples,
+            items_with_examples,
         });
         self
     }

@@ -438,6 +438,25 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             ALTER TABLE owners ALTER COLUMN name DROP NOT NULL;
             ALTER TABLE crates ALTER COLUMN github_stars DROP NOT NULL;
             "
+        ),
+        migration!(
+            context,
+            // version
+            18,
+            // description
+            "Add more information into doc coverage",
+            // upgrade query
+            "
+            ALTER TABLE doc_coverage
+                ADD COLUMN total_items_needing_examples INT,
+                ADD COLUMN items_with_examples INT;
+            ",
+            // downgrade query
+            "
+            ALTER TABLE doc_coverage
+                DROP COLUMN total_items_needing_examples,
+                DROP COLUMN items_with_examples;
+            "
         )
     ];
 

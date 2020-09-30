@@ -644,12 +644,12 @@ mod test {
                 .name("foo")
                 .version("0.0.1")
                 .source_file("test.rs", &[])
-                .coverage(6, 10)
+                .coverage(6, 10, 2, 1)
                 .create()?;
             let web = env.frontend();
 
             let foo_crate = kuchiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
-            for value in &["60%", "6", "10"] {
+            for value in &["60%", "6", "10", "2", "1"] {
                 assert!(foo_crate
                     .select(".pure-menu-item b")
                     .unwrap()
