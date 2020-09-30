@@ -455,11 +455,15 @@ impl RustwideBuilder {
         struct FileCoverage {
             total: i32,
             with_docs: i32,
+            total_examples: i32,
+            with_examples: i32,
         }
 
         let mut coverage = DocCoverage {
             total_items: 0,
             documented_items: 0,
+            total_items_needing_examples: 0,
+            items_with_examples: 0,
         };
 
         self.prepare_command(build, target, metadata, limits, rustdoc_flags)?
@@ -472,6 +476,8 @@ impl RustwideBuilder {
                     for file in parsed.values() {
                         coverage.total_items += file.total;
                         coverage.documented_items += file.with_docs;
+                        coverage.total_items_needing_examples += file.total_examples;
+                        coverage.items_with_examples += file.with_examples;
                     }
                 }
             })
@@ -670,6 +676,11 @@ pub(crate) struct DocCoverage {
     pub(crate) total_items: i32,
     /// The items of the crate that are documented, used to calculate documentation coverage.
     pub(crate) documented_items: i32,
+    /// The total items that could have code examples in the current crate, used to calculate
+    /// documentation coverage.
+    pub(crate) total_items_needing_examples: i32,
+    /// The items of the crate that have a code example, used to calculate documentation coverage.
+    pub(crate) items_with_examples: i32,
 }
 
 pub(crate) struct BuildResult {

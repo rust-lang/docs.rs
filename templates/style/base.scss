@@ -311,6 +311,12 @@ div.package-page-container {
             margin: 20px 5px 15px 5px;
         }
 
+        li.pure-menu-item > .documented-info {
+            font-size: 13px;
+            display: block;
+            width: 100%;
+        }
+
         li.pure-menu-heading:first-child {
             margin-top: 0;
         }
