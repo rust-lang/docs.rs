@@ -137,6 +137,12 @@ To rebuild the site, run `docker-compose build`.
 Note that docker-compose caches the build even if you change the source code,
 so this will be necessary anytime you make changes.
 
+If you want to completely clean up the database, don't forget to remove the volumes too:
+
+```
+$ docker-compose down --volumes
+```
+
 #### FAQ
 
 ##### I keep getting the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
