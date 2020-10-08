@@ -102,15 +102,41 @@ div.nav-container {
         }
     }
 
-    div.rustdoc-navigation {
-        span.title {
-            display: none;
+    // use a .title span inside a menu to hide it on small screens
+    span.title {
+        display: none;
+        @media #{$media-sm} {
+            display: inline;
+        }
+    }
 
+    // Make menu item optional and disappear on small screens
+    .pure-menu-opt {
+        display: none;
+        @media #{$media-sm} {
+            display: inline-block;
+        }
+    }
+
+    // Make children of menu optional and disappear on small screens
+    .pure-menu-opt-children {
+        > .pure-menu-link::after {
+            display: none;
             @media #{$media-sm} {
                 display: inline;
             }
         }
 
+        &.pure-menu-allow-hover:hover > .pure-menu-children,
+        &.pure-menu-active > .pure-menu-children {
+          display: none;
+          @media #{$media-sm} {
+              display: block;
+          }
+        }
+    }
+
+    div.rustdoc-navigation {
         div.package-details-menu {
             width: 350px;
 
