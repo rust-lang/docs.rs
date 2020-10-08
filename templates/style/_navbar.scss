@@ -136,42 +136,40 @@ div.nav-container {
         }
     }
 
-    div.rustdoc-navigation {
-        div.package-details-menu {
-            width: 350px;
+    div.package-details-menu {
+        width: 350px;
 
-            p.description {
-                font-family: $font-family-sans;
-                font-size: 0.8em;
-                color: #777; // color from pure
-                padding: 0.5em 1em;
-                margin: 0;
-            }
+        p.description {
+            font-family: $font-family-sans;
+            font-size: 0.8em;
+            color: #777; // color from pure
+            padding: 0.5em 1em;
+            margin: 0;
+        }
+
+        ul.pure-menu-list {
+            width: 100%;
+        }
+
+        div.right-border {
+            border-right: 1px solid $color-border;
+        }
+
+        a.pure-menu-link {
+            word-wrap: normal;
+            white-space: normal;
+        }
+
+        div.sub-menu {
+            max-height: 150px;
+            overflow-y: auto;
 
             ul.pure-menu-list {
-                width: 100%;
+                border-top: none;
             }
 
-            div.right-border {
-                border-right: 1px solid $color-border;
-            }
-
-            a.pure-menu-link {
-                word-wrap: normal;
-                white-space: normal;
-            }
-
-            div.sub-menu {
-                max-height: 150px;
-                overflow-y: auto;
-
-                ul.pure-menu-list {
-                    border-top: none;
-                }
-
-                li.pure-menu-item:last-child {
-                    border-bottom: none;
-                }
+            li.pure-menu-item:last-child {
+                border-bottom: none;
             }
         }
     }

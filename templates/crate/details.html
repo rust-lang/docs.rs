@@ -5,6 +5,17 @@
     {{ macros::doc_title(name=details.name, version=details.version) }}
 {%- endblock title -%}
 
+{%- block topbar -%}
+  {%- set krate = details -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = details.metadata.target_name ~ "/index.html" -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
+{%- endblock topbar -%}
+
 {%- block header -%}
     {# Set the active tab to the `crate` tab #}
     {{ navigation::package_navigation(metadata=details.metadata, active_tab="crate") }}
