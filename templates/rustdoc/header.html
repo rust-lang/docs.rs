@@ -21,8 +21,8 @@
                 </a>
 
                 <ul class="pure-menu-list">
-                    <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                        <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ krate.description }}">
+                    <li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" title="{{ krate.description }}">
                             {{ "cube" | fas(fw=true) }}
                             <span class="title"> {{ krate.name }}-{{ krate.version }}</span>
                         </a>
@@ -95,6 +95,10 @@
                                         <li class="pure-menu-item">
                                             <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
                                                 {{ "cube" | fas(fw=true) }} Crates.io
+                                            </a>
+
+                                            <a href="{{ crate_url | safe }}" class="pure-menu-link" title="See {{ krate.name }} in docs.rs">
+                                                {{ "cube" | fas(fw=true) }} Crate page on docs.rs
                                             </a>
                                         </li>
                                     </ul>
@@ -212,7 +216,7 @@
                     </li>
 
                     {# Display the platforms that the release has been built for #}
-                    <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+                    <li class="pure-menu-item pure-menu-has-children">
                         <a href="#" class="pure-menu-link" aria-label="Platform">
                             {{ "cogs" | fas(fw=true) }}
                             <span class="title"> Platform</span>
