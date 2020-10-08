@@ -41,17 +41,19 @@ body {
 
     // this is a super nasty override for help dialog in rustdocs
     // see #52 for details
-    .blur > :not(#help) {
-        filter: none;
-        -webkit-filter: none;
-    }
+    &.blur {
+        > :not(#help) {
+            filter: none;
+            -webkit-filter: none;
+        }
 
-    .blur > div.nav-container > *,
-    .blur > div.cratesfyi-package-container > *,
-    .blur > div.rustdoc > :not(#help) {
-        filter: blur(8px);
-        -webkit-filter: blur(8px);
-        opacity: 0.7;
+        > div.nav-container > *,
+        > div.cratesfyi-package-container > *,
+        > div.rustdoc > :not(#help) {
+            filter: blur(8px);
+            -webkit-filter: blur(8px);
+            opacity: 0.7;
+        }
     }
 }
 
