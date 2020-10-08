@@ -108,10 +108,7 @@ pub fn queue_builder(
         }
 
         fn is_in_progress(&self) -> bool {
-            match *self {
-                BuilderState::QueueInProgress(_) => true,
-                _ => false,
-            }
+            matches!(*self, BuilderState::QueueInProgress(_))
         }
 
         fn increment(&mut self) {

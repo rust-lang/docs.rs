@@ -1240,7 +1240,7 @@ mod tests {
                     )
                     .filter(|(a, b)| a.as_str() != **b)
                     .collect::<Vec<_>>();
-                if not_matching.len() > 0 {
+                if !not_matching.is_empty() {
                     let not_found = not_matching.iter().map(|(_, b)| b).collect::<Vec<_>>();
                     let found = not_matching.iter().map(|(a, _)| a).collect::<Vec<_>>();
                     assert!(

@@ -252,7 +252,6 @@ trait StorageTransaction {
 fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
     let mime = mime_guess::from_path(file_path)
         .first_raw()
-        .map(|m| m)
         .unwrap_or("text/plain");
     Ok(match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
