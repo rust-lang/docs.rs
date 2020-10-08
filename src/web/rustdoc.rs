@@ -1598,9 +1598,9 @@ mod test {
                     .send()?
                     .text()?,
             );
-            let selector = format!(
+            let selector =
                 r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
-            );
+                    .to_string();
             assert_eq!(
                 page.select(&selector).unwrap().count(),
                 1,
@@ -1614,7 +1614,7 @@ mod test {
                     .send()?
                     .text()?,
             );
-            let selector = format!(r#"ul > li a[href="/crate/hexponent/0.3.1"]"#);
+            let selector = r#"ul > li a[href="/crate/hexponent/0.3.1"]"#.to_string();
             assert_eq!(
                 page.select(&selector).unwrap().count(),
                 1,
