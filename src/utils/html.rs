@@ -2,7 +2,7 @@ use crate::web::page::TemplateData;
 use lol_html::errors::RewritingError;
 use tera::Context;
 
-/// Rewrite a rustdoc page to have the docs.rs header
+/// Rewrite a rustdoc page to have the docs.rs topbar
 ///
 /// Given a rustdoc HTML page and a context to serialize it with,
 /// render the `rustdoc/` templates with the `html`.
@@ -21,7 +21,7 @@ pub(crate) fn rewrite_lol(
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
     let tera_vendored_css = templates.render("rustdoc/vendored.html", &ctx).unwrap();
     let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();
-    let tera_rustdoc_header = templates.render("rustdoc/header.html", &ctx).unwrap();
+    let tera_rustdoc_topbar = templates.render("rustdoc/topbar.html", &ctx).unwrap();
 
     // Append `style.css` stylesheet after all head elements.
     let head_handler = |head: &mut Element| {
@@ -54,10 +54,10 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.set_tag_name("div")?;
         // Prepend the tera content
         rustdoc_body_class.prepend(&tera_body, ContentType::Html);
-        // Wrap the tranformed body and rustdoc header into a <body> element
+        // Wrap the tranformed body and topbar into a <body> element
         rustdoc_body_class.before("<body>", ContentType::Html);
-        // Insert the header outside of the rustdoc div
-        rustdoc_body_class.before(&tera_rustdoc_header, ContentType::Html);
+        // Insert the topbar outside of the rustdoc div
+        rustdoc_body_class.before(&tera_rustdoc_topbar, ContentType::Html);
         // Finalize body with </body>
         rustdoc_body_class.after("</body>", ContentType::Html);
 

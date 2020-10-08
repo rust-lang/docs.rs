@@ -24,7 +24,9 @@
     </head>
 
     <body>
-        {%- include "header/topbar.html" -%}
+        {%- block topbar -%}
+          {%- include "header/topbar.html" -%}
+        {%- endblock topbar -%}
 
         {%- block header %}{% endblock header -%}
 
