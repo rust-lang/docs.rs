@@ -6,13 +6,21 @@
 {%- include "header/topbar_begin.html" -%}
 
 <ul class="pure-menu-list">
-    <li class="pure-menu-item {% if 'skip_package_details' not in __tera_context %}pure-menu-has-children{% endif %}">
+    {% if 'skip_package_details' in __tera_context %}
+    <li class="pure-menu-item">
+        <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ krate.description }}">
+            {{ "cube" | fas }}
+            <span class="title">{{ krate.name }}-{{ krate.version }}</span>
+        </a>
+    </li>
+
+    {% else %}
+    <li class="pure-menu-item pure-menu-has-children">
         <a href="#" class="pure-menu-link" title="{{ krate.description }}">
             {{ "cube" | fas }}
             <span class="title">{{ krate.name }}-{{ krate.version }}</span>
         </a>
 
-        {% if 'skip_package_details' not in __tera_context %}
         {# Crate details #}
         <div class="pure-menu-children package-details-menu">
             {# Crate name, description and license #}
@@ -160,10 +168,10 @@
                 </div>
             {%- endif -%}
         </div>
-        {%- endif -%}
-    </li>{#
+    </li>
+    {%- endif -%}
 
-    If this is the latest release and it's been yanked, just display a warning #}
+    {# If this is the latest release and it's been yanked, just display a warning #}
     {%- if is_latest_version and krate.yanked -%}
         <li class="pure-menu-item">
             <span class="pure-menu-link warn">
