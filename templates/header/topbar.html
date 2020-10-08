@@ -8,7 +8,7 @@
         <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
             <form action="/releases/search" method="GET" class="landing-search-form-nav">
                 {# The search bar #}
-                <div id="search-input-nav">
+                <div id="search-input-nav" class="pure-menu-right">
                     <label for="nav-search">
                         {{ "search" | fas(fw=true) }}
                     </label>
@@ -23,7 +23,7 @@
                     {{ "cubes" | fas(fw=true) }} Docs.rs
                 </a>
 
-                <ul class="pure-menu-list">
+                <ul class="pure-menu-list pure-menu-right">
                     <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                         <a href="/about" class="pure-menu-link">
                             About
