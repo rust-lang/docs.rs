@@ -3,6 +3,9 @@
     The only piece of context it can take is `search_query`, which should
     be a string and will populate the search field if it exists
 #}
+
+{%- import "macros.html" as macros -%}
+
 <div class="nav-container">
     <div class="container">
         <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
@@ -99,10 +102,13 @@
                             ) }}
                         </ul>
                     </li>
-
-                    {# The global alert, if there is one #}
-                    {% include "header/global_alert.html" -%}
                 </ul>
+
+                {%- block extra -%}{%- endblock extra -%}
+
+                {# The global alert, if there is one #}
+                {% include "header/global_alert.html" -%}
+
             </form>
         </div>
     </div>
