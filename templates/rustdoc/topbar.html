@@ -6,12 +6,13 @@
 {%- include "header/topbar_begin.html" -%}
 
 <ul class="pure-menu-list">
-    <li class="pure-menu-item pure-menu-has-children">
+    <li class="pure-menu-item {% if 'skip_package_details' not in __tera_context %}pure-menu-has-children{% endif %}">
         <a href="#" class="pure-menu-link" title="{{ krate.description }}">
             {{ "cube" | fas }}
             <span class="title">{{ krate.name }}-{{ krate.version }}</span>
         </a>
 
+        {% if 'skip_package_details' not in __tera_context %}
         {# Crate details #}
         <div class="pure-menu-children package-details-menu">
             {# Crate name, description and license #}
@@ -159,6 +160,7 @@
                 </div>
             {%- endif -%}
         </div>
+        {%- endif -%}
     </li>{#
 
     If this is the latest release and it's been yanked, just display a warning #}
