@@ -144,15 +144,6 @@
                         <div class="warning">{{ details.name }}-{{ details.version }} doesn't have any documentation.</div>
                     {%- endif -%}
 
-                    {# If there's a readme, display it #}
-                    {%- if details.readme -%}
-                        {{ details.readme | safe }}
-
-                    {# If there's not a readme then attempt to display the long description #}
-                    {%- elif details.rustdoc -%}
-                        {{ details.rustdoc | safe }}
-                    {%- endif -%}
-
                 {# If the build failed, the release isn't yanked and the release is a library #}
                 {%- else -%}
                     {# Display a warning telling the user we failed to build the docs #}
@@ -177,6 +168,15 @@
                             </a>
                         </div>
                     {%- endif -%}
+                {%- endif -%}
+
+                {# If there's a readme, display it #}
+                {%- if details.readme -%}
+                    {{ details.readme | safe }}
+
+                {# If there's not a readme then attempt to display the long description #}
+                {%- elif details.rustdoc -%}
+                    {{ details.rustdoc | safe }}
                 {%- endif -%}
             </div>
         </div>
