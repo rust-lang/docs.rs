@@ -1,5 +1,5 @@
 // Standard white theme
-body {
+html {
   --color-background-code: #f5f5f5;
   --color-background: #fff;
   --color-border-light: lighten(#ddd, 5%);
@@ -20,3 +20,6 @@ body {
   --color-warn-hover: darken(#e57300, 10%);
   --color-warn: #e57300;
 }
+
+// To add a new theme, copy the above theme into a new `html[data-theme="name"]`
+// block below and change the colors

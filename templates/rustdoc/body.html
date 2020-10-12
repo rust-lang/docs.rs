@@ -29,4 +29,16 @@
       window.addEventListener("scroll", maybeFixupViewPortPosition, {"once": true});
     }
   }
+
+  window.addEventListener('message', function (ev) {
+    if (ev.data && ev.data.storage && ev.data.storage.key === 'rustdoc-theme') {
+      applyTheme(ev.data.storage.value);
+    }
+  });
 </script>
+<!--
+    Only other windows get notified when we change local storage, so we have an
+    invisible iframe that sends us a message when local storage changes so we
+    can detect rustdoc changing the theme
+-->
+<iframe src="/-/static/storage-change-detection.html" width="0" height="0" style="display: none"></iframe>
