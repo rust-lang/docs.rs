@@ -677,7 +677,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slug",
- "staticfile",
  "structopt",
  "strum",
  "systemstat",
@@ -798,17 +797,6 @@ name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
-
-[[package]]
-name = "filetime"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "714653f3e34871534de23771ac7b26e999651a0a228f47beb324dfdf1dd4b10f"
-dependencies = [
- "cfg-if",
- "libc",
- "redox_syscall",
-]
 
 [[package]]
 name = "filetime"
@@ -1782,16 +1770,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41f5c9112cb662acd3b204077e0de5bc66305fa8df65c8019d5adb10e9ab6e58"
 
 [[package]]
-name = "mount"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32245731923cd096899502fc4c4317cfd09f121e80e73f7f576cf3777a824256"
-dependencies = [
- "iron",
- "sequence_trie",
-]
-
-[[package]]
 name = "native-tls"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1861,7 +1839,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80ae4a7688d1fab81c5bf19c64fc8db920be8d519ce6336ed4e7efe024724dbd"
 dependencies = [
  "bitflags",
- "filetime 0.2.10",
+ "filetime",
  "fsevent",
  "fsevent-sys",
  "inotify",
@@ -3048,12 +3026,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
-name = "sequence_trie"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c915714ca833b1d4d6b8f6a9d72a3ff632fe45b40a8d184ef79c81bec6327eed"
-
-[[package]]
 name = "serde"
 version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3243,19 +3215,6 @@ name = "standback"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e4b8c631c998468961a9ea159f064c5c8499b95b5e4a34b77849d45949d540"
-
-[[package]]
-name = "staticfile"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31493480e073d52522a94cdf56269dd8eb05f99549effd1826b0271690608878"
-dependencies = [
- "filetime 0.1.15",
- "iron",
- "mount",
- "time 0.1.43",
- "url 1.7.2",
-]
 
 [[package]]
 name = "stdweb"
@@ -3453,7 +3412,7 @@ version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3196bfbffbba3e57481b6ea32249fbaf590396a52505a2615adbb79d9d826d3"
 dependencies = [
- "filetime 0.2.10",
+ "filetime",
  "libc",
  "redox_syscall",
  "xattr",
