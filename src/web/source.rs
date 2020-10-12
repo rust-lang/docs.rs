@@ -56,7 +56,9 @@ impl FileList {
                         releases.target_name,
                         releases.rustdoc_status,
                         releases.files,
-                        releases.default_target
+                        releases.default_target,
+                        releases.doc_targets,
+                        releases.yanked
                 FROM releases
                 LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -133,6 +135,8 @@ impl FileList {
                     target_name: rows[0].get(3),
                     rustdoc_status: rows[0].get(4),
                     default_target: rows[0].get(6),
+                    doc_targets: MetaData::parse_doc_targets(rows[0].get(7)),
+                    yanked: rows[0].get(8),
                 },
                 files: file_list,
             })

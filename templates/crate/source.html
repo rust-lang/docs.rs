@@ -5,6 +5,17 @@
     {{ macros::doc_title(name=file_list.metadata.name, version=file_list.metadata.version) }}
 {%- endblock title -%}
 
+{%- block topbar -%}
+  {%- set metadata = file_list.metadata -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
+{%- endblock topbar -%}
+
 {%- block header -%}
     {# Set the active tab to the `source` tab #}
     {{ navigation::package_navigation(metadata=file_list.metadata, active_tab="source") }}

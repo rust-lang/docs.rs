@@ -39,8 +39,6 @@ pub struct CrateDetails {
     github_issues: Option<i32>,
     pub(crate) metadata: MetaData,
     is_library: bool,
-    yanked: bool,
-    pub(crate) doc_targets: Vec<String>,
     license: Option<String>,
     documentation_url: Option<String>,
     total_items: Option<f32>,
@@ -144,18 +142,8 @@ impl CrateDetails {
             rustdoc_status: krate.get("rustdoc_status"),
             target_name: krate.get("target_name"),
             default_target: krate.get("default_target"),
-        };
-
-        let doc_targets = {
-            let data: Value = krate.get("doc_targets");
-            data.as_array()
-                .map(|array| {
-                    array
-                        .iter()
-                        .filter_map(|item| item.as_str().map(|s| s.to_owned()))
-                        .collect()
-                })
-                .unwrap_or_else(Vec::new)
+            doc_targets: MetaData::parse_doc_targets(krate.get("doc_targets")),
+            yanked: krate.get("yanked"),
         };
 
         let documented_items: Option<i32> = krate.get("documented_items");
@@ -189,8 +177,6 @@ impl CrateDetails {
             github_issues: krate.get("github_issues"),
             metadata,
             is_library: krate.get("is_library"),
-            yanked: krate.get("yanked"),
-            doc_targets,
             license: krate.get("license"),
             documentation_url: krate.get("documentation_url"),
             documented_items: documented_items.map(|v| v as f32),

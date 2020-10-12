@@ -3,6 +3,7 @@
 pub(crate) mod page;
 
 use log::{debug, info};
+use serde_json::Value;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -542,6 +543,8 @@ pub(crate) struct MetaData {
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
     pub(crate) default_target: String,
+    pub(crate) doc_targets: Vec<String>,
+    pub(crate) yanked: bool,
 }
 
 impl MetaData {
@@ -553,7 +556,9 @@ impl MetaData {
                        releases.description,
                        releases.target_name,
                        releases.rustdoc_status,
-                       releases.default_target
+                       releases.default_target,
+                       releases.doc_targets,
+                       releases.yanked
                 FROM releases
                 INNER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -570,7 +575,21 @@ impl MetaData {
             target_name: row.get(3),
             rustdoc_status: row.get(4),
             default_target: row.get(5),
+            doc_targets: MetaData::parse_doc_targets(row.get(6)),
+            yanked: row.get(7),
         })
+    }
+
+    fn parse_doc_targets(targets: Value) -> Vec<String> {
+        targets
+            .as_array()
+            .map(|array| {
+                array
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_owned()))
+                    .collect()
+            })
+            .unwrap_or_else(Vec::new)
     }
 }
 
@@ -840,6 +859,11 @@ mod test {
             target_name: None,
             rustdoc_status: true,
             default_target: "x86_64-unknown-linux-gnu".to_string(),
+            doc_targets: vec![
+                "x86_64-unknown-linux-gnu".to_string(),
+                "arm64-unknown-linux-gnu".to_string(),
+            ],
+            yanked: false,
         };
 
         let correct_json = json!({
@@ -848,19 +872,29 @@ mod test {
             "description": "serde does stuff",
             "target_name": null,
             "rustdoc_status": true,
-            "default_target": "x86_64-unknown-linux-gnu"
+            "default_target": "x86_64-unknown-linux-gnu",
+            "doc_targets": [
+                "x86_64-unknown-linux-gnu",
+                "arm64-unknown-linux-gnu",
+            ],
+            "yanked": false,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
 
-        metadata.target_name = Some("x86_64-apple-darwin".to_string());
+        metadata.target_name = Some("serde_lib_name".to_string());
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
             "description": "serde does stuff",
-            "target_name": "x86_64-apple-darwin",
+            "target_name": "serde_lib_name",
             "rustdoc_status": true,
-            "default_target": "x86_64-unknown-linux-gnu"
+            "default_target": "x86_64-unknown-linux-gnu",
+            "doc_targets": [
+                "x86_64-unknown-linux-gnu",
+                "arm64-unknown-linux-gnu",
+            ],
+            "yanked": false,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -870,9 +904,14 @@ mod test {
             "name": "serde",
             "version": "1.0.0",
             "description": null,
-            "target_name": "x86_64-apple-darwin",
+            "target_name": "serde_lib_name",
             "rustdoc_status": true,
-            "default_target": "x86_64-unknown-linux-gnu"
+            "default_target": "x86_64-unknown-linux-gnu",
+            "doc_targets": [
+                "x86_64-unknown-linux-gnu",
+                "arm64-unknown-linux-gnu",
+            ],
+            "yanked": false,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());

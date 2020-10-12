@@ -5,6 +5,16 @@
     {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
 {%- endblock title -%}
 
+{%- block topbar -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
+{%- endblock topbar -%}
+
 {%- block header -%}
     {{ navigation::package_navigation(metadata=metadata, active_tab="builds") }}
 {%- endblock header -%}

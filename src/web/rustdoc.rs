@@ -5,7 +5,7 @@ use crate::{
     utils,
     web::{
         crate_details::CrateDetails, error::Nope, file::File, match_version,
-        metrics::RenderingTimesRecorder, redirect_base, MatchSemver,
+        metrics::RenderingTimesRecorder, redirect_base, MatchSemver, MetaData,
     },
     Config, Metrics, Storage,
 };
@@ -186,6 +186,7 @@ struct RustdocPage {
     is_latest_version: bool,
     is_prerelease: bool,
     krate: CrateDetails,
+    metadata: MetaData,
 }
 
 impl RustdocPage {
@@ -390,7 +391,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             "/{}/{}/{}",
             name,
             latest_version,
-            path_for_version(&latest_path, &krate.doc_targets, &storage, &config)
+            path_for_version(&latest_path, &krate.metadata.doc_targets, &storage, &config)
         )
     } else {
         format!("/crate/{}/{}", name, latest_version)
@@ -407,7 +408,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         // Drop the `rustdoc/:crate/:version[/:platform]` prefix
         inner_path.drain(..3).for_each(drop);
 
-        let target = if inner_path.len() > 1 && krate.doc_targets.iter().any(|s| s == inner_path[0])
+        let target = if inner_path.len() > 1
+            && krate
+                .metadata
+                .doc_targets
+                .iter()
+                .any(|s| s == inner_path[0])
         {
             let mut target = inner_path.remove(0).to_string();
             target.push('/');
@@ -427,6 +433,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         inner_path,
         is_latest_version,
         is_prerelease,
+        metadata: krate.metadata.clone(),
         krate,
     }
     .into_response(&file.0.content, config.max_parse_memory, req, &path)
@@ -513,7 +520,12 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         file_path
     };
 
-    let path = path_for_version(&file_path, &crate_details.doc_targets, &storage, &config);
+    let path = path_for_version(
+        &file_path,
+        &crate_details.metadata.doc_targets,
+        &storage,
+        &config,
+    );
     let url = format!(
         "{base}/{name}/{version}/{path}",
         base = base,
