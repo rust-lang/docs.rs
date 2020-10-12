@@ -1,11 +1,5 @@
 use git2::Repository;
-use std::{
-    env,
-    error::Error,
-    fs::{self, File},
-    io::Write,
-    path::Path,
-};
+use std::{env, error::Error, fs::File, io::Write, path::Path};
 
 fn main() {
     // Don't rerun anytime a single change is made
@@ -15,8 +9,6 @@ fn main() {
     println!("cargo:rerun-if-changed=templates/style/_vars.scss");
     println!("cargo:rerun-if-changed=templates/style/_utils.scss");
     println!("cargo:rerun-if-changed=templates/style/_navbar.scss");
-    println!("cargo:rerun-if-changed=templates/menu.js");
-    println!("cargo:rerun-if-changed=templates/index.js");
     println!("cargo:rerun-if-changed=vendor/");
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
@@ -26,7 +18,6 @@ fn main() {
     if let Err(sass_err) = compile_sass() {
         panic!("Error compiling sass: {}", sass_err);
     }
-    copy_js();
 }
 
 fn write_git_version() {
@@ -94,13 +85,4 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
     )?;
 
     Ok(())
-}
-
-fn copy_js() {
-    ["menu.js", "index.js"].iter().for_each(|path| {
-        let source_path =
-            Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).join(format!("templates/{}", path));
-        let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);
-        fs::copy(&source_path, &dest_path).expect("Copy JavaScript file to target");
-    });
 }
