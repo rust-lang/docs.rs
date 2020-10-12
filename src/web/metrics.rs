@@ -133,6 +133,8 @@ mod tests {
             ("/-/sitemap.xml", "static resource"),
             ("/-/static/style.css", "static resource"),
             ("/-/static/vendored.css", "static resource"),
+            ("/rustdoc/rcc/0.0.0/rcc/index.html", "database"),
+            ("/rustdoc/gcc/0.0.0/gcc/index.html", "database"),
         ];
 
         wrapper(|env| {
@@ -178,6 +180,15 @@ mod tests {
                     *count as u64
                 );
             }
+
+            // extra metrics for the "database success" hack
+            assert_eq!(
+                metrics
+                    .routes_visited
+                    .with_label_values(&["database success"])
+                    .get(),
+                2
+            );
 
             Ok(())
         })

@@ -102,6 +102,7 @@ use iron::{
     status::Status,
     Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
 };
+use metrics::RequestRecorder;
 use page::TemplateData;
 use postgres::Client;
 use router::NoRoute;
@@ -147,7 +148,7 @@ impl CratesfyiHandler {
             router_handler: Box::new(router_chain),
             database_file_handler: Box::new(routes::BlockBlacklistedPrefixes::new(
                 blacklisted_prefixes,
-                Box::new(file::DatabaseFileHandler),
+                Box::new(RequestRecorder::new(file::DatabaseFileHandler, "database")),
             )),
             inject_extensions,
         })

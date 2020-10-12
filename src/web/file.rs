@@ -1,7 +1,7 @@
 //! Database based file handler
 
 use crate::storage::{Blob, Storage};
-use crate::{error::Result, Config};
+use crate::{error::Result, Config, Metrics};
 use iron::{status, Handler, IronResult, Request, Response};
 
 #[derive(Debug)]
@@ -60,6 +60,15 @@ impl Handler for DatabaseFileHandler {
         let storage = extension!(req, Storage);
         let config = extension!(req, Config);
         if let Ok(file) = File::from_path(&storage, &path, &config) {
+            let metrics = extension!(req, Metrics);
+
+            // Because all requests that don't hit another handler go through here, we will get all
+            // requests successful or not recorded by the RequestRecorder, so we inject an extra
+            // "database success" route to keep track of how often we succeed vs 404
+            metrics
+                .routes_visited
+                .with_label_values(&["database success"])
+                .inc();
             Ok(file.serve())
         } else {
             Err(super::error::Nope::CrateNotFound.into())
