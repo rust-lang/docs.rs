@@ -96,7 +96,7 @@ use extensions::InjectExtensions;
 use failure::Error;
 use iron::{
     self,
-    headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate},
+    headers::{Expires, HttpDate},
     modifiers::Redirect,
     status,
     status::Status,
@@ -107,12 +107,10 @@ use postgres::Client;
 use router::NoRoute;
 use semver::{Version, VersionReq};
 use serde::Serialize;
-use staticfile::Static;
-use std::{borrow::Cow, env, fmt, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt, net::SocketAddr, sync::Arc};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
-const OPENSEARCH_XML: &[u8] = include_bytes!("opensearch.xml");
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
@@ -120,7 +118,6 @@ struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
     database_file_handler: Box<dyn Handler>,
-    static_handler: Box<dyn Handler>,
     inject_extensions: InjectExtensions,
 }
 
@@ -144,13 +141,6 @@ impl CratesfyiHandler {
         let shared_resources =
             Self::chain(inject_extensions.clone(), rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(inject_extensions.clone(), routes.iron_router());
-        let prefix = PathBuf::from(
-            env::var("CRATESFYI_PREFIX")
-                .expect("the CRATESFYI_PREFIX environment variable is not set"),
-        )
-        .join("public_html");
-        let static_handler =
-            Static::new(prefix).cache(Duration::from_secs(STATIC_FILE_CACHE_DURATION));
 
         Ok(CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
@@ -159,7 +149,6 @@ impl CratesfyiHandler {
                 blacklisted_prefixes,
                 Box::new(file::DatabaseFileHandler),
             )),
-            static_handler: Box::new(static_handler),
             inject_extensions,
         })
     }
@@ -185,7 +174,6 @@ impl Handler for CratesfyiHandler {
             .handle(req)
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
-            .or_else(|e| if_404(e, || self.static_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast::<error::Nope>() {
                     *err
@@ -516,21 +504,6 @@ fn redirect_base(req: &Request) -> String {
     } else {
         format!("{}://{}:{}", scheme, req.url.host(), port)
     }
-}
-
-fn opensearch_xml_handler(_: &mut Request) -> IronResult<Response> {
-    let mut response = Response::with((status::Ok, OPENSEARCH_XML));
-    let cache = vec![
-        CacheDirective::Public,
-        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
-    ];
-    response.headers.set(ContentType(
-        "application/opensearchdescription+xml".parse().unwrap(),
-    ));
-
-    response.headers.set(CacheControl(cache));
-
-    Ok(response)
 }
 
 /// MetaData used in header

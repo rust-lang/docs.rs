@@ -10,9 +10,18 @@ pub(super) const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] =
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
 
-    routes.static_resource("/robots.txt", super::sitemap::robots_txt_handler);
-    routes.static_resource("/sitemap.xml", super::sitemap::sitemap_handler);
-    routes.static_resource("/opensearch.xml", super::opensearch_xml_handler);
+    routes.static_resource("/robots.txt", PermanentRedirect("/-/static/robots.txt"));
+    routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
+
+    // These should not need to be served from the root as we reference the inner path in links,
+    // but clients might have cached the url and need to update it.
+    routes.static_resource(
+        "/opensearch.xml",
+        PermanentRedirect("/-/static/opensearch.xml"),
+    );
+    routes.static_resource("/sitemap.xml", PermanentRedirect("/-/sitemap.xml"));
+
+    routes.static_resource("/-/sitemap.xml", super::sitemap::sitemap_handler);
     routes.static_resource("/-/static/:file", super::statics::static_handler);
 
     routes.internal_page("/", super::releases::home_page);
@@ -257,7 +266,21 @@ impl Handler for SimpleRedirect {
         (self.url_mangler)(&mut url);
         Ok(iron::Response::with((
             iron::status::Found,
-            iron::modifiers::Redirect(iron::Url::parse(&url.to_string()).unwrap()),
+            iron::modifiers::Redirect(iron::Url::from_generic_url(url).unwrap()),
+        )))
+    }
+}
+
+#[derive(Copy, Clone)]
+struct PermanentRedirect(&'static str);
+
+impl Handler for PermanentRedirect {
+    fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
+        let mut url: iron::url::Url = req.url.clone().into();
+        url.set_path(self.0);
+        Ok(iron::Response::with((
+            iron::status::MovedPermanently,
+            iron::modifiers::Redirect(iron::Url::from_generic_url(url).unwrap()),
         )))
     }
 }
@@ -298,4 +321,30 @@ fn calculate_id(pattern: &str) -> String {
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test::*;
+
+    #[test]
+    fn test_root_redirects() {
+        wrapper(|env| {
+            // These are "well-known" resources that must be served from the root
+            assert_redirect("/favicon.ico", "/-/static/favicon.ico", env.frontend())?;
+            assert_redirect("/robots.txt", "/-/static/robots.txt", env.frontend())?;
+
+            // These have previously been served with a url pointing to the root, it may be
+            // plausible to remove the redirects in the future, but for now we need to keep serving
+            // them.
+            assert_redirect(
+                "/opensearch.xml",
+                "/-/static/opensearch.xml",
+                env.frontend(),
+            )?;
+            assert_redirect("/sitemap.xml", "/-/sitemap.xml", env.frontend())?;
+
+            Ok(())
+        });
+    }
 }

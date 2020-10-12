@@ -12,28 +12,17 @@ use std::{ffi::OsStr, fs, path::Path};
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-const MENU_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/menu.js"));
-const INDEX_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/index.js"));
-const STATIC_SEARCH_PATHS: &[&str] = &["vendor/pure-css/css"];
+const STATIC_SEARCH_PATHS: &[&str] = &["vendor/pure-css/css", "static"];
 
 pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let file = cexpect!(req, router.find("file"));
 
-    match file {
-        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap())),
-        "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap())),
-        "index.js" => serve_resource(
-            INDEX_JS,
-            ContentType("application/javascript".parse().unwrap()),
-        ),
-        "menu.js" => serve_resource(
-            MENU_JS,
-            ContentType("application/javascript".parse().unwrap()),
-        ),
-
-        file => serve_file(req, file),
-    }
+    Ok(match file {
+        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap()))?,
+        "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap()))?,
+        file => serve_file(req, file)?,
+    })
 }
 
 fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
@@ -53,7 +42,7 @@ fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
     // If we can detect the file's mime type, set it
     // MimeGuess misses a lot of the file types we need, so there's a small wrapper
     // around it
-    let content_type = path
+    let mut content_type = path
         .extension()
         .and_then(OsStr::to_str)
         .and_then(|ext| match ext {
@@ -67,6 +56,12 @@ fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
                 .first()
                 .map(|mime| ContentType(mime.as_ref().parse().unwrap())),
         });
+
+    if file == "opensearch.xml" {
+        content_type = Some(ContentType(
+            "application/opensearchdescription+xml".parse().unwrap(),
+        ));
+    }
 
     serve_resource(contents, content_type)
 }
@@ -104,8 +99,8 @@ where
 
 pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
     if let Some(&"favicon.ico") = req.url.path().last() {
-        // if we're looking for exactly "favicon.ico", we need to defer to the handler that loads
-        // from `public_html`, so return a 404 here to make the main handler carry on
+        // if we're looking for exactly "favicon.ico", we need to defer to the handler that
+        // actually serves it, so return a 404 here to make the main handler carry on
         Err(Nope::ResourceNotFound.into())
     } else {
         // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
@@ -121,7 +116,7 @@ pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 #[cfg(test)]
 mod tests {
-    use super::{INDEX_JS, MENU_JS, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
+    use super::{STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
     use crate::test::wrapper;
     use std::fs;
 
@@ -172,8 +167,8 @@ mod tests {
                 resp.headers().get("Content-Type"),
                 Some(&"application/javascript".parse().unwrap()),
             );
-            assert_eq!(resp.content_length().unwrap(), INDEX_JS.len() as u64);
-            assert_eq!(resp.text()?, INDEX_JS);
+            assert!(resp.content_length().unwrap() > 10);
+            assert!(resp.text()?.contains("copyTextHandler"));
 
             Ok(())
         });
@@ -190,8 +185,8 @@ mod tests {
                 resp.headers().get("Content-Type"),
                 Some(&"application/javascript".parse().unwrap()),
             );
-            assert_eq!(resp.content_length().unwrap(), MENU_JS.len() as u64);
-            assert_eq!(resp.text()?, MENU_JS);
+            assert!(resp.content_length().unwrap() > 10);
+            assert!(resp.text()?.contains("closeMenu"));
 
             Ok(())
         });

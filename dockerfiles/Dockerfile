@@ -51,8 +51,6 @@ RUN touch build.rs
 COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style templates/style
-COPY templates/index.js templates/
-COPY templates/menu.js templates/
 COPY vendor vendor/
 
 RUN cargo build --release
@@ -76,7 +74,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 RUN mkdir -p /opt/docsrs/prefix
 
 COPY --from=build /build/target/release/cratesfyi /usr/local/bin
-COPY static /opt/docsrs/prefix/public_html
+COPY static /opt/docsrs/static
 COPY templates /opt/docsrs/templates
 COPY dockerfiles/entrypoint.sh /opt/docsrs/
 COPY vendor /opt/docsrs/vendor

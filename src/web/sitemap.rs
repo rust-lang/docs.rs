@@ -3,7 +3,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
-    status, IronResult, Request, Response,
+    IronResult, Request, Response,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -46,13 +46,6 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
         .collect::<Vec<(String, String)>>();
 
     SitemapXml { releases }.into_response(req)
-}
-
-pub fn robots_txt_handler(_: &mut Request) -> IronResult<Response> {
-    let mut resp = Response::with((status::Ok, "Sitemap: https://docs.rs/sitemap.xml"));
-    resp.headers.set(ContentType::plaintext());
-
-    Ok(resp)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
