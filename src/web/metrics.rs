@@ -130,7 +130,7 @@ mod tests {
             ),
             ("/releases/recent/1", "/releases/recent/:page"),
             ("/-/static/robots.txt", "static resource"),
-            ("/-/sitemap.xml", "static resource"),
+            ("/sitemap.xml", "static resource"),
             ("/-/static/style.css", "static resource"),
             ("/-/static/vendored.css", "static resource"),
             ("/rustdoc/rcc/0.0.0/rcc/index.html", "database"),

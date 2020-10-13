@@ -1,1 +1,1 @@
-Sitemap: https://docs.rs/-/sitemap.xml
+Sitemap: https://docs.rs/sitemap.xml
