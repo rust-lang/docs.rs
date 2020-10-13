@@ -182,13 +182,13 @@
     If this isn't the most recent stable release, offer a link to the latest #}
     {%- elif not is_latest_version -%}
         {%- if metadata.yanked -%}
-            {%- set tooltip = "You are seeing a yanked version of the " ~ metadata.name ~ "crate. Click here to go to the latest version." -%}
+            {%- set tooltip = "You are seeing a yanked version of the " ~ metadata.name ~ " crate. Click here to go to the latest version." -%}
             {%- set title = "This release has been yanked, go to latest version" -%}
         {%- elif is_prerelease -%}
-            {%- set tooltip = "You are seeing a pre-release version of the " ~ metadata.name ~ "crate. Click here to go to the latest stable version." -%}
+            {%- set tooltip = "You are seeing a pre-release version of the " ~ metadata.name ~ " crate. Click here to go to the latest stable version." -%}
             {%- set title = "Go to latest stable release" -%}
         {%- else -%}
-            {%- set tooltip = "You are seeing an outdated version of the " ~ metadata.name ~ "crate. Click here to go to the latest version." -%}
+            {%- set tooltip = "You are seeing an outdated version of the " ~ metadata.name ~ " crate. Click here to go to the latest version." -%}
             {%- set title = "Go to latest version" -%}
         {%- endif -%}
 
