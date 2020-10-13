@@ -172,19 +172,19 @@ impl Handler for CratesfyiHandler {
             e: IronError,
             handle: impl FnOnce() -> IronResult<Response>,
         ) -> IronResult<Response> {
-            if e.response.status == Some(status::NotFound) {
-                handle()
+            let is_404 = |err: &IronError| err.response.status == Some(status::NotFound);
+            if is_404(&e) {
+                // we want to keep the original error from the router_handler
+                // in case of a 404, because it provides the best error messages to the user
+                handle().map_err(|err| if is_404(&err) { e } else { err })
             } else {
                 Err(e)
             }
         };
 
-        // try serving shared rustdoc resources first, then db/static file handler and last router
-        // return 404 if none of them return Ok. It is important that the router comes last,
-        // because it gives the most specific errors, e.g. CrateNotFound or VersionNotFound
-        self.shared_resource_handler
+        self.router_handler
             .handle(req)
-            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
+            .or_else(|e| if_404(e, || self.shared_resource_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| if_404(e, || self.static_handler.handle(req)))
             .or_else(|e| {
