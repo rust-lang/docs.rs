@@ -1,5 +1,5 @@
 // FIXME: Use modules
-@import "vars", "rustdoc", "utils", "navbar";
+@import "vars", "rustdoc", "utils", "navbar", "themes";
 
 html,
 input,
@@ -7,13 +7,13 @@ select,
 textarea,
 .pure-g [class*="pure-u"] {
     font-family: $font-family-sans;
-    color: $color-standard;
+    color: var(--color-standard);
 }
 
 .pure-button-normal {
-    background-color: #fff;
+    background-color: var(--color-background);
     box-sizing: border-box !important;
-    border: 1px solid $color-border;
+    border: 1px solid var(--color-border);
 }
 
 .description {
@@ -117,7 +117,7 @@ div.recent-releases-container {
         margin-left: 20px;
 
         a {
-            color: $color-url;
+            color: var(--color-url);
         }
     }
 
@@ -131,7 +131,7 @@ div.recent-releases-container {
 
     .release {
         display: block;
-        border-bottom: 1px solid $color-border;
+        border-bottom: 1px solid var(--color-border);
         padding: 0.4em 1em;
 
         @media #{$media-lg} {
@@ -142,7 +142,7 @@ div.recent-releases-container {
 
     .release:hover,
     li.selected > .release {
-        background-color: $color-background-code;
+        background-color: var(--color-background-code);
     }
 
     li:last-child .release {
@@ -150,7 +150,7 @@ div.recent-releases-container {
     }
 
     .name {
-        color: $color-url;
+        color: var(--color-url);
         font-weight: 500;
         white-space: nowrap;
         margin: 0;
@@ -178,10 +178,10 @@ div.recent-releases-container {
         font-weight: 500;
 
         span.fa-check {
-            color: $color-macro;
+            color: var(--color-macro);
         }
         span.fa-times {
-            color: $color-struct;
+            color: var(--color-struct);
         }
     }
 
@@ -222,13 +222,13 @@ div.recent-releases-container {
     }
 
     h4 {
-        border-bottom-color: $color-border !important;
+        border-bottom-color: var(--color-border) !important;
     }
 }
 
 div.package-container {
-    background-color: $color-url;
-    color: $color-background-code;
+    background-color: var(--color-url);
+    color: var(--color-background-code);
 
     h1 {
         margin: 0;
@@ -241,23 +241,23 @@ div.package-container {
 
     .pure-menu {
         .pure-menu-link {
-            background-color: #fff;
-            border-top: 1px solid $color-border;
-            border-left: 1px solid $color-border;
-            border-right: 1px solid $color-border;
+            background-color: var(--color-background);
+            border-top: 1px solid var(--color-border);
+            border-left: 1px solid var(--color-border);
+            border-right: 1px solid var(--color-border);
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
-            border-bottom: 2px solid $color-border;
+            border-bottom: 2px solid var(--color-border);
             padding: 0.4em 1em;
         }
 
         .pure-menu-active {
-            border-bottom: 2px solid #fff;
-            color: $color-standard;
+            border-bottom: 2px solid var(--color-background);
+            color: var(--color-standard);
         }
 
         .pure-menu-link:hover {
-            color: $color-standard;
+            color: var(--color-standard);
         }
     }
 }
@@ -273,11 +273,11 @@ div.package-sheet-container {
     }
 
     .build-success {
-        color: $color-macro;
+        color: var(--color-macro);
     }
 
     .build-fail {
-        color: $color-struct;
+        color: var(--color-struct);
     }
 }
 
@@ -288,10 +288,10 @@ div.package-page-container {
 
         li.pure-menu-heading {
             font-size: 1.3em;
-            color: #000;
+            color: var(--color-standard);
             font-weight: 500;
             text-align: center;
-            border-bottom: 1px solid lighten($color-border, 5%);
+            border-bottom: 1px solid var(--color-border-light);
             text-transform: none;
             padding-bottom: 6px;
             margin: 20px 5px 15px 5px;
@@ -309,7 +309,7 @@ div.package-page-container {
 
         a.pure-menu-link {
             font-size: 14px;
-            color: $color-standard;
+            color: var(--color-standard);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -317,12 +317,12 @@ div.package-page-container {
         }
 
         a.pure-menu-link:hover {
-            background-color: $color-background-code;
+            background-color: var(--color-background-code);
         }
 
         // used for versions that failed to build
         a.warn {
-            color: $color-type;
+            color: var(--color-type);
         }
 
         div.sub-menu {
@@ -350,7 +350,7 @@ div.package-page-container {
         font-family: $font-family-serif;
 
         a {
-            color: $color-url;
+            color: var(--color-url);
         }
 
         a:hover {
@@ -380,12 +380,12 @@ div.package-page-container {
             border-collapse: collapse;
             border-spacing: 0;
             empty-cells: show;
-            border: 1px solid #cbcbcb;
+            border: 1px solid var(--color-menu-border);
             margin-bottom: 15px;
 
             td,
             th {
-                border-left: 1px solid #cbcbcb;
+                border-left: 1px solid var(--color-menu-border);
                 border-width: 0 0 0 1px;
                 font-size: inherit;
                 margin: 0;
@@ -399,7 +399,7 @@ div.package-page-container {
             }
 
             td {
-                border-bottom: 1px solid #cbcbcb;
+                border-bottom: 1px solid var(--color-menu-border);
             }
 
             tbody > tr:last-child > td {
@@ -407,8 +407,8 @@ div.package-page-container {
             }
 
             thead {
-                background-color: #e0e0e0;
-                color: #000;
+                background-color: var(--color-menu-header-background);
+                color: var(--color-standard);
                 text-align: left;
                 vertical-align: bottom;
             }
@@ -427,8 +427,8 @@ div.package-page-container {
 
 div.cratesfyi-package-container {
     text-align: left;
-    background-color: $color-background-code;
-    border-bottom: 1px solid $color-border;
+    background-color: var(--color-background-code);
+    border-bottom: 1px solid var(--color-border);
     margin-bottom: 20px;
 
     .container {
@@ -471,7 +471,6 @@ div.cratesfyi-package-container {
                 padding-left: 14px;
 
                 .pure-menu-link {
-                    color: #666;
                     font-size: 14px;
                     padding: 0.4em 1em 0.3em 1em;
 
@@ -485,22 +484,22 @@ div.cratesfyi-package-container {
                 }
 
                 .pure-menu-active {
-                    color: $color-standard;
-                    background-color: #fff;
-                    border-top: 1px solid $color-border;
-                    border-left: 1px solid $color-border;
-                    border-right: 1px solid $color-border;
+                    color: var(--color-standard);
+                    background-color: var(--color-background);
+                    border-top: 1px solid var(--color-border);
+                    border-left: 1px solid var(--color-border);
+                    border-right: 1px solid var(--color-border);
                     border-top-left-radius: 4px;
                     border-top-right-radius: 4px;
-                    border-bottom: 2px solid #fff;
+                    border-bottom: 2px solid var(--color-background);
                 }
 
                 .pure-menu-active:hover {
-                    background-color: #fff !important;
+                    background-color: var(--color-background);
                 }
 
                 .pure-menu-link:hover {
-                    color: #000;
+                    color: var(--color-standard);
                     background-color: inherit;
                 }
             }
@@ -512,7 +511,7 @@ div.cratesfyi-package-container {
                 ul.pure-menu-children {
                     left: auto;
                     right: 0;
-                    border: 1px solid $color-border;
+                    border: 1px solid var(--color-border);
                     border-radius: 2px;
                 }
 
@@ -529,10 +528,10 @@ div.cratesfyi-package-container {
         .doc-link {
             margin: 0 10px;
             height: min-content;
-            background: #333;
-            color: #fff;
+            background: var(--color-doc-link-background);
+            color: var(--color-background);
             padding: 10px;
-            border: 1px solid #333;
+            border: 1px solid var(--color-doc-link-background);
             border-radius: 5px;
             display: flex;
 
@@ -542,7 +541,7 @@ div.cratesfyi-package-container {
             }
 
             &:hover {
-                border-color: #3061f3;
+                border-color: var(--color-doc-link-hover);
             }
         }
     }
@@ -560,7 +559,7 @@ div.search-page-search-form {
 }
 
 .menu-item-divided {
-    border-bottom: 1px solid $color-border;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .rust-navigation-item {
@@ -595,7 +594,7 @@ div.search-page-search-form {
     }
 
     h4 {
-        border-bottom-color: $color-border !important;
+        border-bottom-color: var(--color-border) !important;
     }
 }
 
