@@ -54,6 +54,7 @@
         }
         if (this.parentNode === currentMenu) {
             closeMenu();
+            this.blur();
         } else {
             if (currentMenu) closeMenu();
             openMenu(this.parentNode);
@@ -61,17 +62,6 @@
         e.preventDefault();
         e.stopPropagation();
     };
-    function menuMouseOver(e) {
-        if (currentMenu) {
-            if (e.target.className.indexOf("pure-menu-link") !== -1) {
-                e.target.focus();
-                if (e.target.parentNode.className.indexOf("pure-menu-has-children") !== -1 && e.target.parentNode !== currentMenu) {
-                  closeMenu();
-                  openMenu(e.target.parentNode);
-                }
-            }
-        }
-    }
     function menuKeyDown(e) {
         if (currentMenu) {
             var children = currentMenu.querySelector(".pure-menu-children");
@@ -195,7 +185,6 @@
         menu.firstElementChild.setAttribute("aria-haspopup", "menu");
         menu.firstElementChild.nextElementSibling.setAttribute("role", "menu");
         menu.firstElementChild.addEventListener("click", menuOnClick);
-        menu.addEventListener("mouseover", menuMouseOver);
     }
     document.documentElement.addEventListener("keydown", menuKeyDown);
 })();
