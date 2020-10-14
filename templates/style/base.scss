@@ -76,22 +76,6 @@ div.container {
     text-align: left;
 }
 
-div.container-rustdoc {
-    text-align: left;
-}
-
-div.nav-container-rustdoc {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 999;
-}
-
-.rustdoc:focus {
-    outline: unset;
-}
-
 div.landing {
     text-align: center;
     padding-top: 30px;
@@ -562,10 +546,6 @@ div.cratesfyi-package-container {
             }
         }
     }
-}
-
-div.cratesfyi-package-container-rustdoc {
-    margin-bottom: 10px;
 }
 
 div.search-page-search-form {
