@@ -1,6 +1,15 @@
 // FIXME: Use modules
 @import "vars";
 
+// Force the navbar to be left-aligned on rustdoc pages
+body.rustdoc-page > .nav-container > .container {
+    margin-left: 0;
+}
+
+div.container-rustdoc {
+    text-align: left;
+}
+
 // rustdoc overrides
 div.rustdoc {
     font-family: $font-family-serif;
@@ -41,5 +50,9 @@ div.rustdoc {
 
     #sidebar-toggle {
         top: 62px;
+    }
+
+    &:focus {
+        outline: unset;
     }
 }
