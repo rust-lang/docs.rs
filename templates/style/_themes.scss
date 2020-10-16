@@ -2,11 +2,11 @@
 html {
   --color-background-code: #f5f5f5;
   --color-background: #fff;
-  --color-border-light: lighten(#ddd, 5%);
+  --color-border-light: #eaeaea;
   --color-border: #ddd;
   --color-doc-link-background: #333;
   --color-doc-link-hover: #3061f3;
-  --color-error-hover: darken(#d93d3d, 10%);
+  --color-error-hover: #be2525;
   --color-error: #d93d3d;
   --color-macro: #068000;
   --color-menu-border: #cdcdcd;
@@ -16,8 +16,8 @@ html {
   --color-struct: #df3600;
   --color-type: #e57300;
   --color-url: #4d76ae;
-  --color-warn-background: lighten(#e57300, 45%);
-  --color-warn-hover: darken(#e57300, 10%);
+  --color-warn-background: #ffe5cc;
+  --color-warn-hover: #b25900;
   --color-warn: #e57300;
 }
 
