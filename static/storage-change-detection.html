@@ -2,6 +2,12 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
+        <!--
+            Only other windows get notified when we change local storage, so
+            this is used in an invisible iframe to send a message to JS in
+            ../templates/rustdoc/body.html when local storage changes so we can
+            detect rustdoc changing the theme
+        -->
         <script type="text/javascript">
             onstorage = function(ev) {
                 parent.postMessage({
