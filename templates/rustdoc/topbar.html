@@ -7,8 +7,8 @@
 
 <ul class="pure-menu-list">
     {% if 'krate' in __tera_context %}
-        <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link" title="{{ krate.description }}">
+        <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
+            <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ krate.description }}">
                 {{ "cube" | fas }}
                 <span class="title">{{ krate.name }}-{{ krate.version }}</span>
             </a>
@@ -210,7 +210,7 @@
     </li>{#
 
     Display the platforms that the release has been built for
-    #}<li class="pure-menu-item pure-menu-has-children">
+    #}<li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
         <a href="#" class="pure-menu-link" aria-label="Platform">
             {{ "cogs" | fas }}
             <span class="title">Platform</span>
