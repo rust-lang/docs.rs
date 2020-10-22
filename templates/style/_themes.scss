@@ -13,6 +13,7 @@ html {
   --color-menu-header-background: #e0e0e0;
   --color-navbar-standard: #777;
   --color-standard: #000;
+  --color-brand: #000;
   --color-struct: #df3600;
   --color-type: #e57300;
   --color-url: #4d76ae;
@@ -20,6 +21,8 @@ html {
   --color-warn-hover: #b25900;
   --color-warn: #e57300;
   --color-background-input: #fff;
+  --color-table-header-background: #e0e0e0;
+  --color-table-header: #000;
 }
 
 // To add a new theme, copy the above theme into a new `html[data-theme="name"]`
@@ -39,6 +42,7 @@ html[data-theme="dark"] {
   --color-menu-header-background: #e0e0e0;
   --color-navbar-standard: #ddd;
   --color-standard: #c0c0c0;
+  --color-brand: #fff;
   --color-struct: #df3600;
   --color-type: #e57300;
   --color-url: #d2991d;
@@ -46,6 +50,8 @@ html[data-theme="dark"] {
   --color-warn-hover: #b25900;
   --color-warn: #e57300;
   --color-background-input: #f0f0f0;
+  --color-table-header-background: #e0e0e0;
+  --color-table-header: #000;
 }
 
 html[data-theme="ayu"] {
@@ -62,6 +68,7 @@ html[data-theme="ayu"] {
   --color-menu-header-background: #e0e0e0;
   --color-navbar-standard: #ddd;
   --color-standard: #c5c5c5;
+  --color-brand: #fff;
   --color-struct: #df3600;
   --color-type: #e57300;
   --color-url: #39afd7;
@@ -69,4 +76,6 @@ html[data-theme="ayu"] {
   --color-warn-hover: #b25900;
   --color-warn: #e57300;
   --color-background-input: #141920;
+  --color-table-header-background: #364759;
+  --color-table-header: #eee;
 }

@@ -27,10 +27,16 @@ body {
 
     input, #search {
         background-color: var(--color-background-input);
+        color: var(--color-standard);
     }
 
     #search {
-        box-shadow: 0 0 0 1px var(--color-border), 0 0 0 2px transparent;
+        box-shadow: 0 0 0 1px var(--color-border), 0 0 0 1px var(--color-border);
+        transition: box-shadow 150ms ease-in-out;
+    }
+
+    #search:focus {
+        box-shadow: 0 0 0 1px #148099, 0 0 0 1px #148099;
     }
 
     // rustdocs have 200px sidebar and
@@ -99,7 +105,7 @@ div.landing {
     h1.brand {
         font-size: 3em;
         margin-bottom: 10px;
-        color: var(--color-standard);
+        color: var(--color-brand);
     }
 
     form.landing-search-form {
@@ -610,6 +616,11 @@ div.search-page-search-form {
 
     table {
         margin-bottom: 10px;
+    }
+
+    thead {
+        background-color: var(--color-table-header-background);
+        color: var(--color-table-header);
     }
 
     thead tr th {
