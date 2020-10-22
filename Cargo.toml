@@ -100,6 +100,7 @@ time = "0.1"
 git2 = { version = "0.13", default-features = false }
 sass-rs = "0.2.2"
 string_cache_codegen = "0.5.1"
+walkdir = "2"
 
 [[bench]]
 name = "html_parsing"
