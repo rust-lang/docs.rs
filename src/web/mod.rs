@@ -177,9 +177,9 @@ impl Handler for CratesfyiHandler {
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| {
-                let err = if let Some(err) = e.error.downcast::<error::Nope>() {
+                let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
                     *err
-                } else if e.error.downcast::<NoRoute>().is_some()
+                } else if e.error.downcast_ref::<NoRoute>().is_some()
                     || e.response.status == Some(status::NotFound)
                 {
                     error::Nope::ResourceNotFound
