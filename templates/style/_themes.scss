@@ -19,7 +19,54 @@ html {
   --color-warn-background: #ffe5cc;
   --color-warn-hover: #b25900;
   --color-warn: #e57300;
+  --color-background-input: #fff;
 }
 
 // To add a new theme, copy the above theme into a new `html[data-theme="name"]`
 // block below and change the colors
+
+html[data-theme="dark"] {
+  --color-background-code: #2a2a2a;
+  --color-background: #353535;
+  --color-border-light: #eaeaea;
+  --color-border: #4e4e4e;
+  --color-doc-link-background: #c0c0c0;
+  --color-doc-link-hover: #3061f3;
+  --color-error-hover: #be2525;
+  --color-error: #d93d3d;
+  --color-macro: #068000;
+  --color-menu-border: #cdcdcd;
+  --color-menu-header-background: #e0e0e0;
+  --color-navbar-standard: #ddd;
+  --color-standard: #c0c0c0;
+  --color-struct: #df3600;
+  --color-type: #e57300;
+  --color-url: #d2991d;
+  --color-warn-background: #ffe5cc;
+  --color-warn-hover: #b25900;
+  --color-warn: #e57300;
+  --color-background-input: #f0f0f0;
+}
+
+html[data-theme="ayu"] {
+  --color-background-code: #191f26;
+  --color-background: #0f1419;
+  --color-border-light: #eaeaea;
+  --color-border: #424c57;
+  --color-doc-link-background: #d5d5d5;
+  --color-doc-link-hover: #3061f3;
+  --color-error-hover: #be2525;
+  --color-error: #d93d3d;
+  --color-macro: #068000;
+  --color-menu-border: #cdcdcd;
+  --color-menu-header-background: #e0e0e0;
+  --color-navbar-standard: #ddd;
+  --color-standard: #c5c5c5;
+  --color-struct: #df3600;
+  --color-type: #e57300;
+  --color-url: #39afd7;
+  --color-warn-background: #ffe5cc;
+  --color-warn-hover: #b25900;
+  --color-warn: #e57300;
+  --color-background-input: #141920;
+}

@@ -11,18 +11,27 @@ div.nav-container {
     right: 0;
     top: 0;
     position: fixed;
+    color: var(--color-navbar-standard);
 
     li {
         border-left: 1px solid var(--color-border);
     }
 
-    .pure-menu-has-children > .pure-menu-link:after {
-        font-size: 0.8em;
+    .pure-menu-has-children > .pure-menu-link {
+        background-color: var(--color-background);
+
+        &:hover {
+            background-color: var(--color-background);
+        }
+        &:after {
+            font-size: 0.8em;
+        }
     }
 
     .pure-menu-link {
         font-size: 0.8em;
         font-weight: 400;
+        color: var(--color-navbar-standard);
 
         &:hover {
             color: var(--color-standard);
@@ -77,6 +86,7 @@ div.nav-container {
         border: 1px solid var(--color-border);
         border-radius: 0 0 2px 2px;
         margin-left: -1px;
+        background-color: var(--color-background);
 
         li {
             border-left: none;
