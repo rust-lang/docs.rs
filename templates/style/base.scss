@@ -14,6 +14,7 @@ textarea,
     background-color: var(--color-background);
     box-sizing: border-box !important;
     border: 1px solid var(--color-border);
+    color: var(--color-standard);
 }
 
 .description {
@@ -23,6 +24,14 @@ textarea,
 body {
     padding: 0;
     margin: 0;
+
+    input, #search {
+        background-color: var(--color-background-input);
+    }
+
+    #search {
+        box-shadow: 0 0 0 1px var(--color-border), 0 0 0 2px transparent;
+    }
 
     // rustdocs have 200px sidebar and
     // max-width 960px main pane
@@ -38,6 +47,8 @@ body {
     // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
     // for an explanation)
     scroll-padding-top: $top-navbar-height;
+    background-color: var(--color-background);
+    color: var(--color-standard);
 
     // this is a super nasty override for help dialog in rustdocs
     // see #52 for details
@@ -54,6 +65,10 @@ body {
             -webkit-filter: blur(8px);
             opacity: 0.7;
         }
+    }
+
+    > h1 {
+        color: var(--color-standard);
     }
 }
 
@@ -84,6 +99,7 @@ div.landing {
     h1.brand {
         font-size: 3em;
         margin-bottom: 10px;
+        color: var(--color-standard);
     }
 
     form.landing-search-form {
@@ -133,6 +149,11 @@ div.recent-releases-container {
         display: block;
         border-bottom: 1px solid var(--color-border);
         padding: 0.4em 1em;
+        color: var(--color-standard);
+
+        a {
+            color: var(--color-standard);
+        }
 
         @media #{$media-lg} {
             padding: 0.4em 0;
@@ -281,6 +302,10 @@ div.package-sheet-container {
     }
 }
 
+.pure-menu-list > li.pure-menu-heading {
+    color: var(--color-standard);
+}
+
 div.package-page-container {
     div.package-menu {
         padding: 0 10px;
@@ -288,7 +313,6 @@ div.package-page-container {
 
         li.pure-menu-heading {
             font-size: 1.3em;
-            color: var(--color-standard);
             font-weight: 500;
             text-align: center;
             border-bottom: 1px solid var(--color-border-light);
@@ -364,6 +388,7 @@ div.package-page-container {
         h5,
         h6 {
             font-family: $font-family-sans;
+            color: var(--color-standard) !important;
         }
 
         h1:first-child,
@@ -437,10 +462,12 @@ div.cratesfyi-package-container {
 
         .description-container {
             flex-grow: 3;
+            color: var(--color-standard);
 
             h1 {
                 margin: 0;
                 padding: 15px 14px;
+                color: var(--color-standard);
 
                 @media #{$media-sm} {
                     padding: 15px 0 0 14px;
@@ -571,6 +598,11 @@ div.search-page-search-form {
 
 .about {
     font-family: $font-family-serif;
+    color: var(--color-standard);
+
+    a {
+        color: var(--color-url);
+    }
 
     .pure-menu a:hover span {
         text-decoration: none;
@@ -593,8 +625,9 @@ div.search-page-search-form {
         background-color: inherit;
     }
 
-    h4 {
+    h1, h2, h3, h4, h5, h6 {
         border-bottom-color: var(--color-border) !important;
+        color: var(--color-standard) !important;
     }
 }
 
