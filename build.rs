@@ -2,19 +2,6 @@ use git2::Repository;
 use std::{env, error::Error, fs::File, io::Write, path::Path};
 
 fn main() {
-    // Don't rerun anytime a single change is made
-    println!("cargo:rerun-if-changed=templates/style/vendored.scss");
-    println!("cargo:rerun-if-changed=templates/style/base.scss");
-    println!("cargo:rerun-if-changed=templates/style/_rustdoc.scss");
-    println!("cargo:rerun-if-changed=templates/style/_vars.scss");
-    println!("cargo:rerun-if-changed=templates/style/_utils.scss");
-    println!("cargo:rerun-if-changed=templates/style/_navbar.scss");
-    println!("cargo:rerun-if-changed=templates/style/_themes.scss");
-    println!("cargo:rerun-if-changed=vendor/");
-    // TODO: are these right?
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/index");
-
     write_git_version();
     if let Err(sass_err) = compile_sass() {
         panic!("Error compiling sass: {}", sass_err);
@@ -31,6 +18,10 @@ fn write_git_version() {
 
     let mut file = File::create(&dest_path).unwrap();
     write!(file, "({} {})", git_hash, build_date).unwrap();
+
+    // TODO: are these right?
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/index");
 }
 
 fn get_git_hash() -> Option<String> {
@@ -58,6 +49,12 @@ fn compile_sass_file(
         paths.extend_from_slice(include_paths);
         paths
     };
+
+    for path in &include_paths {
+        for entry in walkdir::WalkDir::new(path) {
+            println!("cargo:rerun-if-changed={}", entry?.path().display());
+        }
+    }
 
     // Compile base.scss
     let mut context = Context::new_file(format!("{}/{}.scss", STYLE_DIR, name))?;
