@@ -142,6 +142,11 @@ pub(super) fn build_routes() -> Routes {
             super::rustdoc::RustLangRedirector::new(redirect),
         );
     }
+    // redirect proc-macro to proc_macro
+    routes.internal_page(
+        "/proc-macro",
+        super::rustdoc::RustLangRedirector::new("proc_macro"),
+    );
 
     routes
 }
@@ -320,10 +325,15 @@ impl Handler for BlockBlacklistedPrefixes {
 /// Automatically generate a Route ID from a pattern. Every non-alphanumeric character is replaced
 /// with `_`.
 fn calculate_id(pattern: &str) -> String {
-    pattern
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect()
+    let calculate_char = |c: char| {
+        if c.is_alphanumeric() || c == '-' {
+            c
+        } else {
+            '_'
+        }
+    };
+
+    pattern.chars().map(calculate_char).collect()
 }
 
 #[cfg(test)]
