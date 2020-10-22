@@ -29,7 +29,7 @@ macro_rules! ctry {
                     message: ::std::option::Option::Some(::std::borrow::Cow::Owned(
                         ::std::format!("{}", error),
                     )),
-                    status: ::iron::status::BadRequest,
+                    status: ::iron::status::InternalServerError,
                 };
 
                 return $crate::web::page::WebPage::into_response(error, request);
@@ -58,7 +58,7 @@ macro_rules! cexpect {
                 let error = $crate::web::ErrorPage {
                     title: "Internal Server Error",
                     message: None,
-                    status: ::iron::status::BadRequest,
+                    status: ::iron::status::InternalServerError,
                 };
 
                 return $crate::web::page::WebPage::into_response(error, request);
