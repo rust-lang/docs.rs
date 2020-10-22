@@ -9,6 +9,7 @@ fn main() {
     println!("cargo:rerun-if-changed=templates/style/_vars.scss");
     println!("cargo:rerun-if-changed=templates/style/_utils.scss");
     println!("cargo:rerun-if-changed=templates/style/_navbar.scss");
+    println!("cargo:rerun-if-changed=templates/style/_themes.scss");
     println!("cargo:rerun-if-changed=vendor/");
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
