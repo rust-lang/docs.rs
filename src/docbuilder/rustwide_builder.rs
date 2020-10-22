@@ -26,6 +26,7 @@ use std::sync::Arc;
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "brush.svg",
+    "favicon.svg",
     "wheel.svg",
     "down-arrow.svg",
     "dark.css",
