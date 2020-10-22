@@ -63,17 +63,16 @@ mkdir -p ignored/cratesfyi-prefix/crates.io-index
 cargo build
 # Start the external services
 docker-compose up -d db s3
+# Setup the database you just created
+cargo run -- database migrate
 # Build a sample crate to make sure it works
-# This sets up the docs.rs build environment,
-# including running the migrations and installing the nightly Rust toolchain.
+# This also sets up the docs.rs build environment.
 # This will take a while the first time but will be cached afterwards.
 cargo run -- build crate regex 1.3.1
 # Generate important files for the web navigation
 cargo run -- build add-essential-files
 # This starts the web server but does not build any crates.
-# It does not automatically run the migrations, so you need to do that manually.
-cargo run -- database migrate
-# Start the web server. It doesn't automatically reload templates though!
+# It does not automatically run the migrations, so you need to do that manually (see above).
 cargo run -- start-web-server
 # If you want the server to automatically reload templates if they are modified:
 cargo run -- start-web-server --reload-templates
