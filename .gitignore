@@ -7,5 +7,5 @@ target
 !vendor/**/*.css
 .sass-cache
 .vagrant
-.rustwide
 .rustwide-docker
+.workspace
