@@ -30,6 +30,10 @@ body {
         color: var(--input-color);
     }
 
+    #nav-search {
+        color: var(--color-navbar-standard);
+    }
+
     #search {
         box-shadow: 0 0 0 1px var(--color-border), 0 0 0 1px var(--color-border);
         transition: box-shadow 150ms ease-in-out;
