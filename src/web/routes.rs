@@ -283,12 +283,10 @@ impl Handler for SimpleRedirect {
 struct PermanentRedirect(&'static str);
 
 impl Handler for PermanentRedirect {
-    fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-        let mut url: iron::url::Url = req.url.clone().into();
-        url.set_path(self.0);
+    fn handle(&self, _req: &mut iron::Request) -> iron::IronResult<iron::Response> {
         Ok(iron::Response::with((
             iron::status::MovedPermanently,
-            iron::modifiers::Redirect(iron::Url::from_generic_url(url).unwrap()),
+            iron::modifiers::RedirectRaw(self.0.to_owned()),
         )))
     }
 }
