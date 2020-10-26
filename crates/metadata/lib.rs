@@ -113,7 +113,7 @@ pub struct Metadata {
     /// Whether to pass `--no-default-features` to `cargo`.
     //
     /// By default, Docs.rs will build default features.
-    /// Set `no-default-fatures` to `true` if you want to build only certain features.
+    /// Set `no-default-features` to `true` if you want to build only certain features.
     #[serde(default)]
     no_default_features: bool,
 
