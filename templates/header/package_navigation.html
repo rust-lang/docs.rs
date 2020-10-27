@@ -8,6 +8,7 @@
         * `crate`
         * `source`
         * `builds`
+        * `features`
 
     Note: `false` here is acting as a pseudo-null value since you can't directly construct null values
            and tera requires all parameters without defaults to be filled
@@ -83,6 +84,15 @@
                                 class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
                                 {{ "cogs" | fas }}
                                 <span class="title"> Builds</span>
+                            </a>
+                        </li>
+
+                        {# The features tab #}
+                        <li class="pure-menu-item">
+                            <a href="/crate/{{ crate_path | safe }}/features"
+                               class="pure-menu-link{% if active_tab == 'features' %} pure-menu-active{% endif %}">
+                                {{ "flag" | fas }}
+                                <span class="title">Feature flags</span>
                             </a>
                         </li>
                     </ul>

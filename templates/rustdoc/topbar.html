@@ -229,6 +229,14 @@
                 </li>
             {%- endfor -%}
         </ul>
+    </li>{#
+    Display the features available in current build
+    #}
+    <li class="pure-menu-item">
+        <a href="{{ crate_url | safe }}/features" title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
+            {{ "flag" | fas }}
+            <span class="title">Feature flags</span>
+        </a>
     </li>
 </ul>
 

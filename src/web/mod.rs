@@ -81,6 +81,7 @@ mod builds;
 mod crate_details;
 mod error;
 mod extensions;
+mod features;
 mod file;
 pub(crate) mod metrics;
 mod releases;
@@ -90,6 +91,7 @@ mod sitemap;
 mod source;
 mod statics;
 
+use crate::db::types::Feature;
 use crate::{impl_webpage, Context};
 use chrono::{DateTime, Utc};
 use error::Nope;
@@ -520,6 +522,7 @@ pub(crate) struct MetaData {
     pub(crate) default_target: String,
     pub(crate) doc_targets: Vec<String>,
     pub(crate) yanked: bool,
+    pub(crate) features: Option<Vec<Feature>>,
 }
 
 impl MetaData {
@@ -533,7 +536,8 @@ impl MetaData {
                        releases.rustdoc_status,
                        releases.default_target,
                        releases.doc_targets,
-                       releases.yanked
+                       releases.yanked,
+                       releases.features
                 FROM releases
                 INNER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -552,6 +556,7 @@ impl MetaData {
             default_target: row.get(5),
             doc_targets: MetaData::parse_doc_targets(row.get(6)),
             yanked: row.get(7),
+            features: MetaData::parse_features(row.get(8)),
         })
     }
 
@@ -565,6 +570,14 @@ impl MetaData {
                     .collect()
             })
             .unwrap_or_else(Vec::new)
+    }
+
+    pub(crate) fn parse_features(features: Option<Vec<Feature>>) -> Option<Vec<Feature>> {
+        features.map(|vec| {
+            vec.into_iter()
+                .filter(|feature| !feature.is_private())
+                .collect()
+        })
     }
 }
 
@@ -844,6 +857,7 @@ mod test {
                 "arm64-unknown-linux-gnu".to_string(),
             ],
             yanked: false,
+            features: None,
         };
 
         let correct_json = json!({
@@ -858,6 +872,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "features": null
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -875,6 +890,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "features": null,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -892,6 +908,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "features": null,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());

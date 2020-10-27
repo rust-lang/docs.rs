@@ -210,6 +210,15 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn features(mut self, opt_features: Option<HashMap<String, Vec<String>>>) -> Self {
+        if let Some(features) = opt_features {
+            self.package.features = features;
+        } else {
+            self.package.features = HashMap::new();
+        }
+        self
+    }
+
     /// Returns the release_id
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::fs;

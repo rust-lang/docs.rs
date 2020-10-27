@@ -103,6 +103,7 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
+                releases.features,
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
@@ -148,6 +149,7 @@ impl CrateDetails {
             default_target: krate.get("default_target"),
             doc_targets: MetaData::parse_doc_targets(krate.get("doc_targets")),
             yanked: krate.get("yanked"),
+            features: MetaData::parse_features(krate.get("features")),
         };
 
         let documented_items: Option<i32> = krate.get("documented_items");
@@ -325,6 +327,7 @@ mod tests {
     use crate::test::{wrapper, TestDatabase};
     use failure::Error;
     use kuchiki::traits::TendrilSink;
+    use std::collections::HashMap;
 
     fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -738,6 +741,81 @@ mod tests {
                 vec![("barfoo".into(), "https://example.org/barfoov2".into())]
             );
 
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn feature_flags_report_empty() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("library")
+                .version("0.1.0")
+                .binary(false)
+                .features(None)
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/features")
+                    .send()?
+                    .text()?,
+            );
+            assert!(page.select_first(r#"p[data-id="empty-features"]"#).is_ok());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn feature_private_feature_flags_are_hidden() {
+        wrapper(|env| {
+            let features = [("_private".into(), Vec::new())]
+                .iter()
+                .cloned()
+                .collect::<HashMap<String, Vec<String>>>();
+            env.fake_release()
+                .name("library")
+                .version("0.1.0")
+                .binary(false)
+                .features(Some(features))
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/features")
+                    .send()?
+                    .text()?,
+            );
+            assert!(page.select_first(r#"p[data-id="empty-features"]"#).is_ok());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn feature_flags_without_default() {
+        wrapper(|env| {
+            let features = [("feature1".into(), Vec::new())]
+                .iter()
+                .cloned()
+                .collect::<HashMap<String, Vec<String>>>();
+            env.fake_release()
+                .name("library")
+                .version("0.1.0")
+                .binary(false)
+                .features(Some(features))
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/features")
+                    .send()?
+                    .text()?,
+            );
+            assert!(page.select_first(r#"p[data-id="empty-features"]"#).is_err());
+            let def_len = page
+                .select_first(r#"b[data-id="default-feature-len"]"#)
+                .unwrap();
+            assert_eq!(def_len.text_contents(), "0");
             Ok(())
         });
     }

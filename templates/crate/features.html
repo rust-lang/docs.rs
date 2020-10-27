@@ -1,0 +1,76 @@
+{%- extends "base.html" -%}
+{%- import "header/package_navigation.html" as navigation -%}
+
+{%- block title -%}
+    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
+{%- endblock title -%}
+
+{%- block topbar -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
+{%- endblock topbar -%}
+
+{%- block header -%}
+    {{ navigation::package_navigation(metadata=metadata, active_tab="features") }}
+{%- endblock header -%}
+
+{%- block body -%}
+    <div class="container package-page-container">
+        <div class="pure-g">
+            <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
+                <div class="pure-menu package-menu">
+                    <ul class="pure-menu-list">
+                        <li class="pure-menu-heading">Feature flags</li>
+                        {%- if metadata.features -%}
+                            {%- for feature in metadata.features -%}
+                                <li class="pure-menu-item">
+                                    <a href="#{{ feature.name }}" class="pure-menu-link" style="text-align:center;">
+                                        {{ feature.name }}
+                                    </a>
+                                </li>
+                            {%- endfor -%}
+                        {%- else -%}
+                            <li class="pure-menu-item">
+                                <span style="font-size: 13px;">Feature flags are not available for this version.</span>
+                            </li>
+                        {%- endif -%}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
+                <h1>{{ metadata.name }}</h1>
+                {%- if metadata.features -%}
+                    <p>This version has <b>{{ metadata.features | length }}</b> feature flags, <b data-id="default-feature-len">
+                        {%- if metadata.features[0].name == 'default' -%}
+                            {{ metadata.features[0].subfeatures | length }}
+                        {%- else -%}
+                            0
+                        {%- endif -%}
+                    </b> of them being enabled by <b>default</b>.</p>
+                    {%- for feature in metadata.features -%}
+                        <h3 id="{{ feature.name }}">{{ feature.name }}</h3>
+                        <ul class="pure-menu-list">
+                            {%- if feature.subfeatures -%}
+                                {%- for subfeature in feature.subfeatures -%}
+                                    <li class="pure-menu-item">
+                                        <span>{{ subfeature }}</span>
+                                    </li>
+                                {%- endfor -%}
+                            {%- else -%}
+                                <p>This feature flag does not enable additional features.</p>
+                            {%- endif -%}
+                        </ul>
+                    {%- endfor -%}
+                {%- else -%}
+                    <p data-id="empty-features">Feature flags are not available for this release.</p>
+                {%- endif -%}
+            </div>
+        </div>
+    </div>
+{%- endblock body -%}

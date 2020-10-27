@@ -88,6 +88,10 @@ pub(super) fn build_routes() -> Routes {
         super::builds::build_list_handler,
     );
     routes.internal_page(
+        "/crate/:name/:version/features",
+        super::features::build_features_handler,
+    );
+    routes.internal_page(
         "/crate/:name/:version/source",
         SimpleRedirect::new(|url| url.set_path(&format!("{}/", url.path()))),
     );
