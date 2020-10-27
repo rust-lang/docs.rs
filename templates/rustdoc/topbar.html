@@ -8,7 +8,7 @@
 <ul class="pure-menu-list">
     {% if 'krate' in __tera_context %}
         <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link" title="{{ krate.description }}">
+            <a href="#" class="pure-menu-link crate-name" title="{{ krate.description }}">
                 {{ "cube" | fas }}
                 <span class="title">{{ krate.name }}-{{ krate.version }}</span>
             </a>
@@ -163,7 +163,7 @@
         </li>
     {% else %}
         <li class="pure-menu-item">
-            <a href="{{ crate_url | safe }}" class="pure-menu-link" title="{{ metadata.description }}">
+            <a href="{{ crate_url | safe }}" class="pure-menu-link crate-name" title="{{ metadata.description }}">
                 {{ "cube" | fas }}
                 <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>

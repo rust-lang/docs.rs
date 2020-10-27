@@ -43,6 +43,12 @@ div.nav-container {
             color: var(--color-standard);
             background-color: inherit;
         }
+
+        &.crate-name {
+            text-overflow: ellipsis;
+            overflow: hidden;
+            max-width: 200px;
+        }
     }
 
     .pure-menu-right {
@@ -121,8 +127,35 @@ div.nav-container {
     // use a .title span inside a menu to hide it on small screens
     span.title {
         display: none;
-        @media #{$media-sm} {
+        @media screen and (min-width: 872px) {
             display: inline;
+        }
+    }
+
+    .pure-menu-right span.title {
+        @media screen and (min-width: 872px) {
+            display: none;
+        }
+        @media screen and (min-width: 965px) {
+            display: inline;
+        }
+    }
+
+    form.landing-search-form-nav.not-latest {
+        span.title {
+            display: none;
+            @media screen and (min-width: 973px) {
+                display: inline;
+            }
+        }
+
+        .pure-menu-right span.title {
+            @media screen and (min-width: 973px) {
+                display: none;
+            }
+            @media screen and (min-width: 1125px) {
+                display: inline;
+            }
         }
     }
 
