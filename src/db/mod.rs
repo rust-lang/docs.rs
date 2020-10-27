@@ -15,3 +15,4 @@ mod delete;
 pub(crate) mod file;
 mod migrate;
 mod pool;
+pub(crate) mod types;
