@@ -21,6 +21,6 @@ div {
         @extend .info;
 
         background-color: var(--color-warn-background);
-        color: var(--color-warn);
+        color: var(--color-warn-msg);
     }
 }
