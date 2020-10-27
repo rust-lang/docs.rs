@@ -790,6 +790,36 @@ mod test {
     }
 
     #[test]
+    fn platform_dropdown_not_shown_with_no_targets() {
+        wrapper(|env| {
+            release("0.1.0", env);
+            let web = env.frontend();
+            let text = web.get("/foo/0.1.0/foo").send()?.text()?;
+            let platform = kuchiki::parse_html()
+                .one(text)
+                .select(r#"ul > li > a[aria-label="Platform"]"#)
+                .unwrap()
+                .count();
+            assert_eq!(platform, 0);
+
+            // sanity check the test is doing something
+            env.fake_release()
+                .name("foo")
+                .version("0.2.0")
+                .add_platform("x86_64-unknown-linux-musl")
+                .create()?;
+            let text = web.get("/foo/0.2.0/foo").send()?.text()?;
+            let platform = kuchiki::parse_html()
+                .one(text)
+                .select(r#"ul > li > a[aria-label="Platform"]"#)
+                .unwrap()
+                .count();
+            assert_eq!(platform, 1);
+            Ok(())
+        });
+    }
+
+    #[test]
     // https://github.com/rust-lang/docs.rs/issues/221
     fn yanked_crates_are_not_considered() {
         wrapper(|env| {

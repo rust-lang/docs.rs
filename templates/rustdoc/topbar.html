@@ -213,7 +213,9 @@
     </li>{#
 
     Display the platforms that the release has been built for
-    #}<li class="pure-menu-item pure-menu-has-children">
+    #}
+    {% if metadata.doc_targets %}
+    <li class="pure-menu-item pure-menu-has-children">
         <a href="#" class="pure-menu-link" aria-label="Platform">
             {{ "cogs" | fas }}
             <span class="title">Platform</span>
@@ -238,6 +240,7 @@
             <span class="title">Feature flags</span>
         </a>
     </li>
+    {% endif %}
 </ul>
 
 {%- include "header/topbar_end.html" -%}
