@@ -25,7 +25,7 @@ body {
     padding: 0;
     margin: 0;
 
-    input, #search {
+    input, :not(#rustdoc_body_wrapper) > #search {
         background-color: var(--color-background-input);
         color: var(--input-color);
     }
@@ -34,12 +34,12 @@ body {
         color: var(--color-navbar-standard);
     }
 
-    #search {
+    :not(#rustdoc_body_wrapper) > #search {
         box-shadow: 0 0 0 1px var(--color-border), 0 0 0 1px var(--color-border);
         transition: box-shadow 150ms ease-in-out;
     }
 
-    #search:focus {
+    :not(#rustdoc_body_wrapper) > #search:focus {
         box-shadow: var(--input-box-shadow-focus);
     }
 
@@ -487,6 +487,13 @@ div.cratesfyi-package-container {
     .container {
         display: flex;
         align-items: center;
+
+        // This rule is only used on the error page when we land on a crate which doesn't exist.
+        #crate-title {
+            color: var(--color-standard);
+            text-align: center;
+            width: 100%;
+        }
 
         .description-container {
             flex-grow: 3;
