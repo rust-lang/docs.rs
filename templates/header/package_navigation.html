@@ -3,7 +3,6 @@
 
     * `title` A possibly-null string. If it is null, `metadata.name metadata.version` will be used as the title
     * `metadata` A non-null instance of the MetaData struct
-    * `platforms` A possibly-null vector of strings
     * `active_tab` A string with one of the following values:
         * `crate`
         * `source`
@@ -13,7 +12,7 @@
     Note: `false` here is acting as a pseudo-null value since you can't directly construct null values
            and tera requires all parameters without defaults to be filled
 #}
-{% macro package_navigation(title=false, metadata, platforms=false, active_tab) %}
+{% macro package_navigation(title=false, metadata, active_tab) %}
     <div class="cratesfyi-package-container">
         <div class="container">
             <div class="description-container">
@@ -41,25 +40,6 @@
 
 
                 <div class="pure-menu pure-menu-horizontal">
-                    {# If there are platforms, show a dropdown with them #}
-                    {%- if platforms -%}
-                        <ul class="pure-menu-list platforms-menu">
-                            <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
-                                <a href="#" class="pure-menu-link">Platform</a>
-                                <ul class="pure-menu-children">
-                                    {%- for platform in platforms -%}
-                                        <li class="pure-menu-item">
-                                            <a href="/{{ metadata.name }}/{{ metadata.version }}/{{ platform }}/{{ metadata.target_name }}/"
-                                                class="pure-menu-link">
-                                                {{ platform }}
-                                            </a>
-                                        </li>
-                                    {%- endfor -%}
-                                </ul>
-                            </li>
-                        </ul>
-                    {%- endif -%}
-
                     <ul class="pure-menu-list">
                         {# The crate information tab #}
                         <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
