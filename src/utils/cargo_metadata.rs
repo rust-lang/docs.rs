@@ -77,6 +77,7 @@ pub(crate) struct Package {
     pub(crate) readme: Option<String>,
     pub(crate) keywords: Vec<String>,
     pub(crate) authors: Vec<String>,
+    pub(crate) features: HashMap<String, Vec<String>>,
 }
 
 impl Package {
@@ -131,6 +132,7 @@ pub(crate) struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,
     pub(crate) kind: Option<String>,
+    pub(crate) optional: bool,
 }
 
 #[derive(Deserialize, Serialize)]

@@ -457,7 +457,24 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                 DROP COLUMN total_items_needing_examples,
                 DROP COLUMN items_with_examples;
             "
-        )
+        ),
+        migration!(
+            context,
+            // version
+            19,
+            // description
+            "Add features that are available for given release",
+            // upgrade query
+            "
+                CREATE TYPE feature AS (name TEXT, subfeatures TEXT[]);
+                ALTER TABLE releases ADD COLUMN features feature[];
+            ",
+            // downgrade query
+            "
+                ALTER TABLE releases DROP COLUMN features;
+                DROP TYPE feature;                         
+            "
+        ),
     ];
 
     for migration in migrations {

@@ -5,6 +5,7 @@ use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
 use failure::Error;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
@@ -48,11 +49,21 @@ impl<'a> FakeRelease<'a> {
                     name: "fake-dependency".into(),
                     req: "^1.0.0".into(),
                     kind: None,
+                    optional: false,
                 }],
                 targets: vec![Target::dummy_lib("fake_package".into(), None)],
                 readme: None,
                 keywords: vec!["fake".into(), "package".into()],
                 authors: vec!["Fake Person <fake@example.com>".into()],
+                features: [
+                    ("default".into(), vec!["feature1".into(), "feature3".into()]),
+                    ("feature1".into(), Vec::new()),
+                    ("feature2".into(), vec!["feature1".into()]),
+                    ("feature3".into(), Vec::new()),
+                ]
+                .iter()
+                .cloned()
+                .collect::<HashMap<String, Vec<String>>>(),
             },
             build_result: BuildResult {
                 rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),

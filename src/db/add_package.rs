@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    db::types::Feature,
     docbuilder::{BuildResult, DocCoverage},
     error::Result,
     index::api::{CrateData, CrateOwner, ReleaseData},
@@ -42,6 +43,7 @@ pub(crate) fn add_package_into_database(
     let dependencies = convert_dependencies(metadata_pkg);
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
+    let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
 
     let rows = conn.query(
@@ -52,12 +54,12 @@ pub(crate) fn add_package_into_database(
             homepage_url, description, description_long, readme,
             authors, keywords, have_examples, downloads, files,
             doc_targets, is_library, doc_rustc_version,
-            documentation_url, default_target
+            documentation_url, default_target, features
          )
          VALUES (
             $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,
             $10, $11, $12, $13, $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23, $24, $25
+            $19, $20, $21, $22, $23, $24, $25, $26
          )
          ON CONFLICT (crate_id, version) DO UPDATE
             SET release_time = $3,
@@ -82,7 +84,8 @@ pub(crate) fn add_package_into_database(
                 is_library = $22,
                 doc_rustc_version = $23,
                 documentation_url = $24,
-                default_target = $25
+                default_target = $25,
+                features = $26
          RETURNING id",
         &[
             &crate_id,
@@ -110,6 +113,7 @@ pub(crate) fn add_package_into_database(
             &res.rustc_version,
             &metadata_pkg.documentation,
             &default_target,
+            &features,
         ],
     )?;
 
@@ -210,6 +214,30 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
 
             (name, version, kind)
         })
+        .collect()
+}
+
+/// Reads features and converts them to Vec<Feature> with default being first
+fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
+    let mut features = Vec::with_capacity(pkg.features.len());
+    if let Some(subfeatures) = pkg.features.get("default") {
+        features.push(Feature::new("default".into(), subfeatures.clone()));
+    };
+    features.extend(
+        pkg.features
+            .iter()
+            .filter(|(name, _)| *name != "default")
+            .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone())),
+    );
+    features.extend(get_optional_dependencies(pkg));
+    features
+}
+
+fn get_optional_dependencies(pkg: &MetadataPackage) -> Vec<Feature> {
+    pkg.dependencies
+        .iter()
+        .filter(|dep| dep.optional)
+        .map(|dep| Feature::new(dep.name.clone(), Vec::new()))
         .collect()
 }
 
