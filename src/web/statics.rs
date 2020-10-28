@@ -12,6 +12,7 @@ use std::{ffi::OsStr, fs, path::Path};
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
+const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"));
 const STATIC_SEARCH_PATHS: &[&str] = &["vendor/pure-css/css", "static"];
 
 pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
@@ -21,6 +22,7 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
     Ok(match file {
         "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap()))?,
         "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap()))?,
+        "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap()))?,
         file => serve_file(req, file)?,
     })
 }

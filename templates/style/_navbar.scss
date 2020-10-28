@@ -1,6 +1,11 @@
 // FIXME: Use modules
 @import "vars", "utils";
 
+.pure-g [class*="pure-u"] {
+    font-family: $font-family-sans;
+    color: var(--color-standard);
+}
+
 div.nav-container {
     // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
     z-index: 999;
@@ -12,6 +17,7 @@ div.nav-container {
     top: 0;
     position: fixed;
     color: var(--color-navbar-standard);
+    font-family: $font-family-sans;
 
     li {
         border-left: 1px solid var(--color-border);
@@ -183,4 +189,39 @@ div.nav-container {
             }
         }
     }
+}
+
+#nav-search {
+    color: var(--color-navbar-standard);
+}
+
+body {
+    // Since top navbar is fixed, we need to add padding to the body content.
+    padding-top: $top-navbar-height !important;
+
+    // The scroll padding on the <body> is necessary for Chrome
+    // browsers for now (see
+    // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
+    // for an explanation)
+    scroll-padding-top: $top-navbar-height;
+}
+
+html {
+    // Offset anchor jump targets down by this much, so they don't
+    // overlap the top navigation bar (not supported on Desktop/Mobile
+    // Safari yet):
+    scroll-padding-top: $top-navbar-height;
+}
+
+.menu-item-divided {
+    border-bottom: 1px solid var(--color-border);
+}
+
+.pure-menu-list > li.pure-menu-heading {
+    color: var(--color-standard);
+}
+
+i.dependencies.normal {
+    visibility: hidden;
+    display: none;
 }

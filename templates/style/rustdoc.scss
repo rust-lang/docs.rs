@@ -1,5 +1,5 @@
 // FIXME: Use modules
-@import "vars";
+@import "vars", "navbar", "themes", "fa";
 
 // Force the navbar to be left-aligned on rustdoc pages
 body.rustdoc-page > .nav-container > .container {
@@ -8,6 +8,23 @@ body.rustdoc-page > .nav-container > .container {
 
 div.container-rustdoc {
     text-align: left;
+}
+
+// this is a super nasty override for help dialog in rustdocs
+// see #52 for details
+body.blur {
+    > :not(#help) {
+        filter: none;
+        -webkit-filter: none;
+    }
+
+    > div.nav-container > *,
+    > div.cratesfyi-package-container > *,
+    > div.rustdoc > :not(#help) {
+        filter: blur(8px);
+        -webkit-filter: blur(8px);
+        opacity: 0.7;
+    }
 }
 
 // rustdoc overrides
