@@ -56,7 +56,6 @@ fn compile_sass_file(
         }
     }
 
-    // Compile base.scss
     let mut context = Context::new_file(format!("{}/{}.scss", STYLE_DIR, name))?;
     context.set_options(Options {
         output_style: OutputStyle::Compressed,
@@ -75,6 +74,9 @@ fn compile_sass_file(
 fn compile_sass() -> Result<(), Box<dyn Error>> {
     // Compile base.scss -> style.css
     compile_sass_file("base", "style", &[])?;
+
+    // Compile rustdoc.scss -> rustdoc.css
+    compile_sass_file("rustdoc", "rustdoc", &[])?;
 
     // Compile vendored.scss -> vendored.css
     compile_sass_file(

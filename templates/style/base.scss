@@ -1,5 +1,5 @@
 // FIXME: Use modules
-@import "vars", "rustdoc", "utils", "navbar", "themes";
+@import "vars", "utils", "navbar", "themes", "fa";
 
 html,
 input,
@@ -25,21 +25,17 @@ body {
     padding: 0;
     margin: 0;
 
-    input, :not(#rustdoc_body_wrapper) > #search {
+    input, #search {
         background-color: var(--color-background-input);
         color: var(--input-color);
     }
 
-    #nav-search {
-        color: var(--color-navbar-standard);
-    }
-
-    :not(#rustdoc_body_wrapper) > #search {
+    #search {
         box-shadow: 0 0 0 1px var(--color-border), 0 0 0 1px var(--color-border);
         transition: box-shadow 150ms ease-in-out;
     }
 
-    :not(#rustdoc_body_wrapper) > #search:focus {
+    #search:focus {
         box-shadow: var(--input-box-shadow-focus);
     }
 
@@ -49,33 +45,8 @@ body {
     text-align: center;
     font: 16px/1.4 $font-family-sans;
 
-    // Since top navbar is fixed, we need to add padding to the body content.
-    padding-top: $top-navbar-height;
-
-    // The scroll padding on the <body> is necessary for Chrome
-    // browsers for now (see
-    // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
-    // for an explanation)
-    scroll-padding-top: $top-navbar-height;
     background-color: var(--color-background);
     color: var(--color-standard);
-
-    // this is a super nasty override for help dialog in rustdocs
-    // see #52 for details
-    &.blur {
-        > :not(#help) {
-            filter: none;
-            -webkit-filter: none;
-        }
-
-        > div.nav-container > *,
-        > div.cratesfyi-package-container > *,
-        > div.rustdoc > :not(#help) {
-            filter: blur(8px);
-            -webkit-filter: blur(8px);
-            opacity: 0.7;
-        }
-    }
 
     > h1 {
         color: var(--color-standard);
@@ -97,13 +68,6 @@ body {
     g.highcharts-grid > path {
         stroke: var(--chart-grid) !important;
     }
-}
-
-html {
-    // Offset anchor jump targets down by this much, so they don't
-    // overlap the top navigation bar (not supported on Desktop/Mobile
-    // Safari yet):
-    scroll-padding-top: $top-navbar-height;
 }
 
 pre {
@@ -328,10 +292,6 @@ div.package-sheet-container {
     .build-fail {
         color: var(--color-struct);
     }
-}
-
-.pure-menu-list > li.pure-menu-heading {
-    color: var(--color-standard);
 }
 
 div.package-page-container {
@@ -620,10 +580,6 @@ div.search-page-search-form {
     }
 }
 
-.menu-item-divided {
-    border-bottom: 1px solid var(--color-border);
-}
-
 .rust-navigation-item {
     background: url(/rust-logo.png) no-repeat;
     background-position: 15px 45%;
@@ -679,28 +635,8 @@ div.search-page-search-form {
     cursor: pointer;
 }
 
-i.dependencies.normal {
-    visibility: hidden;
-    display: none;
-}
-
 /* Don't put a newline after code fragments in headers */
 h3 > code,
 h4 > code {
     display: inline-block;
 }
-
-.fa-svg-fw {
-    width: 1.25em;
-    text-align: center;
-    display: inline-block;
-}
-
-.fa-svg svg {
-    width: 1em;
-    height: 1em;
-    fill: currentColor;
-    /* pull icon about one stroke width into the descenders */
-    margin-bottom: -0.1em;
-}
-
