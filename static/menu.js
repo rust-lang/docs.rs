@@ -128,14 +128,25 @@
                     break;
                 case "enter":
                 case "return":
-                case "space":
-                case " ":
-                    // enter, return, and space have the default browser behavior,
+                    // enter and return have the default browser behavior,
                     // but they also close the menu
                     // this behavior is identical between both the WAI example, and GitHub's
                     setTimeout(function() {
                         closeMenu();
                     }, 100);
+                    break;
+                case "space":
+                case " ":
+                    // space closes the menu, and activates the current link
+                    // this behavior is identical between both the WAI example, and GitHub's
+                    if (document.activeElement instanceof HTMLAnchorElement && !document.activeElement.hasAttribute("aria-haspopup")) {
+                        document.activeElement.click();
+                    }
+                    setTimeout(function() {
+                        closeMenu();
+                    }, 100);
+                    e.preventDefault();
+                    e.stopPropagation();
                     break;
                 case "home":
                 case "pageup":
