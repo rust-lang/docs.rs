@@ -1,6 +1,56 @@
 // FIXME: Use modules
 @import "vars", "utils", "navbar", "themes", "fa";
 
+/* See FiraSans-LICENSE.txt for the Fira Sans license. */
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Fira Sans'), url("FiraSans-Regular.woff") format('woff');
+}
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 500;
+    src: local('Fira Sans Medium'), url("FiraSans-Medium.woff") format('woff');
+}
+
+/* See SourceSerifPro-LICENSE.txt for the Source Serif Pro license. */
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Source Serif Pro'), url("SourceSerifPro-Regular.ttf.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: italic;
+    font-weight: 400;
+    src: local('Source Serif Pro Italic'), url("SourceSerifPro-It.ttf.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Serif Pro';
+    font-style: normal;
+    font-weight: 700;
+    src: local('Source Serif Pro Bold'), url("SourceSerifPro-Bold.ttf.woff") format('woff');
+}
+
+/* See SourceCodePro-LICENSE.txt for the Source Code Pro license. */
+@font-face {
+    font-family: 'Source Code Pro';
+    font-style: normal;
+    font-weight: 400;
+    /* Avoid using locally installed font because bad versions are in circulation:
+     * see https://github.com/rust-lang/rust/issues/24355 */
+    src: url("SourceCodePro-Regular.woff") format('woff');
+}
+@font-face {
+    font-family: 'Source Code Pro';
+    font-style: normal;
+    font-weight: 600;
+    src: url("SourceCodePro-Semibold.woff") format('woff');
+}
+
 html,
 input,
 select,
@@ -25,12 +75,62 @@ body {
     padding: 0;
     margin: 0;
 
+    * {
+        -webkit-box-sizing: border-box;
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+    }
+
+    h1 {
+        font-size: 1.5em;
+    }
+    h3 {
+        font-size: 1.3em;
+    }
+    h1, h2, h3, h4 {
+        font-family: "Fira Sans",sans-serif;
+        font-weight: 500;
+        margin: 20px 0 15px 0;
+        padding-bottom: 6px;
+    }
+    h2, h3, h4 {
+        border-bottom: 1px solid;
+    }
+    pre {
+        background-color: #F5F5F5;
+        padding: 14px;
+    }
+    code, kbd, pre, samp {
+        font-family: "Source Code Pro",monospace;
+    }
+    a {
+        text-decoration: none;
+        background: transparent;
+    }
+    p {
+        margin: 0 0 .6em 0;
+    }
+    ol, ul {
+        padding-left: 25px;
+    }
+
     input, #search {
         background-color: var(--color-background-input);
         color: var(--input-color);
+        line-height: normal;
     }
 
     #search {
+        -moz-box-sizing: border-box !important;
+        box-sizing: border-box !important;
+        outline: none;
+        border: none;
+        border-radius: 1px;
+        margin-top: 5px;
+        padding: 10px 16px;
+        font-size: 17px;
+        width: 100%;
+
         box-shadow: 0 0 0 1px var(--color-border), 0 0 0 1px var(--color-border);
         transition: box-shadow 150ms ease-in-out;
     }
@@ -89,7 +189,8 @@ div.landing {
 
     h1.brand {
         font-size: 3em;
-        margin-bottom: 10px;
+        margin: 20px 0 10px 0;
+        padding-bottom: 6px;
         color: var(--color-brand);
     }
 
