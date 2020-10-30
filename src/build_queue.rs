@@ -11,6 +11,7 @@ pub(crate) struct QueuedCrate {
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) priority: i32,
+    pub(crate) registry: Option<String>,
 }
 
 #[derive(Debug)]
@@ -29,10 +30,16 @@ impl BuildQueue {
         }
     }
 
-    pub fn add_crate(&self, name: &str, version: &str, priority: i32) -> Result<()> {
+    pub fn add_crate(
+        &self,
+        name: &str,
+        version: &str,
+        priority: i32,
+        registry: Option<&str>,
+    ) -> Result<()> {
         self.db.get()?.execute(
-            "INSERT INTO queue (name, version, priority) VALUES ($1, $2, $3);",
-            &[&name, &version, &priority],
+            "INSERT INTO queue (name, version, priority, registry) VALUES ($1, $2, $3, $4);",
+            &[&name, &version, &priority, &registry],
         )?;
         Ok(())
     }
@@ -63,7 +70,7 @@ impl BuildQueue {
 
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
         let query = self.db.get()?.query(
-            "SELECT id, name, version, priority
+            "SELECT id, name, version, priority, registry
              FROM queue
              WHERE attempt < $1
              ORDER BY priority ASC, attempt ASC, id ASC",
@@ -77,6 +84,7 @@ impl BuildQueue {
                 name: row.get("name"),
                 version: row.get("version"),
                 priority: row.get("priority"),
+                registry: row.get("registry"),
             })
             .collect())
     }
@@ -149,7 +157,7 @@ mod tests {
                 ("high-priority-baz", "1.0.0", -1000),
             ];
             for krate in &test_crates {
-                queue.add_crate(krate.0, krate.1, krate.2)?;
+                queue.add_crate(krate.0, krate.1, krate.2, None)?;
             }
 
             let assert_next = |name| -> Result<()> {
@@ -214,9 +222,9 @@ mod tests {
             let queue = env.build_queue();
 
             assert_eq!(queue.pending_count()?, 0);
-            queue.add_crate("foo", "1.0.0", 0)?;
+            queue.add_crate("foo", "1.0.0", 0, None)?;
             assert_eq!(queue.pending_count()?, 1);
-            queue.add_crate("bar", "1.0.0", 0)?;
+            queue.add_crate("bar", "1.0.0", 0, None)?;
             assert_eq!(queue.pending_count()?, 2);
 
             queue.process_next_crate(|krate| {
@@ -235,11 +243,11 @@ mod tests {
             let queue = env.build_queue();
 
             assert_eq!(queue.prioritized_count()?, 0);
-            queue.add_crate("foo", "1.0.0", 0)?;
+            queue.add_crate("foo", "1.0.0", 0, None)?;
             assert_eq!(queue.prioritized_count()?, 1);
-            queue.add_crate("bar", "1.0.0", -100)?;
+            queue.add_crate("bar", "1.0.0", -100, None)?;
             assert_eq!(queue.prioritized_count()?, 2);
-            queue.add_crate("baz", "1.0.0", 100)?;
+            queue.add_crate("baz", "1.0.0", 100, None)?;
             assert_eq!(queue.prioritized_count()?, 2);
 
             queue.process_next_crate(|krate| {
@@ -262,9 +270,9 @@ mod tests {
             let queue = env.build_queue();
 
             assert_eq!(queue.failed_count()?, 0);
-            queue.add_crate("foo", "1.0.0", -100)?;
+            queue.add_crate("foo", "1.0.0", -100, None)?;
             assert_eq!(queue.failed_count()?, 0);
-            queue.add_crate("bar", "1.0.0", 0)?;
+            queue.add_crate("bar", "1.0.0", 0, None)?;
 
             for _ in 0..MAX_ATTEMPTS {
                 assert_eq!(queue.failed_count()?, 0);
@@ -296,7 +304,7 @@ mod tests {
                 ("baz", "1.0.0", 10),
             ];
             for krate in &test_crates {
-                queue.add_crate(krate.0, krate.1, krate.2)?;
+                queue.add_crate(krate.0, krate.1, krate.2, None)?;
             }
 
             assert_eq!(
