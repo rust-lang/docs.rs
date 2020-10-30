@@ -2871,9 +2871,8 @@ dependencies = [
 
 [[package]]
 name = "rustwide"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17a9c66cf835ece6742443f3a2c2874df15db3dfc060ced53feeb210a463fd93"
+version = "0.10.0"
+source = "git+https://github.com/rust-lang/rustwide.git?rev=bcf19b84128c983d02257a0ae9b91e5a6772122b#bcf19b84128c983d02257a0ae9b91e5a6772122b"
 dependencies = [
  "base64 0.12.1",
  "failure",

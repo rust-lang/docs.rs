@@ -40,7 +40,7 @@ schemamama = "0.3"
 schemamama_postgres = "0.3"
 systemstat = "0.1.4"
 prometheus = { version = "0.10.0", default-features = false }
-rustwide = "0.11"
+rustwide = { git = "https://github.com/rust-lang/rustwide.git" , rev = "bcf19b84128c983d02257a0ae9b91e5a6772122b"}
 mime_guess = "2"
 dotenv = "0.15"
 zstd = "0.5"
