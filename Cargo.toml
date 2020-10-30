@@ -20,7 +20,7 @@ log = "0.4"
 regex = "1"
 structopt = "0.3"
 crates-index = "0.15.1"
-crates-index-diff = "7.1.1"
+crates-index-diff = "7.1"
 reqwest = { version = "0.10.6", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "0.9", features = ["serde"] }
 slug = "=0.1.1"
