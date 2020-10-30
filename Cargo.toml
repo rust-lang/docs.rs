@@ -16,6 +16,7 @@ exclude = [
 ]
 
 [dependencies]
+sentry = { version = "0.20", features = ["env_logger", "log"] }
 log = "0.4"
 regex = "1"
 structopt = "0.3"
