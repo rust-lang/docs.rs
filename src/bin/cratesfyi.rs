@@ -262,7 +262,11 @@ enum BuildSubcommand {
         crate_version: Option<String>,
 
         /// Build a crate at a specific path
-        #[structopt(short = "l", long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
+        #[structopt(
+            short = "l",
+            long = "local",
+            conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION", "CRATE_REGISTRY"])
+        )]
         local: Option<PathBuf>,
     },
 
