@@ -140,6 +140,28 @@
                     // space closes the menu, and activates the current link
                     // this behavior is identical between both the WAI example, and GitHub's
                     if (document.activeElement instanceof HTMLAnchorElement && !document.activeElement.hasAttribute("aria-haspopup")) {
+                        // It's supposed to copy the behaviour of the WAI Menu Bar
+                        // page, and of GitHub's menus. I've been using these two
+                        // sources to judge what is basically "industry standard"
+                        // behaviour for menu keyboard activity on the web.
+                        //
+                        // On GitHub, here's what I notice:
+                        //
+                        // 1 If you click open a menu, the menu button remains
+                        //   focused. If, in this stage, I press space, the menu will
+                        //   close.
+                        //
+                        // 2 If I use the arrow keys to focus a menu item, and then
+                        //   press space, the menu item will be activated. For
+                        //   example, clicking "+", then pressing down, then pressing
+                        //   space will open the New Repository page.
+                        //
+                        // Behaviour 1 is why the
+                        // `!document.activeElement.hasAttribute("aria-haspopup")`
+                        // condition is there. It's to make sure the menu-link on
+                        // things like the About dropdown don't get activated.
+                        // Behaviour 2 is why this code is required at all; I want to
+                        // activate the currently highlighted menu item.
                         document.activeElement.click();
                     }
                     setTimeout(function() {
