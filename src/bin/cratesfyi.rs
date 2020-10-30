@@ -6,7 +6,8 @@ use std::sync::Arc;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
 use docs_rs::{
-    BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server, Storage,
+    BuildQueue, Config, Context, DocBuilder, Index, Metrics, PackageKind, RustwideBuilder, Server,
+    Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -169,9 +170,12 @@ impl QueueSubcommand {
                 crate_name,
                 crate_version,
                 build_priority,
-            } => ctx
-                .build_queue()?
-                .add_crate(&crate_name, &crate_version, build_priority)?,
+            } => ctx.build_queue()?.add_crate(
+                &crate_name,
+                &crate_version,
+                build_priority,
+                ctx.config()?.registry_url.as_deref(),
+            )?,
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
@@ -308,12 +312,16 @@ impl BuildSubcommand {
                         .build_local_package(&path)
                         .context("Building documentation failed")?;
                 } else {
+                    let registry_url = ctx.config()?.registry_url.clone();
                     builder
                         .build_package(
                             &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
                             &crate_version
                                 .ok_or_else(|| err_msg("must specify version if not local"))?,
-                            None,
+                            registry_url
+                                .as_ref()
+                                .map(|s| PackageKind::Registry(s.as_str()))
+                                .unwrap_or(PackageKind::CratesIo),
                         )
                         .context("Building documentation failed")?;
                 }
@@ -593,7 +601,16 @@ impl Context for BinContext {
     fn index(&self) -> Result<Arc<Index>, Error> {
         Ok(self
             .index
-            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Index::new(&*self.config()?)?)))?
+            .get_or_try_init::<_, Error>(|| {
+                let config = self.config()?;
+                Ok(Arc::new(
+                    if let Some(registry_url) = config.registry_url.clone() {
+                        Index::from_url(config.registry_index_path.clone(), registry_url)
+                    } else {
+                        Index::new(config.registry_index_path.clone())
+                    }?,
+                ))
+            })?
             .clone())
     }
 }

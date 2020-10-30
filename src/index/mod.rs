@@ -3,7 +3,7 @@ use std::{path::PathBuf, process::Command};
 use url::Url;
 
 use self::{api::Api, crates::Crates};
-use crate::{error::Result, Config};
+use crate::error::Result;
 use failure::ResultExt;
 
 pub(crate) mod api;
@@ -12,9 +12,10 @@ mod crates;
 pub struct Index {
     path: PathBuf,
     api: Api,
+    repository_url: Option<String>,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(Debug, serde::Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 struct IndexConfig {
     dl: String,
@@ -40,19 +41,44 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub fn new(app_config: &Config) -> Result<Self> {
-        let path = app_config.registry_index_path.clone();
+    pub fn from_url(path: PathBuf, repository_url: String) -> Result<Self> {
+        let url = repository_url.clone();
+        let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
+            &path,
+            crates_index_diff::CloneOptions { repository_url },
+        )
+        .context("initialising registry index repository")?;
+
+        let config = load_config(diff.repository()).context("loading registry config")?;
+        let api = Api::new(config.api).context("initialising registry api client")?;
+        Ok(Self {
+            path,
+            api,
+            repository_url: Some(url),
+        })
+    }
+
+    pub fn new(path: PathBuf) -> Result<Self> {
         // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
         // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
             .context("initialising registry index repository")?;
         let config = load_config(diff.repository()).context("loading registry config")?;
         let api = Api::new(config.api).context("initialising registry api client")?;
-        Ok(Self { path, api })
+        Ok(Self {
+            path,
+            api,
+            repository_url: None,
+        })
     }
 
     pub(crate) fn diff(&self) -> Result<crates_index_diff::Index> {
-        let diff = crates_index_diff::Index::from_path_or_cloned(&self.path)
+        let options = self
+            .repository_url
+            .clone()
+            .map(|repository_url| crates_index_diff::CloneOptions { repository_url })
+            .unwrap_or_default();
+        let diff = crates_index_diff::Index::from_path_or_cloned_with_options(&self.path, options)
             .context("re-opening registry index for diff")?;
         Ok(diff)
     }
@@ -86,5 +112,9 @@ impl Index {
                 err
             );
         }
+    }
+
+    pub fn repository_url(&self) -> Option<&str> {
+        self.repository_url.as_deref()
     }
 }

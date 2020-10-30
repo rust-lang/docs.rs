@@ -1,6 +1,6 @@
 //! Updates registry index and builds new packages
 
-use super::{DocBuilder, RustwideBuilder};
+use super::{DocBuilder, PackageKind, RustwideBuilder};
 use crate::error::Result;
 use crate::utils::get_crate_priority;
 use crate::Index;
@@ -45,10 +45,12 @@ impl DocBuilder {
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&mut conn, &krate.name)?;
 
-                    match self
-                        .build_queue
-                        .add_crate(&krate.name, &krate.version, priority)
-                    {
+                    match self.build_queue.add_crate(
+                        &krate.name,
+                        &krate.version,
+                        priority,
+                        index.repository_url(),
+                    ) {
                         Ok(()) => {
                             debug!("{}-{} added into build queue", krate.name, krate.version);
                             crates_added += 1;
@@ -79,7 +81,13 @@ impl DocBuilder {
         queue.process_next_crate(|krate| {
             processed = true;
 
-            builder.build_package(&krate.name, &krate.version, None)?;
+            let kind = krate
+                .registry
+                .as_ref()
+                .map(|r| PackageKind::Registry(r.as_str()))
+                .unwrap_or(PackageKind::CratesIo);
+
+            builder.build_package(&krate.name, &krate.version, kind)?;
             Ok(())
         })?;
 

@@ -12,6 +12,7 @@ pub struct Config {
 
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
+    pub registry_url: Option<String>,
 
     // Database connection params
     pub(crate) database_url: String,
@@ -56,6 +57,7 @@ impl Config {
 
             prefix: prefix.clone(),
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
+            registry_url: maybe_env("REGISTRY_URL")?,
 
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
