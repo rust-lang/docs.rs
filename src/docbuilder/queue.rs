@@ -1,6 +1,6 @@
 //! Updates registry index and builds new packages
 
-use super::{DocBuilder, PackageKind, RustwideBuilder};
+use super::{DocBuilder, RustwideBuilder};
 use crate::error::Result;
 use crate::utils::get_crate_priority;
 use crate::Index;
@@ -79,7 +79,7 @@ impl DocBuilder {
         queue.process_next_crate(|krate| {
             processed = true;
 
-            builder.build_package(&krate.name, &krate.version, PackageKind::CratesIo)?;
+            builder.build_package(&krate.name, &krate.version, None)?;
             Ok(())
         })?;
 
