@@ -258,10 +258,6 @@ enum BuildSubcommand {
         #[structopt(name = "CRATE_VERSION")]
         crate_version: Option<String>,
 
-        /// Url for registry different from cratesio
-        #[structopt(name = "CRATE_REGISTRY")]
-        crate_registry: Option<String>,
-
         /// Build a crate at a specific path
         #[structopt(
             short = "l",
@@ -308,7 +304,6 @@ impl BuildSubcommand {
             Self::Crate {
                 crate_name,
                 crate_version,
-                crate_registry,
                 local,
             } => {
                 let mut builder = rustwide_builder()?;
@@ -318,12 +313,13 @@ impl BuildSubcommand {
                         .build_local_package(&path)
                         .context("Building documentation failed")?;
                 } else {
+                    let registry_url = ctx.config()?.registry_url.clone();
                     builder
                         .build_package(
                             &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
                             &crate_version
                                 .ok_or_else(|| err_msg("must specify version if not local"))?,
-                            crate_registry
+                            registry_url
                                 .as_ref()
                                 .map(|s| PackageKind::Registry(s.as_str()))
                                 .unwrap_or(PackageKind::CratesIo),
