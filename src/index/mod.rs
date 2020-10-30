@@ -113,8 +113,4 @@ impl Index {
             );
         }
     }
-
-    pub fn repository_url(&self) -> Option<&str> {
-        self.repository_url.as_deref()
-    }
 }

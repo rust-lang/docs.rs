@@ -45,12 +45,10 @@ impl DocBuilder {
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&mut conn, &krate.name)?;
 
-                    match self.build_queue.add_crate(
-                        &krate.name,
-                        &krate.version,
-                        priority,
-                        index.repository_url(),
-                    ) {
+                    match self
+                        .build_queue
+                        .add_crate(&krate.name, &krate.version, priority)
+                    {
                         Ok(()) => {
                             debug!("{}-{} added into build queue", krate.name, krate.version);
                             crates_added += 1;
@@ -81,13 +79,7 @@ impl DocBuilder {
         queue.process_next_crate(|krate| {
             processed = true;
 
-            let kind = krate
-                .registry
-                .as_ref()
-                .map(|r| PackageKind::Registry(r.as_str()))
-                .unwrap_or(PackageKind::CratesIo);
-
-            builder.build_package(&krate.name, &krate.version, kind)?;
+            builder.build_package(&krate.name, &krate.version, PackageKind::CratesIo)?;
             Ok(())
         })?;
 
