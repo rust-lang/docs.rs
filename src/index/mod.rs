@@ -2,11 +2,12 @@ use std::{path::PathBuf, process::Command};
 
 use url::Url;
 
-use self::{api::Api, crates::Crates};
+use self::api::Api;
 use crate::error::Result;
 use failure::ResultExt;
 
 pub(crate) mod api;
+#[cfg(feature = "consistency_check")]
 mod crates;
 
 pub struct Index {
@@ -83,7 +84,8 @@ impl Index {
         Ok(diff)
     }
 
-    pub(crate) fn crates(&self) -> Result<Crates> {
+    #[cfg(feature = "consistency_check")]
+    pub(crate) fn crates(&self) -> Result<crates::Crates> {
         // First ensure the index is up to date, peeking will pull the latest changes without
         // affecting anything else.
         log::debug!("Updating index");
@@ -91,7 +93,7 @@ impl Index {
         // It'd be nice to use `crates_index` directly for interacting with the index, but it
         // doesn't support bare repositories. So we use its `Crate` type but walk the index
         // ourselves.
-        Ok(Crates::new(git2::Repository::open(&self.path)?))
+        Ok(crates::Crates::new(git2::Repository::open(&self.path)?))
     }
 
     pub fn api(&self) -> &Api {

@@ -404,6 +404,7 @@ enum DatabaseSubcommand {
     },
 
     /// Compares the database with the index and resolves inconsistencies
+    #[cfg(feature = "consistency_check")]
     Synchronize {
         /// Don't actually resolve the inconsistencies, just log them
         #[structopt(long)]
@@ -455,6 +456,7 @@ impl DatabaseSubcommand {
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
+            #[cfg(feature = "consistency_check")]
             Self::Synchronize { dry_run } => {
                 docs_rs::utils::consistency::run_check(&mut *ctx.conn()?, &*ctx.index()?, dry_run)?;
             }
