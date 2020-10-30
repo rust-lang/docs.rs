@@ -170,9 +170,12 @@ impl QueueSubcommand {
                 crate_name,
                 crate_version,
                 build_priority,
-            } => ctx
-                .build_queue()?
-                .add_crate(&crate_name, &crate_version, build_priority)?,
+            } => ctx.build_queue()?.add_crate(
+                &crate_name,
+                &crate_version,
+                build_priority,
+                ctx.config()?.registry_url.as_deref(),
+            )?,
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
