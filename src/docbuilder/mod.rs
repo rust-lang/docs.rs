@@ -4,8 +4,8 @@ mod queue;
 mod rustwide_builder;
 
 pub(crate) use self::limits::Limits;
-pub use self::rustwide_builder::RustwideBuilder;
 pub(crate) use self::rustwide_builder::{BuildResult, DocCoverage};
+pub use self::rustwide_builder::{PackageKind, RustwideBuilder};
 
 use crate::db::Pool;
 use crate::error::Result;

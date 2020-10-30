@@ -6,7 +6,8 @@ use std::sync::Arc;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
 use docs_rs::{
-    BuildQueue, Config, Context, DocBuilder, Index, Metrics, RustwideBuilder, Server, Storage,
+    BuildQueue, Config, Context, DocBuilder, Index, Metrics, PackageKind, RustwideBuilder, Server,
+    Storage,
 };
 use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
@@ -257,8 +258,16 @@ enum BuildSubcommand {
         #[structopt(name = "CRATE_VERSION")]
         crate_version: Option<String>,
 
+        /// Url for registry different from cratesio
+        #[structopt(name = "CRATE_REGISTRY")]
+        crate_registry: Option<String>,
+
         /// Build a crate at a specific path
-        #[structopt(short = "l", long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
+        #[structopt(
+            short = "l",
+            long = "local",
+            conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION", "CRATE_REGISTRY"])
+        )]
         local: Option<PathBuf>,
     },
 
@@ -299,6 +308,7 @@ impl BuildSubcommand {
             Self::Crate {
                 crate_name,
                 crate_version,
+                crate_registry,
                 local,
             } => {
                 let mut builder = rustwide_builder()?;
@@ -313,7 +323,10 @@ impl BuildSubcommand {
                             &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
                             &crate_version
                                 .ok_or_else(|| err_msg("must specify version if not local"))?,
-                            None,
+                            crate_registry
+                                .as_ref()
+                                .map(|s| PackageKind::Registry(s.as_str()))
+                                .unwrap_or(PackageKind::CratesIo),
                         )
                         .context("Building documentation failed")?;
                 }
@@ -593,7 +606,16 @@ impl Context for BinContext {
     fn index(&self) -> Result<Arc<Index>, Error> {
         Ok(self
             .index
-            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Index::new(&*self.config()?)?)))?
+            .get_or_try_init::<_, Error>(|| {
+                let config = self.config()?;
+                Ok(Arc::new(
+                    if let Some(registry_url) = config.registry_url.clone() {
+                        Index::from_url(config.registry_index_path.clone(), registry_url)
+                    } else {
+                        Index::new(config.registry_index_path.clone())
+                    }?,
+                ))
+            })?
             .clone())
     }
 }

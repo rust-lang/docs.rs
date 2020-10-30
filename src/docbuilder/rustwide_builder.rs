@@ -56,6 +56,12 @@ const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
+pub enum PackageKind<'a> {
+    Local(&'a Path),
+    CratesIo,
+    Registry(&'a str),
+}
+
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
@@ -259,7 +265,12 @@ impl RustwideBuilder {
         crates_from_path(
             &self.config.registry_index_path.clone(),
             &mut |name, version| {
-                if let Err(err) = self.build_package(name, version, None) {
+                let registry_url = self.config.registry_url.clone();
+                let package_kind = registry_url
+                    .as_ref()
+                    .map(|r| PackageKind::Registry(r.as_str()))
+                    .unwrap_or(PackageKind::CratesIo);
+                if let Err(err) = self.build_package(name, version, package_kind) {
                     warn!("failed to build package {} {}: {}", name, version, err);
                 }
             },
@@ -273,14 +284,14 @@ impl RustwideBuilder {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
-        self.build_package(&package.name, &package.version, Some(path))
+        self.build_package(&package.name, &package.version, PackageKind::Local(path))
     }
 
     pub fn build_package(
         &mut self,
         name: &str,
         version: &str,
-        local: Option<&Path>,
+        kind: PackageKind<'_>,
     ) -> Result<bool> {
         let mut conn = self.db.get()?;
 
@@ -302,10 +313,10 @@ impl RustwideBuilder {
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
         build_dir.purge()?;
 
-        let krate = if let Some(path) = local {
-            Crate::local(path)
-        } else {
-            Crate::crates_io(name, version)
+        let krate = match kind {
+            PackageKind::Local(path) => Crate::local(path),
+            PackageKind::CratesIo => Crate::crates_io(name, version),
+            PackageKind::Registry(registry) => Crate::registry(registry, name, version),
         };
         krate.fetch(&self.workspace)?;
 
