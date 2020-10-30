@@ -1126,9 +1126,9 @@ mod tests {
                 .expect("missing heading")
                 .any(|el| el.text_contents().contains("nothing")));
 
-            queue.add_crate("foo", "1.0.0", 0, None)?;
-            queue.add_crate("bar", "0.1.0", -10, None)?;
-            queue.add_crate("baz", "0.0.1", 10, None)?;
+            queue.add_crate("foo", "1.0.0", 0)?;
+            queue.add_crate("bar", "0.1.0", -10)?;
+            queue.add_crate("baz", "0.0.1", 10)?;
 
             let full = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             let items = full
