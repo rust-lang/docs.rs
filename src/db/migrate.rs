@@ -475,6 +475,20 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                 DROP TYPE feature;                         
             "
         ),
+        migration!(
+            context,
+            20,
+            // description
+            "Support alternative registries",
+            // upgrade query
+            "
+                ALTER TABLE queue ADD COLUMN registry TEXT DEFAULT NULL;
+            ",
+            // downgrade query
+            "
+                ALTER TABLE queue DROP COLUMN registry;
+            "
+        )
     ];
 
     for migration in migrations {
