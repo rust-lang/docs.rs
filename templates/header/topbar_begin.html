@@ -10,7 +10,7 @@
     <div class="container">
         <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
             <form action="/releases/search" method="GET"
-                class="landing-search-form-nav {% if not is_latest_version %}not-latest{% endif %}">
+                class="landing-search-form-nav {% if is_latest_version is defined and not is_latest_version %}not-latest{% endif %}">
                 {# The search bar #}
                 <div id="search-input-nav" class="pure-menu-right">
                     <label for="nav-search">
