@@ -6,13 +6,13 @@
     font-family: 'Fira Sans';
     font-style: normal;
     font-weight: 400;
-    src: local('Fira Sans'), url("fonts/FiraSans-Regular.woff") format('woff');
+    src: local('Fira Sans'), url("FiraSans-Regular.woff") format('woff');
 }
 @font-face {
     font-family: 'Fira Sans';
     font-style: normal;
     font-weight: 500;
-    src: local('Fira Sans Medium'), url("fonts/FiraSans-Medium.woff") format('woff');
+    src: local('Fira Sans Medium'), url("FiraSans-Medium.woff") format('woff');
 }
 
 /* See SourceSerifPro-LICENSE.txt for the Source Serif Pro license. */
@@ -20,19 +20,19 @@
     font-family: 'Source Serif Pro';
     font-style: normal;
     font-weight: 400;
-    src: local('Source Serif Pro'), url("fonts/SourceSerifPro-Regular.ttf.woff") format('woff');
+    src: local('Source Serif Pro'), url("SourceSerifPro-Regular.ttf.woff") format('woff');
 }
 @font-face {
     font-family: 'Source Serif Pro';
     font-style: italic;
     font-weight: 400;
-    src: local('Source Serif Pro Italic'), url("fonts/SourceSerifPro-It.ttf.woff") format('woff');
+    src: local('Source Serif Pro Italic'), url("SourceSerifPro-It.ttf.woff") format('woff');
 }
 @font-face {
     font-family: 'Source Serif Pro';
     font-style: normal;
     font-weight: 700;
-    src: local('Source Serif Pro Bold'), url("fonts/SourceSerifPro-Bold.ttf.woff") format('woff');
+    src: local('Source Serif Pro Bold'), url("SourceSerifPro-Bold.ttf.woff") format('woff');
 }
 
 /* See SourceCodePro-LICENSE.txt for the Source Code Pro license. */
@@ -42,13 +42,13 @@
     font-weight: 400;
     /* Avoid using locally installed font because bad versions are in circulation:
      * see https://github.com/rust-lang/rust/issues/24355 */
-    src: url("fonts/SourceCodePro-Regular.woff") format('woff');
+    src: url("SourceCodePro-Regular.woff") format('woff');
 }
 @font-face {
     font-family: 'Source Code Pro';
     font-style: normal;
     font-weight: 600;
-    src: url("fonts/SourceCodePro-Semibold.woff") format('woff');
+    src: url("SourceCodePro-Semibold.woff") format('woff');
 }
 
 html,
