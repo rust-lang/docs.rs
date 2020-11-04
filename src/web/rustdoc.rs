@@ -635,6 +635,10 @@ pub struct SharedResourceHandler;
 impl Handler for SharedResourceHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path();
+        if path.len() > 1 {
+            // All rustdoc shared resources are hosted at the root
+            return Err(Nope::ResourceNotFound.into());
+        }
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
         let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
         if ["js", "css", "woff", "svg"].contains(&suffix) {
