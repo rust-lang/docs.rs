@@ -113,7 +113,7 @@
 
                             {# Display all dependencies that the crate has #}
                             <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
                                     <ul class="pure-menu-list">
                                         {%- for dep in krate.dependencies -%}
                                             <li class="pure-menu-item">
@@ -134,7 +134,7 @@
                             <li class="pure-menu-heading">Versions</li>
 
                             <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
                                     <ul class="pure-menu-list">
                                         {# Display all releases of this crate #}
                                         {{ macros::releases_list(name=krate.name, releases=krate.releases, target=target, inner_path=inner_path) }}
