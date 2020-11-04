@@ -171,7 +171,6 @@
                     e.stopPropagation();
                     break;
                 case "home":
-                case "pageup":
                     // home: focus first menu item.
                     // This is the behavior of WAI, while GitHub scrolls,
                     // but it's unlikely that a user will try to scroll the page while the menu is open,
@@ -179,12 +178,35 @@
                     switchTo = allItems[0];
                     break;
                 case "end":
-                case "pagedown":
                     // end: focus last menu item.
                     // This is the behavior of WAI, while GitHub scrolls,
                     // but it's unlikely that a user will try to scroll the page while the menu is open,
                     // so they won't do it on accident.
                     switchTo = last(allItems);
+                    break;
+                case "pageup":
+                    // page up: jump five items up, stopping at the top
+                    // the number 5 is used so that we go one page in the
+                    // inner-scrolled Depedencies and Versions fields
+                    switchTo = currentLink;
+                    for (var n = 0; n < 5 && switchTo; ++n) {
+                        switchTo = previous(allItems, switchTo);
+                    }
+                    if (!switchTo) {
+                        switchTo = allItems[0];
+                    }
+                    break;
+                case "pagedown":
+                    // page down: jump five items down, stopping at the bottom
+                    // the number 5 is used so that we go one page in the
+                    // inner-scrolled Depedencies and Versions fields
+                    switchTo = currentLink;
+                    for (var n = 0; n < 5 && switchTo; ++n) {
+                        switchTo = next(allItems, switchTo);
+                    }
+                    if (!switchTo) {
+                        switchTo = last(allItems);
+                    }
                     break;
             }
             if (switchTo) {
