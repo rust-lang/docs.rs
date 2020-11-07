@@ -123,8 +123,10 @@
         {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
         {% if inner_path == "" %} {# /crate #}
             {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
+            {%- set retain_fragment = false -%}
         {% else %}
             {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version ~ "/target-redirect/" ~ target ~ inner_path -%}
+            {%- set retain_fragment = true -%}
         {% endif %}
         {# The release's name and version, `:name-:version` #}
         {%- set release_name = name ~ "-" ~ release.version -%}
@@ -150,6 +152,7 @@
                 href="{{ release_url | safe }}"
                 class="pure-menu-link{% if warning %} warn{% endif %}"
                 {% if warning %} title="{{ warning }}"{% endif %}
+                {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
                 {% if warning %}
                     {{ "exclamation-triangle" | fas(fw=true) }}

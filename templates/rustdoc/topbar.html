@@ -194,6 +194,7 @@
 
         <li class="pure-menu-item">
             <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
+                data-fragment="retain"
                 title="{{ tooltip }}">
                 {{ "exclamation-triangle" | fas }}
                 <span class="title">{{ title }}</span>
@@ -222,7 +223,7 @@
                 {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
 
                 <li class="pure-menu-item">
-                    <a href="{{ target_url | safe }}" class="pure-menu-link">{{ target }}</a>
+                    <a href="{{ target_url | safe }}" class="pure-menu-link" data-fragment="retain">{{ target }}</a>
                 </li>
             {%- endfor -%}
         </ul>
