@@ -25,4 +25,7 @@ function copyTextHandler() {
 (function() {
     const clipboard = document.getElementById("clipboard");
     if (clipboard != null) clipboard.addEventListener("click", copyTextHandler);
+    for (const e of document.querySelectorAll('a[data-fragment="retain"]')) {
+        e.addEventListener('mouseover', () => e.hash = document.location.hash);
+    }
 })();
