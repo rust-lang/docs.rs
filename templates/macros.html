@@ -129,38 +129,33 @@
         {# The release's name and version, `:name-:version` #}
         {%- set release_name = name ~ "-" ~ release.version -%}
 
-        <li class="pure-menu-item">
+        {%- if not release.is_library -%}
             {# If the release isn't a library, then display that warning #}
-            {% if not release.is_library -%}
-                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is not a library">
-                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
-                </a>
-
+            {%- set warning = release_name ~ " is not a library" -%}
+        {%- elif release.yanked and release.build_status -%}
             {# If the release has been yanked and failed to build, display a warning #}
-            {%- elif release.yanked and release.build_status -%}
-                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="{{ release_name }} is yanked">
-                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
-                </a>
-
+            {%- set warning = release_name ~ " is yanked" -%}
+        {%- elif release.yanked and not release.build_status -%}
             {# If the release has been yanked and failed to build, display a warning #}
-            {%- elif release.yanked and not release.build_status -%}
-                <a href="{{ release_url | safe }}" class="pure-menu-link warn"
-                    title="{{ release_name }} is yanked and docs.rs failed to build it">
-                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
-                </a>
-
+            {%- set warning = release_name ~ " is yanked and docs.rs failed to build it" -%}
+        {%- elif not release.build_status -%}
             {# If the release failed to build, display a warning #}
-            {%- elif not release.build_status -%}
-                <a href="{{ release_url | safe }}" class="pure-menu-link warn" title="docs.rs failed to build {{ release_name }}">
-                    {{ "exclamation-triangle" | fas(fw=true) }} {{ release.version }}
-                </a>
+            {%- set warning = "docs.rs failed to build " ~ release_name -%}
+        {%- else -%}
+            {%- set warning = false -%}
+        {%- endif -%}
 
-            {# Otherwise just display the version #}
-            {%- else -%}
-                <a href="{{ release_url | safe }}" class="pure-menu-link">
-                    {{ release.version }}
-                </a>
-            {%- endif %}
+        <li class="pure-menu-item">
+            <a
+                href="{{ release_url | safe }}"
+                class="pure-menu-link{% if warning %} warn{% endif %}"
+                {% if warning %} title="{{ warning }}"{% endif %}
+            >
+                {% if warning %}
+                    {{ "exclamation-triangle" | fas(fw=true) }}
+                {% endif %}
+                {{ release.version }}
+            </a>
         </li>
     {%- endfor -%}
 {% endmacro releases_list %}
