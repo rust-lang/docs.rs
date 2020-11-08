@@ -187,7 +187,7 @@
                 case "pageup":
                     // page up: jump five items up, stopping at the top
                     // the number 5 is used so that we go one page in the
-                    // inner-scrolled Depedencies and Versions fields
+                    // inner-scrolled Dependencies and Versions fields
                     switchTo = currentLink;
                     for (var n = 0; n < 5 && switchTo; ++n) {
                         switchTo = previous(allItems, switchTo);
