@@ -188,24 +188,22 @@
                     // page up: jump five items up, stopping at the top
                     // the number 5 is used so that we go one page in the
                     // inner-scrolled Dependencies and Versions fields
-                    switchTo = currentLink;
-                    for (var n = 0; n < 5 && switchTo; ++n) {
-                        switchTo = previous(allItems, switchTo);
-                    }
-                    if (!switchTo) {
-                        switchTo = allItems[0];
+                    switchTo = currentItem || allItems[0];
+                    for (var n = 0; n < 5; ++n) {
+                        if (switchTo.previousElementSibling && switchTo.previousElementSibling.className == 'pure-menu-item') {
+                            switchTo = switchTo.previousElementSibling;
+                        }
                     }
                     break;
                 case "pagedown":
                     // page down: jump five items down, stopping at the bottom
                     // the number 5 is used so that we go one page in the
-                    // inner-scrolled Depedencies and Versions fields
-                    switchTo = currentLink;
-                    for (var n = 0; n < 5 && switchTo; ++n) {
-                        switchTo = next(allItems, switchTo);
-                    }
-                    if (!switchTo) {
-                        switchTo = last(allItems);
+                    // inner-scrolled Dependencies and Versions fields
+                    switchTo = currentItem || last(allItems);
+                    for (var n = 0; n < 5; ++n) {
+                        if (switchTo.nextElementSibling && switchTo.nextElementSibling.className == 'pure-menu-item') {
+                            switchTo = switchTo.nextElementSibling;
+                        }
                     }
                     break;
             }
