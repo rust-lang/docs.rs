@@ -116,7 +116,8 @@ impl CommandLine {
                 socket_addr,
                 reload_templates,
             } => {
-                Server::start(Some(&socket_addr), reload_templates, &ctx)?;
+                // Blocks indefinitely
+                let _ = Server::start(Some(&socket_addr), reload_templates, &ctx)?;
             }
             Self::Daemon {
                 foreground,

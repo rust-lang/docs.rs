@@ -401,6 +401,7 @@ fn render_markdown(text: &str) -> String {
     markdown_to_html(text, &options)
 }
 
+#[must_use = "`Server` blocks indefinitely when dropped"]
 pub struct Server {
     inner: Listening,
 }
