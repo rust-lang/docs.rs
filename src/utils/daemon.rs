@@ -54,7 +54,8 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
-    let _server = crate::Server::start(None, false, context)?;
+    let server = crate::Server::start(None, false, context)?;
+    let server_thread = thread::spawn(|| drop(server));
 
     let config = context.config()?;
 
@@ -104,7 +105,11 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     )?;
 
     // Never returns; `server` blocks indefinitely when dropped
-    Ok(())
+    // NOTE: if a failure occurred earlier in `start_daemon`, the server will _not_ be joined -
+    // instead it will get killed when the process exits.
+    server_thread
+        .join()
+        .map_err(|_| failure::err_msg("web server panicked"))
 }
 
 fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>
