@@ -34,9 +34,13 @@
                                     </a>
                                 </li>
                             {%- endfor -%}
+                        {%- elif metadata.features is iterable -%}
+                            <li class="pure-menu-item">
+                                <span style="font-size: 13px;">This release does not have any feature flags.</span>
+                            </li>
                         {%- else -%}
                             <li class="pure-menu-item">
-                                <span style="font-size: 13px;">Feature flags are not available for this version.</span>
+                                <span style="font-size: 13px;">Feature flags data are not available for this release.</span>
                             </li>
                         {%- endif -%}
                     </ul>
@@ -52,7 +56,7 @@
                         {%- else -%}
                             0
                         {%- endif -%}
-                    </b> of them being enabled by <b>default</b>.</p>
+                    </b> of them enabled by <b>default</b>.</p>
                     {%- for feature in metadata.features -%}
                         <h3 id="{{ feature.name }}">{{ feature.name }}</h3>
                         <ul class="pure-menu-list">
@@ -67,8 +71,10 @@
                             {%- endif -%}
                         </ul>
                     {%- endfor -%}
+                {%- elif metadata.features is iterable  -%}
+                    <p data-id="empty-features">This release does not have any feature flags.</p>
                 {%- else -%}
-                    <p data-id="empty-features">Feature flags are not available for this release.</p>
+                    <p data-id="null-features">Feature flags data are not available for this release.</p>
                 {%- endif -%}
             </div>
         </div>

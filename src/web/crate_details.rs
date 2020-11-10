@@ -751,8 +751,7 @@ mod tests {
             env.fake_release()
                 .name("library")
                 .version("0.1.0")
-                .binary(false)
-                .features(None)
+                .features(HashMap::new())
                 .create()?;
 
             let page = kuchiki::parse_html().one(
@@ -776,8 +775,7 @@ mod tests {
             env.fake_release()
                 .name("library")
                 .version("0.1.0")
-                .binary(false)
-                .features(Some(features))
+                .features(features)
                 .create()?;
 
             let page = kuchiki::parse_html().one(
@@ -801,8 +799,7 @@ mod tests {
             env.fake_release()
                 .name("library")
                 .version("0.1.0")
-                .binary(false)
-                .features(Some(features))
+                .features(features)
                 .create()?;
 
             let page = kuchiki::parse_html().one(
@@ -816,6 +813,31 @@ mod tests {
                 .select_first(r#"b[data-id="default-feature-len"]"#)
                 .unwrap();
             assert_eq!(def_len.text_contents(), "0");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn feature_flags_report_null() {
+        wrapper(|env| {
+            let id = env
+                .fake_release()
+                .name("library")
+                .version("0.1.0")
+                .features(HashMap::new())
+                .create()?;
+
+            env.db()
+                .conn()
+                .query("UPDATE releases SET features = NULL WHERE id = $1", &[&id])?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/features")
+                    .send()?
+                    .text()?,
+            );
+            assert!(page.select_first(r#"p[data-id="null-features"]"#).is_ok());
             Ok(())
         });
     }
