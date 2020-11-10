@@ -210,12 +210,8 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn features(mut self, opt_features: Option<HashMap<String, Vec<String>>>) -> Self {
-        if let Some(features) = opt_features {
-            self.package.features = features;
-        } else {
-            self.package.features = HashMap::new();
-        }
+    pub(crate) fn features(mut self, features: HashMap<String, Vec<String>>) -> Self {
+        self.package.features = features;
         self
     }
 
