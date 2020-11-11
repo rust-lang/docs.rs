@@ -4,8 +4,8 @@ use serde::Serialize;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, FromSql, ToSql)]
 #[postgres(name = "feature")]
 pub struct Feature {
-    name: String,
-    subfeatures: Vec<String>,
+    pub(crate) name: String,
+    pub(crate) subfeatures: Vec<String>,
 }
 
 impl Feature {

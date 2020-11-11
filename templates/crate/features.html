@@ -26,15 +26,15 @@
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
                         <li class="pure-menu-heading">Feature flags</li>
-                        {%- if metadata.features -%}
-                            {%- for feature in metadata.features -%}
+                        {%- if features -%}
+                            {%- for feature in features -%}
                                 <li class="pure-menu-item">
                                     <a href="#{{ feature.name }}" class="pure-menu-link" style="text-align:center;">
                                         {{ feature.name }}
                                     </a>
                                 </li>
                             {%- endfor -%}
-                        {%- elif metadata.features is iterable -%}
+                        {%- elif features is iterable -%}
                             <li class="pure-menu-item">
                                 <span style="font-size: 13px;">This release does not have any feature flags.</span>
                             </li>
@@ -49,15 +49,9 @@
 
             <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
                 <h1>{{ metadata.name }}</h1>
-                {%- if metadata.features -%}
-                    <p>This version has <b>{{ metadata.features | length }}</b> feature flags, <b data-id="default-feature-len">
-                        {%- if metadata.features[0].name == 'default' -%}
-                            {{ metadata.features[0].subfeatures | length }}
-                        {%- else -%}
-                            0
-                        {%- endif -%}
-                    </b> of them enabled by <b>default</b>.</p>
-                    {%- for feature in metadata.features -%}
+                {%- if features -%}
+                    <p>This version has <b>{{ features | length }}</b> feature flags, <b data-id="default-feature-len">{{ default_len }}</b> of them enabled by <b>default</b>.</p>
+                    {%- for feature in features -%}
                         <h3 id="{{ feature.name }}">{{ feature.name }}</h3>
                         <ul class="pure-menu-list">
                             {%- if feature.subfeatures -%}
@@ -71,7 +65,7 @@
                             {%- endif -%}
                         </ul>
                     {%- endfor -%}
-                {%- elif metadata.features is iterable  -%}
+                {%- elif features is iterable  -%}
                     <p data-id="empty-features">This release does not have any feature flags.</p>
                 {%- else -%}
                     <p data-id="null-features">Feature flags data are not available for this release.</p>

@@ -103,7 +103,6 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
-                releases.features,
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
@@ -149,7 +148,6 @@ impl CrateDetails {
             default_target: krate.get("default_target"),
             doc_targets: MetaData::parse_doc_targets(krate.get("doc_targets")),
             yanked: krate.get("yanked"),
-            features: MetaData::parse_features(krate.get("features")),
         };
 
         let documented_items: Option<i32> = krate.get("documented_items");
@@ -818,13 +816,44 @@ mod tests {
     }
 
     #[test]
+    fn feature_flags_with_nested_default() {
+        wrapper(|env| {
+            let features = [
+                ("default".into(), vec!["feature1".into()]),
+                ("feature1".into(), vec!["feature2".into()]),
+                ("feature2".into(), Vec::new()),
+            ]
+            .iter()
+            .cloned()
+            .collect::<HashMap<String, Vec<String>>>();
+            env.fake_release()
+                .name("library")
+                .version("0.1.0")
+                .features(features)
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/features")
+                    .send()?
+                    .text()?,
+            );
+            assert!(page.select_first(r#"p[data-id="empty-features"]"#).is_err());
+            let def_len = page
+                .select_first(r#"b[data-id="default-feature-len"]"#)
+                .unwrap();
+            assert_eq!(def_len.text_contents(), "3");
+            Ok(())
+        });
+    }
+
+    #[test]
     fn feature_flags_report_null() {
         wrapper(|env| {
             let id = env
                 .fake_release()
                 .name("library")
                 .version("0.1.0")
-                .features(HashMap::new())
                 .create()?;
 
             env.db()
