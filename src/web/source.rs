@@ -58,8 +58,7 @@ impl FileList {
                         releases.files,
                         releases.default_target,
                         releases.doc_targets,
-                        releases.yanked,
-                        releases.features
+                        releases.yanked
                 FROM releases
                 LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -138,7 +137,6 @@ impl FileList {
                     default_target: rows[0].get(6),
                     doc_targets: MetaData::parse_doc_targets(rows[0].get(7)),
                     yanked: rows[0].get(8),
-                    features: MetaData::parse_features(rows[0].get(9)),
                 },
                 files: file_list,
             })
