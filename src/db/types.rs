@@ -6,6 +6,7 @@ use serde::Serialize;
 pub struct Feature {
     pub(crate) name: String,
     pub(crate) subfeatures: Vec<String>,
+    /// [`None`] when this crate was built before optional dependencies were tracked
     pub(crate) optional_dependency: Option<bool>,
 }
 
