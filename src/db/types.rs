@@ -6,11 +6,16 @@ use serde::Serialize;
 pub struct Feature {
     pub(crate) name: String,
     pub(crate) subfeatures: Vec<String>,
+    pub(crate) optional_dependency: Option<bool>,
 }
 
 impl Feature {
-    pub fn new(name: String, subfeatures: Vec<String>) -> Self {
-        Feature { name, subfeatures }
+    pub fn new(name: String, subfeatures: Vec<String>, optional_dependency: bool) -> Self {
+        Feature {
+            name,
+            subfeatures,
+            optional_dependency: Some(optional_dependency),
+        }
     }
 
     pub fn is_private(&self) -> bool {

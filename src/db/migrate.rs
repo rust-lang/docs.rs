@@ -488,6 +488,20 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             "
                 ALTER TABLE queue DROP COLUMN registry;
             "
+        ),
+        migration!(
+            context,
+            21,
+            // description
+            "Add mark for features that are derived from optional dependencies",
+            // upgrade query
+            "
+                ALTER TYPE feature ADD ATTRIBUTE optional_dependency BOOL;
+            ",
+            // downgrade query
+            "
+                 ALTER TYPE feature DROP ATTRIBUTE optional_dependency;
+            "
         )
     ];
 

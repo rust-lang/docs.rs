@@ -221,13 +221,13 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
 fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
     let mut features = Vec::with_capacity(pkg.features.len());
     if let Some(subfeatures) = pkg.features.get("default") {
-        features.push(Feature::new("default".into(), subfeatures.clone()));
+        features.push(Feature::new("default".into(), subfeatures.clone(), false));
     };
     features.extend(
         pkg.features
             .iter()
             .filter(|(name, _)| *name != "default")
-            .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone())),
+            .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone(), false)),
     );
     features.extend(get_optional_dependencies(pkg));
     features
@@ -237,7 +237,14 @@ fn get_optional_dependencies(pkg: &MetadataPackage) -> Vec<Feature> {
     pkg.dependencies
         .iter()
         .filter(|dep| dep.optional)
-        .map(|dep| Feature::new(dep.name.clone(), Vec::new()))
+        .map(|dep| {
+            let name = if let Some(rename) = &dep.rename {
+                rename.clone()
+            } else {
+                dep.name.clone()
+            };
+            Feature::new(name, Vec::new(), true)
+        })
         .collect()
 }
 
