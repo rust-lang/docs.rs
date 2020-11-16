@@ -132,6 +132,7 @@ pub(crate) struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,
     pub(crate) kind: Option<String>,
+    pub(crate) rename: Option<String>,
     pub(crate) optional: bool,
 }
 

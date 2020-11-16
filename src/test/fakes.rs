@@ -49,6 +49,7 @@ impl<'a> FakeRelease<'a> {
                     name: "fake-dependency".into(),
                     req: "^1.0.0".into(),
                     kind: None,
+                    rename: None,
                     optional: false,
                 }],
                 targets: vec![Target::dummy_lib("fake_package".into(), None)],
