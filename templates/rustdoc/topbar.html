@@ -3,9 +3,9 @@
 {# The url of the current release, `/crate/:name/:version` #}
 {%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version -%}
 
-{%- include "header/topbar_begin.html" -%}
+{%- include "header/topbar_begin.html" -%}{#
 
-<ul class="pure-menu-list">
+#}<ul class="pure-menu-list">
     {% if 'krate' in __tera_context %}
         <li class="pure-menu-item pure-menu-has-children">
             <a href="#" class="pure-menu-link crate-name" title="{{ krate.description }}">
