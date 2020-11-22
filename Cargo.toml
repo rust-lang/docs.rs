@@ -107,10 +107,6 @@ string_cache_codegen = "0.5.1"
 walkdir = "2"
 
 [[bench]]
-name = "html_parsing"
-harness = false
-
-[[bench]]
 name = "compression"
 harness = false
 
