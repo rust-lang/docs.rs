@@ -579,6 +579,12 @@ impl RustwideBuilder {
 
         // Add docs.rs specific arguments
         let mut cargo_args = Vec::new();
+        // Show the command line Rustdoc is invoked with
+        cargo_args.push("--verbose".into());
+        // We know that `metadata` unconditionally passes `-Z rustdoc-map`.
+        // Don't copy paste this, since that fact is not stable and may change in the future.
+        // Normally we would need -Z unstable-options, but we currently pass that too.
+        cargo_args.push(r#"--config=doc.extern-map.registries.crates-io="https://docs.rs""#.into());
         if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
         }
