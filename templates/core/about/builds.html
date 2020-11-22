@@ -8,7 +8,7 @@
     <div class="container about">
     <p>
         Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>.
-         
+
         It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>.
     </p>
 
@@ -35,11 +35,16 @@
             <code>
                 if let Ok(_) = std::env::var("DOCS_RS") {
                     // ... your code here ...
-                }        
+                }
             </code>
         </pre>
         {%- endfilter %}
         This approach can be helpful if you need dependencies for building the library, but not for building the documentation.
+    </p>
+
+    <h4 id="cross-compiling">Cross-compiling</h4>
+    <p>
+      All targets other than <code>x86_64-unknown-linux-gnu</code> are cross-compiled. For implementation reasons, this is unlikely to change for the foreseeable future.
     </p>
 
     <p>
