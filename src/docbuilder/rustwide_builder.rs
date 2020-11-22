@@ -518,16 +518,6 @@ impl RustwideBuilder {
 
         let mut rustdoc_flags = Vec::new();
 
-        for dep in &cargo_metadata.root_dependencies() {
-            rustdoc_flags.push("--extern-html-root-url".to_string());
-            rustdoc_flags.push(format!(
-                "{}=https://docs.rs/{}/{}",
-                dep.name.replace("-", "_"),
-                dep.name,
-                dep.version
-            ));
-        }
-
         rustdoc_flags.extend(vec![
             "--resource-suffix".to_string(),
             format!("-{}", parse_rustc_version(&self.rustc_version)?),
