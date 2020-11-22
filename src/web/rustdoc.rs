@@ -9,6 +9,7 @@ use crate::{
     },
     Config, Metrics, Storage,
 };
+use iron::url::percent_encoding::percent_decode;
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
@@ -44,8 +45,6 @@ impl iron::Handler for RustLangRedirector {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
-    use iron::url::percent_encoding::percent_decode;
-
     fn redirect_to_doc(
         req: &Request,
         name: &str,
@@ -331,6 +330,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         path.push_str("index.html");
         req_path.push("index.html");
     }
+    let mut path = ctry!(req, percent_decode(path.as_bytes()).decode_utf8());
 
     // Attempt to load the file from the database
     let file = match File::from_path(&storage, &path, &config) {
@@ -338,7 +338,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         Err(err) => {
             log::debug!("got error serving {}: {}", path, err);
             // If it fails, we try again with /index.html at the end
-            path.push_str("/index.html");
+            path.to_mut().push_str("/index.html");
             req_path.push("index.html");
 
             return if ctry!(req, storage.exists(&path)) {
@@ -1568,6 +1568,21 @@ mod test {
             assert_redirect(
                 "/tokio/0.2.21/tokio/time",
                 "/tokio/0.2.21/tokio/time/index.html",
+                env.frontend(),
+            )
+        })
+    }
+
+    #[test]
+    fn test_non_ascii() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("const_unit_poc")
+                .version("1.0.0")
+                .rustdoc_file("const_unit_poc/units/constant.Ω.html")
+                .create()?;
+            assert_success(
+                "/const_unit_poc/1.0.0/const_unit_poc/units/constant.Ω.html",
                 env.frontend(),
             )
         })
