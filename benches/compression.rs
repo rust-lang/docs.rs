@@ -1,5 +1,5 @@
-use cratesfyi::storage::{compress, decompress, CompressionAlgorithm};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use docs_rs::storage::{compress, decompress, CompressionAlgorithm};
 
 const ALGORITHM: CompressionAlgorithm = CompressionAlgorithm::Zstd;
 
