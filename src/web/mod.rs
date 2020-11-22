@@ -715,11 +715,11 @@ mod test {
                 assert_redirect(&format!("/{}", krate), &target, web)?;
                 assert_redirect(&format!("/{}/", krate), &target, web)?;
             }
-            let target = format!("https://doc.rust-lang.org/stable/proc_macro/");
 
+            let target = "https://doc.rust-lang.org/stable/proc_macro/";
             // with or without slash
-            assert_redirect("/proc-macro", &target, web)?;
-            assert_redirect("/proc-macro/", &target, web)?;
+            assert_redirect("/proc-macro", target, web)?;
+            assert_redirect("/proc-macro/", target, web)?;
             Ok(())
         })
     }
