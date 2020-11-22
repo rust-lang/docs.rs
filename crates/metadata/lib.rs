@@ -522,7 +522,12 @@ mod test_calculations {
     use super::*;
 
     fn default_cargo_args() -> Vec<String> {
-        vec!["rustdoc".into(), "--lib".into(), "--".into()]
+        vec![
+            "rustdoc".into(),
+            "--lib".into(),
+            "-Zrustdoc-map".into(),
+            "--".into(),
+        ]
     }
 
     #[test]
@@ -575,6 +580,7 @@ mod test_calculations {
         let expected_args = vec![
             "rustdoc".into(),
             "--lib".into(),
+            "-Zrustdoc-map".into(),
             "--features".into(),
             String::new(),
             "--".into(),
@@ -589,6 +595,7 @@ mod test_calculations {
         let expected_args = vec![
             String::from("rustdoc"),
             "--lib".into(),
+            "-Zrustdoc-map".into(),
             "--features".into(),
             "some_feature".into(),
             "--".into(),
@@ -603,6 +610,7 @@ mod test_calculations {
         let expected_args = vec![
             String::from("rustdoc"),
             "--lib".into(),
+            "-Zrustdoc-map".into(),
             "--features".into(),
             "feature1 feature2".into(),
             "--".into(),
@@ -624,6 +632,7 @@ mod test_calculations {
         let expected_args = vec![
             String::from("rustdoc"),
             "--lib".into(),
+            "-Zrustdoc-map".into(),
             "--".into(),
             "-Z".into(),
             "unstable-options".into(),
@@ -642,6 +651,7 @@ mod test_calculations {
         let expected_args = vec![
             String::from("rustdoc"),
             "--lib".into(),
+            "-Zrustdoc-map".into(),
             "-Z".into(),
             "unstable-options".into(),
             "--config".into(),
