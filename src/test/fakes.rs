@@ -230,8 +230,8 @@ impl<'a> FakeRelease<'a> {
         // Upload all source files as rustdoc files
         // In real life, these would be highlighted HTML, but for testing we just use the files themselves.
         for (source_path, data) in &self.source_files {
-            if source_path.starts_with("src/") {
-                let updated = ["src", &package.name, &source_path[4..]].join("/");
+            if let Some(src) = source_path.strip_prefix("src/") {
+                let updated = ["src", &package.name, src].join("/");
                 rustdoc_files.push((Box::leak(Box::new(updated)), data));
             }
         }

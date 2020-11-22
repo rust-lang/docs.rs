@@ -134,7 +134,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --workspace --locked -- -D warnings
+          args: --all-targets --workspace --locked -- -D warnings
 
       - name: Clean unused artifacts
         uses: actions-rs/cargo@v1
