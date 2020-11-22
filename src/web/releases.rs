@@ -229,6 +229,9 @@ fn get_search_results(
     limit: i64,
 ) -> Result<(i64, Vec<Release>), failure::Error> {
     query = query.trim();
+    if query.is_empty() {
+        return Ok((0, Vec::new()));
+    }
     let offset = (page - 1) * limit;
 
     let statement = "
@@ -1265,5 +1268,16 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_empty_query() {
+        wrapper(|env| {
+            let mut conn = env.db().conn();
+            let (num_results, results) = get_search_results(&mut conn, "", 0, 0).unwrap();
+            assert_eq!(num_results, 0);
+            assert!(results.is_empty());
+            Ok(())
+        })
     }
 }
