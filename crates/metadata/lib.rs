@@ -229,7 +229,8 @@ impl Metadata {
     /// For example, the links may point somewhere different than they would on docs.rs.
     /// However, rustdoc will see exactly the same code as it would on docs.rs, even counting `cfg`s.
     pub fn cargo_args(&self, additional_args: &[String], rustdoc_args: &[String]) -> Vec<String> {
-        let mut cargo_args: Vec<String> = vec!["rustdoc".into(), "--lib".into()];
+        let mut cargo_args: Vec<String> =
+            vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
 
         if let Some(features) = &self.features {
             cargo_args.push("--features".into());

@@ -1,13 +1,11 @@
 use crate::error::Result;
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub(crate) struct CargoMetadata {
-    packages: HashMap<String, Package>,
-    deps_graph: HashMap<String, HashSet<String>>,
-    root_id: String,
+    root: Package,
 }
 
 impl CargoMetadata {
@@ -31,34 +29,18 @@ impl CargoMetadata {
             ));
         };
 
-        // Convert from Vecs to HashMaps and HashSets to get more efficient lookups
+        let root = metadata.resolve.root;
         Ok(CargoMetadata {
-            packages: metadata
+            root: metadata
                 .packages
                 .into_iter()
-                .map(|pkg| (pkg.id.clone(), pkg))
-                .collect(),
-            deps_graph: metadata
-                .resolve
-                .nodes
-                .into_iter()
-                .map(|node| (node.id, node.deps.into_iter().map(|d| d.pkg).collect()))
-                .collect(),
-            root_id: metadata.resolve.root,
+                .find(|pkg| pkg.id == root)
+                .unwrap(),
         })
     }
 
-    pub(crate) fn root_dependencies(&self) -> Vec<&Package> {
-        let ids = &self.deps_graph[&self.root_id];
-        self.packages
-            .iter()
-            .filter(|(id, _pkg)| ids.contains(id.as_str()))
-            .map(|(_id, pkg)| pkg)
-            .collect()
-    }
-
     pub(crate) fn root(&self) -> &Package {
-        &self.packages[&self.root_id]
+        &self.root
     }
 }
 
