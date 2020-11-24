@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "rustwide"
 version = "0.11.0"
-source = "git+https://github.com/devsnek/rustwide.git?branch=sandbox-image-override#5536645973149cc81217917862a9ea8957cda68e"
+source = "git+https://github.com/devsnek/rustwide.git?branch=sandbox-image-override#b0eba0018368bdde373a93f647d022c34d056807"
 dependencies = [
  "attohttpc",
  "base64 0.12.1",

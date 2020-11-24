@@ -212,7 +212,7 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        let metadata = Metadata::from_crate_root(&build_dir.build_dir())?;
+        let metadata = Metadata::from_crate_root(&build_dir.get_source_dir(&krate)?)?;
 
         build_dir
             .build(
@@ -330,7 +330,7 @@ impl RustwideBuilder {
 
         let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
-        let metadata = Metadata::from_crate_root(&build_dir.build_dir())?;
+        let metadata = Metadata::from_crate_root(&build_dir.get_source_dir(&krate)?)?;
         let res = build_dir
             .build(
                 &self.toolchain,
