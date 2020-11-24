@@ -106,11 +106,15 @@ impl RustwideBuilder {
         self.skip_build_if_exists = should;
     }
 
-    fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
-        SandboxBuilder::new()
+    fn prepare_sandbox(&self, metadata: &Metadata, limits: &Limits) -> Result<SandboxBuilder> {
+        let mut builder = SandboxBuilder::new()
             .cpu_limit(self.config.build_cpu_limit.map(|limit| limit as f32))
             .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking())
+            .enable_networking(limits.networking());
+        if let Some(image) = metadata.docker_image() {
+            builder = builder.image(SandboxImage::remote(&image)?)
+        }
+        Ok(builder)
     }
 
     pub fn update_toolchain(&mut self) -> Result<()> {
@@ -208,11 +212,15 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        build_dir
-            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
-            .run(|build| {
-                let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
+        let metadata = Metadata::from_crate_root(&build_dir.build_dir())?;
 
+        build_dir
+            .build(
+                &self.toolchain,
+                &krate,
+                self.prepare_sandbox(&metadata, &limits)?,
+            )
+            .run(|build| {
                 let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
                     failure::bail!("failed to build dummy crate for {}", self.rustc_version);
@@ -322,14 +330,18 @@ impl RustwideBuilder {
 
         let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
+        let metadata = Metadata::from_crate_root(&build_dir.build_dir())?;
         let res = build_dir
-            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
+            .build(
+                &self.toolchain,
+                &krate,
+                self.prepare_sandbox(&metadata, &limits)?,
+            )
             .run(|build| {
                 use docsrs_metadata::BuildTargets;
 
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
-                let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
                 let BuildTargets {
                     default_target,
                     other_targets,
