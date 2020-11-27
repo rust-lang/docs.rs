@@ -283,8 +283,8 @@ impl Metadata {
     }
 
     /// Return the custom docker image, if provided.
-    pub fn docker_image(&self) -> Option<String> {
-        self.docker_image.clone()
+    pub fn docker_image(&self) -> Option<&String> {
+        self.docker_image.as_ref()
     }
 }
 

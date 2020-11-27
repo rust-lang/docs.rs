@@ -436,6 +436,11 @@ impl RustwideBuilder {
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
         local_storage.close()?;
+        if let Some(image) = metadata.docker_image() {
+            std::process::Command::new("docker")
+                .args(&["image", "rm", image])
+                .status()?;
+        }
         Ok(res.result.successful)
     }
 
