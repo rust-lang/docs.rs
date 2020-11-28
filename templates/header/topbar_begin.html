@@ -18,7 +18,8 @@
                     </label>
 
                     {# If there is a search query, put it in the search bar #}
-                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query"
+                    {# The tabindex="-1" is used to prevent it to be the first input focused on the page when using the browser shortcut #}
+                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
                         placeholder="Find crate" {%- if search_query %} value="{{ search_query }}" {%- endif %}>
                 </div>
 
