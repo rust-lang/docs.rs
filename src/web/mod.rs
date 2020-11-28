@@ -927,4 +927,20 @@ mod test {
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
     }
+
+    #[test]
+    fn test_tabindex_is_present_on_topbar_crate_search_input() {
+        wrapper(|env| {
+            release("0.1.0", env);
+            let web = env.frontend();
+            let text = web.get("/foo/0.1.0/foo").send()?.text()?;
+            let tabindex = kuchiki::parse_html()
+                .one(text)
+                .select(r#"#nav-search[tabindex="-1"]"#)
+                .unwrap()
+                .count();
+            assert_eq!(tabindex, 1);
+            Ok(())
+        });
+    }
 }
