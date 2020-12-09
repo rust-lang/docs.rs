@@ -39,16 +39,16 @@ div.nav-container {
         font-weight: 400;
         color: var(--color-navbar-standard);
 
-        &:hover {
-            color: var(--color-standard);
-            background-color: inherit;
-        }
-
         // Improves menu link readability when inverting the colors on focus.
         // Vendor do background-color #eee, looks weird on different theme.
         &:focus {
             color: var(--color-background);
             background-color: var(--color-doc-link-background);
+        }
+
+        &:hover {
+            color: var(--color-standard);
+            background-color: inherit;
         }
 
         &.crate-name {
