@@ -34,18 +34,15 @@ pub struct GithubUpdater {
 
 impl GithubUpdater {
     pub fn new(config: &Config, pool: Pool) -> Result<Self> {
-        let github_auth = config.github_auth();
-
-        let mut headers = HeaderMap::with_capacity(2 + github_auth.is_some() as usize);
+        let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
-        if let Some((username, accesstoken)) = github_auth {
-            let basicauth = format!(
-                "Basic {}",
-                base64::encode(format!("{}:{}", username, accesstoken))
+        if let Some(token) = &config.github_accesstoken {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("token {}", token))?,
             );
-            headers.insert(AUTHORIZATION, HeaderValue::from_str(&basicauth).unwrap());
         } else {
             warn!("No GitHub authorization specified, will be working with very low rate limits");
         }
