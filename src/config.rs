@@ -27,7 +27,6 @@ pub struct Config {
     pub(crate) s3_bucket_is_temporary: bool,
 
     // Github authentication
-    pub(crate) github_username: Option<String>,
     pub(crate) github_accesstoken: Option<String>,
 
     // Max size of the files served by the docs.rs frontend
@@ -74,7 +73,6 @@ impl Config {
             #[cfg(test)]
             s3_bucket_is_temporary: false,
 
-            github_username: maybe_env("CRATESFYI_GITHUB_USERNAME")?,
             github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
 
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
@@ -91,13 +89,6 @@ impl Config {
             build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
         })
-    }
-
-    pub fn github_auth(&self) -> Option<(&str, &str)> {
-        Some((
-            self.github_username.as_deref()?,
-            self.github_accesstoken.as_deref()?,
-        ))
     }
 }
 
