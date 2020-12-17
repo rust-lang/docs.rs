@@ -26,7 +26,7 @@ struct GitHubFields {
     stars: i64,
     forks: i64,
     issues: i64,
-    last_commit: DateTime<Utc>,
+    last_commit: Option<DateTime<Utc>>,
 }
 
 pub struct GithubUpdater {
@@ -143,7 +143,7 @@ impl GithubUpdater {
                 &fields.node_id,
                 &fields.full_name,
                 &fields.description,
-                &fields.last_commit.naive_utc(),
+                &fields.last_commit.as_ref().map(|lc| lc.naive_utc()),
                 &(fields.stars as i32),
                 &(fields.forks as i32),
                 &(fields.issues as i32),
@@ -162,7 +162,7 @@ impl GithubUpdater {
                 &(fields.stars as i32),
                 &(fields.forks as i32),
                 &(fields.issues as i32),
-                &fields.last_commit.naive_utc(),
+                &fields.last_commit.as_ref().map(|lc| lc.naive_utc()),
                 &crate_id,
             ],
         )?;
@@ -190,8 +190,7 @@ impl GithubUpdater {
             forks_count: i64,
             #[serde(default)]
             open_issues: i64,
-            #[serde(default = "Utc::now")]
-            pushed_at: DateTime<Utc>,
+            pushed_at: Option<DateTime<Utc>>,
         }
 
         let url = format!("https://api.github.com/repos/{}", path);
