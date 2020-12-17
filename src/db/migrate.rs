@@ -502,6 +502,33 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             "
                  ALTER TYPE feature DROP ATTRIBUTE optional_dependency;
             "
+        ),
+        migration!(
+            context,
+            22,
+            // description
+            "Add the github_repositories table to contain GitHub information",
+            // upgrade query
+            "
+                CREATE TABLE github_repos (
+                    id VARCHAR PRIMARY KEY NOT NULL,
+                    name VARCHAR NOT NULL,
+                    description VARCHAR,
+                    last_commit TIMESTAMP,
+                    stars INT NOT NULL,
+                    forks INT NOT NULL,
+                    issues INT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                );
+
+                ALTER TABLE releases ADD COLUMN github_repo VARCHAR
+                    REFERENCES github_repos(id) ON DELETE SET NULL;
+            ",
+            // downgrade query
+            "
+                ALTER TABLE releases DROP COLUMN github_repo;
+                DROP TABLE github_repos;
+            "
         )
     ];
 
