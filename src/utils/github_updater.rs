@@ -20,6 +20,8 @@ const APP_USER_AGENT: &str = concat!(
 /// Fields we need in docs.rs
 #[derive(Debug)]
 struct GitHubFields {
+    node_id: String,
+    full_name: String,
     description: String,
     stars: i64,
     forks: i64,
@@ -125,6 +127,30 @@ impl GithubUpdater {
         let fields = self.get_github_fields(&path)?;
 
         conn.execute(
+            "INSERT INTO github_repos (
+                 id, name, description, last_commit, stars, forks, issues, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+             ON CONFLICT (id) DO
+             UPDATE SET
+                 name = $2,
+                 description = $3,
+                 last_commit = $4,
+                 stars = $5,
+                 forks = $6,
+                 issues = $7,
+                 updated_at = NOW();",
+            &[
+                &fields.node_id,
+                &fields.full_name,
+                &fields.description,
+                &fields.last_commit.naive_utc(),
+                &(fields.stars as i32),
+                &(fields.forks as i32),
+                &(fields.issues as i32),
+            ],
+        )?;
+
+        conn.execute(
             "UPDATE crates
              SET github_description = $1,
                  github_stars = $2, github_forks = $3,
@@ -141,12 +167,21 @@ impl GithubUpdater {
             ],
         )?;
 
+        // Temporary statement to migrate production data over to the new table. Will be removed by
+        // Pietro's next PR.
+        conn.execute(
+            "UPDATE releases SET github_repo = $1 WHERE crate_id = $2;",
+            &[&fields.node_id, &crate_id],
+        )?;
+
         Ok(())
     }
 
     fn get_github_fields(&self, path: &str) -> Result<GitHubFields> {
         #[derive(Deserialize)]
         struct Response {
+            node_id: String,
+            full_name: String,
             #[serde(default)]
             description: Option<String>,
             #[serde(default)]
@@ -163,6 +198,8 @@ impl GithubUpdater {
         let response: Response = self.client.get(&url).send()?.error_for_status()?.json()?;
 
         Ok(GitHubFields {
+            node_id: response.node_id,
+            full_name: response.full_name,
             description: response.description.unwrap_or_default(),
             stars: response.stargazers_count,
             forks: response.forks_count,
