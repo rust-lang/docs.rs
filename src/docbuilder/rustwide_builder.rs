@@ -8,7 +8,7 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
-use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
+use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, GithubUpdater};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
@@ -392,9 +392,25 @@ impl RustwideBuilder {
                     }
                 };
 
+                let cargo_metadata = res.cargo_metadata.root();
+
+                // Fetch repository statistics from GitHub
+                let github_updater = GithubUpdater::new(self.config.clone(), self.db.clone())?;
+                let github_repo = if let Some(repo) = &cargo_metadata.repository {
+                    match github_updater.load_repository(&mut conn, repo) {
+                        Ok(repo) => repo,
+                        Err(err) => {
+                            warn!("failed to get github stats: {}", err);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
                 let release_id = add_package_into_database(
                     &mut conn,
-                    res.cargo_metadata.root(),
+                    cargo_metadata,
                     &build.host_source_dir(),
                     &res.result,
                     &res.target,
@@ -404,6 +420,7 @@ impl RustwideBuilder {
                     has_docs,
                     has_examples,
                     algs,
+                    github_repo,
                 )?;
 
                 if let Some(doc_coverage) = res.result.doc_coverage {

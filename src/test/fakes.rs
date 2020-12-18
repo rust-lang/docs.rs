@@ -300,6 +300,7 @@ impl<'a> FakeRelease<'a> {
             self.has_docs,
             self.has_examples,
             algs,
+            None,
         )?;
         crate::db::update_crate_data_in_database(
             &mut db.conn(),
