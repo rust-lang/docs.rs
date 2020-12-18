@@ -422,7 +422,7 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateGithubFields => {
-                docs_rs::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
+                docs_rs::utils::GithubUpdater::new(ctx.config()?, ctx.pool()?)?
                     .update_all_crates()?;
             }
 
