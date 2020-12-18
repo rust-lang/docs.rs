@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
-use log::{info, trace, warn};
+use log::{debug, info, trace, warn};
 use once_cell::sync::Lazy;
 use postgres::Client;
 use regex::Regex;
@@ -32,6 +32,18 @@ const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
     }
     rateLimit {
         remaining
+    }
+}";
+
+const GRAPHQL_SINGLE: &str = "query($owner: String!, $repo: String!) {
+    repository(owner: $owner, name: $repo) {
+        id
+        nameWithOwner
+        pushedAt
+        description
+        stargazerCount
+        forkCount
+        issues { totalCount }
     }
 }";
 
@@ -69,6 +81,73 @@ impl GithubUpdater {
         })
     }
 
+    pub fn backfill_repositories(&self) -> Result<()> {
+        info!("started backfilling GitHub repository stats");
+
+        let mut conn = self.pool.get()?;
+        let needs_backfilling = conn.query(
+            "SELECT releases.id, crates.name, releases.version, releases.repository_url
+             FROM releases
+             INNER JOIN crates ON (crates.id = releases.crate_id)
+             WHERE github_repo IS NULL AND repository_url LIKE '%github.com%';",
+            &[],
+        )?;
+
+        for row in &needs_backfilling {
+            let id: i32 = row.get("id");
+            let name: String = row.get("name");
+            let version: String = row.get("version");
+
+            if let Some(node_id) = self.load_repository(&mut conn, row.get("repository_url"))? {
+                conn.execute(
+                    "UPDATE releases SET github_repo = $1 WHERE id = $2;",
+                    &[&node_id, &id],
+                )?;
+                info!("backfilled GitHub repository for {} {}", name, version);
+            } else {
+                debug!("{} {} does not point to a GitHub repository", name, version);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn load_repository(&self, conn: &mut Client, url: &str) -> Result<Option<String>> {
+        let name = match RepositoryName::from_url(url) {
+            Some(name) => name,
+            None => return Ok(None),
+        };
+
+        // Avoid querying the GitHub API for repositories we already loaded.
+        if let Some(row) = conn.query_opt(
+            "SELECT id FROM github_repos WHERE name = $1 LIMIT 1;",
+            &[&format!("{}/{}", name.owner, name.repo)],
+        )? {
+            return Ok(Some(row.get("id")));
+        }
+
+        // Fetch the latest information from the GitHub API.
+        let response: GraphResponse<GraphRepositoryNode> = self.graphql(
+            GRAPHQL_SINGLE,
+            serde_json::json!({
+                "owner": name.owner,
+                "repo": name.repo,
+            }),
+        )?;
+        if let Some(repo) = response.data.repository {
+            self.store_repository(conn, &repo)?;
+            Ok(Some(repo.id))
+        } else if let Some(error) = response.errors.get(0) {
+            use GraphErrorPath::*;
+            match (error.error_type.as_str(), error.path.as_slice()) {
+                ("NOT_FOUND", [Segment(repository)]) if repository == "repository" => Ok(None),
+                _ => failure::bail!("error loading repository: {}", error.message),
+            }
+        } else {
+            panic!("missing repository but there were no errors!");
+        }
+    }
+
     /// Updates github fields in crates table
     pub fn update_all_crates(&self) -> Result<()> {
         info!("started updating GitHub repository stats");
@@ -103,18 +182,12 @@ impl GithubUpdater {
     }
 
     fn update_repositories(&self, conn: &mut Client, node_ids: &[String]) -> Result<()> {
-        let response: GraphResponse<GraphNodes<Option<GraphRepository>>> = self
-            .client
-            .post("https://api.github.com/graphql")
-            .json(&serde_json::json!({
-                "query": GRAPHQL_UPDATE,
-                "variables": {
-                    "ids": node_ids,
-                },
-            }))
-            .send()?
-            .error_for_status()?
-            .json()?;
+        let response: GraphResponse<GraphNodes<Option<GraphRepository>>> = self.graphql(
+            GRAPHQL_UPDATE,
+            serde_json::json!({
+                "ids": node_ids,
+            }),
+        )?;
 
         // The error is returned *before* we reach the rate limit, to ensure we always have an
         // amount of API calls we can make at any time.
@@ -145,6 +218,23 @@ impl GithubUpdater {
         }
 
         Ok(())
+    }
+
+    fn graphql<T: serde::de::DeserializeOwned>(
+        &self,
+        query: &str,
+        variables: impl serde::Serialize,
+    ) -> Result<GraphResponse<T>> {
+        Ok(self
+            .client
+            .post("https://api.github.com/graphql")
+            .json(&serde_json::json!({
+                "query": query,
+                "variables": variables,
+            }))
+            .send()?
+            .error_for_status()?
+            .json()?)
     }
 
     fn store_repository(&self, conn: &mut Client, repo: &GraphRepository) -> Result<()> {
@@ -248,6 +338,11 @@ struct GraphRateLimit {
 struct GraphNodes<T> {
     nodes: Vec<T>,
     rate_limit: GraphRateLimit,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphRepositoryNode {
+    repository: Option<GraphRepository>,
 }
 
 #[derive(Debug, Deserialize)]
