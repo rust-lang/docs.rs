@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
 use log::{info, trace, warn};
+use once_cell::sync::Lazy;
 use postgres::Client;
 use regex::Regex;
 use reqwest::{
@@ -184,23 +185,30 @@ impl GithubUpdater {
     }
 }
 
-fn get_github_path(url: &str) -> Option<String> {
-    let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
-    match re.captures(url) {
-        Some(cap) => {
-            let username = cap.get(1).unwrap().as_str();
-            let reponame = cap.get(2).unwrap().as_str();
+#[derive(Debug, Eq, PartialEq)]
+struct RepositoryName<'a> {
+    owner: &'a str,
+    repo: &'a str,
+}
 
-            let reponame = if reponame.ends_with(".git") {
-                reponame.split(".git").next().unwrap()
-            } else {
-                reponame
-            };
+impl<'a> RepositoryName<'a> {
+    fn from_url(url: &'a str) -> Option<Self> {
+        static RE: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"https?://(www.)?github\.com/(?P<owner>[\w\._-]+)/(?P<repo>[\w\._-]+)")
+                .unwrap()
+        });
 
-            Some(format!("{}/{}", username, reponame))
+        match RE.captures(url) {
+            Some(cap) => {
+                let owner = cap.name("owner").expect("missing group 'owner'").as_str();
+                let repo = cap.name("repo").expect("missing group 'repo'").as_str();
+                Some(Self {
+                    owner,
+                    repo: repo.strip_suffix(".git").unwrap_or(repo),
+                })
+            }
+            None => None,
         }
-
-        None => None,
     }
 }
 
@@ -265,26 +273,27 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_get_github_path() {
-        assert_eq!(
-            get_github_path("https://github.com/onur/cratesfyi"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("http://github.com/onur/cratesfyi"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/onur/cratesfyi.git"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/onur23cmD_M_R_L_/crates_fy-i"),
-            Some("onur23cmD_M_R_L_/crates_fy-i".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/docopt/docopt.rs"),
-            Some("docopt/docopt.rs".to_string())
-        );
+    fn test_repository_name() {
+        macro_rules! assert_name {
+            ($url:expr => ($owner:expr, $repo: expr)) => {
+                assert_eq!(
+                    RepositoryName::from_url($url),
+                    Some(RepositoryName {
+                        owner: $owner,
+                        repo: $repo
+                    })
+                );
+            };
+        }
+
+        assert_name!("https://github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("http://github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("https://www.github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("http://www.github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("https://github.com/onur/cratesfyi.git" => ("onur", "cratesfyi"));
+        assert_name!("https://github.com/docopt/docopt.rs" => ("docopt", "docopt.rs"));
+        assert_name!("https://github.com/onur23cmD_M_R_L_/crates_fy-i" => (
+            "onur23cmD_M_R_L_", "crates_fy-i"
+        ));
     }
 }
