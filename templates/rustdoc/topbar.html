@@ -59,13 +59,13 @@
                             {%- endif -%}
 
                             {# If the crate is hosted on GitHub, show some stats #}
-                            {%- if krate.github -%}
+                            {%- if krate.github_metadata -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                         {{ "github" | fab(fw=true) }}
-                                        {{ "star" | fas(fw=true) }} {{ krate.github_stars }}
-                                        {{ "code-branch" | fas(fw=true) }} {{ krate.github_forks }}
-                                        {{ "exclamation-circle" | fas(fw=true) }} {{ krate.github_issues }}
+                                        {{ "star" | fas(fw=true) }} {{ krate.github_metadata.stars }}
+                                        {{ "code-branch" | fas(fw=true) }} {{ krate.github_metadata.forks }}
+                                        {{ "exclamation-circle" | fas(fw=true) }} {{ krate.github_metadata.issues }}
                                     </a>
                                 </li>
 

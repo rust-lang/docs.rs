@@ -33,10 +33,7 @@ pub struct CrateDetails {
     have_examples: bool, // need to check this manually
     pub target_name: String,
     releases: Vec<Release>,
-    github: bool, // is crate hosted in github
-    github_stars: Option<i32>,
-    github_forks: Option<i32>,
-    github_issues: Option<i32>,
+    github_metadata: Option<GitHubMetadata>,
     pub(crate) metadata: MetaData,
     is_library: bool,
     license: Option<String>,
@@ -49,6 +46,13 @@ pub struct CrateDetails {
     pub(crate) crate_id: i32,
     /// Database id for this release
     pub(crate) release_id: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct GitHubMetadata {
+    stars: i32,
+    forks: i32,
+    issues: i32,
 }
 
 fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
@@ -94,9 +98,10 @@ impl CrateDetails {
                 releases.have_examples,
                 releases.target_name,
                 ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS versions,
-                crates.github_stars,
-                crates.github_forks,
-                crates.github_issues,
+                releases.github_repo,
+                github_repos.stars AS github_stars,
+                github_repos.forks AS github_forks,
+                github_repos.issues AS github_issues,
                 releases.is_library,
                 releases.yanked,
                 releases.doc_targets,
@@ -110,6 +115,7 @@ impl CrateDetails {
             FROM releases
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
+            LEFT JOIN github_repos ON releases.github_repo = github_repos.id
             WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version]).unwrap();
@@ -137,6 +143,16 @@ impl CrateDetails {
                 .into_iter()
                 .map(|version| map_to_release(conn, crate_id, version))
                 .collect()
+        };
+
+        let github_metadata = if krate.get::<_, Option<String>>("github_repo").is_some() {
+            Some(GitHubMetadata {
+                issues: krate.get("github_issues"),
+                stars: krate.get("github_stars"),
+                forks: krate.get("github_forks"),
+            })
+        } else {
+            None
         };
 
         let metadata = MetaData {
@@ -175,10 +191,7 @@ impl CrateDetails {
             have_examples: krate.get("have_examples"),
             target_name: krate.get("target_name"),
             releases,
-            github: false,
-            github_stars: krate.get("github_stars"),
-            github_forks: krate.get("github_forks"),
-            github_issues: krate.get("github_issues"),
+            github_metadata,
             metadata,
             is_library: krate.get("is_library"),
             license: krate.get("license"),
@@ -190,11 +203,6 @@ impl CrateDetails {
             crate_id,
             release_id,
         };
-
-        if let Some(repository_url) = crate_details.repository_url.clone() {
-            crate_details.github = repository_url.starts_with("http://github.com")
-                || repository_url.starts_with("https://github.com");
-        }
 
         // get authors
         let authors = conn
