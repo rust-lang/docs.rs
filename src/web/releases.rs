@@ -71,9 +71,9 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
         Order::ReleaseTime => ("releases.release_time", false),
-        Order::GithubStars => ("crates.github_stars", false),
+        Order::GithubStars => ("github_repos.stars", false),
         Order::RecentFailures => ("releases.release_time", true),
-        Order::FailuresByGithubStars => ("crates.github_stars", true),
+        Order::FailuresByGithubStars => ("github_repos.stars", true),
     };
     let query = format!(
         "SELECT crates.name,
@@ -82,13 +82,14 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             releases.target_name,
             releases.release_time,
             releases.rustdoc_status,
-            crates.github_stars
+            github_repos.stars
         FROM crates
         INNER JOIN releases ON crates.id = releases.crate_id
+        LEFT JOIN github_repos ON releases.github_repo = github_repos.id
         WHERE
             ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
             AND crates.latest_version_id = releases.id
-        ORDER BY {} DESC
+        ORDER BY {} DESC NULLS LAST
         LIMIT $1 OFFSET $2",
         ordering,
     );
@@ -103,7 +104,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             target_name: row.get(3),
             release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
             rustdoc_status: row.get(5),
-            stars: row.get(6),
+            stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
         })
         .collect()
 }
@@ -123,14 +124,15 @@ fn get_releases_by_author(
                releases.target_name,
                releases.release_time,
                releases.rustdoc_status,
-               crates.github_stars,
+               github_repos.stars,
                authors.name
         FROM crates
         INNER JOIN releases ON releases.id = crates.latest_version_id
         INNER JOIN author_rels ON releases.id = author_rels.rid
         INNER JOIN authors ON authors.id = author_rels.aid
+        LEFT JOIN github_repos ON releases.github_repo = github_repos.id
         WHERE authors.slug = $1
-        ORDER BY crates.github_stars DESC
+        ORDER BY github_repos.stars DESC NULLS LAST
         LIMIT $2 OFFSET $3";
     let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
 
@@ -149,7 +151,7 @@ fn get_releases_by_author(
                 target_name: row.get(3),
                 release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
                 rustdoc_status: row.get(5),
-                stars: row.get(6),
+                stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
             }
         })
         .collect();
@@ -171,15 +173,16 @@ fn get_releases_by_owner(
                         releases.target_name,
                         releases.release_time,
                         releases.rustdoc_status,
-                        crates.github_stars,
+                        github_repos.stars,
                         owners.name,
                         owners.login
                  FROM crates
                  INNER JOIN releases ON releases.id = crates.latest_version_id
                  INNER JOIN owner_rels ON owner_rels.cid = crates.id
                  INNER JOIN owners ON owners.id = owner_rels.oid
+                 LEFT JOIN github_repos ON releases.github_repo = github_repos.id
                  WHERE owners.login = $1
-                 ORDER BY crates.github_stars DESC
+                 ORDER BY github_repos.stars DESC NULLS LAST
                  LIMIT $2 OFFSET $3";
     let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
 
@@ -202,7 +205,7 @@ fn get_releases_by_owner(
                 target_name: row.get(3),
                 release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
                 rustdoc_status: row.get(5),
-                stars: row.get(6),
+                stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
             }
         })
         .collect();
@@ -242,7 +245,7 @@ fn get_search_results(
             releases.target_name AS target_name,
             releases.release_time AS release_time,
             releases.rustdoc_status AS rustdoc_status,
-            crates.github_stars AS github_stars,
+            github_repos.stars AS github_stars,
             COUNT(*) OVER() as total
         FROM crates
         INNER JOIN (
@@ -258,10 +261,11 @@ fn get_search_results(
             WHERE releases.rank = 1
         ) AS latest_release ON latest_release.crate_id = crates.id
         INNER JOIN releases ON latest_release.id = releases.id
+        LEFT JOIN github_repos ON releases.github_repo = github_repos.id
         WHERE
             ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65
             OR crates.name ILIKE CONCAT('%', $1, '%')
-        GROUP BY crates.id, releases.id
+        GROUP BY crates.id, releases.id, github_repos.stars
         ORDER BY
             levenshtein(crates.name, $1) ASC,
             crates.name ILIKE CONCAT('%', $1, '%'),
@@ -284,7 +288,7 @@ fn get_search_results(
             target_name: row.get("target_name"),
             release_time: DateTime::from_utc(row.get("release_time"), Utc),
             rustdoc_status: row.get("rustdoc_status"),
-            stars: row.get::<_, i32>("github_stars"),
+            stars: row.get::<_, Option<i32>>("github_stars").unwrap_or(0),
         })
         .collect();
 
