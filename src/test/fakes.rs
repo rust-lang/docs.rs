@@ -32,6 +32,8 @@ pub(crate) struct FakeRelease<'a> {
 }
 
 pub(crate) struct FakeBuild {
+    s3_build_log: Option<String>,
+    db_build_log: Option<String>,
     result: BuildResult,
 }
 
@@ -323,12 +325,13 @@ impl<'a> FakeRelease<'a> {
         if let Some(markdown) = self.readme {
             fs::write(crate_dir.join("README.md"), markdown)?;
         }
+        let default_target = self.default_target.unwrap_or(docsrs_metadata::HOST_TARGET);
         let release_id = crate::db::add_package_into_database(
             &mut db.conn(),
             &package,
             crate_dir,
             last_build_result,
-            self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
+            default_target,
             source_meta,
             self.doc_targets,
             &self.registry_release_data,
@@ -343,7 +346,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )?;
         for build in &self.builds {
-            build.create(&mut db.conn(), release_id)?;
+            build.create(&mut db.conn(), &*storage, release_id, default_target)?;
         }
         if let Some(coverage) = self.doc_coverage {
             crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;
@@ -384,6 +387,7 @@ impl FakeBuild {
                 rustc_version: rustc_version.into(),
                 ..self.result
             },
+            ..self
         }
     }
 
@@ -393,15 +397,28 @@ impl FakeBuild {
                 docsrs_version: docsrs_version.into(),
                 ..self.result
             },
+            ..self
         }
     }
 
-    pub(crate) fn build_log(self, build_log: impl Into<String>) -> Self {
+    pub(crate) fn s3_build_log(self, build_log: impl Into<String>) -> Self {
         Self {
-            result: BuildResult {
-                build_log: build_log.into(),
-                ..self.result
-            },
+            s3_build_log: Some(build_log.into()),
+            ..self
+        }
+    }
+
+    pub(crate) fn db_build_log(self, build_log: impl Into<String>) -> Self {
+        Self {
+            db_build_log: Some(build_log.into()),
+            ..self
+        }
+    }
+
+    pub(crate) fn no_s3_build_log(self) -> Self {
+        Self {
+            s3_build_log: None,
+            ..self
         }
     }
 
@@ -411,11 +428,30 @@ impl FakeBuild {
                 successful,
                 ..self.result
             },
+            ..self
         }
     }
 
-    fn create(&self, conn: &mut Client, release_id: i32) -> Result<(), Error> {
-        crate::db::add_build_into_database(conn, release_id, &self.result)?;
+    fn create(
+        &self,
+        conn: &mut Client,
+        storage: &Storage,
+        release_id: i32,
+        default_target: &str,
+    ) -> Result<(), Error> {
+        let build_id = crate::db::add_build_into_database(conn, release_id, &self.result)?;
+
+        if let Some(db_build_log) = self.db_build_log.as_deref() {
+            conn.query(
+                "UPDATE builds SET output = $2 WHERE id = $1",
+                &[&build_id, &db_build_log],
+            )?;
+        }
+
+        if let Some(s3_build_log) = self.s3_build_log.as_deref() {
+            let path = format!("build-logs/{}/{}.txt", build_id, default_target);
+            storage.store_one(path, s3_build_log)?;
+        }
 
         Ok(())
     }
@@ -424,10 +460,11 @@ impl FakeBuild {
 impl Default for FakeBuild {
     fn default() -> Self {
         Self {
+            s3_build_log: Some("It works!".into()),
+            db_build_log: None,
             result: BuildResult {
                 rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
-                build_log: "It works!".into(),
                 successful: true,
             },
         }
