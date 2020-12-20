@@ -21,14 +21,12 @@ pub(crate) struct Build {
     docsrs_version: String,
     build_status: bool,
     build_time: DateTime<Utc>,
-    output: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
-    build_details: Option<Build>,
     limits: Limits,
 }
 
@@ -40,7 +38,6 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(req, router.find("name"));
     let version = cexpect!(req, router.find("version"));
-    let req_build_id: i32 = router.find("id").unwrap_or("0").parse().unwrap_or(0);
 
     let mut conn = extension!(req, Pool).get()?;
     let limits = ctry!(req, Limits::for_crate(&mut conn, name));
@@ -57,8 +54,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                 builds.rustc_version,
                 builds.cratesfyi_version,
                 builds.build_status,
-                builds.build_time,
-                builds.output
+                builds.build_time
              FROM builds
              INNER JOIN releases ON releases.id = builds.rid
              INNER JOIN crates ON releases.crate_id = crates.id
@@ -68,36 +64,18 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         )
     );
 
-    let mut build_details = None;
-    // FIXME: getting builds.output may cause performance issues when release have tons of builds
-    let mut builds = query
+    let builds: Vec<_> = query
         .into_iter()
-        .map(|row| {
-            let id: i32 = row.get("id");
-
-            let build = Build {
-                id,
-                rustc_version: row.get("rustc_version"),
-                docsrs_version: row.get("cratesfyi_version"),
-                build_status: row.get("build_status"),
-                build_time: row.get("build_time"),
-                output: row.get("output"),
-            };
-
-            if id == req_build_id {
-                build_details = Some(build.clone());
-            }
-
-            build
+        .map(|row| Build {
+            id: row.get("id"),
+            rustc_version: row.get("rustc_version"),
+            docsrs_version: row.get("cratesfyi_version"),
+            build_status: row.get("build_status"),
+            build_time: row.get("build_time"),
         })
-        .collect::<Vec<Build>>();
+        .collect();
 
     if req.url.path().join("/").ends_with(".json") {
-        // Remove build output from build list for json output
-        for build in builds.iter_mut() {
-            build.output = None;
-        }
-
         let mut resp = Response::with((status::Ok, serde_json::to_string(&builds).unwrap()));
         resp.headers.set(ContentType::json());
         resp.headers.set(Expires(HttpDate(time::now())));
@@ -113,7 +91,6 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         BuildsPage {
             metadata: cexpect!(req, MetaData::from_crate(&mut conn, &name, &version)),
             builds,
-            build_details,
             limits,
         }
         .into_response(req)
@@ -295,36 +272,6 @@ mod tests {
             assert!(values.contains(&"100 KB"));
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn build_logs() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("foo")
-                .version("0.1.0")
-                .builds(vec![FakeBuild::default().build_log("A build log")])
-                .create()?;
-
-            let page = kuchiki::parse_html().one(
-                env.frontend()
-                    .get("/crate/foo/0.1.0/builds")
-                    .send()?
-                    .text()?,
-            );
-
-            let node = page.select("ul > li a.release").unwrap().next().unwrap();
-            let attrs = node.attributes.borrow();
-            let url = attrs.get("href").unwrap();
-
-            let page = kuchiki::parse_html().one(env.frontend().get(url).send()?.text()?);
-
-            let log = page.select("pre").unwrap().next().unwrap().text_contents();
-
-            assert!(log.contains("A build log"));
 
             Ok(())
         });

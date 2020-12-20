@@ -9,6 +9,7 @@ use std::{error::Error, fmt};
 #[derive(Debug, Copy, Clone)]
 pub enum Nope {
     ResourceNotFound,
+    BuildNotFound,
     CrateNotFound,
     VersionNotFound,
     NoResults,
@@ -19,6 +20,7 @@ impl fmt::Display for Nope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match *self {
             Nope::ResourceNotFound => "Requested resource not found",
+            Nope::BuildNotFound => "Requested build not found",
             Nope::CrateNotFound => "Requested crate not found",
             Nope::VersionNotFound => "Requested crate does not have specified version",
             Nope::NoResults => "Search yielded no results",
@@ -35,6 +37,7 @@ impl From<Nope> for IronError {
 
         let status = match err {
             Nope::ResourceNotFound
+            | Nope::BuildNotFound
             | Nope::CrateNotFound
             | Nope::VersionNotFound
             | Nope::NoResults => status::NotFound,
@@ -58,6 +61,13 @@ impl Handler for Nope {
                 }
                 .into_response(req)
             }
+
+            Nope::BuildNotFound => ErrorPage {
+                title: "The requested build does not exist",
+                message: Some("no such build".into()),
+                status: Status::NotFound,
+            }
+            .into_response(req),
 
             Nope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
