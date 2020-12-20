@@ -89,7 +89,7 @@ pub(super) fn build_routes() -> Routes {
     );
     routes.internal_page(
         "/crate/:name/:version/builds/:id",
-        super::builds::build_list_handler,
+        super::build_details::build_details_handler,
     );
     routes.internal_page(
         "/crate/:name/:version/features",

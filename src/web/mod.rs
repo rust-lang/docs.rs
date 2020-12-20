@@ -77,6 +77,7 @@ macro_rules! extension {
     }};
 }
 
+mod build_details;
 mod builds;
 mod crate_details;
 mod error;
