@@ -322,7 +322,7 @@ impl RustwideBuilder {
 
         let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
-        let res = build_dir
+        let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 use docsrs_metadata::BuildTargets;
@@ -414,7 +414,9 @@ impl RustwideBuilder {
                     add_doc_coverage(&mut conn, release_id, doc_coverage)?;
                 }
 
-                add_build_into_database(&mut conn, release_id, &res.result)?;
+                let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
+                let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
+                self.storage.store_one(build_log_path, res.build_log)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
                 match self.index.api().get_crate_data(name) {
@@ -422,13 +424,13 @@ impl RustwideBuilder {
                     Err(err) => warn!("{:#?}", err),
                 }
 
-                Ok(res)
+                Ok(res.result.successful)
             })?;
 
         build_dir.purge()?;
         krate.purge_from_cache(&self.workspace)?;
         local_storage.close()?;
-        Ok(res.result.successful)
+        Ok(successful)
     }
 
     fn build_target(
@@ -556,13 +558,13 @@ impl RustwideBuilder {
 
         Ok(FullBuildResult {
             result: BuildResult {
-                build_log: storage.to_string(),
                 rustc_version: self.rustc_version.clone(),
                 docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                 successful,
             },
             doc_coverage,
             cargo_metadata,
+            build_log: storage.to_string(),
             target: target.to_string(),
         })
     }
@@ -706,6 +708,7 @@ struct FullBuildResult {
     target: String,
     cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
+    build_log: String,
 }
 
 #[derive(Clone, Copy)]
@@ -725,6 +728,5 @@ pub(crate) struct DocCoverage {
 pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
-    pub(crate) build_log: String,
     pub(crate) successful: bool,
 }

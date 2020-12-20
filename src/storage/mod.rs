@@ -149,9 +149,6 @@ impl Storage {
 
     // Store all files in `root_dir` into the backend under `prefix`.
     //
-    // If the environment is configured with S3 credentials, this will upload to S3;
-    // otherwise, this will store files in the database.
-    //
     // This returns (map<filename, mime type>, set<compression algorithms>).
     pub(crate) fn store_all(
         &self,
@@ -199,10 +196,36 @@ impl Storage {
         self.store_inner(blobs.into_iter().map(Ok))
     }
 
+    // Store file into the backend at the given path (also used to detect mime type), returns the
+    // chosen compression algorithm
+    pub(crate) fn store_one(
+        &self,
+        path: impl Into<String>,
+        content: impl Into<Vec<u8>>,
+    ) -> Result<CompressionAlgorithm, Error> {
+        let path = path.into();
+        let content = content.into();
+        let alg = CompressionAlgorithm::default();
+        let content = compress(&*content, alg)?;
+        let mime = detect_mime(&path)?.to_owned();
+
+        self.store_inner(std::iter::once(Ok(Blob {
+            path,
+            mime,
+            content,
+            compression: Some(alg),
+            // this field is ignored by the backend
+            date_updated: Utc::now(),
+        })))?;
+
+        Ok(alg)
+    }
+
     fn store_inner(
         &self,
-        mut blobs: impl Iterator<Item = Result<Blob, Error>>,
+        blobs: impl IntoIterator<Item = Result<Blob, Error>>,
     ) -> Result<(), Error> {
+        let mut blobs = blobs.into_iter();
         self.transaction(|trans| {
             loop {
                 let batch: Vec<_> = blobs
@@ -249,13 +272,13 @@ trait StorageTransaction {
     fn complete(self: Box<Self>) -> Result<(), Error>;
 }
 
-fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
-    let mime = mime_guess::from_path(file_path)
+fn detect_mime(file_path: impl AsRef<Path>) -> Result<&'static str, Error> {
+    let mime = mime_guess::from_path(file_path.as_ref())
         .first_raw()
         .unwrap_or("text/plain");
     Ok(match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
-            match file_path.extension().and_then(OsStr::to_str) {
+            match file_path.as_ref().extension().and_then(OsStr::to_str) {
                 Some("md") => "text/markdown",
                 Some("rs") => "text/rust",
                 Some("markdown") => "text/markdown",
