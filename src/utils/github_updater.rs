@@ -10,6 +10,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
 };
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 const APP_USER_AGENT: &str = concat!(
@@ -93,12 +94,16 @@ impl GithubUpdater {
             &[],
         )?;
 
+        let mut missing_urls = HashSet::new();
         for row in &needs_backfilling {
             let id: i32 = row.get("id");
             let name: String = row.get("name");
             let version: String = row.get("version");
+            let url: String = row.get("repository_url");
 
-            if let Some(node_id) = self.load_repository(&mut conn, row.get("repository_url"))? {
+            if missing_urls.contains(&url) {
+                debug!("{} {} points to a known missing repo", name, version);
+            } else if let Some(node_id) = self.load_repository(&mut conn, &url)? {
                 conn.execute(
                     "UPDATE releases SET github_repo = $1 WHERE id = $2;",
                     &[&node_id, &id],
@@ -106,6 +111,7 @@ impl GithubUpdater {
                 info!("backfilled GitHub repository for {} {}", name, version);
             } else {
                 debug!("{} {} does not point to a GitHub repository", name, version);
+                missing_urls.insert(url);
             }
         }
 
@@ -259,7 +265,7 @@ impl GithubUpdater {
                 &repo.id,
                 &repo.name_with_owner,
                 &repo.description,
-                &repo.pushed_at.naive_utc(),
+                &repo.pushed_at.map(|time| time.naive_utc()),
                 &(repo.stargazer_count as i32),
                 &(repo.fork_count as i32),
                 &(repo.issues.total_count as i32),
@@ -350,8 +356,8 @@ struct GraphRepositoryNode {
 struct GraphRepository {
     id: String,
     name_with_owner: String,
-    pushed_at: DateTime<Utc>,
-    description: String,
+    pushed_at: Option<DateTime<Utc>>,
+    description: Option<String>,
     stargazer_count: i64,
     fork_count: i64,
     issues: GraphIssues,
