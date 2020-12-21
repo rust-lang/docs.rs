@@ -5,6 +5,7 @@ use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
 use failure::Error;
+use postgres::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,6 +27,7 @@ pub(crate) struct FakeRelease<'a> {
     has_examples: bool,
     /// This stores the content, while `package.readme` stores the filename
     readme: Option<&'a str>,
+    github_stats: Option<FakeGithubStats>,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -86,6 +88,7 @@ impl<'a> FakeRelease<'a> {
             has_docs: true,
             has_examples: false,
             readme: None,
+            github_stats: None,
         }
     }
 
@@ -216,6 +219,22 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn github_stats(
+        mut self,
+        repo: impl Into<String>,
+        stars: i32,
+        forks: i32,
+        issues: i32,
+    ) -> Self {
+        self.github_stats = Some(FakeGithubStats {
+            repo: repo.into(),
+            stars,
+            forks,
+            issues,
+        });
+        self
+    }
+
     /// Returns the release_id
     pub(crate) fn create(self) -> Result<i32, Error> {
         use std::fs;
@@ -284,6 +303,11 @@ impl<'a> FakeRelease<'a> {
             }
         }
 
+        let github_repo = match self.github_stats {
+            Some(stats) => Some(stats.create(&mut self.db.conn())?),
+            None => None,
+        };
+
         let crate_dir = tempdir.path();
         if let Some(markdown) = self.readme {
             fs::write(crate_dir.join("README.md"), markdown)?;
@@ -300,7 +324,7 @@ impl<'a> FakeRelease<'a> {
             self.has_docs,
             self.has_examples,
             algs,
-            None,
+            github_repo,
         )?;
         crate::db::update_crate_data_in_database(
             &mut db.conn(),
@@ -313,5 +337,29 @@ impl<'a> FakeRelease<'a> {
         }
 
         Ok(release_id)
+    }
+}
+
+struct FakeGithubStats {
+    repo: String,
+    stars: i32,
+    forks: i32,
+    issues: i32,
+}
+
+impl FakeGithubStats {
+    fn create(&self, conn: &mut Client) -> Result<String, Error> {
+        let existing_count: i64 = conn
+            .query_one("SELECT COUNT(*) FROM github_repos;", &[])?
+            .get(0);
+        let id = base64::encode(format!("FAKE ID {}", existing_count));
+
+        conn.execute(
+            "INSERT INTO github_repos (id, name, description, last_commit, stars, forks, issues, updated_at)
+             VALUES ($1, $2, 'Fake description!', NOW(), $3, $4, $5, NOW());",
+            &[&id, &self.repo, &self.stars, &self.forks, &self.issues],
+        )?;
+
+        Ok(id)
     }
 }

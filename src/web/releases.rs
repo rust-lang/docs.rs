@@ -697,6 +697,40 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
+    fn releases_by_stars() {
+        wrapper(|env| {
+            let db = env.db();
+
+            env.fake_release()
+                .name("foo")
+                .version("1.0.0")
+                .github_stats("ghost/foo", 10, 10, 10)
+                .create()?;
+            env.fake_release()
+                .name("bar")
+                .version("1.0.0")
+                .github_stats("ghost/bar", 20, 20, 20)
+                .create()?;
+            env.fake_release().name("baz").version("1.0.0").create()?;
+
+            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars);
+            assert_eq!(
+                vec![
+                    "bar", // 20 stars
+                    "foo", // 10 stars
+                    "baz", // no stars (still included at the bottom)
+                ],
+                releases
+                    .iter()
+                    .map(|release| release.name.as_str())
+                    .collect::<Vec<_>>(),
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn database_search() {
         wrapper(|env| {
             let db = env.db();
