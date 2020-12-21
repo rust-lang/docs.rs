@@ -374,6 +374,9 @@ enum DatabaseSubcommand {
     /// Updates github stats for crates.
     UpdateGithubFields,
 
+    /// Backfill GitHub stats for crates.
+    BackfillGithubStats,
+
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[structopt(name = "CRATE")]
@@ -422,8 +425,13 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateGithubFields => {
-                docs_rs::utils::GithubUpdater::new(&*ctx.config()?, ctx.pool()?)?
+                docs_rs::utils::GithubUpdater::new(ctx.config()?, ctx.pool()?)?
                     .update_all_crates()?;
+            }
+
+            Self::BackfillGithubStats => {
+                docs_rs::utils::GithubUpdater::new(ctx.config()?, ctx.pool()?)?
+                    .backfill_repositories()?;
             }
 
             Self::UpdateCrateRegistryFields { name } => {

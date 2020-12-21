@@ -97,7 +97,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     if config.tmp_disable_github_updater {
         log::warn!("the github stats updater was disabled!");
     } else {
-        let github_updater = GithubUpdater::new(&config, context.pool()?)?;
+        let github_updater = GithubUpdater::new(config, context.pool()?)?;
         cron(
             "github stats updater",
             Duration::from_secs(60 * 60),

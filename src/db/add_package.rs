@@ -37,6 +37,7 @@ pub(crate) fn add_package_into_database(
     has_docs: bool,
     has_examples: bool,
     compression_algorithms: std::collections::HashSet<CompressionAlgorithm>,
+    github_repo: Option<String>,
 ) -> Result<i32> {
     debug!("Adding package into database");
     let crate_id = initialize_package_in_database(conn, metadata_pkg)?;
@@ -54,12 +55,12 @@ pub(crate) fn add_package_into_database(
             homepage_url, description, description_long, readme,
             authors, keywords, have_examples, downloads, files,
             doc_targets, is_library, doc_rustc_version,
-            documentation_url, default_target, features
+            documentation_url, default_target, features, github_repo
          )
          VALUES (
             $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,
             $10, $11, $12, $13, $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23, $24, $25, $26
+            $19, $20, $21, $22, $23, $24, $25, $26, $27
          )
          ON CONFLICT (crate_id, version) DO UPDATE
             SET release_time = $3,
@@ -85,7 +86,8 @@ pub(crate) fn add_package_into_database(
                 doc_rustc_version = $23,
                 documentation_url = $24,
                 default_target = $25,
-                features = $26
+                features = $26,
+                github_repo = $27
          RETURNING id",
         &[
             &crate_id,
@@ -114,6 +116,7 @@ pub(crate) fn add_package_into_database(
             &metadata_pkg.documentation,
             &default_target,
             &features,
+            &github_repo,
         ],
     )?;
 

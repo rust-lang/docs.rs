@@ -1,8 +1,8 @@
 use crate::error::Result;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
-use failure::err_msg;
-use log::{debug, warn};
+use log::{debug, info, trace, warn};
+use once_cell::sync::Lazy;
 use postgres::Client;
 use regex::Regex;
 use reqwest::{
@@ -10,6 +10,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
 };
 use serde::Deserialize;
+use std::sync::Arc;
 
 const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -17,25 +18,47 @@ const APP_USER_AGENT: &str = concat!(
     include_str!(concat!(env!("OUT_DIR"), "/git_version"))
 );
 
-/// Fields we need in docs.rs
-#[derive(Debug)]
-struct GitHubFields {
-    node_id: String,
-    full_name: String,
-    description: String,
-    stars: i64,
-    forks: i64,
-    issues: i64,
-    last_commit: Option<DateTime<Utc>>,
-}
+const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
+    nodes(ids: $ids) {
+        ... on Repository {
+            id
+            nameWithOwner
+            pushedAt
+            description
+            stargazerCount
+            forkCount
+            issues { totalCount }
+        }
+    }
+    rateLimit {
+        remaining
+    }
+}";
+
+const GRAPHQL_SINGLE: &str = "query($owner: String!, $repo: String!) {
+    repository(owner: $owner, name: $repo) {
+        id
+        nameWithOwner
+        pushedAt
+        description
+        stargazerCount
+        forkCount
+        issues { totalCount }
+    }
+}";
+
+/// How many repositories to update in a single chunk. Values over 100 are probably going to be
+/// rejected by the GraphQL API.
+const UPDATE_CHUNK_SIZE: usize = 100;
 
 pub struct GithubUpdater {
     client: HttpClient,
     pool: Pool,
+    config: Arc<Config>,
 }
 
 impl GithubUpdater {
-    pub fn new(config: &Config, pool: Pool) -> Result<Self> {
+    pub fn new(config: Arc<Config>, pool: Pool) -> Result<Self> {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
@@ -51,81 +74,174 @@ impl GithubUpdater {
 
         let client = HttpClient::builder().default_headers(headers).build()?;
 
-        Ok(GithubUpdater { client, pool })
+        Ok(GithubUpdater {
+            client,
+            pool,
+            config,
+        })
+    }
+
+    pub fn backfill_repositories(&self) -> Result<()> {
+        info!("started backfilling GitHub repository stats");
+
+        let mut conn = self.pool.get()?;
+        let needs_backfilling = conn.query(
+            "SELECT releases.id, crates.name, releases.version, releases.repository_url
+             FROM releases
+             INNER JOIN crates ON (crates.id = releases.crate_id)
+             WHERE github_repo IS NULL AND repository_url LIKE '%github.com%';",
+            &[],
+        )?;
+
+        for row in &needs_backfilling {
+            let id: i32 = row.get("id");
+            let name: String = row.get("name");
+            let version: String = row.get("version");
+
+            if let Some(node_id) = self.load_repository(&mut conn, row.get("repository_url"))? {
+                conn.execute(
+                    "UPDATE releases SET github_repo = $1 WHERE id = $2;",
+                    &[&node_id, &id],
+                )?;
+                info!("backfilled GitHub repository for {} {}", name, version);
+            } else {
+                debug!("{} {} does not point to a GitHub repository", name, version);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn load_repository(&self, conn: &mut Client, url: &str) -> Result<Option<String>> {
+        let name = match RepositoryName::from_url(url) {
+            Some(name) => name,
+            None => return Ok(None),
+        };
+
+        // Avoid querying the GitHub API for repositories we already loaded.
+        if let Some(row) = conn.query_opt(
+            "SELECT id FROM github_repos WHERE name = $1 LIMIT 1;",
+            &[&format!("{}/{}", name.owner, name.repo)],
+        )? {
+            return Ok(Some(row.get("id")));
+        }
+
+        // Fetch the latest information from the GitHub API.
+        let response: GraphResponse<GraphRepositoryNode> = self.graphql(
+            GRAPHQL_SINGLE,
+            serde_json::json!({
+                "owner": name.owner,
+                "repo": name.repo,
+            }),
+        )?;
+        if let Some(repo) = response.data.repository {
+            self.store_repository(conn, &repo)?;
+            Ok(Some(repo.id))
+        } else if let Some(error) = response.errors.get(0) {
+            use GraphErrorPath::*;
+            match (error.error_type.as_str(), error.path.as_slice()) {
+                ("NOT_FOUND", [Segment(repository)]) if repository == "repository" => Ok(None),
+                _ => failure::bail!("error loading repository: {}", error.message),
+            }
+        } else {
+            panic!("missing repository but there were no errors!");
+        }
     }
 
     /// Updates github fields in crates table
     pub fn update_all_crates(&self) -> Result<()> {
-        debug!("Starting update of all crates");
+        info!("started updating GitHub repository stats");
 
-        if self.is_rate_limited()? {
-            warn!("Skipping update because of rate limit");
+        let mut conn = self.pool.get()?;
+        let needs_update = conn
+            .query(
+                "SELECT id FROM github_repos WHERE updated_at < NOW() - INTERVAL '1 day';",
+                &[],
+            )?
+            .into_iter()
+            .map(|row| row.get(0))
+            .collect::<Vec<String>>();
+
+        if needs_update.is_empty() {
+            info!("no GitHub repository stats needed to be updated");
             return Ok(());
         }
 
-        let mut conn = self.pool.get()?;
-        // TODO: This query assumes repository field in Cargo.toml is
-        //       always the same across all versions of a crate
-        let rows = conn.query(
-            "SELECT DISTINCT ON (crates.name)
-                    crates.name,
-                    crates.id,
-                    releases.repository_url
-             FROM crates
-             INNER JOIN releases ON releases.crate_id = crates.id
-             WHERE releases.repository_url ~ '^https?://github.com' AND
-                   (crates.github_last_update < NOW() - INTERVAL '1 day' OR
-                    crates.github_last_update IS NULL)
-             ORDER BY crates.name, releases.release_time DESC",
-            &[],
-        )?;
-
-        for row in &rows {
-            let crate_name: String = row.get(0);
-            let crate_id: i32 = row.get(1);
-            let repository_url: String = row.get(2);
-
-            debug!("Updating {}", crate_name);
-            if let Err(err) = self.update_crate(&mut conn, crate_id, &repository_url) {
-                if self.is_rate_limited()? {
-                    warn!("Skipping remaining updates because of rate limit");
+        for chunk in needs_update.chunks(UPDATE_CHUNK_SIZE) {
+            if let Err(err) = self.update_repositories(&mut conn, &chunk) {
+                if err.downcast_ref::<RateLimitReached>().is_some() {
+                    warn!("rate limit reached, blocked the GitHub repository stats updater");
                     return Ok(());
                 }
-                warn!("Failed to update {}: {}", crate_name, err);
+                return Err(err);
             }
         }
 
-        debug!("Completed all updates");
+        info!("finished updating GitHub repository stats");
         Ok(())
     }
 
-    fn is_rate_limited(&self) -> Result<bool> {
-        #[derive(Deserialize)]
-        struct Response {
-            resources: Resources,
+    fn update_repositories(&self, conn: &mut Client, node_ids: &[String]) -> Result<()> {
+        let response: GraphResponse<GraphNodes<Option<GraphRepository>>> = self.graphql(
+            GRAPHQL_UPDATE,
+            serde_json::json!({
+                "ids": node_ids,
+            }),
+        )?;
+
+        // The error is returned *before* we reach the rate limit, to ensure we always have an
+        // amount of API calls we can make at any time.
+        trace!(
+            "GitHub GraphQL rate limit remaining: {}",
+            response.data.rate_limit.remaining
+        );
+        if response.data.rate_limit.remaining < self.config.github_updater_min_rate_limit {
+            return Err(RateLimitReached.into());
         }
 
-        #[derive(Deserialize)]
-        struct Resources {
-            core: Resource,
+        // When a node is missing (for example if the repository was deleted or made private) the
+        // GraphQL API will return *both* a `null` instead of the data in the nodes list and a
+        // `NOT_FOUND` error in the errors list.
+        for node in &response.data.nodes {
+            if let Some(node) = node {
+                self.store_repository(conn, &node)?;
+            }
+        }
+        for error in &response.errors {
+            use GraphErrorPath::*;
+            match (error.error_type.as_str(), error.path.as_slice()) {
+                ("NOT_FOUND", [Segment(nodes), Index(idx)]) if nodes == "nodes" => {
+                    self.delete_repository(conn, &node_ids[*idx as usize])?;
+                }
+                _ => failure::bail!("error updating repositories: {}", error.message),
+            }
         }
 
-        #[derive(Deserialize)]
-        struct Resource {
-            remaining: u64,
-        }
-
-        let url = "https://api.github.com/rate_limit";
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
-
-        Ok(response.resources.core.remaining == 0)
+        Ok(())
     }
 
-    fn update_crate(&self, conn: &mut Client, crate_id: i32, repository_url: &str) -> Result<()> {
-        let path =
-            get_github_path(repository_url).ok_or_else(|| err_msg("Failed to get github path"))?;
-        let fields = self.get_github_fields(&path)?;
+    fn graphql<T: serde::de::DeserializeOwned>(
+        &self,
+        query: &str,
+        variables: impl serde::Serialize,
+    ) -> Result<GraphResponse<T>> {
+        Ok(self
+            .client
+            .post("https://api.github.com/graphql")
+            .json(&serde_json::json!({
+                "query": query,
+                "variables": variables,
+            }))
+            .send()?
+            .error_for_status()?
+            .json()?)
+    }
 
+    fn store_repository(&self, conn: &mut Client, repo: &GraphRepository) -> Result<()> {
+        trace!(
+            "storing GitHub repository stats for {}",
+            repo.name_with_owner
+        );
         conn.execute(
             "INSERT INTO github_repos (
                  id, name, description, last_commit, stars, forks, issues, updated_at
@@ -140,92 +256,111 @@ impl GithubUpdater {
                  issues = $7,
                  updated_at = NOW();",
             &[
-                &fields.node_id,
-                &fields.full_name,
-                &fields.description,
-                &fields.last_commit.as_ref().map(|lc| lc.naive_utc()),
-                &(fields.stars as i32),
-                &(fields.forks as i32),
-                &(fields.issues as i32),
+                &repo.id,
+                &repo.name_with_owner,
+                &repo.description,
+                &repo.pushed_at.naive_utc(),
+                &(repo.stargazer_count as i32),
+                &(repo.fork_count as i32),
+                &(repo.issues.total_count as i32),
             ],
         )?;
-
-        conn.execute(
-            "UPDATE crates
-             SET github_description = $1,
-                 github_stars = $2, github_forks = $3,
-                 github_issues = $4, github_last_commit = $5,
-                 github_last_update = NOW()
-             WHERE id = $6",
-            &[
-                &fields.description,
-                &(fields.stars as i32),
-                &(fields.forks as i32),
-                &(fields.issues as i32),
-                &fields.last_commit.as_ref().map(|lc| lc.naive_utc()),
-                &crate_id,
-            ],
-        )?;
-
-        // Temporary statement to migrate production data over to the new table. Will be removed by
-        // Pietro's next PR.
-        conn.execute(
-            "UPDATE releases SET github_repo = $1 WHERE crate_id = $2;",
-            &[&fields.node_id, &crate_id],
-        )?;
-
         Ok(())
     }
 
-    fn get_github_fields(&self, path: &str) -> Result<GitHubFields> {
-        #[derive(Deserialize)]
-        struct Response {
-            node_id: String,
-            full_name: String,
-            #[serde(default)]
-            description: Option<String>,
-            #[serde(default)]
-            stargazers_count: i64,
-            #[serde(default)]
-            forks_count: i64,
-            #[serde(default)]
-            open_issues: i64,
-            pushed_at: Option<DateTime<Utc>>,
-        }
-
-        let url = format!("https://api.github.com/repos/{}", path);
-        let response: Response = self.client.get(&url).send()?.error_for_status()?.json()?;
-
-        Ok(GitHubFields {
-            node_id: response.node_id,
-            full_name: response.full_name,
-            description: response.description.unwrap_or_default(),
-            stars: response.stargazers_count,
-            forks: response.forks_count,
-            issues: response.open_issues,
-            last_commit: response.pushed_at,
-        })
+    fn delete_repository(&self, conn: &mut Client, id: &str) -> Result<()> {
+        trace!("removing GitHub repository stats for ID {}", id);
+        conn.execute("DELETE FROM github_repos WHERE id = $1;", &[&id])?;
+        Ok(())
     }
 }
 
-fn get_github_path(url: &str) -> Option<String> {
-    let re = Regex::new(r"https?://github\.com/([\w\._-]+)/([\w\._-]+)").unwrap();
-    match re.captures(url) {
-        Some(cap) => {
-            let username = cap.get(1).unwrap().as_str();
-            let reponame = cap.get(2).unwrap().as_str();
+#[derive(Debug, Eq, PartialEq)]
+struct RepositoryName<'a> {
+    owner: &'a str,
+    repo: &'a str,
+}
 
-            let reponame = if reponame.ends_with(".git") {
-                reponame.split(".git").next().unwrap()
-            } else {
-                reponame
-            };
+impl<'a> RepositoryName<'a> {
+    fn from_url(url: &'a str) -> Option<Self> {
+        static RE: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"https?://(www.)?github\.com/(?P<owner>[\w\._-]+)/(?P<repo>[\w\._-]+)")
+                .unwrap()
+        });
 
-            Some(format!("{}/{}", username, reponame))
+        match RE.captures(url) {
+            Some(cap) => {
+                let owner = cap.name("owner").expect("missing group 'owner'").as_str();
+                let repo = cap.name("repo").expect("missing group 'repo'").as_str();
+                Some(Self {
+                    owner,
+                    repo: repo.strip_suffix(".git").unwrap_or(repo),
+                })
+            }
+            None => None,
         }
-
-        None => None,
     }
+}
+
+#[derive(Debug, failure::Fail)]
+#[fail(display = "rate limit reached")]
+struct RateLimitReached;
+
+#[derive(Debug, Deserialize)]
+struct GraphResponse<T> {
+    data: T,
+    #[serde(default)]
+    errors: Vec<GraphError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphError {
+    #[serde(rename = "type")]
+    error_type: String,
+    path: Vec<GraphErrorPath>,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GraphErrorPath {
+    Segment(String),
+    Index(i64),
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphRateLimit {
+    remaining: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphNodes<T> {
+    nodes: Vec<T>,
+    rate_limit: GraphRateLimit,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphRepositoryNode {
+    repository: Option<GraphRepository>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphRepository {
+    id: String,
+    name_with_owner: String,
+    pushed_at: DateTime<Utc>,
+    description: String,
+    stargazer_count: i64,
+    fork_count: i64,
+    issues: GraphIssues,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphIssues {
+    total_count: i64,
 }
 
 #[cfg(test)]
@@ -233,26 +368,27 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_get_github_path() {
-        assert_eq!(
-            get_github_path("https://github.com/onur/cratesfyi"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("http://github.com/onur/cratesfyi"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/onur/cratesfyi.git"),
-            Some("onur/cratesfyi".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/onur23cmD_M_R_L_/crates_fy-i"),
-            Some("onur23cmD_M_R_L_/crates_fy-i".to_string())
-        );
-        assert_eq!(
-            get_github_path("https://github.com/docopt/docopt.rs"),
-            Some("docopt/docopt.rs".to_string())
-        );
+    fn test_repository_name() {
+        macro_rules! assert_name {
+            ($url:expr => ($owner:expr, $repo: expr)) => {
+                assert_eq!(
+                    RepositoryName::from_url($url),
+                    Some(RepositoryName {
+                        owner: $owner,
+                        repo: $repo
+                    })
+                );
+            };
+        }
+
+        assert_name!("https://github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("http://github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("https://www.github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("http://www.github.com/onur/cratesfyi" => ("onur", "cratesfyi"));
+        assert_name!("https://github.com/onur/cratesfyi.git" => ("onur", "cratesfyi"));
+        assert_name!("https://github.com/docopt/docopt.rs" => ("docopt", "docopt.rs"));
+        assert_name!("https://github.com/onur23cmD_M_R_L_/crates_fy-i" => (
+            "onur23cmD_M_R_L_", "crates_fy-i"
+        ));
     }
 }
