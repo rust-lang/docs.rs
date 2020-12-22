@@ -1,5 +1,6 @@
 mod fakes;
 
+pub(crate) use self::fakes::FakeBuild;
 use crate::db::{Pool, PoolClient};
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
