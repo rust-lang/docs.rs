@@ -693,7 +693,6 @@ mod test {
             env.fake_release()
                 .name("buggy")
                 .version("0.1.0")
-                .build_result_successful(true)
                 .rustdoc_file("settings.html")
                 .rustdoc_file("directory_1/index.html")
                 .rustdoc_file("directory_2.html/index.html")
@@ -704,7 +703,7 @@ mod test {
             env.fake_release()
                 .name("buggy")
                 .version("0.2.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             let web = env.frontend();
             assert_success("/", web)?;
@@ -873,7 +872,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
 
             let web = env.frontend();
@@ -1533,7 +1532,7 @@ mod test {
             env.fake_release()
                 .name("hexponent")
                 .version("0.2.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             let web = env.frontend();
 

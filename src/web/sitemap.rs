@@ -193,7 +193,7 @@ mod tests {
             env.fake_release().name("some_random_crate").create()?;
             env.fake_release()
                 .name("some_random_crate_that_failed")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
 
             // these fake crates appear only in the `s` sitemap
