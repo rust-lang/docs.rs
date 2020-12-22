@@ -5,11 +5,11 @@
         <stop offset="1" stop-opacity=".1"/>
     </linearGradient>
 
-    <mask id="round">
+    <clipPath id="round">
         <rect width="73" height="20" rx="3" fill="#fff"/>
-    </mask>
+    </clipPath>
 
-    <g mask="url(#round)">
+    <g clip-path="url(#round)">
         <rect width="34" height="20" fill="#555"/>
         <rect x="34" width="39" height="20" fill="#4d76ae"/>
         <rect width="73" height="20" fill="url(#smooth)"/>
