@@ -591,7 +591,7 @@ impl_webpage! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test::*, web::match_version};
+    use crate::{docbuilder::DocCoverage, test::*, web::match_version};
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
 
@@ -643,7 +643,12 @@ mod test {
                 .name("foo")
                 .version("0.0.1")
                 .source_file("test.rs", &[])
-                .coverage(6, 10, 2, 1)
+                .doc_coverage(DocCoverage {
+                    total_items: 10,
+                    documented_items: 6,
+                    total_items_needing_examples: 2,
+                    items_with_examples: 1,
+                })
                 .create()?;
             let web = env.frontend();
 
