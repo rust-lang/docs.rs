@@ -78,11 +78,11 @@ impl Badge {
                 <stop offset="1" stop-opacity=".1"/>
               </linearGradient>
 
-              <mask id="round">
+              <clipPath id="round">
                 <rect width="{badge_width}" height="20" rx="3" fill="#fff"/>
-              </mask>
+              </clipPath>
 
-              <g mask="url(#round)">
+              <g clip-path="url(#round)">
                 <rect width="{left_width}" height="20" fill="#555"/>
                 <rect x="{left_width}" width="{right_width}" height="20" fill="{color}"/>
                 <rect width="{badge_width}" height="20" fill="url(#smooth)"/>
