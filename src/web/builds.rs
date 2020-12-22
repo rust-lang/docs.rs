@@ -119,3 +119,214 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         .into_response(req)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test::{wrapper, FakeBuild};
+    use chrono::{DateTime, Duration, Utc};
+    use kuchiki::traits::TendrilSink;
+
+    #[test]
+    fn build_list() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.0.0")
+                        .docsrs_version("docs.rs 1.0.0"),
+                    FakeBuild::default()
+                        .successful(false)
+                        .rustc_version("rustc 2.0.0")
+                        .docsrs_version("docs.rs 2.0.0"),
+                    FakeBuild::default()
+                        .rustc_version("rustc 3.0.0")
+                        .docsrs_version("docs.rs 3.0.0"),
+                ])
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/foo/0.1.0/builds")
+                    .send()?
+                    .text()?,
+            );
+
+            let rows: Vec<_> = page
+                .select("ul > li a.release")
+                .unwrap()
+                .map(|row| row.text_contents())
+                .collect();
+
+            assert!(rows[0].contains("rustc 3.0.0"));
+            assert!(rows[0].contains("docs.rs 3.0.0"));
+            assert!(rows[1].contains("rustc 2.0.0"));
+            assert!(rows[1].contains("docs.rs 2.0.0"));
+            assert!(rows[2].contains("rustc 1.0.0"));
+            assert!(rows[2].contains("docs.rs 1.0.0"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn build_list_json() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.0.0")
+                        .docsrs_version("docs.rs 1.0.0"),
+                    FakeBuild::default()
+                        .successful(false)
+                        .rustc_version("rustc 2.0.0")
+                        .docsrs_version("docs.rs 2.0.0"),
+                    FakeBuild::default()
+                        .rustc_version("rustc 3.0.0")
+                        .docsrs_version("docs.rs 3.0.0"),
+                ])
+                .create()?;
+
+            let value: serde_json::Value = serde_json::from_str(
+                &env.frontend()
+                    .get("/crate/foo/0.1.0/builds.json")
+                    .send()?
+                    .text()?,
+            )?;
+
+            assert_eq!(value.pointer("/0/build_status"), Some(&true.into()));
+            assert_eq!(
+                value.pointer("/0/docsrs_version"),
+                Some(&"docs.rs 3.0.0".into())
+            );
+            assert_eq!(
+                value.pointer("/0/rustc_version"),
+                Some(&"rustc 3.0.0".into())
+            );
+            assert!(value.pointer("/0/id").unwrap().is_i64());
+            assert!(serde_json::from_value::<DateTime<Utc>>(
+                value.pointer("/0/build_time").unwrap().clone()
+            )
+            .is_ok());
+
+            assert_eq!(value.pointer("/1/build_status"), Some(&false.into()));
+            assert_eq!(
+                value.pointer("/1/docsrs_version"),
+                Some(&"docs.rs 2.0.0".into())
+            );
+            assert_eq!(
+                value.pointer("/1/rustc_version"),
+                Some(&"rustc 2.0.0".into())
+            );
+            assert!(value.pointer("/1/id").unwrap().is_i64());
+            assert!(serde_json::from_value::<DateTime<Utc>>(
+                value.pointer("/1/build_time").unwrap().clone()
+            )
+            .is_ok());
+
+            assert_eq!(value.pointer("/2/build_status"), Some(&true.into()));
+            assert_eq!(
+                value.pointer("/2/docsrs_version"),
+                Some(&"docs.rs 1.0.0".into())
+            );
+            assert_eq!(
+                value.pointer("/2/rustc_version"),
+                Some(&"rustc 1.0.0".into())
+            );
+            assert!(value.pointer("/2/id").unwrap().is_i64());
+            assert!(serde_json::from_value::<DateTime<Utc>>(
+                value.pointer("/2/build_time").unwrap().clone()
+            )
+            .is_ok());
+
+            assert!(
+                value.pointer("/1/build_time").unwrap().as_str().unwrap()
+                    < value.pointer("/0/build_time").unwrap().as_str().unwrap()
+            );
+            assert!(
+                value.pointer("/2/build_time").unwrap().as_str().unwrap()
+                    < value.pointer("/1/build_time").unwrap().as_str().unwrap()
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn limits() {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.1.0").create()?;
+
+            env.db().conn().query(
+                "INSERT INTO sandbox_overrides
+                    (crate_name, max_memory_bytes, timeout_seconds, max_targets)
+                 VALUES ($1, $2, $3, $4)",
+                &[
+                    &"foo",
+                    &3072i64,
+                    &(Duration::hours(2).num_seconds() as i32),
+                    &1,
+                ],
+            )?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/foo/0.1.0/builds")
+                    .send()?
+                    .text()?,
+            );
+
+            let header = page.select(".about h4").unwrap().next().unwrap();
+            assert_eq!(header.text_contents(), "foo's sandbox limits");
+
+            let values: Vec<_> = page
+                .select(".about table tr td:last-child")
+                .unwrap()
+                .map(|row| row.text_contents())
+                .collect();
+            let values: Vec<_> = values.iter().map(|v| &**v).collect();
+
+            dbg!(&values);
+            assert!(values.contains(&"3 KB"));
+            assert!(values.contains(&"2 hours"));
+            assert!(values.contains(&"100 KB"));
+            assert!(values.contains(&"blocked"));
+            assert!(values.contains(&"1"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn build_logs() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default().build_log("A build log")])
+                .create()?;
+
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/foo/0.1.0/builds")
+                    .send()?
+                    .text()?,
+            );
+
+            let node = page.select("ul > li a.release").unwrap().next().unwrap();
+            let attrs = node.attributes.borrow();
+            let url = attrs.get("href").unwrap();
+
+            let page = kuchiki::parse_html().one(env.frontend().get(url).send()?.text()?);
+
+            let log = page.select("pre").unwrap().next().unwrap().text_contents();
+
+            assert!(log.contains("A build log"));
+
+            Ok(())
+        });
+    }
+}
