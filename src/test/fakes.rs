@@ -28,6 +28,7 @@ pub(crate) struct FakeRelease<'a> {
     /// This stores the content, while `package.readme` stores the filename
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
+    doc_coverage: Option<DocCoverage>,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -73,7 +74,6 @@ impl<'a> FakeRelease<'a> {
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
                 build_log: "It works!".into(),
                 successful: true,
-                doc_coverage: None,
             },
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
@@ -89,6 +89,7 @@ impl<'a> FakeRelease<'a> {
             has_examples: false,
             readme: None,
             github_stats: None,
+            doc_coverage: None,
         }
     }
 
@@ -198,20 +199,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn coverage(
-        mut self,
-        documented_items: i32,
-        total_items: i32,
-        total_items_needing_examples: i32,
-        items_with_examples: i32,
-    ) -> Self {
-        self.build_result.doc_coverage = Some(DocCoverage {
-            total_items,
-            documented_items,
-            total_items_needing_examples,
-            items_with_examples,
-        });
-        self
+    pub(crate) fn doc_coverage(self, doc_coverage: DocCoverage) -> Self {
+        Self {
+            doc_coverage: Some(doc_coverage),
+            ..self
+        }
     }
 
     pub(crate) fn features(mut self, features: HashMap<String, Vec<String>>) -> Self {
@@ -332,7 +324,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )?;
         crate::db::add_build_into_database(&mut db.conn(), release_id, &self.build_result)?;
-        if let Some(coverage) = self.build_result.doc_coverage {
+        if let Some(coverage) = self.doc_coverage {
             crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;
         }
 

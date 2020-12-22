@@ -410,7 +410,7 @@ impl RustwideBuilder {
                     github_repo,
                 )?;
 
-                if let Some(doc_coverage) = res.result.doc_coverage {
+                if let Some(doc_coverage) = res.doc_coverage {
                     add_doc_coverage(&mut conn, release_id, doc_coverage)?;
                 }
 
@@ -560,8 +560,8 @@ impl RustwideBuilder {
                 rustc_version: self.rustc_version.clone(),
                 docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                 successful,
-                doc_coverage,
             },
+            doc_coverage,
             cargo_metadata,
             target: target.to_string(),
         })
@@ -705,6 +705,7 @@ struct FullBuildResult {
     result: BuildResult,
     target: String,
     cargo_metadata: CargoMetadata,
+    doc_coverage: Option<DocCoverage>,
 }
 
 #[derive(Clone, Copy)]
@@ -726,5 +727,4 @@ pub(crate) struct BuildResult {
     pub(crate) docsrs_version: String,
     pub(crate) build_log: String,
     pub(crate) successful: bool,
-    pub(crate) doc_coverage: Option<DocCoverage>,
 }
