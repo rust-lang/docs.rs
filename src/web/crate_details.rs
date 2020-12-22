@@ -361,7 +361,7 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("foo")
@@ -371,7 +371,7 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.5")
-                .build_result_successful(false)
+                .build_result_failed()
                 .yanked(true)
                 .create()?;
 
@@ -392,12 +392,12 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.1")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("foo")
                 .version("0.0.2")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("foo")
@@ -421,7 +421,7 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.2")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("foo")
@@ -449,7 +449,7 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.3.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release().name("foo").version("1.0.0").create()?;
             env.fake_release().name("foo").version("0.12.0").create()?;
@@ -465,7 +465,7 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.1")
-                .build_result_successful(false)
+                .build_result_failed()
                 .binary(true)
                 .create()?;
 

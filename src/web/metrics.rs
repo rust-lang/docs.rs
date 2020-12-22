@@ -146,7 +146,7 @@ mod tests {
             env.fake_release()
                 .name("rcc")
                 .version("1.0.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("hexponent")

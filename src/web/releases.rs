@@ -750,7 +750,7 @@ mod tests {
             env.fake_release()
                 .name("fool")
                 .version("0.0.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("freakin")
@@ -810,7 +810,7 @@ mod tests {
             env.fake_release()
                 .name("regex")
                 .version("0.0.0")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
 
             let (num_results, results) = get_search_results(&mut db.conn(), "regex", 1, 100)?;
@@ -1076,7 +1076,7 @@ mod tests {
         env.fake_release()
             .name("crate_that_failed")
             .version("0.1.0")
-            .build_result_successful(false)
+            .build_result_failed()
             .create()?;
         let page = kuchiki::parse_html().one(env.frontend().get(path).send()?.text()?);
         let releases: Vec<_> = page.select("a.release").expect("missing heading").collect();
@@ -1151,7 +1151,7 @@ mod tests {
             env.fake_release().name("some_random_crate").create()?;
             env.fake_release()
                 .name("some_random_crate_that_failed")
-                .build_result_successful(false)
+                .build_result_failed()
                 .create()?;
             assert_success("/releases/feed", web)
         })

@@ -14,7 +14,7 @@ pub(crate) struct FakeRelease<'a> {
     db: &'a TestDatabase,
     storage: Arc<Storage>,
     package: MetadataPackage,
-    build_result: BuildResult,
+    builds: Vec<FakeBuild>,
     /// name, content
     source_files: Vec<(&'a str, &'a [u8])>,
     /// name, content
@@ -29,6 +29,10 @@ pub(crate) struct FakeRelease<'a> {
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
     doc_coverage: Option<DocCoverage>,
+}
+
+pub(crate) struct FakeBuild {
+    result: BuildResult,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -69,12 +73,7 @@ impl<'a> FakeRelease<'a> {
                 .cloned()
                 .collect::<HashMap<String, Vec<String>>>(),
             },
-            build_result: BuildResult {
-                rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
-                docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
-                build_log: "It works!".into(),
-                successful: true,
-            },
+            builds: vec![],
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
             doc_targets: Vec::new(),
@@ -130,10 +129,24 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn build_result_successful(mut self, new: bool) -> Self {
-        self.has_docs = new;
-        self.build_result.successful = new;
-        self
+    /// Shortcut to add a single unsuccessful build with default data
+    // TODO: How should `has_docs` actually be handled?
+    pub(crate) fn build_result_failed(self) -> Self {
+        assert!(
+            self.builds.is_empty(),
+            "cannot use custom builds with build_result_failed"
+        );
+        Self {
+            has_docs: false,
+            builds: vec![FakeBuild::default().successful(false)],
+            ..self
+        }
+    }
+
+    pub(crate) fn builds(self, builds: Vec<FakeBuild>) -> Self {
+        assert!(self.builds.is_empty());
+        assert!(!builds.is_empty());
+        Self { builds, ..self }
     }
 
     pub(crate) fn yanked(mut self, new: bool) -> Self {
@@ -228,7 +241,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     /// Returns the release_id
-    pub(crate) fn create(self) -> Result<i32, Error> {
+    pub(crate) fn create(mut self) -> Result<i32, Error> {
         use std::fs;
         use std::path::Path;
 
@@ -278,7 +291,13 @@ impl<'a> FakeRelease<'a> {
         let (source_meta, mut algs) = upload_files("source", &self.source_files, None)?;
         log::debug!("added source files {}", source_meta);
 
-        if self.build_result.successful {
+        // If the test didn't add custom builds, inject a default one
+        if self.builds.is_empty() {
+            self.builds.push(FakeBuild::default());
+        }
+        let last_build_result = &self.builds.last().unwrap().result;
+
+        if last_build_result.successful {
             let index = [&package.name, "index.html"].join("/");
             if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
                 rustdoc_files.push((&index, DEFAULT_CONTENT));
@@ -308,7 +327,7 @@ impl<'a> FakeRelease<'a> {
             &mut db.conn(),
             &package,
             crate_dir,
-            &self.build_result,
+            last_build_result,
             self.default_target.unwrap_or("x86_64-unknown-linux-gnu"),
             source_meta,
             self.doc_targets,
@@ -323,7 +342,9 @@ impl<'a> FakeRelease<'a> {
             &package.name,
             &self.registry_crate_data,
         )?;
-        crate::db::add_build_into_database(&mut db.conn(), release_id, &self.build_result)?;
+        for build in &self.builds {
+            build.create(&mut db.conn(), release_id)?;
+        }
         if let Some(coverage) = self.doc_coverage {
             crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;
         }
@@ -353,5 +374,62 @@ impl FakeGithubStats {
         )?;
 
         Ok(id)
+    }
+}
+
+impl FakeBuild {
+    pub(crate) fn rustc_version(self, rustc_version: impl Into<String>) -> Self {
+        Self {
+            result: BuildResult {
+                rustc_version: rustc_version.into(),
+                ..self.result
+            },
+        }
+    }
+
+    pub(crate) fn docsrs_version(self, docsrs_version: impl Into<String>) -> Self {
+        Self {
+            result: BuildResult {
+                docsrs_version: docsrs_version.into(),
+                ..self.result
+            },
+        }
+    }
+
+    pub(crate) fn build_log(self, build_log: impl Into<String>) -> Self {
+        Self {
+            result: BuildResult {
+                build_log: build_log.into(),
+                ..self.result
+            },
+        }
+    }
+
+    pub(crate) fn successful(self, successful: bool) -> Self {
+        Self {
+            result: BuildResult {
+                successful,
+                ..self.result
+            },
+        }
+    }
+
+    fn create(&self, conn: &mut Client, release_id: i32) -> Result<(), Error> {
+        crate::db::add_build_into_database(conn, release_id, &self.result)?;
+
+        Ok(())
+    }
+}
+
+impl Default for FakeBuild {
+    fn default() -> Self {
+        Self {
+            result: BuildResult {
+                rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
+                docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
+                build_log: "It works!".into(),
+                successful: true,
+            },
+        }
     }
 }
