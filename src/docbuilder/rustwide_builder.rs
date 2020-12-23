@@ -1,4 +1,3 @@
-use crate::db::blacklist::is_blacklisted;
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
@@ -9,6 +8,7 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, GithubUpdater};
+use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
@@ -393,20 +393,7 @@ impl RustwideBuilder {
                 };
 
                 let cargo_metadata = res.cargo_metadata.root();
-
-                // Fetch repository statistics from GitHub
-                let github_updater = GithubUpdater::new(self.config.clone(), self.db.clone())?;
-                let github_repo = if let Some(repo) = &cargo_metadata.repository {
-                    match github_updater.load_repository(&mut conn, repo) {
-                        Ok(repo) => repo,
-                        Err(err) => {
-                            warn!("failed to get github stats: {}", err);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
+                let github_repo = self.get_github_repo(&mut conn, cargo_metadata)?;
 
                 let release_id = add_package_into_database(
                     &mut conn,
@@ -682,6 +669,34 @@ impl RustwideBuilder {
                 .is_empty())
         } else {
             Ok(true)
+        }
+    }
+
+    fn get_github_repo(
+        &self,
+        conn: &mut Client,
+        metadata: &MetadataPackage,
+    ) -> Result<Option<String>> {
+        let updater = match GithubUpdater::new(self.config.clone(), self.db.clone())? {
+            Some(updater) => updater,
+            None => {
+                warn!("did not collect GitHub stats as no token was provided");
+                return Ok(None);
+            }
+        };
+        let repo = match &metadata.repository {
+            Some(url) => url,
+            None => {
+                debug!("did not collect GitHub stats as no repository URL was present");
+                return Ok(None);
+            }
+        };
+        match updater.load_repository(conn, repo) {
+            Ok(repo) => Ok(repo),
+            Err(err) => {
+                warn!("failed to collect GitHub stats: {}", err);
+                Ok(None)
+            }
         }
     }
 }

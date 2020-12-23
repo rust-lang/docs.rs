@@ -59,7 +59,7 @@ pub struct GithubUpdater {
 }
 
 impl GithubUpdater {
-    pub fn new(config: Arc<Config>, pool: Pool) -> Result<Self> {
+    pub fn new(config: Arc<Config>, pool: Pool) -> Result<Option<Self>> {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
@@ -70,16 +70,16 @@ impl GithubUpdater {
                 HeaderValue::from_str(&format!("token {}", token))?,
             );
         } else {
-            warn!("No GitHub authorization specified, will be working with very low rate limits");
+            return Ok(None);
         }
 
         let client = HttpClient::builder().default_headers(headers).build()?;
 
-        Ok(GithubUpdater {
+        Ok(Some(GithubUpdater {
             client,
             pool,
             config,
-        })
+        }))
     }
 
     pub fn backfill_repositories(&self) -> Result<()> {
