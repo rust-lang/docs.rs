@@ -93,22 +93,17 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
         },
     )?;
 
-    // update github stats every hour
-    if config.tmp_disable_github_updater {
-        log::warn!("the github stats updater was disabled!");
+    if let Some(github_updater) = GithubUpdater::new(config, context.pool()?)? {
+        cron(
+            "github stats updater",
+            Duration::from_secs(60 * 60),
+            move || {
+                github_updater.update_all_crates()?;
+                Ok(())
+            },
+        )?;
     } else {
-        if let Some(github_updater) = GithubUpdater::new(config, context.pool()?)? {
-            cron(
-                "github stats updater",
-                Duration::from_secs(60 * 60),
-                move || {
-                    github_updater.update_all_crates()?;
-                    Ok(())
-                },
-            )?;
-        } else {
-            log::warn!("GitHub stats updater not started as no token was provided");
-        }
+        log::warn!("GitHub stats updater not started as no token was provided");
     }
 
     // Never returns; `server` blocks indefinitely when dropped
