@@ -46,9 +46,6 @@ pub struct Config {
     pub(crate) toolchain: String,
     pub(crate) build_cpu_limit: Option<u32>,
     pub(crate) include_default_targets: bool,
-
-    // Temporary flags
-    pub(crate) tmp_disable_github_updater: bool,
 }
 
 impl Config {
@@ -93,8 +90,6 @@ impl Config {
             toolchain: env("CRATESFYI_TOOLCHAIN", "nightly".to_string())?,
             build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
-
-            tmp_disable_github_updater: env("DOCSRS_TMP_DISABLE_GITHUB_UPDATER", false)?,
         })
     }
 }
