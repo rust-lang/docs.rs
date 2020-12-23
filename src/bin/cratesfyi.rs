@@ -426,11 +426,13 @@ impl DatabaseSubcommand {
 
             Self::UpdateGithubFields => {
                 docs_rs::utils::GithubUpdater::new(ctx.config()?, ctx.pool()?)?
+                    .ok_or_else(|| failure::format_err!("missing GitHub token"))?
                     .update_all_crates()?;
             }
 
             Self::BackfillGithubStats => {
                 docs_rs::utils::GithubUpdater::new(ctx.config()?, ctx.pool()?)?
+                    .ok_or_else(|| failure::format_err!("missing GitHub token"))?
                     .backfill_repositories()?;
             }
 
