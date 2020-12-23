@@ -529,7 +529,33 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                 ALTER TABLE releases DROP COLUMN github_repo;
                 DROP TABLE github_repos;
             "
-        )
+        ),
+        migration!(
+            context,
+            23,
+            // description
+            "Delete old GitHub stats",
+            // upgrade query
+            "
+                ALTER TABLE crates
+                    DROP COLUMN github_description,
+                    DROP COLUMN github_stars,
+                    DROP COLUMN github_forks,
+                    DROP COLUMN github_issues,
+                    DROP COLUMN github_last_commit,
+                    DROP COLUMN github_last_update;
+            ",
+            // downgrade query
+            "
+                ALTER TABLE crates
+                    ADD COLUMN github_description VARCHAR(1024),
+                    ADD COLUMN github_stars INTEGER NOT NULL DEFAULT 0,
+                    ADD COLUMN github_forks INTEGER DEFAULT 0,
+                    ADD COLUMN github_issues INTEGER DEFAULT 0,
+                    ADD COLUMN github_last_commit TIMESTAMP,
+                    ADD COLUMN github_last_update TIMESTAMP;
+            "
+        ),
     ];
 
     for migration in migrations {
