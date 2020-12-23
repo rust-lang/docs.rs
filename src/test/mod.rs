@@ -309,13 +309,16 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        crate::db::migrate(Some(0), &mut self.conn()).expect("downgrading database works");
+        let migration_result = crate::db::migrate(Some(0), &mut self.conn());
         if let Err(e) = self.conn().execute(
             format!("DROP SCHEMA {} CASCADE;", self.schema).as_str(),
             &[],
         ) {
             error!("failed to drop test schema {}: {}", self.schema, e);
         }
+        // Drop the connection pool so we don't leak database connections
+        self.pool.shutdown();
+        migration_result.expect("downgrading database works");
     }
 }
 

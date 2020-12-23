@@ -10,6 +10,9 @@ const DEFAULT_SCHEMA: &str = "public";
 
 #[derive(Debug, Clone)]
 pub struct Pool {
+    #[cfg(test)]
+    pool: Arc<std::sync::Mutex<Option<r2d2::Pool<PostgresConnectionManager<NoTls>>>>>,
+    #[cfg(not(test))]
     pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
     metrics: Arc<Metrics>,
     max_size: u32,
@@ -43,14 +46,31 @@ impl Pool {
             .map_err(PoolError::PoolCreationFailed)?;
 
         Ok(Pool {
+            #[cfg(test)]
+            pool: Arc::new(std::sync::Mutex::new(Some(pool))),
+            #[cfg(not(test))]
             pool,
             metrics,
             max_size: config.max_pool_size,
         })
     }
 
+    fn with_pool<R>(
+        &self,
+        f: impl FnOnce(&r2d2::Pool<PostgresConnectionManager<NoTls>>) -> R,
+    ) -> R {
+        #[cfg(test)]
+        {
+            f(&self.pool.lock().unwrap().as_ref().unwrap())
+        }
+        #[cfg(not(test))]
+        {
+            f(&self.pool)
+        }
+    }
+
     pub fn get(&self) -> Result<PoolClient, PoolError> {
-        match self.pool.get() {
+        match self.with_pool(|p| p.get()) {
             Ok(conn) => Ok(conn),
             Err(err) => {
                 self.metrics.failed_db_connections.inc();
@@ -60,15 +80,20 @@ impl Pool {
     }
 
     pub(crate) fn used_connections(&self) -> u32 {
-        self.pool.state().connections - self.pool.state().idle_connections
+        self.with_pool(|p| p.state().connections - p.state().idle_connections)
     }
 
     pub(crate) fn idle_connections(&self) -> u32 {
-        self.pool.state().idle_connections
+        self.with_pool(|p| p.state().idle_connections)
     }
 
     pub(crate) fn max_size(&self) -> u32 {
         self.max_size
+    }
+
+    #[cfg(test)]
+    pub(crate) fn shutdown(&self) {
+        self.pool.lock().unwrap().take();
     }
 }
 
