@@ -430,7 +430,11 @@ impl Server {
         context: &dyn Context,
     ) -> Result<Self, Error> {
         let cratesfyi = CratesfyiHandler::new(template_data, context)?;
-        let inner = Iron::new(cratesfyi)
+        let mut iron = Iron::new(cratesfyi);
+        if cfg!(test) {
+            iron.threads = 1;
+        }
+        let inner = iron
             .http(addr)
             .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
 
