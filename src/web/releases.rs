@@ -461,7 +461,7 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
         show_next_page,
         show_previous_page,
         page_number,
-        author: Some(author_name),
+        author: Some(author.into()),
     }
     .into_response(req)
 }
