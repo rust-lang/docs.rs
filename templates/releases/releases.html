@@ -57,7 +57,11 @@
             </ul>
 
             <div class="pagination">
-                {%- set page_link = "/releases/" ~ release_type -%}
+                {%- if release_type == 'author' -%}
+                    {%- set page_link = "/releases/" ~ author -%}
+                {%- else -%}
+                    {%- set page_link = "/releases/" ~ release_type -%}
+                {%- endif -%}
                 {%- if release_type == 'search' -%}
                     {%- set query = "?search=" ~ search_query -%}
                 {%- endif -%}
