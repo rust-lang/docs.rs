@@ -59,6 +59,8 @@ pub struct GithubUpdater {
 }
 
 impl GithubUpdater {
+    /// Returns `Err` if the access token has invalid syntax (but *not* if it isn't authorized).
+    /// Returns `Ok(None)` if there is no access token.
     pub fn new(config: Arc<Config>, pool: Pool) -> Result<Option<Self>> {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
