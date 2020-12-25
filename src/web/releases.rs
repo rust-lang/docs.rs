@@ -1212,6 +1212,26 @@ mod tests {
     }
 
     #[test]
+    fn authors_pagination() {
+        wrapper(|env| {
+            let web = env.frontend();
+            for i in 0..RELEASES_IN_RELEASES {
+                env.fake_release()
+                    .name(&format!("some_random_crate_{}", i))
+                    .author("frankenstein <frankie@stein.com")
+                    .create()?;
+            }
+            let page = kuchiki::parse_html().one(web.get("/releases/frankenstein").send()?.text()?);
+            let button = page.select_first("a[href='/releases/frankenstein/2']");
+	    
+            eprintln!("{:?}", button);
+            assert!(button.is_ok());
+	    
+            Ok(())
+        })
+    }
+
+    #[test]
     fn home_page_links() {
         wrapper(|env| {
             let web = env.frontend();
