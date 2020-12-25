@@ -13,13 +13,12 @@
         <link rel="stylesheet" href="/-/static/vendored.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
         <link rel="stylesheet" href="/-/static/style.css?{{ docsrs_version() | slugify }}" type="text/css" media="all" />
 
-        {%- block css -%}{%- endblock css -%}
-
         <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 
         <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
 
         <script type="text/javascript">{%- include "theme.js" -%}</script>
+        {%- block css -%}{%- endblock css -%}
     </head>
 
     <body>
