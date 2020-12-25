@@ -1223,10 +1223,9 @@ mod tests {
             }
             let page = kuchiki::parse_html().one(web.get("/releases/frankenstein").send()?.text()?);
             let button = page.select_first("a[href='/releases/frankenstein/2']");
-	    
-            eprintln!("{:?}", button);
+
             assert!(button.is_ok());
-	    
+
             Ok(())
         })
     }
