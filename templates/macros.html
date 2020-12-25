@@ -22,8 +22,29 @@
 {# Makes the appropriate CSS imports for highlighting #}
 {% macro highlight_css() %}
     {# Load the highlighting theme css #}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/github.min.css"
-        type="text/css" media="all" />
+    <script>
+        // Choose which highlight.js theme to load based on the user theme
+        var stylesheet;
+        switch(document.documentElement.dataset.theme) {
+            case "dark":
+            case "ayu":
+                stylesheet = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/dark.min.css";
+                break;
+            case "light":
+                stylesheet = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/github.min.css";
+                break;
+            default:
+                throw "unrecognized theme " + document.documentElement.dataset.theme;
+                break;
+        }
+        // Now add the stylesheet to the document
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = stylesheet;
+        link.type = "text/css";
+        link.media = "all";
+        document.head.appendChild(link);
+    </script>
 {% endmacro highlight_css %}
 
 {#

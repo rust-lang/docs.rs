@@ -97,7 +97,7 @@ body {
         border-bottom: 1px solid;
     }
     pre {
-        background-color: #F5F5F5;
+        background-color: var(--color-background-code);
         padding: 14px;
     }
     code, kbd, pre, samp {
