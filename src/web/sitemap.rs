@@ -5,8 +5,26 @@ use iron::{
     mime::{Mime, SubLevel, TopLevel},
     IronResult, Request, Response,
 };
+use router::Router;
 use serde::Serialize;
 use serde_json::Value;
+
+/// sitemap index
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SitemapIndexXml {
+    sitemaps: Vec<char>,
+}
+
+impl_webpage! {
+    SitemapIndexXml   = "core/sitemapindex.xml",
+    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+}
+
+pub fn sitemapindex_handler(req: &mut Request) -> IronResult<Response> {
+    let sitemaps: Vec<char> = (b'a'..=b'z').map(char::from).collect();
+
+    SitemapIndexXml { sitemaps }.into_response(req)
+}
 
 /// The sitemap
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -21,16 +39,30 @@ impl_webpage! {
 }
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
+    let router = extension!(req, Router);
+    let which = cexpect!(req, router.find("which")).to_lowercase();
+
     let mut conn = extension!(req, Pool).get()?;
     let query = conn
         .query(
-            "SELECT DISTINCT ON (crates.name)
-                    crates.name,
-                    releases.release_time
+            "SELECT crates.name,
+                    MAX(releases.release_time) as release_time
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
-             WHERE rustdoc_status = true",
-            &[],
+             WHERE 
+                rustdoc_status = true AND 
+                ( 
+                    crates.name like $1 OR 
+                    crates.name like $2
+                )
+             GROUP BY crates.name
+             ",
+            &[
+                // this LIKE pattern has the '%' only at the end,
+                // so postgres can use the index on `name`
+                &format!("{}%", which),
+                &format!("{}%", which.to_uppercase()),
+            ],
         )
         .unwrap();
 
@@ -125,13 +157,15 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
             assert_success("/sitemap.xml", web)?;
+            assert_success("/-/sitemap/s/sitemap.xml", web)?;
 
             env.fake_release().name("some_random_crate").create()?;
             env.fake_release()
                 .name("some_random_crate_that_failed")
                 .build_result_successful(false)
                 .create()?;
-            assert_success("/sitemap.xml", web)
+            assert_success("/sitemap.xml", web)?;
+            assert_success("/-/sitemap/s/sitemap.xml", web)
         })
     }
 
