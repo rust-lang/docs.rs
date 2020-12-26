@@ -16,7 +16,11 @@ pub(super) fn build_routes() -> Routes {
     //   https://support.google.com/webmasters/answer/183668?hl=en
     routes.static_resource("/robots.txt", PermanentRedirect("/-/static/robots.txt"));
     routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
-    routes.static_resource("/sitemap.xml", super::sitemap::sitemap_handler);
+    routes.static_resource("/sitemap.xml", super::sitemap::sitemapindex_handler);
+    routes.static_resource(
+        "/-/sitemap/:which/sitemap.xml",
+        super::sitemap::sitemap_handler,
+    );
 
     // This should not need to be served from the root as we reference the inner path in links,
     // but clients might have cached the url and need to update it.
