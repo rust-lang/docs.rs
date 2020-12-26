@@ -1,7 +1,6 @@
 use super::{Blob, StorageTransaction};
 use crate::db::Pool;
 use crate::Metrics;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use failure::Error;
 use postgres::Transaction;
 use std::sync::Arc;
@@ -61,7 +60,7 @@ impl DatabaseBackend {
             Ok(Blob {
                 path: row.get("path"),
                 mime: row.get("mime"),
-                date_updated: DateTime::from_utc(row.get::<_, NaiveDateTime>("date_updated"), Utc),
+                date_updated: row.get("date_updated"),
                 content: row.get("content"),
                 compression,
             })

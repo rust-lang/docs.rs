@@ -92,7 +92,7 @@ pub(crate) fn add_package_into_database(
         &[
             &crate_id,
             &metadata_pkg.version,
-            &registry_data.release_time.naive_utc(),
+            &registry_data.release_time,
             &serde_json::to_value(&dependencies)?,
             &metadata_pkg.package_name(),
             &registry_data.yanked,

@@ -1,5 +1,5 @@
 use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::page::WebPage};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
@@ -37,9 +37,7 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let releases = query
         .into_iter()
         .map(|row| {
-            let time = DateTime::<Utc>::from_utc(row.get::<_, NaiveDateTime>(1), Utc)
-                .format("%+")
-                .to_string();
+            let time = row.get::<_, DateTime<Utc>>(1).format("%+").to_string();
 
             (row.get(0), time)
         })
