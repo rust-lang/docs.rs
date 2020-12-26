@@ -556,6 +556,49 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                     ADD COLUMN github_last_update TIMESTAMP;
             "
         ),
+        migration!(
+            context, 
+            24, 
+            "migrate timestamp to be timezone aware",
+            // upgrade
+            "
+                ALTER TABLE builds 
+                    ALTER build_time TYPE timestamptz USING build_time AT TIME ZONE 'UTC';
+
+                ALTER TABLE files
+                    ALTER date_added TYPE timestamptz USING date_added AT TIME ZONE 'UTC',
+                    ALTER date_updated TYPE timestamptz USING date_updated AT TIME ZONE 'UTC';
+
+                ALTER TABLE github_repos 
+                    ALTER updated_at TYPE timestamptz USING updated_at AT TIME ZONE 'UTC', 
+                    ALTER last_commit TYPE timestamptz USING last_commit AT TIME ZONE 'UTC';
+
+                ALTER TABLE queue 
+                    ALTER date_added TYPE timestamptz USING date_added AT TIME ZONE 'UTC';
+
+                ALTER TABLE releases 
+                    ALTER release_time TYPE timestamptz USING release_time AT TIME ZONE 'UTC';
+            ",
+            // downgrade 
+            "
+                ALTER TABLE builds 
+                    ALTER build_time TYPE timestamp USING build_time AT TIME ZONE 'UTC';
+
+                ALTER TABLE files
+                    ALTER date_added TYPE timestamp USING date_added AT TIME ZONE 'UTC',
+                    ALTER date_updated TYPE timestamp USING date_updated AT TIME ZONE 'UTC';
+
+                ALTER TABLE github_repos 
+                    ALTER updated_at TYPE timestamp USING updated_at AT TIME ZONE 'UTC', 
+                    ALTER last_commit TYPE timestamp USING last_commit AT TIME ZONE 'UTC';
+
+                ALTER TABLE queue 
+                    ALTER date_added TYPE timestamp USING date_added AT TIME ZONE 'UTC';
+
+                ALTER TABLE releases 
+                    ALTER release_time TYPE timestamp USING release_time AT TIME ZONE 'UTC';
+            ",
+        ),
     ];
 
     for migration in migrations {

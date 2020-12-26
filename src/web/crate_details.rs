@@ -1,6 +1,6 @@
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
 use crate::{db::Pool, impl_webpage, web::page::WebPage};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::prelude::*;
 use iron::Url;
 use postgres::Client;
@@ -181,7 +181,7 @@ impl CrateDetails {
             dependencies: krate.get("dependencies"),
             readme: krate.get("readme"),
             rustdoc: krate.get("description_long"),
-            release_time: DateTime::from_utc(krate.get::<_, NaiveDateTime>("release_time"), Utc),
+            release_time: krate.get("release_time"),
             build_status: krate.get("build_status"),
             last_successful_build: None,
             rustdoc_status: krate.get("rustdoc_status"),

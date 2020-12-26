@@ -7,7 +7,7 @@ use crate::{
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
@@ -102,7 +102,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
-            release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
+            release_time: row.get(4),
             rustdoc_status: row.get(5),
             stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
         })
@@ -149,7 +149,7 @@ fn get_releases_by_author(
                 version: row.get(1),
                 description: row.get(2),
                 target_name: row.get(3),
-                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
+                release_time: row.get(4),
                 rustdoc_status: row.get(5),
                 stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
             }
@@ -203,7 +203,7 @@ fn get_releases_by_owner(
                 version: row.get(1),
                 description: row.get(2),
                 target_name: row.get(3),
-                release_time: DateTime::from_utc(row.get::<_, NaiveDateTime>(4), Utc),
+                release_time: row.get(4),
                 rustdoc_status: row.get(5),
                 stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
             }
@@ -286,7 +286,7 @@ fn get_search_results(
             version: row.get("version"),
             description: row.get("description"),
             target_name: row.get("target_name"),
-            release_time: DateTime::from_utc(row.get("release_time"), Utc),
+            release_time: row.get("release_time"),
             rustdoc_status: row.get("rustdoc_status"),
             stars: row.get::<_, Option<i32>>("github_stars").unwrap_or(0),
         })

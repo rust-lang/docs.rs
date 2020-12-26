@@ -4,7 +4,7 @@ use crate::{
     impl_webpage,
     web::{page::WebPage, MetaData},
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use iron::{
     headers::{
         AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
@@ -80,7 +80,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                 rustc_version: row.get("rustc_version"),
                 docsrs_version: row.get("cratesfyi_version"),
                 build_status: row.get("build_status"),
-                build_time: DateTime::from_utc(row.get::<_, NaiveDateTime>("build_time"), Utc),
+                build_time: row.get("build_time"),
                 output: row.get("output"),
             };
 
