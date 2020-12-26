@@ -557,8 +557,8 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             "
         ),
         migration!(
-            context, 
-            24, 
+            context,
+            24,
             "migrate timestamp to be timezone aware",
             // upgrade
             "
