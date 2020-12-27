@@ -18,7 +18,7 @@ pub(super) fn build_routes() -> Routes {
     routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
     routes.static_resource("/sitemap.xml", super::sitemap::sitemapindex_handler);
     routes.static_resource(
-        "/-/sitemap/:which/sitemap.xml",
+        "/-/sitemap/:letter/sitemap.xml",
         super::sitemap::sitemap_handler,
     );
 

@@ -40,7 +40,7 @@ impl_webpage! {
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let which = cexpect!(req, router.find("which")).to_lowercase();
+    let letter = cexpect!(req, router.find("letter")).to_lowercase();
 
     let mut conn = extension!(req, Pool).get()?;
     let query = conn
@@ -60,8 +60,8 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
             &[
                 // this LIKE pattern has the '%' only at the end,
                 // so postgres can use the index on `name`
-                &format!("{}%", which),
-                &format!("{}%", which.to_uppercase()),
+                &format!("{}%", letter),
+                &format!("{}%", letter.to_uppercase()),
             ],
         )
         .unwrap();
