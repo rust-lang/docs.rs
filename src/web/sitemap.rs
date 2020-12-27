@@ -218,7 +218,7 @@ mod tests {
             assert!(!(content.contains(&"some_random_crate_that_failed")));
 
             // and not in the others
-            for letter in letters.iter().filter(|&&c| c != 's') {
+            for letter in ('a'..='z').filter(|&&c| c != 's') {
                 let response = web
                     .get(&format!("/-/sitemap/{}/sitemap.xml", letter))
                     .send()?;
