@@ -58,8 +58,11 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
              GROUP BY crates.name
              ",
             &[
-                // this LIKE pattern has the '%' only at the end,
-                // so postgres can use the index on `name`
+                // postgres can use the normal BTREE index on `name`
+                // for LIKE queries, if they are anchored to the
+                // beginning of the string.
+                // This does not work for ILIKE and alphabetic
+                // characters, hence the OR.
                 &format!("{}%", letter),
                 &format!("{}%", letter.to_uppercase()),
             ],
