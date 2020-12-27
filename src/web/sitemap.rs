@@ -21,7 +21,7 @@ impl_webpage! {
 }
 
 pub fn sitemapindex_handler(req: &mut Request) -> IronResult<Response> {
-    let sitemaps: Vec<char> = (b'a'..=b'z').map(char::from).collect();
+    let sitemaps: Vec<char> = ('a'..='z').collect();
 
     SitemapIndexXml { sitemaps }.into_response(req)
 }
@@ -216,7 +216,7 @@ mod tests {
             assert!(!(content.contains(&"some_random_crate_that_failed")));
 
             // and not in the others
-            for letter in ('a'..='z').filter(|&&c| c != 's') {
+            for letter in ('a'..='z').filter(|&c| c != 's') {
                 let response = web
                     .get(&format!("/-/sitemap/{}/sitemap.xml", letter))
                     .send()?;
