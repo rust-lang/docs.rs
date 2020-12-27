@@ -59,21 +59,10 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
              INNER JOIN releases ON releases.crate_id = crates.id
              WHERE 
                 rustdoc_status = true AND 
-                ( 
-                    crates.name like $1 OR 
-                    crates.name like $2
-                )
+                crates.name ILIKE $1 
              GROUP BY crates.name
              ",
-            &[
-                // postgres can use the normal BTREE index on `name`
-                // for LIKE queries, if they are anchored to the
-                // beginning of the string.
-                // This does not work for ILIKE and alphabetic
-                // characters, hence the OR.
-                &format!("{}%", letter),
-                &format!("{}%", letter.to_uppercase()),
-            ],
+            &[&format!("{}%", letter)],
         )
         .unwrap();
 
