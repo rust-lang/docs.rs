@@ -1,4 +1,4 @@
-use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::page::WebPage};
+use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::error::Nope, web::page::WebPage};
 use chrono::{DateTime, Utc};
 use iron::{
     headers::ContentType,
@@ -40,7 +40,15 @@ impl_webpage! {
 
 pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    let letter = cexpect!(req, router.find("letter")).to_lowercase();
+    let letter = cexpect!(req, router.find("letter"));
+
+    if letter.len() != 1 {
+        return Err(Nope::ResourceNotFound.into());
+    } else if let Some(ch) = letter.chars().next() {
+        if !(ch.is_ascii_lowercase()) {
+            return Err(Nope::ResourceNotFound.into());
+        }
+    }
 
     let mut conn = extension!(req, Pool).get()?;
     let query = conn
@@ -154,21 +162,72 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use crate::test::{assert_success, wrapper};
+    use reqwest::StatusCode;
 
     #[test]
-    fn sitemap() {
+    fn sitemap_index() {
         wrapper(|env| {
             let web = env.frontend();
-            assert_success("/sitemap.xml", web)?;
-            assert_success("/-/sitemap/s/sitemap.xml", web)?;
+            assert_success("/sitemap.xml", web)
+        })
+    }
+
+    #[test]
+    fn sitemap_invalid_letters() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            // everything not length=1 and ascii-lowercase should fail
+            for invalid_letter in &["1", "aa", "A", ""] {
+                println!("trying to fail letter {}", invalid_letter);
+                assert_eq!(
+                    web.get(&format!("/-/sitemap/{}/sitemap.xml", invalid_letter))
+                        .send()?
+                        .status(),
+                    StatusCode::NOT_FOUND
+                );
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn sitemap_letter() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let letters: Vec<char> = (b'a'..=b'z').map(char::from).collect();
+
+            // letter-sitemaps always work, even without crates & releases
+            for letter in letters.iter().as_ref() {
+                assert_success(&format!("/-/sitemap/{}/sitemap.xml", letter), web)?;
+            }
 
             env.fake_release().name("some_random_crate").create()?;
             env.fake_release()
                 .name("some_random_crate_that_failed")
                 .build_result_successful(false)
                 .create()?;
-            assert_success("/sitemap.xml", web)?;
-            assert_success("/-/sitemap/s/sitemap.xml", web)
+
+            // these fake crates appear only in the `s` sitemap
+            let response = web.get("/-/sitemap/s/sitemap.xml").send()?;
+            assert!(response.status().is_success());
+
+            let content = response.text()?;
+            assert!(content.contains(&"some_random_crate"));
+            assert!(!(content.contains(&"some_random_crate_that_failed")));
+
+            // and not in the others
+            for letter in letters.iter().filter(|&&c| c != 's') {
+                let response = web
+                    .get(&format!("/-/sitemap/{}/sitemap.xml", letter))
+                    .send()?;
+
+                assert!(response.status().is_success());
+                assert!(!(response.text()?.contains("some_random_crate")));
+            }
+
+            Ok(())
         })
     }
 
