@@ -205,14 +205,17 @@ fn get_search_results(
             .unwrap()
     });
 
-    let url = format!(
-        "https://crates.io/api/v1/crates?page={page}&per_page={limit}&q={query}",
-        page = page,
-        limit = limit,
-        query = query
-    );
+    let page: &str = &page.to_string();
+    let url = url::Url::parse_with_params(
+        "https://crates.io/api/v1/crates",
+        &[
+            ("page", page),
+            ("per_page", &limit.to_string()),
+            ("q", query),
+        ],
+    )?;
     debug!("fetching search results from {}", url);
-    let releases: CratesIoReleases = HTTP_CLIENT.get(&url).send()?.json()?;
+    let releases: CratesIoReleases = HTTP_CLIENT.get(url).send()?.json()?;
     let query = conn.prepare(
         "SELECT github_repos.stars, releases.target_name, releases.rustdoc_status
         FROM crates INNER JOIN releases ON crates.id = releases.crate_id
