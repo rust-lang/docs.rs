@@ -196,10 +196,8 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
 
-            let letters: Vec<char> = (b'a'..=b'z').map(char::from).collect();
-
             // letter-sitemaps always work, even without crates & releases
-            for letter in letters.iter().as_ref() {
+            for letter in 'a'..='z' {
                 assert_success(&format!("/-/sitemap/{}/sitemap.xml", letter), web)?;
             }
 
