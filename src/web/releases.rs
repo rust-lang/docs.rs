@@ -530,7 +530,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                      FROM crates
                      INNER JOIN releases
                          ON crates.latest_version_id = releases.id
-                     WHERE github_stars >= 100 AND rustdoc_status = true
+                     LEFT JOIN github_repos
+                         ON releases.github_repo = github_repos.id
+                     WHERE github_repos.stars >= 100 AND rustdoc_status = true
                      OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
                         &[]
                     ),
