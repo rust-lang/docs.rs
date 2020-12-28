@@ -472,7 +472,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             // downgrade query
             "
                 ALTER TABLE releases DROP COLUMN features;
-                DROP TYPE feature;                         
+                DROP TYPE feature;
             "
         ),
         migration!(
@@ -559,43 +559,46 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
         migration!(
             context,
             24,
+            "drop unused `date_added` columns",
+            // upgrade
+            "ALTER TABLE queue DROP COLUMN IF EXISTS date_added;
+             ALTER TABLE files DROP COLUMN IF EXISTS date_added;",
+             // downgrade
+             "ALTER TABLE queue ADD COLUMN date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+              ALTER TABLE files ADD COLUMN date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;",
+        ),
+        migration!(
+            context,
+            25,
             "migrate timestamp to be timezone aware",
             // upgrade
             "
-                ALTER TABLE builds 
+                ALTER TABLE builds
                     ALTER build_time TYPE timestamptz USING build_time AT TIME ZONE 'UTC';
 
                 ALTER TABLE files
-                    ALTER date_added TYPE timestamptz USING date_added AT TIME ZONE 'UTC',
                     ALTER date_updated TYPE timestamptz USING date_updated AT TIME ZONE 'UTC';
 
-                ALTER TABLE github_repos 
-                    ALTER updated_at TYPE timestamptz USING updated_at AT TIME ZONE 'UTC', 
+                ALTER TABLE github_repos
+                    ALTER updated_at TYPE timestamptz USING updated_at AT TIME ZONE 'UTC',
                     ALTER last_commit TYPE timestamptz USING last_commit AT TIME ZONE 'UTC';
 
-                ALTER TABLE queue 
-                    ALTER date_added TYPE timestamptz USING date_added AT TIME ZONE 'UTC';
-
-                ALTER TABLE releases 
+                ALTER TABLE releases
                     ALTER release_time TYPE timestamptz USING release_time AT TIME ZONE 'UTC';
             ",
-            // downgrade 
+            // downgrade
             "
-                ALTER TABLE builds 
+                ALTER TABLE builds
                     ALTER build_time TYPE timestamp USING build_time AT TIME ZONE 'UTC';
 
                 ALTER TABLE files
-                    ALTER date_added TYPE timestamp USING date_added AT TIME ZONE 'UTC',
                     ALTER date_updated TYPE timestamp USING date_updated AT TIME ZONE 'UTC';
 
-                ALTER TABLE github_repos 
-                    ALTER updated_at TYPE timestamp USING updated_at AT TIME ZONE 'UTC', 
+                ALTER TABLE github_repos
+                    ALTER updated_at TYPE timestamp USING updated_at AT TIME ZONE 'UTC',
                     ALTER last_commit TYPE timestamp USING last_commit AT TIME ZONE 'UTC';
 
-                ALTER TABLE queue 
-                    ALTER date_added TYPE timestamp USING date_added AT TIME ZONE 'UTC';
-
-                ALTER TABLE releases 
+                ALTER TABLE releases
                     ALTER release_time TYPE timestamp USING release_time AT TIME ZONE 'UTC';
             ",
         ),
