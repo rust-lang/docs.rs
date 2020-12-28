@@ -14,7 +14,7 @@ use iron::{
     modifiers::Redirect,
     status, IronResult, Request, Response, Url,
 };
-use log::debug;
+use log::{debug, trace};
 use postgres::Client;
 use router::Router;
 use serde::{Deserialize, Serialize};
@@ -182,8 +182,6 @@ fn get_search_results(
     struct CratesIoRelease {
         name: String,
         max_version: String,
-        description: Option<String>,
-        updated_at: DateTime<Utc>,
     }
     #[derive(Deserialize)]
     struct CratesIoMeta {
@@ -205,47 +203,57 @@ fn get_search_results(
             .unwrap()
     });
 
-    let page: &str = &page.to_string();
     let url = url::Url::parse_with_params(
         "https://crates.io/api/v1/crates",
         &[
-            ("page", page),
-            ("per_page", &limit.to_string()),
             ("q", query),
+            ("page", &page.to_string()),
+            ("per_page", &limit.to_string()),
         ],
     )?;
     debug!("fetching search results from {}", url);
     let releases: CratesIoReleases = HTTP_CLIENT.get(url).send()?.json()?;
-    let query = conn.prepare(
-        "SELECT github_repos.stars, releases.target_name, releases.rustdoc_status
-        FROM crates INNER JOIN releases ON crates.id = releases.crate_id
-                    LEFT JOIN github_repos ON releases.github_repo = github_repos.id
-        WHERE crates.name = $1 AND releases.version = $2",
-    )?;
-    let crates = releases
+    let (names_and_versions, names): (Vec<_>, Vec<_>) = releases
         .crates
         .into_iter()
-        .flat_map(|krate| {
-            let rows = match conn.query(&query, &[&krate.name, &krate.max_version]) {
-                Err(e) => return Some(Err(e)),
-                Ok(rows) => rows,
-            };
-            debug!("looking up results for {:?}", krate);
-            // crates.io could have a release that hasn't yet been added to the database.
-            // If so, just skip it.
-            let row = rows.get(0)?;
+        // The `postgres` crate doesn't support anonymous records.
+        // Use strings instead.
+        // Additionally, looking at both the name and version doesn't allow using the index;
+        // first filter by crate name so the query is more efficient.
+        .map(|krate| (format!("{}:{}", krate.name, krate.max_version), krate.name))
+        .unzip();
+    trace!("crates.io search results {:#?}", names_and_versions);
+    let crates = conn
+        .query(
+            "
+        SELECT
+            crates.name,
+            releases.version,
+            releases.description,
+            releases.release_time,
+            releases.target_name,
+            releases.rustdoc_status,
+            github_repos.stars
+        FROM crates INNER JOIN releases ON crates.id = releases.crate_id
+                    LEFT JOIN github_repos ON releases.github_repo = github_repos.id
+        WHERE crates.name = ANY($1) AND crates.name || ':' || releases.version = ANY($2)
+        ",
+            &[&names, &names_and_versions],
+        )?
+        .into_iter()
+        .map(|row| {
             let stars: Option<_> = row.get("stars");
-            Some(Result::<_, postgres::Error>::Ok(Release {
-                name: krate.name,
-                version: krate.max_version,
-                description: krate.description,
-                release_time: krate.updated_at,
+            Release {
+                name: row.get("name"),
+                version: row.get("version"),
+                description: row.get("description"),
+                release_time: row.get("release_time"),
                 target_name: row.get("target_name"),
                 rustdoc_status: row.get("rustdoc_status"),
                 stars: stars.unwrap_or(0),
-            }))
+            }
         })
-        .collect::<Result<_, _>>()?;
+        .collect();
     Ok((releases.meta.total, crates))
 }
 
