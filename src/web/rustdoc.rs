@@ -1166,9 +1166,8 @@ mod test {
                         .borrow()
                         .get("href")
                         .expect("href")
-                        .trim()
                         .to_string();
-                    let name = el.text_contents().trim().to_string();
+                    let name = el.text_contents();
                     (name, url)
                 })
                 .collect())
