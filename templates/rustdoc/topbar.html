@@ -223,11 +223,25 @@
 
         {# Build the dropdown list showing available targets #}
         <ul class="pure-menu-children">
+            {%- set inner_path_when_root = metadata.name ~ "/index.html" -%}
             {%- for target in metadata.doc_targets -%}
-                {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+                {#
+                    The index pages for every target always exist, so we don't need `target-redirect` for them.
+                    Also, crawlers don't have to follow the `target-redirect` links, since they already reach the
+                    target-specific pages through the root.
+                #}
+                {%- if inner_path == inner_path_when_root -%}
+                    {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.version ~ "/" ~ target ~ "/" ~ inner_path -%}
+                    {%- set target_no_follow = "" -%}
+                {%- else -%}
+                    {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+                    {%- set target_no_follow = "nofollow" -%}
+                {%- endif -%}
 
                 <li class="pure-menu-item">
-                    <a href="{{ target_url | safe }}" class="pure-menu-link" data-fragment="retain">{{ target }}</a>
+                    <a href="{{ target_url | safe }}" class="pure-menu-link" data-fragment="retain" rel="{{ target_no_follow }}">
+                        {{ target }}
+                    </a>
                 </li>
             {%- endfor -%}
         </ul>
