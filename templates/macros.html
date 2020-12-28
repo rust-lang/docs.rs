@@ -26,8 +26,10 @@
         // Choose which highlight.js theme to load based on the user theme
         var stylesheet;
         switch(document.documentElement.dataset.theme) {
-            case "dark":
             case "ayu":
+                stylesheet = "/-/static/ayu-highlight.css";
+                break;
+            case "dark":
                 stylesheet = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.4.0/styles/dark.min.css";
                 break;
             case "null": // The user is visiting docs.rs for the first time and hasn't set a theme yet.

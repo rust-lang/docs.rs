@@ -5,6 +5,7 @@ target
 *.css
 *.css.map
 !vendor/**/*.css
+!static/ayu-highlight.css
 .sass-cache
 .vagrant
 .rustwide
