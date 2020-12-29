@@ -84,6 +84,14 @@
                                 </a>
                             </li>
 
+                            {# A link to the release's source view #}
+                            <li class="pure-menu-item">
+                                <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
+                                    {{ "folder-open" | fas(fw=true) }}
+                                    <span class="title">Source</span>
+                                </a>
+                            </li>
+
                             <li class="pure-menu-item">
                                 <a href="{{ crate_url | safe }}" class="pure-menu-link" title="See {{ krate.name }} in docs.rs">
                                     {{ "cube" | fas(fw=true) }} More information
@@ -204,16 +212,7 @@
         </li>
     {%- endif -%}
 
-    {# A link to the release's source view
-    #}<li class="pure-menu-item">
-        <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-            {{ "folder-open" | far }}
-            <span class="title">Source</span>
-        </a>
-    </li>{#
-
-    Display the platforms that the release has been built for
-    #}
+    {# Display the platforms that the release has been built for #}
     {% if metadata.doc_targets %}
     <li class="pure-menu-item pure-menu-has-children">
         <a href="#" class="pure-menu-link" aria-label="Platform">

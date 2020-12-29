@@ -131,38 +131,86 @@ div.nav-container {
         }
     }
 
+    // These hardcoded values are "magic", in the sense they were observed to be the lowest-possible
+    // thresholds through experimentation with a package name that hit the max-width of the element.
+    $full-width: 1142px;
+    $medium-width: 994px;
+    $narrow-width: 901px;
+
     // use a .title span inside a menu to hide it on small screens
     span.title {
         display: none;
-        @media screen and (min-width: 872px) {
+        @media screen and (min-width: #{$narrow-width}) {
             display: inline;
         }
     }
 
     .pure-menu-right span.title {
-        @media screen and (min-width: 872px) {
-            display: none;
-        }
-        @media screen and (min-width: 965px) {
+        display: none;
+        @media screen and (min-width: #{$medium-width}) {
             display: inline;
         }
     }
 
-    form.landing-search-form-nav.not-latest {
-        span.title {
+     /// Generate the rules for the navbar menu item labels at various dimensions.
+     ///
+     /// @param {number} $medium-breakpoint [$medium-width] - the medium breakpoint
+     /// @param {number} $full-breakpoint [$full-width] - the full breakpoint
+     /// @param {boolean} $show-medium [true] - whether labels should be shown after the medium breakpoint
+     /// @param {boolean} $show-full [true] - whether labels should be shown after the full breakpoint
+    @mixin navbar-menu-labels(
+        $medium-breakpoint: $medium-width,
+        $full-breakpoint: $full-width,
+        $show-medium: true,
+        $show-full: true
+    ) {
+        .pure-menu-item span.title {
             display: none;
-            @media screen and (min-width: 973px) {
-                display: inline;
+            @media screen and (min-width: #{$medium-breakpoint}) {
+                @if $show-medium {
+                    display: inline;
+                }
+                @else {
+                    display: none;
+                }
             }
         }
-
         .pure-menu-right span.title {
-            @media screen and (min-width: 973px) {
-                display: none;
+            display: none;
+            @media screen and (min-width: #{$full-breakpoint}) {
+                @if $show-full {
+                    display: inline;
+                }
+                @else {
+                    display: none;
+                }
             }
-            @media screen and (min-width: 1125px) {
-                display: inline;
+        }
+    }
+
+    form.landing-search-form-nav {
+        // These hardcoded values are "magic", in the sense they were observed to be the lowest-possible
+        // thresholds through experimentation with a package name that hit the max-width of the element,
+        // and various combinations of latest, not latest, and yanked states.
+        &.not-latest {
+            @include navbar-menu-labels(1061px, 1153px);
+        }
+
+        &.yanked {
+            @include navbar-menu-labels(1119px, $full-width, $show-full: false);
+        }
+
+        &.not-latest.yanked {
+            $medium-width: 1191px;
+
+            // Because this message is very long, steal some additional space from the search input
+            #search-input-nav {
+                @media screen and (min-width: #{$medium-width}) {
+                    max-width: 150px;
+                }
             }
+
+            @include navbar-menu-labels($medium-width, $full-width, $show-full: false);
         }
     }
 
