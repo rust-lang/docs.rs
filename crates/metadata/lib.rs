@@ -95,6 +95,7 @@ pub enum MetadataError {
 /// targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
+/// docker-image = "rustops/crates-build-env"
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
@@ -128,6 +129,9 @@ pub struct Metadata {
     /// List of command line arguments for `rustdoc`.
     #[serde(default)]
     rustdoc_args: Vec<String>,
+
+    /// Custom docker image.
+    docker_image: Option<String>,
 }
 
 /// The targets that should be built for a crate.
@@ -276,6 +280,11 @@ impl Metadata {
         // https://github.com/rust-lang/docs.rs/issues/147
         map.insert("DOCS_RS", "1".into());
         map
+    }
+
+    /// Return the custom docker image, if provided.
+    pub fn docker_image(&self) -> Option<&String> {
+        self.docker_image.as_ref()
     }
 }
 

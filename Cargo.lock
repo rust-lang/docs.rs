@@ -78,6 +78,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "attohttpc"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1082810677916862c7704351dfe4696a837aaf34da0dd6431abc60783e71ee8f"
+dependencies = [
+ "flate2",
+ "http",
+ "log 0.4.8",
+ "native-tls",
+ "openssl",
+ "url 2.1.1",
+ "wildmatch",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2872,9 +2887,9 @@ dependencies = [
 [[package]]
 name = "rustwide"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17a9c66cf835ece6742443f3a2c2874df15db3dfc060ced53feeb210a463fd93"
+source = "git+https://github.com/devsnek/rustwide.git?branch=sandbox-image-override#b0eba0018368bdde373a93f647d022c34d056807"
 dependencies = [
+ "attohttpc",
  "base64 0.12.1",
  "failure",
  "flate2",
@@ -2882,12 +2897,12 @@ dependencies = [
  "futures-util",
  "getrandom",
  "git2",
+ "http",
  "lazy_static",
  "log 0.4.8",
  "nix",
  "percent-encoding 2.1.0",
  "remove_dir_all",
- "reqwest",
  "scopeguard",
  "serde",
  "serde_json",
@@ -4061,6 +4076,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "wildmatch"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79346daa5ca66c72db46ee4dac6e605811478ae0807b385d18328be3f5c0eb74"
 
 [[package]]
 name = "winapi"
