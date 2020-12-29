@@ -878,4 +878,42 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn platform_links_are_direct_and_without_nofollow() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("x86_64-pc-windows-msvc")
+                .create()?;
+
+            let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
+            assert!(response.status().is_success());
+
+            let platform_links: Vec<(String, String)> = kuchiki::parse_html()
+                .one(response.text()?)
+                .select(r#"a[aria-label="Platform"] + ul li a"#)
+                .expect("invalid selector")
+                .map(|el| {
+                    let attributes = el.attributes.borrow();
+                    let url = attributes.get("href").expect("href").to_string();
+                    let rel = attributes.get("rel").unwrap_or("").to_string();
+                    (url, rel)
+                })
+                .collect();
+
+            assert_eq!(platform_links.len(), 2);
+
+            for (url, rel) in platform_links {
+                assert!(!url.contains("/target-redirect/"));
+                assert_eq!(rel, "");
+            }
+
+            Ok(())
+        });
+    }
 }

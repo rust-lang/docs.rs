@@ -1154,7 +1154,7 @@ mod test {
         fn get_platform_links(
             path: &str,
             web: &TestFrontend,
-        ) -> Result<Vec<(String, String)>, failure::Error> {
+        ) -> Result<Vec<(String, String, String)>, failure::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             let dom = kuchiki::parse_html().one(data);
@@ -1162,14 +1162,11 @@ mod test {
                 .select(r#"a[aria-label="Platform"] + ul li a"#)
                 .expect("invalid selector")
                 .map(|el| {
-                    let url = el
-                        .attributes
-                        .borrow()
-                        .get("href")
-                        .expect("href")
-                        .to_string();
+                    let attributes = el.attributes.borrow();
+                    let url = attributes.get("href").expect("href").to_string();
+                    let rel = attributes.get("rel").unwrap_or("").to_string();
                     let name = el.text_contents();
-                    (name, url)
+                    (name, url, rel)
                 })
                 .collect())
         }
@@ -1181,7 +1178,8 @@ mod test {
         ) -> Result<(), failure::Error> {
             let mut links = BTreeMap::from_iter(links.iter().copied());
 
-            for (platform, link) in get_platform_links(path, web)? {
+            for (platform, link, rel) in get_platform_links(path, web)? {
+                assert_eq!(rel, "nofollow");
                 assert_redirect(&link, links.remove(platform.as_str()).unwrap(), web)?;
             }
 
