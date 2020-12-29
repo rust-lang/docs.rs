@@ -1659,4 +1659,60 @@ mod test {
             Ok(())
         })
     }
+
+    #[test]
+    fn test_repository_link_in_topbar_dropdown() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("testing")
+                .repo("https://git.example.com")
+                .version("0.1.0")
+                .rustdoc_file("testing/index.html")
+                .create()?;
+
+            let dom = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/testing/0.1.0/testing/")
+                    .send()?
+                    .text()?,
+            );
+
+            assert_eq!(
+                dom.select(r#"ul > li a[href="https://git.example.com"]"#)
+                    .unwrap()
+                    .count(),
+                1,
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_repository_link_in_topbar_dropdown_github() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("testing")
+                .version("0.1.0")
+                .rustdoc_file("testing/index.html")
+                .github_stats("https://git.example.com", 123, 321, 333)
+                .create()?;
+
+            let dom = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/testing/0.1.0/testing/")
+                    .send()?
+                    .text()?,
+            );
+
+            assert_eq!(
+                dom.select(r#"ul > li a[href="https://git.example.com"]"#)
+                    .unwrap()
+                    .count(),
+                1,
+            );
+
+            Ok(())
+        })
+    }
 }

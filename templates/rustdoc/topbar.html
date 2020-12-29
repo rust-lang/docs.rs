@@ -70,7 +70,7 @@
                                 </li>
 
                             {# If all the crate has is a repo url, show it #}
-                            {%- elif repository_url -%}
+                            {%- elif krate.repository_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.repository_url }}" class="pure-menu-link">
                                         {{ "code-branch" | fas(fw=true) }} Repository
