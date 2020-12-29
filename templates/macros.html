@@ -84,7 +84,10 @@
     * `releases` A list of crate releases where each release has the following fields:
         * `version` A string of the release's version
         * `yanked` A boolean of the release's yanked status
-        * `build_status` A boolean of the crate's build status (true for built, false for failed build)
+        * `build_status` A string of the crate's build status
+          * "success" for built
+          * "failure" for failed build
+          * "in_progress" for in progress
         * `is_library` A boolean that's true if the crate is a library and false if it's a binary
     * `target` The target platform (empty string if the default or a `/crate` page)
     * `inner_path` The current rustdoc page (empty string if a `/crate` page)
@@ -106,17 +109,23 @@
         {%- if not release.is_library -%}
             {# If the release isn't a library, then display that warning #}
             {%- set warning = release_name ~ " is not a library" -%}
-        {%- elif release.yanked and release.build_status -%}
-            {# If the release has been yanked and failed to build, display a warning #}
+        {%- elif release.yanked and release.build_status == "success" -%}
+            {# If the release has been yanked and successfully built, display a warning #}
             {%- set warning = release_name ~ " is yanked" -%}
-        {%- elif release.yanked and not release.build_status -%}
+        {%- elif release.yanked and release.build_status == "failure" -%}
             {# If the release has been yanked and failed to build, display a warning #}
             {%- set warning = release_name ~ " is yanked and docs.rs failed to build it" -%}
-        {%- elif not release.build_status -%}
+        {%- elif release.build_status == "failure" -%}
             {# If the release failed to build, display a warning #}
             {%- set warning = "docs.rs failed to build " ~ release_name -%}
+        {%- elif release.build_status == "in_progress" -%}
+            {%- set title = release_name ~ " is currently being built" -%}
         {%- else -%}
             {%- set warning = false -%}
+        {%- endif -%}
+
+        {%- if warning -%}
+            {%- set title = warning -%}
         {%- endif -%}
 
         <li class="pure-menu-item">
@@ -125,11 +134,14 @@
                 {# We only want crawlers to crawl the /latest/ URLs, not /1.2.3/ URLs. #}
                 rel="nofollow"
                 class="pure-menu-link{% if warning %} warn{% endif %}"
-                {% if warning %} title="{{ warning }}"{% endif %}
+                {% if title %} title="{{ title }}"{% endif %}
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
                 {% if warning %}
                     {{ "triangle-exclamation" | fas }}
+                {% endif %}
+                {% if release.build_status == "in_progress" %}
+                    {{ "gear" | fas(fw=true, spin=true) }}
                 {% endif %}
                 {{ release.version }}
             </a>

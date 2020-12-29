@@ -271,14 +271,22 @@ impl tera::Filter for IconType {
         };
 
         let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
-        let (space, class_extra) = match args.get("extra").and_then(|s| s.as_str()) {
-            Some(extra) => (" ", extra),
-            None => ("", ""),
-        };
 
+        let mut classes = vec!["fa-svg", "fa-svg-fw"];
+        if args
+            .get("spin")
+            .and_then(|spin| spin.as_bool())
+            .unwrap_or(false)
+        {
+            classes.push("fa-svg-spin");
+        };
+        if let Some(extra) = args.get("extra").and_then(|s| s.as_str()) {
+            classes.push(extra);
+        }
         let icon = format!(
             "\
-<span class=\"fa-svg fa-svg-fw{space}{class_extra}\" aria-hidden=\"true\">{icon_file_string}</span>"
+<span class=\"{class}\" aria-hidden=\"true\">{icon_file_string}</span>",
+            class = classes.join(" "),
         );
 
         Ok(Value::String(icon))

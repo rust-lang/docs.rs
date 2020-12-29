@@ -2,6 +2,7 @@ use super::{markdown, match_version, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::web::rustdoc::RustdocHtmlParams;
 use crate::{
+    db::types::BuildStatus,
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
@@ -30,7 +31,7 @@ use std::sync::Arc;
 // TODO: Add target name and versions
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CrateDetails {
+pub(crate) struct CrateDetails {
     name: String,
     pub version: Version,
     description: Option<String>,
@@ -41,7 +42,7 @@ pub struct CrateDetails {
     #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
     release_time: DateTime<Utc>,
-    build_status: bool,
+    build_status: BuildStatus,
     pub latest_build_id: Option<i32>,
     last_successful_build: Option<String>,
     pub rustdoc_status: bool,
@@ -86,10 +87,10 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Release {
+pub(crate) struct Release {
     pub id: i32,
     pub version: semver::Version,
-    pub build_status: bool,
+    pub build_status: BuildStatus,
     pub yanked: bool,
     pub is_library: bool,
     pub rustdoc_status: bool,
@@ -131,13 +132,13 @@ impl CrateDetails {
                 releases.readme,
                 releases.description_long,
                 releases.release_time,
-                COALESCE(builds.build_status, false) as "build_status!",
+                COALESCE(builds.build_status, 'failure') as "build_status!: BuildStatus",
                 (
                     SELECT id
                     FROM builds
                     WHERE
                         builds.rid = releases.id AND
-                        builds.build_status = TRUE
+                        builds.build_status = 'success'
                     ORDER BY build_time DESC
                     LIMIT 1
                 ) AS latest_build_id,
@@ -255,11 +256,11 @@ impl CrateDetails {
         .try_collect()
         .await?;
 
-        if !crate_details.build_status {
+        if crate_details.build_status != BuildStatus::Success {
             crate_details.last_successful_build = crate_details
                 .releases
                 .iter()
-                .filter(|release| release.build_status && !release.yanked)
+                .filter(|release| release.build_status == BuildStatus::Success && !release.yanked)
                 .map(|release| release.version.to_string())
                 .next();
         }
@@ -351,7 +352,7 @@ pub(crate) async fn releases_for_crate(
         r#"SELECT
              releases.id,
              releases.version,
-             COALESCE(builds.build_status, false) as "build_status!",
+             COALESCE(builds.build_status, 'failure') as "build_status!: BuildStatus",
              releases.yanked,
              releases.is_library,
              releases.rustdoc_status,
@@ -648,7 +649,7 @@ pub(crate) async fn get_all_platforms_inner(
         format!("{}/{inner_path}", krate.name)
     };
 
-    let current_target = if latest_release.build_status {
+    let current_target = if latest_release.build_status.is_success() {
         if target.is_empty() {
             krate.default_target
         } else {
@@ -693,7 +694,7 @@ mod tests {
     use crate::registry_api::CrateOwner;
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
-        TestDatabase, TestEnvironment,
+        FakeBuild, TestDatabase, TestEnvironment,
     };
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
@@ -726,6 +727,7 @@ mod tests {
         .unwrap()
     }
 
+    #[fn_error_context::context("assert_last_successful_build_equals({package}, {version}, {expected_last_successful_build:?})")]
     async fn assert_last_successful_build_equals(
         db: &TestDatabase,
         package: &str,
@@ -735,10 +737,12 @@ mod tests {
         let mut conn = db.async_conn().await;
         let details = crate_details(&mut conn, package, version, None).await;
 
-        assert_eq!(
+        anyhow::ensure!(
+            details.last_successful_build.as_deref() == expected_last_successful_build,
+            "didn't expect {:?}",
             details.last_successful_build,
-            expected_last_successful_build.map(|s| s.to_string()),
         );
+
         Ok(())
     }
 
@@ -906,7 +910,7 @@ mod tests {
                 vec![
                     Release {
                         version: semver::Version::parse("1.0.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -915,7 +919,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -924,7 +928,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: false,
@@ -933,7 +937,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: true,
                         is_library: true,
                         rustdoc_status: true,
@@ -942,7 +946,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -951,7 +955,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -960,7 +964,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -969,7 +973,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: false,
                         rustdoc_status: false,
@@ -1120,7 +1124,36 @@ mod tests {
     }
 
     #[test]
-    fn releases_dropdowns_is_correct() {
+    fn test_latest_version_in_progress() {
+        wrapper(|env| {
+            let db = env.db();
+
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release()
+                .name("foo")
+                .version("0.0.2")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                ])
+                .create()?;
+
+            for version in &["0.0.1", "0.0.2"] {
+                let details = env.runtime().block_on(async move {
+                    let mut conn = db.async_conn().await;
+                    crate_details(&mut conn, "foo", version, None).await
+                });
+                assert_eq!(
+                    details.latest_release().unwrap().version,
+                    semver::Version::parse("0.0.1")?
+                );
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn releases_dropdowns_show_binary_warning() {
         wrapper(|env| {
             env.fake_release()
                 .name("binary")
@@ -1129,12 +1162,13 @@ mod tests {
                 .create()?;
 
             let page = kuchikiki::parse_html()
-                .one(env.frontend().get("/crate/binary/0.1.0").send()?.text()?);
-            let warning = page.select_first("a.pure-menu-link.warn").unwrap();
+                .one(env.frontend().get("/crate/binary/latest").send()?.text()?);
+            let link = page
+                .select_first("a.pure-menu-link[href='/crate/binary/0.1.0']")
+                .unwrap();
 
             assert_eq!(
-                warning
-                    .as_node()
+                link.as_node()
                     .as_element()
                     .unwrap()
                     .attributes
@@ -1142,6 +1176,38 @@ mod tests {
                     .get("title")
                     .unwrap(),
                 "binary-0.1.0 is not a library"
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn releases_dropdowns_show_in_progress() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                ])
+                .create()?;
+
+            let page = kuchikiki::parse_html()
+                .one(env.frontend().get("/crate/foo/latest").send()?.text()?);
+            let link = page
+                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
+                .unwrap();
+
+            assert_eq!(
+                link.as_node()
+                    .as_element()
+                    .unwrap()
+                    .attributes
+                    .borrow()
+                    .get("title")
+                    .unwrap(),
+                "foo-0.1.0 is currently being built"
             );
 
             Ok(())

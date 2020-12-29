@@ -1,5 +1,6 @@
 use super::{cache::CachePolicy, error::AxumNope, headers::CanonicalUrl};
 use crate::{
+    db::types::BuildStatus,
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
@@ -23,7 +24,7 @@ pub(crate) struct Build {
     id: i32,
     rustc_version: String,
     docsrs_version: String,
-    build_status: bool,
+    build_status: BuildStatus,
     build_time: DateTime<Utc>,
 }
 
@@ -96,17 +97,17 @@ async fn get_builds(
 ) -> Result<Vec<Build>> {
     Ok(sqlx::query_as!(
         Build,
-        "SELECT
+        r#"SELECT
             builds.id,
             builds.rustc_version,
             builds.docsrs_version,
-            builds.build_status,
+            builds.build_status as "build_status: BuildStatus",
             builds.build_time
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE crates.name = $1 AND releases.version = $2
-         ORDER BY id DESC",
+         ORDER BY id DESC"#,
         name,
         version.to_string(),
     )
