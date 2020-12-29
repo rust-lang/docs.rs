@@ -13,6 +13,7 @@
   {%- set inner_path = details.metadata.target_name ~ "/index.html" -%}
   {%- set is_latest_version = true -%}
   {%- set is_prerelease = false -%}
+  {%- set use_direct_platform_links = true -%}
   {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
