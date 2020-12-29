@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             releases.id,\n             releases.version,\n             COALESCE(builds.build_status, 'failure') as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.target_name\n         FROM releases\n         LEFT JOIN LATERAL (\n            SELECT build_status FROM builds\n            WHERE builds.rid = releases.id\n            ORDER BY builds.build_time\n            DESC LIMIT 1\n         ) AS builds ON true\n         WHERE\n             releases.crate_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "yanked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_library",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "target_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9a6a50ddbc1d07ef5648726f135eeca83ec922c4e9da07516b5f963b3551f4ee"
+}

@@ -14,7 +14,18 @@
         "Int4",
         "Varchar",
         "Varchar",
-        "Bool",
+        {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        },
         "Text"
       ]
     },

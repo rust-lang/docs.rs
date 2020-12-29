@@ -1,6 +1,7 @@
 use super::TestDatabase;
 
-use crate::docbuilder::{BuildResult, DocCoverage};
+use crate::db::types::BuildStatus;
+use crate::docbuilder::DocCoverage;
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{
@@ -45,7 +46,9 @@ pub(crate) struct FakeBuild {
     s3_build_log: Option<String>,
     other_build_logs: HashMap<String, String>,
     db_build_log: Option<String>,
-    result: BuildResult,
+    rustc_version: String,
+    docsrs_version: String,
+    build_status: BuildStatus,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -430,7 +433,7 @@ impl<'a> FakeRelease<'a> {
         // If the test didn't add custom builds, inject a default one
         let builds = self.builds.unwrap_or_else(|| vec![FakeBuild::default()]);
 
-        if builds.last().map(|b| b.result.successful).unwrap_or(false) {
+        if builds.last().map(|b| b.build_status) == Some(BuildStatus::Success) {
             let index = [&package.name, "index.html"].join("/");
             if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
                 rustdoc_files.push((&index, DEFAULT_CONTENT));
@@ -544,20 +547,14 @@ impl FakeGithubStats {
 impl FakeBuild {
     pub(crate) fn rustc_version(self, rustc_version: impl Into<String>) -> Self {
         Self {
-            result: BuildResult {
-                rustc_version: rustc_version.into(),
-                ..self.result
-            },
+            rustc_version: rustc_version.into(),
             ..self
         }
     }
 
     pub(crate) fn docsrs_version(self, docsrs_version: impl Into<String>) -> Self {
         Self {
-            result: BuildResult {
-                docsrs_version: docsrs_version.into(),
-                ..self.result
-            },
+            docsrs_version: docsrs_version.into(),
             ..self
         }
     }
@@ -594,11 +591,16 @@ impl FakeBuild {
     }
 
     pub(crate) fn successful(self, successful: bool) -> Self {
+        self.build_status(if successful {
+            BuildStatus::Success
+        } else {
+            BuildStatus::Failure
+        })
+    }
+
+    pub(crate) fn build_status(self, build_status: BuildStatus) -> Self {
         Self {
-            result: BuildResult {
-                successful,
-                ..self.result
-            },
+            build_status,
             ..self
         }
     }
@@ -610,8 +612,14 @@ impl FakeBuild {
         release_id: i32,
         default_target: &str,
     ) -> Result<()> {
-        let build_id =
-            crate::db::add_build_into_database(&mut *conn, release_id, &self.result).await?;
+        let build_id = crate::db::add_build_into_database(
+            &mut *conn,
+            release_id,
+            &self.rustc_version,
+            &self.docsrs_version,
+            self.build_status,
+        )
+        .await?;
 
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(
@@ -648,11 +656,9 @@ impl Default for FakeBuild {
             s3_build_log: Some("It works!".into()),
             db_build_log: None,
             other_build_logs: HashMap::new(),
-            result: BuildResult {
-                rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
-                docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
-                successful: true,
-            },
+            rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
+            docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
+            build_status: BuildStatus::Success,
         }
     }
 }

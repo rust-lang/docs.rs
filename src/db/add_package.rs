@@ -1,6 +1,6 @@
 use crate::{
-    db::types::Feature,
-    docbuilder::{BuildResult, DocCoverage},
+    db::types::{BuildStatus, Feature},
+    docbuilder::DocCoverage,
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
@@ -177,7 +177,9 @@ pub(crate) async fn add_doc_coverage(
 pub(crate) async fn add_build_into_database(
     conn: &mut sqlx::PgConnection,
     release_id: i32,
-    res: &BuildResult,
+    rustc_version: &str,
+    docsrs_version: &str,
+    build_status: BuildStatus,
 ) -> Result<i32> {
     debug!("Adding build into database");
     let hostname = hostname::get()?;
@@ -186,9 +188,9 @@ pub(crate) async fn add_build_into_database(
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id",
         release_id,
-        res.rustc_version,
-        res.docsrs_version,
-        res.successful,
+        rustc_version,
+        docsrs_version,
+        build_status as BuildStatus,
         hostname.to_str().unwrap_or(""),
     )
     .fetch_one(&mut *conn)

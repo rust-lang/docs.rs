@@ -1,7 +1,7 @@
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
-    add_path_into_remote_archive, update_crate_data_in_database, Pool,
+    add_path_into_remote_archive, types::BuildStatus, update_crate_data_in_database, Pool,
 };
 use crate::docbuilder::Limits;
 use crate::error::Result;
@@ -582,11 +582,19 @@ impl RustwideBuilder {
                         ))?;
                     }
 
+                    let build_status = if res.result.successful {
+                        BuildStatus::Success
+                    } else {
+                        BuildStatus::Failure
+                    };
                     let build_id = self.runtime.block_on(add_build_into_database(
                         &mut async_conn,
                         release_id,
-                        &res.result,
+                        &res.result.rustc_version,
+                        &res.result.docsrs_version,
+                        build_status,
                     ))?;
+
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
                     self.storage.store_one(build_log_path, res.build_log)?;
                     for (target, log) in target_build_logs {

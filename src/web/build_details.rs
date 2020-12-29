@@ -1,4 +1,5 @@
 use crate::{
+    db::types::BuildStatus,
     impl_axum_webpage,
     web::{
         error::{AxumNope, AxumResult},
@@ -21,7 +22,7 @@ pub(crate) struct BuildDetails {
     id: i32,
     rustc_version: String,
     docsrs_version: String,
-    build_status: bool,
+    build_status: BuildStatus,
     build_time: DateTime<Utc>,
     output: String,
 }
@@ -56,17 +57,17 @@ pub(crate) async fn build_details_handler(
     let id: i32 = params.id.parse().map_err(|_| AxumNope::BuildNotFound)?;
 
     let row = sqlx::query!(
-        "SELECT
+        r#"SELECT
              builds.rustc_version,
              builds.docsrs_version,
-             builds.build_status,
+             builds.build_status as "build_status: BuildStatus",
              builds.build_time,
              builds.output,
              releases.default_target
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
         id,
         params.name,
         params.version.to_string(),
