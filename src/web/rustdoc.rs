@@ -427,7 +427,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .recently_accessed_releases
         .record(krate.crate_id, krate.release_id, target);
 
-    let target = if target == "" {
+    let target = if target.is_empty() {
         String::new()
     } else {
         format!("{}/", target)
@@ -656,7 +656,7 @@ mod test {
     use crate::test::*;
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
-    use std::{collections::BTreeMap, iter::FromIterator};
+    use std::collections::BTreeMap;
 
     fn try_latest_version_redirect(
         path: &str,
@@ -1175,7 +1175,7 @@ mod test {
             path: &str,
             links: &[(&str, &str)],
         ) -> Result<(), failure::Error> {
-            let mut links = BTreeMap::from_iter(links.iter().copied());
+            let mut links: BTreeMap<_, _> = links.iter().copied().collect();
 
             for (platform, link, rel) in get_platform_links(path, web)? {
                 assert_eq!(rel, "nofollow");
