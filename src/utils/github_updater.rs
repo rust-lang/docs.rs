@@ -267,7 +267,7 @@ impl GithubUpdater {
                 &repo.id,
                 &repo.name_with_owner,
                 &repo.description,
-                &repo.pushed_at.map(|time| time.naive_utc()),
+                &repo.pushed_at,
                 &(repo.stargazer_count as i32),
                 &(repo.fork_count as i32),
                 &(repo.issues.total_count as i32),
