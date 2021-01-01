@@ -81,7 +81,7 @@ Get a fontawesome svg file by its name.
 */
 pub fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
     let svg = fontawesome_svg(type_.as_str(), name);
-    if svg == "" {
+    if svg.is_empty() {
         return Err(NameError);
     }
     Ok(svg)
