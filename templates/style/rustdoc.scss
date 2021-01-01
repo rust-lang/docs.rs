@@ -50,8 +50,8 @@ div.rustdoc {
             &.mobile {
                 top: $top-navbar-height;
 
-                .sidebar-elems .show-it {
-                    top: 77px;
+                .sidebar-elems.show-it {
+                    top: 45px + $top-navbar-height;
                 }
 
                 #sidebar-filler {
