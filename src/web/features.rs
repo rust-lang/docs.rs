@@ -1,10 +1,11 @@
+use super::{match_version, redirect_base, MatchSemver};
 use crate::db::types::Feature;
 use crate::{
     db::Pool,
     impl_webpage,
     web::{page::WebPage, MetaData},
 };
-use iron::{IronResult, Request, Response};
+use iron::{IronResult, Request, Response, Url};
 use router::Router;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
@@ -25,9 +26,27 @@ impl_webpage! {
 pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(req, router.find("name"));
-    let version = cexpect!(req, router.find("version"));
+    let req_version = router.find("version");
 
     let mut conn = extension!(req, Pool).get()?;
+    let version =
+        match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
+            MatchSemver::Exact((version, _)) => version,
+
+            MatchSemver::Semver((version, _)) => {
+                let url = ctry!(
+                    req,
+                    Url::parse(&format!(
+                        "{}/crate/{}/{}/features",
+                        redirect_base(req),
+                        name,
+                        version
+                    )),
+                );
+
+                return Ok(super::redirect(url));
+            }
+        };
     let rows = ctry!(
         req,
         conn.query(
@@ -100,10 +119,13 @@ fn get_feature_map(raw: Vec<Feature>) -> HashMap<String, Feature> {
 #[cfg(test)]
 mod tests {
     use crate::db::types::Feature;
+    use crate::test::wrapper;
     use crate::web::features::{
         get_feature_map, get_tree_structure_from_default, order_features_and_count_default_len,
         DEFAULT_NAME,
     };
+    use reqwest::StatusCode;
+    use std::collections::HashMap;
 
     #[test]
     fn test_feature_map_filters_private() {
@@ -219,5 +241,60 @@ mod tests {
         assert_eq!(default_len, 1);
         assert_eq!(features[0], default);
         assert_eq!(features[1], non_default);
+    }
+
+    #[test]
+    fn latest_redirect() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .features(HashMap::new())
+                .create()?;
+
+            env.fake_release()
+                .name("foo")
+                .version("0.2.0")
+                .features(HashMap::new())
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/latest/features").send()?;
+            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/features"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn crate_version_not_found() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .features(HashMap::new())
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/0.2.0/features").send()?;
+            dbg!(resp.url().as_str());
+            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/features"));
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn invalid_semver() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .features(HashMap::new())
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/0,1,0/features").send()?;
+            dbg!(resp.url().as_str());
+            assert!(resp.url().as_str().ends_with("/crate/foo/0,1,0/features"));
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        });
     }
 }
