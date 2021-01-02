@@ -84,12 +84,13 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             releases.rustdoc_status,
             github_repos.stars
         FROM crates
-        INNER JOIN releases ON crates.id = releases.crate_id
+        INNER JOIN releases ON crates.latest_version_id = releases.id
         LEFT JOIN github_repos ON releases.github_repo = github_repos.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
-            AND crates.latest_version_id = releases.id
-        ORDER BY {} DESC NULLS LAST
+            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)) 
+            AND {0} IS NOT NULL
+
+        ORDER BY {0} DESC
         LIMIT $1 OFFSET $2",
         ordering,
     );
@@ -692,14 +693,14 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_success, wrapper, TestEnvironment};
+    use crate::test::{assert_success, wrapper, TestFrontend};
     use chrono::TimeZone;
     use failure::Error;
     use kuchiki::traits::TendrilSink;
     use std::collections::HashSet;
 
     #[test]
-    fn releases_by_stars() {
+    fn get_releases_by_stars() {
         wrapper(|env| {
             let db = env.db();
 
@@ -713,6 +714,7 @@ mod tests {
                 .version("1.0.0")
                 .github_stats("ghost/bar", 20, 20, 20)
                 .create()?;
+            // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
             let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars);
@@ -720,7 +722,6 @@ mod tests {
                 vec![
                     "bar", // 20 stars
                     "foo", // 10 stars
-                    "baz", // no stars (still included at the bottom)
                 ],
                 releases
                     .iter()
@@ -1063,49 +1064,6 @@ mod tests {
         })
     }
 
-    fn releases_link_test(path: &str, env: &TestEnvironment) -> Result<(), Error> {
-        env.fake_release()
-            .name("crate_that_succeeded")
-            .version("0.1.0")
-            .create()?;
-        // make sure that crates get at most one release shown, so they don't crowd the page
-        env.fake_release()
-            .name("crate_that_succeeded")
-            .version("0.2.0")
-            .create()?;
-        env.fake_release()
-            .name("crate_that_failed")
-            .version("0.1.0")
-            .build_result_failed()
-            .create()?;
-        let page = kuchiki::parse_html().one(env.frontend().get(path).send()?.text()?);
-        let releases: Vec<_> = page.select("a.release").expect("missing heading").collect();
-        if path.contains("failures") {
-            assert_eq!(
-                1,
-                releases.len(),
-                "expected one failed release for path {}",
-                path
-            );
-        } else {
-            assert_eq!(2, releases.len(), "expected 2 releases for path {}", path);
-        }
-        for release in releases {
-            let attributes = release.attributes.borrow();
-            let url = attributes.get("href").unwrap();
-            if url.contains("crate_that_succeeded") {
-                assert_eq!(
-                    url, "/crate_that_succeeded/0.2.0/crate_that_succeeded",
-                    "for path {}",
-                    path
-                );
-            } else {
-                assert_eq!(url, "/crate/crate_that_failed/0.1.0", "for path {}", path);
-            }
-        }
-        Ok(())
-    }
-
     #[test]
     fn search() {
         wrapper(|env| {
@@ -1115,20 +1073,174 @@ mod tests {
         })
     }
 
+    fn get_release_links(path: &str, web: &TestFrontend) -> Result<Vec<String>, Error> {
+        let response = web.get(path).send()?;
+        assert!(response.status().is_success());
+
+        let page = kuchiki::parse_html().one(response.text()?);
+
+        Ok(page
+            .select("a.release")
+            .expect("missing heading")
+            .map(|el| {
+                let attributes = el.attributes.borrow();
+                attributes.get("href").unwrap().to_string()
+            })
+            .collect())
+    }
+
     #[test]
-    fn releases() {
+    fn releases_by_stars() {
         wrapper(|env| {
-            let web = env.frontend();
-            for page in &[
-                "/",
-                "/releases",
-                "/releases/stars",
-                "/releases/recent-failures",
-                "/releases/failures",
-            ] {
-                assert_success(page, web)?;
-                releases_link_test(page, env)?;
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 66, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.2.0")
+                .github_stats("some/repo", 66, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 20).and_hms(4, 33, 50))
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_succeeded_without_github")
+                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .version("0.2.0")
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_failed_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .build_result_failed()
+                .create()?;
+
+            let links = get_release_links("/releases/stars", env.frontend())?;
+
+            // output is sorted by stars, not release-time
+            assert_eq!(links.len(), 2);
+            assert_eq!(
+                links[0],
+                "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github"
+            );
+            assert_eq!(links[1], "/crate/crate_that_failed_with_github/0.1.0");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn failures_by_stars() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 66, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.2.0")
+                .github_stats("some/repo", 66, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 20).and_hms(4, 33, 50))
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_succeeded_without_github")
+                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .version("0.2.0")
+                .create()?;
+
+            env.fake_release()
+                .name("crate_that_failed_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .build_result_failed()
+                .create()?;
+
+            let links = get_release_links("/releases/failures", env.frontend())?;
+
+            // output is sorted by stars, not release-time
+            assert_eq!(links.len(), 1);
+            assert_eq!(links[0], "/crate/crate_that_failed_with_github/0.1.0");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn releases_failed_by_time() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .create()?;
+            // make sure that crates get at most one release shown, so they don't crowd the page
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .version("0.2.0")
+                .create()?;
+            env.fake_release()
+                .name("crate_that_failed")
+                .version("0.1.0")
+                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .build_result_failed()
+                .create()?;
+
+            let links = get_release_links("/releases/recent-failures", env.frontend())?;
+
+            assert_eq!(links.len(), 1);
+            assert_eq!(links[0], "/crate/crate_that_failed/0.1.0");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn releases_homepage_and_recent() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.1.0")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .create()?;
+            // make sure that crates get at most one release shown, so they don't crowd the page
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .version("0.2.0")
+                .create()?;
+            env.fake_release()
+                .name("crate_that_failed")
+                .version("0.1.0")
+                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .build_result_failed()
+                .create()?;
+
+            for page in &["/", "/releases"] {
+                let links = get_release_links(page, env.frontend())?;
+
+                assert_eq!(links.len(), 2);
+                assert_eq!(links[0], "/crate/crate_that_failed/0.1.0");
+                assert_eq!(
+                    links[1],
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github"
+                );
             }
+
             Ok(())
         })
     }

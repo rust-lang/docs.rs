@@ -602,6 +602,22 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                     ALTER release_time TYPE timestamp USING release_time AT TIME ZONE 'UTC';
             ",
         ),
+        migration!(
+            context,
+            26,
+            "create indexes for crates, github_repos and releases", 
+            // upgrade
+            "
+            CREATE INDEX crates_latest_version_idx ON crates (latest_version_id);
+            CREATE INDEX releases_github_repo_idx ON releases (github_repo);
+            CREATE INDEX github_repos_stars_idx ON github_repos(stars DESC);
+            ",
+            "
+            DROP INDEX crates_latest_version_idx;
+            DROP INDEX releases_github_repo_idx;
+            DROP INDEX github_repos_stars_idx;
+            ",
+        ),
     ];
 
     for migration in migrations {
