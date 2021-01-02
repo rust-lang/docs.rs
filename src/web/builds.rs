@@ -1,3 +1,4 @@
+use super::{match_version, redirect_base, MatchSemver};
 use crate::{
     db::Pool,
     docbuilder::Limits,
@@ -9,7 +10,7 @@ use iron::{
     headers::{
         AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
     },
-    status, IronResult, Request, Response,
+    status, IronResult, Request, Response, Url,
 };
 use router::Router;
 use serde::Serialize;
@@ -37,10 +38,29 @@ impl_webpage! {
 pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(req, router.find("name"));
-    let version = cexpect!(req, router.find("version"));
+    let req_version = router.find("version");
 
     let mut conn = extension!(req, Pool).get()?;
     let limits = ctry!(req, Limits::for_crate(&mut conn, name));
+
+    let version =
+        match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
+            MatchSemver::Exact((version, _)) => version,
+
+            MatchSemver::Semver((version, _)) => {
+                let url = ctry!(
+                    req,
+                    Url::parse(&format!(
+                        "{}/crate/{}/{}/builds",
+                        redirect_base(req),
+                        name,
+                        version
+                    )),
+                );
+
+                return Ok(super::redirect(url));
+            }
+        };
 
     let query = ctry!(
         req,
@@ -102,6 +122,7 @@ mod tests {
     use crate::test::{wrapper, FakeBuild};
     use chrono::{DateTime, Duration, Utc};
     use kuchiki::traits::TendrilSink;
+    use reqwest::StatusCode;
 
     #[test]
     fn build_list() {
@@ -273,6 +294,69 @@ mod tests {
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
 
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn latest_redirect() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.0.0")
+                    .docsrs_version("docs.rs 1.0.0")])
+                .create()?;
+
+            env.fake_release()
+                .name("foo")
+                .version("0.2.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.0.0")
+                    .docsrs_version("docs.rs 1.0.0")])
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/latest/builds").send()?;
+            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/builds"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn crate_version_not_found() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.0.0")
+                    .docsrs_version("docs.rs 1.0.0")])
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/0.2.0/builds").send()?;
+            dbg!(resp.url().as_str());
+            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/builds"));
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn invalid_semver() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.0.0")
+                    .docsrs_version("docs.rs 1.0.0")])
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/0,1,0/builds").send()?;
+            dbg!(resp.url().as_str());
+            assert!(resp.url().as_str().ends_with("/crate/foo/0,1,0/builds"));
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
