@@ -97,7 +97,6 @@ impl CrateDetails {
                 releases.keywords,
                 releases.have_examples,
                 releases.target_name,
-                ARRAY(SELECT releases.version FROM releases WHERE releases.crate_id = crates.id) AS versions,
                 releases.github_repo,
                 github_repos.stars AS github_stars,
                 github_repos.forks AS github_forks,
@@ -129,21 +128,8 @@ impl CrateDetails {
         let crate_id: i32 = krate.get("crate_id");
         let release_id: i32 = krate.get("release_id");
 
-        // sort versions with semver
-        let releases = {
-            let versions: Vec<String> = krate.get("versions");
-            let mut versions: Vec<semver::Version> = versions
-                .iter()
-                .filter_map(|version| semver::Version::parse(&version).ok())
-                .collect();
-
-            versions.sort();
-            versions.reverse();
-            versions
-                .into_iter()
-                .map(|version| map_to_release(conn, crate_id, version))
-                .collect()
-        };
+        // get releases, sorted by semver
+        let releases = releases_for_crate(conn, crate_id);
 
         let github_metadata = if krate.get::<_, Option<String>>("github_repo").is_some() {
             Some(GitHubMetadata {
@@ -258,32 +244,37 @@ impl CrateDetails {
     }
 }
 
-fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) -> Release {
-    let rows = conn
+fn releases_for_crate(conn: &mut Client, crate_id: i32) -> Vec<Release> {
+    let mut releases: Vec<Release> = conn
         .query(
-            "SELECT build_status,
-                    yanked,
-                    is_library
+            "SELECT 
+                version,
+                build_status,
+                yanked,
+                is_library
              FROM releases
-             WHERE releases.crate_id = $1 and releases.version = $2;",
-            &[&crate_id, &version.to_string()],
+             WHERE 
+                 releases.crate_id = $1",
+            &[&crate_id],
         )
-        .unwrap();
+        .unwrap()
+        .into_iter()
+        .filter_map(|row| {
+            let version: String = row.get("version");
+            semver::Version::parse(&version)
+                .map(|semversion| Release {
+                    version: semversion,
+                    build_status: row.get("build_status"),
+                    yanked: row.get("yanked"),
+                    is_library: row.get("is_library"),
+                })
+                .ok()
+        })
+        .collect();
 
-    let (build_status, yanked, is_library) = rows.get(0).map_or_else(Default::default, |row| {
-        (
-            row.get("build_status"),
-            row.get("yanked"),
-            row.get("is_library"),
-        )
-    });
-
-    Release {
-        version,
-        build_status,
-        yanked,
-        is_library,
-    }
+    releases.sort_by_key(|r| r.version.clone());
+    releases.reverse();
+    releases
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
