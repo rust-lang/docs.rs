@@ -117,6 +117,11 @@ impl CommandLine {
                 reload_templates,
             } => {
                 // Blocks indefinitely
+                log::info!(
+                    "Starting server on `{}`... (reload templates: {})",
+                    socket_addr,
+                    reload_templates,
+                );
                 let _ = Server::start(Some(&socket_addr), reload_templates, &ctx)?;
             }
             Self::Daemon {
