@@ -53,6 +53,7 @@ struct GitHubMetadata {
     stars: i32,
     forks: i32,
     issues: i32,
+    name: Option<String>,
 }
 
 fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
@@ -102,6 +103,7 @@ impl CrateDetails {
                 github_repos.stars AS github_stars,
                 github_repos.forks AS github_forks,
                 github_repos.issues AS github_issues,
+                github_repos.name AS github_name,
                 releases.is_library,
                 releases.yanked,
                 releases.doc_targets,
@@ -150,6 +152,7 @@ impl CrateDetails {
                 issues: krate.get("github_issues"),
                 stars: krate.get("github_stars"),
                 forks: krate.get("github_forks"),
+                name: krate.get("github_name"),
             })
         } else {
             None
