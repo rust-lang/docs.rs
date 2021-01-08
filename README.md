@@ -50,7 +50,8 @@ There may be other dependencies that have not been documented.
 
 ### Getting started
 
-Make sure you have docker-compose and are able to download ~10GB data on the first run.
+Make sure you have docker-compose and are able to download ~10GB data on the first run. Also ensure that
+docker is installed and the service is running.
 
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
