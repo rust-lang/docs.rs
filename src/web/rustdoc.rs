@@ -377,30 +377,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         })?
         .is_prerelease();
 
-    // If the requested crate version is the most recent, use it to build the url
-    let mut latest_path = if is_latest_version {
-        format!("/{}/{}", name, latest_version)
-
-    // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
-    } else if latest_release.build_status {
-        // Replace the version of the old path with the latest version
-        let mut latest_path = req_path.clone();
-        latest_path[2] = &latest_version;
-
-        format!(
-            "/{}/{}/{}",
-            name,
-            latest_version,
-            path_for_version(&latest_path, &krate.metadata.doc_targets, &storage, &config)
-        )
-    } else {
-        format!("/crate/{}/{}", name, latest_version)
-    };
-    if let Some(query) = req.url.query() {
-        latest_path.push('?');
-        latest_path.push_str(query);
-    }
-
     // The path within this crate version's rustdoc output
     let (target, inner_path) = {
         let mut inner_path = req_path.clone();
@@ -422,6 +398,28 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
         (target, inner_path.join("/"))
     };
+
+    // If the requested crate version is the most recent, use it to build the url
+    let mut latest_path = if is_latest_version {
+        format!("/{}/{}", name, latest_version)
+    // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
+    } else if latest_release.build_status {
+        let target = if target.is_empty() {
+            &krate.metadata.default_target
+        } else {
+            target
+        };
+        format!(
+            "/crate/{}/{}/target-redirect/{}/{}",
+            name, latest_version, target, inner_path
+        )
+    } else {
+        format!("/crate/{}/{}", name, latest_version)
+    };
+    if let Some(query) = req.url.query() {
+        latest_path.push('?');
+        latest_path.push_str(query);
+    }
 
     metrics
         .recently_accessed_releases
@@ -790,25 +788,27 @@ mod test {
 
             // check it works at all
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+            );
 
             // check it keeps the subpage
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", &web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
+            );
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/blah/blah.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/blah.html"
+            );
 
-            // check it searches for removed pages
+            // check it also works for deleted pages
             let redirect =
                 latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
-            // This must be a double redirect to deal with crates that failed to build in the
-            // latest version
-            assert_eq!(redirect, "/dummy/0.2.0/?search=will-be-deleted");
-            assert_redirect(
-                &redirect,
-                "/dummy/0.2.0/dummy/?search=will-be-deleted",
-                &web,
-            )?;
+            assert_eq!(redirect, "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
 
             Ok(())
         })
@@ -835,27 +835,24 @@ mod test {
                 latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
             assert_eq!(
                 redirect,
-                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html"
+                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
             let redirect =
                 latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/index.html"
+                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
-            // With deleted file platform specific redirect also handles search
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/struct.Blah.html",
-                web,
+                &web,
             )?;
-            assert_eq!(redirect, "/dummy/0.2.0/x86_64-pc-windows-msvc?search=Blah");
-            assert_redirect(
-                &redirect,
-                "/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/?search=Blah",
-                web,
-            )?;
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/struct.Blah.html"
+            );
 
             Ok(())
         })
@@ -905,10 +902,16 @@ mod test {
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+            );
 
             let redirect = latest_version_redirect("/dummy/0.2.1/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.0/dummy/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+            );
 
             Ok(())
         })
@@ -938,10 +941,16 @@ mod test {
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+            );
 
             let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
-            assert_eq!(redirect, "/dummy/0.2.1/dummy/index.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+            );
 
             Ok(())
         })
@@ -1603,7 +1612,7 @@ mod test {
                     "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
                     env.frontend()
                 )?,
-                "/tungstenite/0.11.0/tungstenite/index.html?search=String%20-%3E%20Message",
+                "/crate/tungstenite/0.11.0/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
             );
             Ok(())
         });
