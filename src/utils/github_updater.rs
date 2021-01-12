@@ -28,7 +28,7 @@ const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
             description
             stargazerCount
             forkCount
-            issues { totalCount }
+            issues(states: [OPEN]) { totalCount }
         }
     }
     rateLimit {
@@ -44,7 +44,7 @@ const GRAPHQL_SINGLE: &str = "query($owner: String!, $repo: String!) {
         description
         stargazerCount
         forkCount
-        issues { totalCount }
+        issues(states: [OPEN]) { totalCount }
     }
 }";
 
