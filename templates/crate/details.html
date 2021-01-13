@@ -76,7 +76,13 @@
                                     {# TODO: add support for hosts besides github (#35) #}
                                     {%- if details.github_metadata -%}
                                         {{ "github" | fab(fw=true) }}
-                                        {{ "star" | fas(fw=true) }} {{ details.github_metadata.stars }}
+                                        {% if details.github_metadata.name %}
+                                            {{details.github_metadata.name}}
+                                        {% else %}
+                                            Repository
+                                        {% endif %}
+                                        <br>
+                                        {{ "star" | fas(fw=true, extra="left-margin") }} {{ details.github_metadata.stars }}
                                         {{ "code-branch" | fas(fw=true) }} {{ details.github_metadata.forks }}
                                         {{ "exclamation-circle" | fas(fw=true) }} {{ details.github_metadata.issues }}
 

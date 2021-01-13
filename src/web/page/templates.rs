@@ -301,9 +301,9 @@ impl tera::Filter for IconType {
         let mut aria_hidden = true;
         let icon_name = tera::escape_html(value.as_str().expect("Icons only take strings"));
         let class = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
-            "class=\"fa-svg fa-svg-fw\""
+            "fa-svg fa-svg-fw"
         } else {
-            "class=\"fa-svg\""
+            "fa-svg"
         };
         let aria_label = args
             .get("aria-label")
@@ -332,9 +332,12 @@ impl tera::Filter for IconType {
         let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
 
         let icon = format!(
-            r#"<span {class} aria-hidden="{aria_hidden}"{aria_label}{id}>{icon_file_string}</span>"#,
+            "<span \
+                class=\"{class} {class_extra}\" \
+                aria-hidden=\"{aria_hidden}\"{aria_label}{id}>{icon_file_string}</span>",
             icon_file_string = icon_file_string,
             class = class,
+            class_extra = args.get("extra").and_then(|s| s.as_str()).unwrap_or(""),
             aria_hidden = aria_hidden,
             aria_label = aria_label,
             id = id,
