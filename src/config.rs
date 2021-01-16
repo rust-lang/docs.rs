@@ -30,6 +30,9 @@ pub struct Config {
     pub(crate) github_accesstoken: Option<String>,
     pub(crate) github_updater_min_rate_limit: u32,
 
+    // Gitlab authentication
+    pub(crate) gitlab_accesstoken: Option<String>,
+
     // Max size of the files served by the docs.rs frontend
     pub(crate) max_file_size: usize,
     pub(crate) max_file_size_html: usize,
@@ -89,6 +92,8 @@ impl Config {
 
             github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
+
+            gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
 
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
