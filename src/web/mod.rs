@@ -169,7 +169,7 @@ impl Handler for CratesfyiHandler {
             } else {
                 Err(e)
             }
-        };
+        }
 
         // try serving shared rustdoc resources first, then db/static file handler and last router
         // return 404 if none of them return Ok. It is important that the router comes last,
