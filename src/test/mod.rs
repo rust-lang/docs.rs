@@ -2,6 +2,7 @@ mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
 use crate::db::{Pool, PoolClient};
+use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
 use crate::{BuildQueue, Config, Context, Index, Metrics};
@@ -101,6 +102,7 @@ pub(crate) struct TestEnvironment {
     index: OnceCell<Arc<Index>>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
+    repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
 }
 
 pub(crate) fn init_logger() {
@@ -123,6 +125,7 @@ impl TestEnvironment {
             index: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
+            repository_stats_updater: OnceCell::new(),
         }
     }
 
@@ -137,7 +140,7 @@ impl TestEnvironment {
         }
     }
 
-    fn base_config(&self) -> Config {
+    pub(crate) fn base_config(&self) -> Config {
         let mut config = Config::from_env().expect("failed to get base config");
 
         // create index directory
@@ -212,6 +215,17 @@ impl TestEnvironment {
             .clone()
     }
 
+    pub(crate) fn repository_stats_updater(&self) -> Arc<RepositoryStatsUpdater> {
+        self.repository_stats_updater
+            .get_or_init(|| {
+                Arc::new(RepositoryStatsUpdater::new(
+                    &self.config(),
+                    self.pool().expect("failed to get the pool"),
+                ))
+            })
+            .clone()
+    }
+
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db.get_or_init(|| {
             TestDatabase::new(&self.config(), self.metrics()).expect("failed to initialize the db")
@@ -251,11 +265,16 @@ impl Context for TestEnvironment {
     fn index(&self) -> Result<Arc<Index>, Error> {
         Ok(self.index())
     }
+
+    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>, Error> {
+        Ok(self.repository_stats_updater())
+    }
 }
 
 pub(crate) struct TestDatabase {
     pool: Pool,
     schema: String,
+    repository_stats_updater: RepositoryStatsUpdater,
 }
 
 impl TestDatabase {
@@ -263,6 +282,9 @@ impl TestDatabase {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
+
+        let pool = Pool::new_with_schema(&config, metrics, &schema)?;
+        let repository_stats_updater = RepositoryStatsUpdater::new(config, pool.clone());
 
         let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
         conn.batch_execute(&format!(
@@ -298,8 +320,9 @@ impl TestDatabase {
         conn.batch_execute(&query)?;
 
         Ok(TestDatabase {
-            pool: Pool::new_with_schema(config, metrics, &schema)?,
+            pool,
             schema,
+            repository_stats_updater,
         })
     }
 
@@ -311,6 +334,10 @@ impl TestDatabase {
         self.pool
             .get()
             .expect("failed to get a connection out of the pool")
+    }
+
+    pub(crate) fn repository_stats_updater(&self) -> &RepositoryStatsUpdater {
+        &self.repository_stats_updater
     }
 }
 
