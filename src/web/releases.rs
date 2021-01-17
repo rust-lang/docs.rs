@@ -2,7 +2,7 @@
 
 use crate::{
     build_queue::QueuedCrate,
-    db::Pool,
+    db::{Pool, PoolClient},
     impl_webpage,
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue,
@@ -497,6 +497,69 @@ impl Default for Search {
     }
 }
 
+fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<Response> {
+    // since there is a chance of this query returning an empty result,
+    // we retry a certain amount of times, and log a warning.
+    for _ in 0..20 {
+        let rows = ctry!(
+            req,
+            conn.query(
+                "WITH params AS (
+                    -- get maximum possible id-value in crates-table
+                    SELECT last_value AS max_id FROM crates_id_seq
+                )
+                SELECT
+                    crates.name,
+                    releases.version,
+                    releases.target_name
+                FROM (
+                    -- generate 500 random numbers in the ID-range. 
+                    -- this might have to be increased when we have to repeat 
+                    -- this query too often. 
+                    -- it depends on the percentage of crates with > 100 stars
+                    SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
+                    FROM params, generate_series(1, 500)
+                ) AS r
+                INNER JOIN crates ON r.id = crates.id
+                INNER JOIN releases ON crates.latest_version_id = releases.id
+                INNER JOIN github_repos ON releases.github_repo = github_repos.id
+                WHERE
+                    releases.rustdoc_status = TRUE AND
+                    github_repos.stars >= 100
+                LIMIT 1
+                ",
+                &[]
+            ),
+        );
+
+        if let Some(row) = rows.into_iter().next() {
+            let name: String = row.get("name");
+            let version: String = row.get("version");
+            let target_name: String = row.get("target_name");
+            let url = ctry!(
+                req,
+                Url::parse(&format!(
+                    "{}/{}/{}/{}",
+                    redirect_base(req),
+                    name,
+                    version,
+                    target_name
+                )),
+            );
+
+            let mut resp = Response::with((status::Found, Redirect(url)));
+            resp.headers.set(Expires(HttpDate(time::now())));
+
+            return Ok(resp);
+        } else {
+            ::log::warn!("retrying random crate search");
+        }
+    }
+    ::log::error!("found no result in random crate search");
+
+    Err(Nope::NoResults.into())
+}
+
 impl_webpage! {
     Search = "releases/releases.html",
     status = |search| search.status,
@@ -511,7 +574,6 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     if let Some((_, query)) = query {
         // check if I am feeling lucky button pressed and redirect user to crate page
         // if there is a match
-        // TODO: Redirecting to latest doc might be more useful
         // NOTE: calls `query_pairs()` again because iterators are lazy and only yield items once
         if url
             .query_pairs()
@@ -519,45 +581,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         {
             // redirect to a random crate if query is empty
             if query.is_empty() {
-                // FIXME: This is a fast query but using a constant
-                //        There are currently 280 crates with docs and 100+
-                //        starts. This should be fine for a while.
-                let rows = ctry!(
-                    req,
-                    conn.query(
-                        "SELECT crates.name,
-                            releases.version,
-                            releases.target_name
-                     FROM crates
-                     INNER JOIN releases
-                         ON crates.latest_version_id = releases.id
-                     LEFT JOIN github_repos
-                         ON releases.github_repo = github_repos.id
-                     WHERE github_repos.stars >= 100 AND rustdoc_status = true
-                     OFFSET FLOOR(RANDOM() * 280) LIMIT 1",
-                        &[]
-                    ),
-                );
-                let row = rows.into_iter().next().unwrap();
-
-                let name: String = row.get("name");
-                let version: String = row.get("version");
-                let target_name: String = row.get("target_name");
-                let url = ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/{}/{}/{}",
-                        redirect_base(req),
-                        name,
-                        version,
-                        target_name
-                    )),
-                );
-
-                let mut resp = Response::with((status::Found, Redirect(url)));
-                resp.headers.set(Expires(HttpDate(time::now())));
-
-                return Ok(resp);
+                return redirect_to_random_crate(req, &mut conn);
             }
 
             // since we never pass a version into `match_version` here, we'll never get
@@ -1061,6 +1085,18 @@ mod tests {
             assert_eq!(results.count(), 0);
 
             Ok(())
+        })
+    }
+
+    #[test]
+    fn im_feeling_lucky_with_stars() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release()
+                .github_stats("some/repo", 333, 22, 11)
+                .name("some_random_crate")
+                .create()?;
+            assert_success("/releases/search?query=&i-am-feeling-lucky=1", web)
         })
     }
 
