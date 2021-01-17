@@ -215,6 +215,12 @@ cargo run -- database blacklist add <CRATE_NAME>
 cargo run -- database blacklist remove <CRATE_NAME>
 ```
 
+If you want to revert to a precise migration, you can run:
+
+```sh
+cargo run -- database migrate <migration number>
+```
+
 #### `daemon` subcommand
 
 ```sh
