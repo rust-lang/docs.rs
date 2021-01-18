@@ -550,6 +550,9 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
             let mut resp = Response::with((status::Found, Redirect(url)));
             resp.headers.set(Expires(HttpDate(time::now())));
 
+            let metrics = extension!(req, crate::Metrics).clone();
+            metrics.im_feeling_lucky_searches.inc();
+
             log::debug!("finished random crate search on iteration {}", i);
             return Ok(resp);
         } else {

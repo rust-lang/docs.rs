@@ -71,6 +71,9 @@ metrics! {
 
         /// The number of attempted files that failed due to a memory limit
         pub(crate) html_rewrite_ooms: IntCounter,
+
+        /// the number of "I'm feeling lucky" searches for crates
+        pub(crate) im_feeling_lucky_searches: IntCounter,
     }
 
     // The Rust prometheus library treats the namespace as the "prefix" of the metric name: a
