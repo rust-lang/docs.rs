@@ -29,7 +29,8 @@ pub(super) fn build_routes() -> Routes {
         PermanentRedirect("/-/static/opensearch.xml"),
     );
 
-    routes.static_resource("/-/static/:file", super::statics::static_handler);
+    routes.static_resource("/-/static/:single", super::statics::static_handler);
+    routes.static_resource("/-/static/*", super::statics::static_handler);
 
     routes.internal_page("/", super::releases::home_page);
 

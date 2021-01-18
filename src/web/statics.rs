@@ -7,7 +7,6 @@ use iron::{
     IronResult, Request, Response, Url,
 };
 use mime_guess::MimeGuess;
-use router::Router;
 use std::{ffi::OsStr, fs, path::Path};
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
@@ -16,10 +15,11 @@ const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"))
 const STATIC_SEARCH_PATHS: &[&str] = &["vendor/pure-css/css", "static"];
 
 pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let file = cexpect!(req, router.find("file"));
+    let mut file = req.url.path();
+    file.drain(..2).for_each(std::mem::drop);
+    let file = file.join("/");
 
-    Ok(match file {
+    Ok(match file.as_str() {
         "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap()))?,
         "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap()))?,
         "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap()))?,
@@ -28,15 +28,21 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
-    // Filter out files that attempt to traverse directories
-    if file.contains("..") || file.contains('/') || file.contains('\\') {
-        return Err(Nope::ResourceNotFound.into());
-    }
-
     // Find the first path that actually exists
     let path = STATIC_SEARCH_PATHS
         .iter()
-        .map(|p| Path::new(p).join(file))
+        .filter_map(|root| {
+            let path = Path::new(root).join(file);
+
+            // Prevent accessing static files outside the root. This could happen if the path
+            // contains `/` or `..`. The check doesn't outright prevent those strings to be present
+            // to allow accessing files in subdirectories.
+            if path.starts_with(root) {
+                Some(path)
+            } else {
+                None
+            }
+        })
         .find(|p| p.exists())
         .ok_or(Nope::ResourceNotFound)?;
     let contents = ctry!(req, fs::read(&path));
@@ -199,11 +205,15 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
 
-            for path in STATIC_SEARCH_PATHS {
-                for (file, path) in fs::read_dir(path)?
-                    .map(|e| e.unwrap())
-                    .map(|e| (e.file_name(), e.path()))
-                {
+            for root in STATIC_SEARCH_PATHS {
+                for entry in walkdir::WalkDir::new(root) {
+                    let entry = entry?;
+                    if !entry.file_type().is_file() {
+                        continue;
+                    }
+                    let file = entry.path().strip_prefix(root).unwrap();
+                    let path = entry.path();
+
                     let url = format!("/-/static/{}", file.to_str().unwrap());
                     let resp = web.get(&url).send()?;
 
