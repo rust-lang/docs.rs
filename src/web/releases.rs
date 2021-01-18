@@ -500,7 +500,7 @@ impl Default for Search {
 fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<Response> {
     // since there is a chance of this query returning an empty result,
     // we retry a certain amount of times, and log a warning.
-    for _ in 0..20 {
+    for i in 0..20 {
         let rows = ctry!(
             req,
             conn.query(
@@ -550,12 +550,13 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
             let mut resp = Response::with((status::Found, Redirect(url)));
             resp.headers.set(Expires(HttpDate(time::now())));
 
+            log::debug!("finished random crate search on iteration {}", i);
             return Ok(resp);
         } else {
-            ::log::warn!("retrying random crate search");
+            log::warn!("retrying random crate search");
         }
     }
-    ::log::error!("found no result in random crate search");
+    log::error!("found no result in random crate search");
 
     Err(Nope::NoResults.into())
 }
