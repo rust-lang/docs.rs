@@ -9,51 +9,63 @@
 
 {%- block body -%}
     <div class="container">
-        <div id="releases-activity-chart"></div>
+        <canvas id="releases-activity-chart"></canvas>
     </div>
 {%- endblock body -%}
 
 {# TODO: Do this with tera alone #}
+{%- block css -%}
+    <link rel="stylesheet" href="/-/static/chartjs/chart.min.css">
+{%- endblock -%}
 {%- block javascript -%}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/4.2.5/highcharts.js" type="text/javascript"
-        charset="utf-8"></script>
+    <script src="/-/static/chartjs/chart.min.js" type="text/javascript"></script>
 
-    <script type="text/javascript" charset="utf-8">
-        new Highcharts.Chart({
-            chart: {
-                renderTo: 'releases-activity-chart',
-                type: 'line'
-            },
-            title: {
-                text: 'Monthly release activity',
-                x: -20 //center
-            },
-            xAxis: {
-                categories: [
+    <script type="text/javascript">
+        // We're including the CSS file manually to avoid issues with the CSP.
+        Chart.platform.disableCSSInjection = true;
+
+        var ctx = document.getElementById("releases-activity-chart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [
                     {% if activity_data.dates -%}
                         {%- for date in activity_data.dates -%}
                             {{ "'" ~ date ~ "'," }}
                         {%- endfor -%}
                     {%- endif %}
+                ],
+                datasets: [
+                    {
+                        label: "Releases",
+                        borderColor: "#4d76ae",
+                        backgroundColor: "#4d76ae",
+                        fill: false,
+                        data: [{{ activity_data.counts | default(value=[]) | join(sep=", ") }}],
+                    },
+                    {
+                        label: "Build Failures",
+                        borderColor: "#434348",
+                        backgroundColor: "#434348",
+                        fill: false,
+                        data: [{{ activity_data.failures | default(value=[]) | join(sep=", ") }}],
+                    },
                 ]
             },
-            yAxis: {
-                title: {
-                    text: 'Crates'
+            options: {
+                animation: false,
+                tooltips: {
+                    mode: "index",
+                    intersect: false,
                 },
-                plotLines: [{
-                    value: 0,
-                    width: 1,
-                    color: '#808080'
-                }]
-            },
-            series: [{
-                name: 'Releases',
-                data: [{{ activity_data.counts | default(value=[]) | join(sep=", ") }}]
-            }, {
-                name: 'Build Failures',
-                data: [{{ activity_data.failures | default(value=[]) | join(sep=", ") }}]
-            }]
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero: true,
+                        }
+                    }]
+                }
+            }
         });
     </script>
 {%- endblock javascript -%}
