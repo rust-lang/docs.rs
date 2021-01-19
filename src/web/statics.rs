@@ -23,29 +23,37 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
         "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap()))?,
         "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap()))?,
         "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap()))?,
-        file => serve_file(req, file)?,
+        file => serve_file(file)?,
     })
 }
 
-fn serve_file(req: &Request, file: &str) -> IronResult<Response> {
+fn serve_file(file: &str) -> IronResult<Response> {
     // Find the first path that actually exists
     let path = STATIC_SEARCH_PATHS
         .iter()
         .filter_map(|root| {
             let path = Path::new(root).join(file);
+            if !path.exists() {
+                return None;
+            }
 
             // Prevent accessing static files outside the root. This could happen if the path
             // contains `/` or `..`. The check doesn't outright prevent those strings to be present
             // to allow accessing files in subdirectories.
-            if path.starts_with(root) {
-                Some(path)
+            let canonical_path = std::fs::canonicalize(path).ok()?;
+            let canonical_root = std::fs::canonicalize(root).ok()?;
+            if canonical_path.starts_with(canonical_root) {
+                Some(canonical_path)
             } else {
                 None
             }
         })
-        .find(|p| p.exists())
+        .next()
         .ok_or(Nope::ResourceNotFound)?;
-    let contents = ctry!(req, fs::read(&path));
+    let contents = fs::read(&path).map_err(|e| {
+        log::error!("failed to read static file {}: {}", path.display(), e);
+        Nope::InternalServerError
+    })?;
 
     // If we can detect the file's mime type, set it
     // MimeGuess misses a lot of the file types we need, so there's a small wrapper
@@ -124,7 +132,7 @@ pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 #[cfg(test)]
 mod tests {
-    use super::{STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
+    use super::{serve_file, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
     use crate::test::wrapper;
     use std::fs;
 
@@ -272,23 +280,22 @@ mod tests {
 
     #[test]
     fn directory_traversal() {
-        wrapper(|env| {
-            let web = env.frontend();
+        const PATHS: &[&str] = &[
+            "../LICENSE",
+            "%2e%2e%2fLICENSE",
+            "%2e%2e/LICENSE",
+            "..%2fLICENSE",
+            "%2e%2e%5cLICENSE",
+        ];
 
-            let urls = &[
-                "../LICENSE.txt",
-                "%2e%2e%2fLICENSE.txt",
-                "%2e%2e/LICENSE.txt",
-                "..%2fLICENSE.txt",
-                "%2e%2e%5cLICENSE.txt",
-            ];
-
-            for url in urls {
-                let req = web.get(&format!("/-/static/{}", url)).send()?;
-                assert_eq!(req.status().as_u16(), 404);
-            }
-
-            Ok(())
-        });
+        for path in PATHS {
+            // This doesn't test an actual web request as the web framework used at the time of
+            // writing this test (iron 0.5) already resolves `..` before calling any handler.
+            //
+            // Still, the test ensures the underlying function called by the request handler to
+            // serve the file also includes protection for path traversal, in the event we switch
+            // to a framework that doesn't include builtin protection in the future.
+            assert!(serve_file(path).is_err(), "{} was served", path);
+        }
     }
 }
