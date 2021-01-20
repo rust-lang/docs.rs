@@ -35,7 +35,7 @@
             <ul>
                 {%- for release in recent_releases -%}
                     {%- if release.rustdoc_status -%}
-                        {%- set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+                        {%- set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
                     {%- else -%}
                         {%- set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
                     {%- endif -%}
