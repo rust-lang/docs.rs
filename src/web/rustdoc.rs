@@ -87,6 +87,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     }
 
+    let metrics = extension!(req, Metrics).clone();
+    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
+
     // this unwrap is safe because iron urls are always able to use `path_segments`
     // i'm using this instead of `req.url.path()` to avoid allocating the Vec, and also to avoid
     // keeping the borrow alive into the return statement
@@ -102,8 +105,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         // redirecting to the crate root page
         if req.url.as_ref().path_segments().unwrap().count() > 2 {
             // this URL is actually from a crate-internal path, serve it there instead
+            rendering_time.step("serve JS for crate");
             return rustdoc_html_server_handler(req);
         } else {
+            rendering_time.step("serve JS");
             let storage = extension!(req, Storage);
             let config = extension!(req, Config);
 
@@ -124,6 +129,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
+        rendering_time.step("serve ICO");
         return super::statics::ico_handler(req);
     }
 
@@ -141,6 +147,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
+    rendering_time.step("match version");
     let v = match_version(&mut conn, &crate_name, req_version)?;
     if let Some(new_name) = v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should
@@ -151,6 +158,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
+    rendering_time.step("fetch release doc status");
     let (target_name, has_docs): (String, bool) = {
         let rows = ctry!(
             req,
@@ -170,8 +178,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     if has_docs {
+        rendering_time.step("redirect to doc");
         redirect_to_doc(req, &crate_name, &version, target, &target_name)
     } else {
+        rendering_time.step("redirect to crate");
         redirect_to_crate(req, &crate_name, &version)
     }
 }
