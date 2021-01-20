@@ -69,8 +69,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push_str(query);
         }
         let url = ctry!(req, Url::parse(&url_str));
+        let config = extension!(req, Config);
         let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.headers.set(Expires(HttpDate(time::now())));
+        resp.headers.set(CacheControl(vec![
+            CacheDirective::MaxAge(0),
+            // s-maxage is only for the CDN.
+            CacheDirective::SMaxAge(config.cache_rustdoc_redirects),
+        ]));
 
         Ok(resp)
     }
@@ -81,8 +86,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             Url::parse(&format!("{}/crate/{}/{}", redirect_base(req), name, vers)),
         );
 
+        let config = extension!(req, Config);
         let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.headers.set(Expires(HttpDate(time::now())));
+        resp.headers.set(CacheControl(vec![
+            CacheDirective::MaxAge(0),
+            // s-maxage is only for the CDN.
+            CacheDirective::SMaxAge(config.cache_rustdoc_redirects),
+        ]));
 
         Ok(resp)
     }

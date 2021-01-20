@@ -38,6 +38,7 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 
+<<<<<<< HEAD
     // random crate search generates a number of random IDs to
     // efficiently find a random crate with > 100 GH stars.
     // The amount depends on the ratio of crates with >100 stars
@@ -46,6 +47,10 @@ pub struct Config {
     // `500` for a ratio of 7249 over 54k crates.
     // For unit-tests the number has to be higher.
     pub(crate) random_crate_search_view_size: u32,
+=======
+    // CDN / caching settings
+    pub(crate) cache_rustdoc_redirects: u32,
+>>>>>>> 53d35de (Set CDN caching headers for rustdoc redirects)
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -94,6 +99,7 @@ impl Config {
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
+            cache_rustdoc_redirects: env("DOCSRS_CACHE_RUSTDOC_REDIRECTS", 30 * 60)?,
 
             rustwide_workspace: env("CRATESFYI_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCS_RS_DOCKER", false)?,
