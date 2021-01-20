@@ -132,6 +132,8 @@ pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
 
 #[cfg(test)]
 mod tests {
+    use iron::status::Status;
+
     use super::{serve_file, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
     use crate::test::wrapper;
     use std::fs;
@@ -295,7 +297,12 @@ mod tests {
             // Still, the test ensures the underlying function called by the request handler to
             // serve the file also includes protection for path traversal, in the event we switch
             // to a framework that doesn't include builtin protection in the future.
-            assert!(serve_file(path).is_err(), "{} was served", path);
+            assert_eq!(
+                Some(Status::NotFound),
+                serve_file(path).unwrap_err().response.status,
+                "{} did not return a 404",
+                path
+            );
         }
     }
 }
