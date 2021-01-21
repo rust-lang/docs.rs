@@ -652,13 +652,15 @@ pub fn badge_handler_svg(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn badge_handler_json(req: &mut Request) -> IronResult<Response> {
+    use serde_json::Value;
     use std::collections::HashMap;
+
     let builder = |label, message, color| {
         let mut out = HashMap::new();
-        out.insert("schemaVersion", "1".to_string());
-        out.insert("label", label);
-        out.insert("message", message);
-        out.insert("color", color);
+        out.insert("schemaVersion", Value::Number(1.into()));
+        out.insert("label", Value::String(label));
+        out.insert("message", Value::String(message));
+        out.insert("color", Value::String(color));
         serde_json::to_string(&out)
     };
     badge_handler_common(
