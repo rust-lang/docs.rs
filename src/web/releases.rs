@@ -1166,7 +1166,7 @@ mod tests {
             assert_eq!(links.len(), 2);
             assert_eq!(
                 links[0],
-                "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github"
+                "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/"
             );
             assert_eq!(links[1], "/crate/crate_that_failed_with_github/0.1.0");
 
@@ -1277,7 +1277,7 @@ mod tests {
                 assert_eq!(links[0], "/crate/crate_that_failed/0.1.0");
                 assert_eq!(
                     links[1],
-                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github"
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/"
                 );
             }
 
