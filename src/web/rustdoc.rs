@@ -11,7 +11,7 @@ use crate::{
 };
 use iron::url::percent_encoding::percent_decode;
 use iron::{
-    headers::{CacheControl, CacheDirective, Expires, HttpDate},
+    headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate},
     modifiers::Redirect,
     status, Handler, IronResult, Request, Response, Url,
 };
@@ -206,7 +206,7 @@ impl RustdocPage {
         req: &mut Request,
         file_path: &str,
     ) -> IronResult<Response> {
-        use iron::{headers::ContentType, status::Status};
+        use iron::status::Status;
 
         let templates = req
             .extensions
@@ -557,9 +557,16 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     Ok(resp)
 }
 
-pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
-    use badge::{Badge, BadgeOptions};
-    use iron::headers::ContentType;
+fn badge_handler_common<F, E>(
+    req: &mut Request,
+    ext: &str,
+    content_type: ContentType,
+    builder: F,
+) -> IronResult<Response>
+where
+    F: Fn(String, String, String) -> Result<String, E>,
+    E: std::fmt::Display,
+{
     let version = {
         let mut params = req.url.as_ref().query_pairs();
         match params.find(|(key, _)| key == "version") {
@@ -571,59 +578,51 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(req, extension!(req, Router).find("crate"));
     let mut conn = extension!(req, Pool).get()?;
 
-    let options =
-        match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
-            Ok(MatchSemver::Exact((version, id))) => {
-                let rows = ctry!(
-                    req,
-                    conn.query(
-                        "SELECT rustdoc_status
+    const SUCCESS_COLOR: &str = "#4d76ae";
+    const FAILURE_COLOR: &str = "#e05d44";
+
+    let out = match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        Ok(MatchSemver::Exact((version, id))) => {
+            let rows = ctry!(
+                req,
+                conn.query(
+                    "SELECT rustdoc_status
                      FROM releases
                      WHERE releases.id = $1",
-                        &[&id]
-                    ),
-                );
-                if !rows.is_empty() && rows[0].get(0) {
-                    BadgeOptions {
-                        subject: "docs".to_owned(),
-                        status: version,
-                        color: "#4d76ae".to_owned(),
-                    }
-                } else {
-                    BadgeOptions {
-                        subject: "docs".to_owned(),
-                        status: version,
-                        color: "#e05d44".to_owned(),
-                    }
-                }
+                    &[&id]
+                ),
+            );
+            if !rows.is_empty() && rows[0].get(0) {
+                builder("docs".to_string(), version, SUCCESS_COLOR.to_string())
+            } else {
+                builder("docs".to_string(), version, FAILURE_COLOR.to_string())
             }
+        }
 
-            Ok(MatchSemver::Semver((version, _))) => {
-                let base_url = format!("{}/{}/badge.svg", redirect_base(req), name);
-                let url = ctry!(
-                    req,
-                    iron::url::Url::parse_with_params(&base_url, &[("version", version)]),
-                );
-                let iron_url = ctry!(req, Url::from_generic_url(url));
-                return Ok(super::redirect(iron_url));
-            }
+        Ok(MatchSemver::Semver((version, _))) => {
+            let base_url = format!("{}/{}/badge.{}", redirect_base(req), name, ext);
+            let url = ctry!(
+                req,
+                iron::url::Url::parse_with_params(&base_url, &[("version", version)]),
+            );
+            let iron_url = ctry!(req, Url::from_generic_url(url));
+            return Ok(super::redirect(iron_url));
+        }
 
-            Err(Nope::VersionNotFound) => BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "version not found".to_owned(),
-                color: "#e05d44".to_owned(),
-            },
+        Err(Nope::VersionNotFound) => builder(
+            "docs".to_string(),
+            "version not found".to_string(),
+            FAILURE_COLOR.to_string(),
+        ),
+        Err(_) => builder(
+            "docs".to_string(),
+            "no builds".to_string(),
+            FAILURE_COLOR.to_string(),
+        ),
+    };
 
-            Err(_) => BadgeOptions {
-                subject: "docs".to_owned(),
-                status: "no builds".to_owned(),
-                color: "#e05d44".to_owned(),
-            },
-        };
-
-    let mut resp = Response::with((status::Ok, ctry!(req, Badge::new(options)).to_svg()));
-    resp.headers
-        .set(ContentType("image/svg+xml".parse().unwrap()));
+    let mut resp = Response::with((status::Ok, ctry!(req, out)));
+    resp.headers.set(content_type);
     resp.headers.set(Expires(HttpDate(time::now())));
     resp.headers.set(CacheControl(vec![
         CacheDirective::NoCache,
@@ -631,6 +630,43 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
         CacheDirective::MustRevalidate,
     ]));
     Ok(resp)
+}
+
+pub fn badge_handler_svg(req: &mut Request) -> IronResult<Response> {
+    use badge::{Badge, BadgeOptions};
+
+    let builder = |subject, status, color| {
+        let options = BadgeOptions {
+            subject,
+            status,
+            color,
+        };
+        Badge::new(options).map(|badge| badge.to_svg())
+    };
+    badge_handler_common(
+        req,
+        "svg",
+        ContentType("image/svg+xml".parse().unwrap()),
+        builder,
+    )
+}
+
+pub fn badge_handler_json(req: &mut Request) -> IronResult<Response> {
+    use std::collections::HashMap;
+    let builder = |label, message, color| {
+        let mut out = HashMap::new();
+        out.insert("schemaVersion", "1".to_string());
+        out.insert("label", label);
+        out.insert("message", message);
+        out.insert("color", color);
+        serde_json::to_string(&out)
+    };
+    badge_handler_common(
+        req,
+        "json",
+        ContentType("application/json".parse().unwrap()),
+        builder,
+    )
 }
 
 /// Serves shared web resources used by rustdoc-generated documentation.
