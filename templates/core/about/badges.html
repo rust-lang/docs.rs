@@ -16,7 +16,7 @@
 	<p>
 		Badge will display in blue if docs.rs is successfully hosting your crate
 		documentation, and red if building documentation failing.
-	</p>
+    </p>
 
 	<p>Example badges for mio crate:</p>
 	<table class="pure-table pure-table-horizontal">
@@ -48,6 +48,22 @@
 			<td><img src="{{ mio_badge | safe }}?version=0.1.0" alt="mio" /></td>
 		</tr>
 		</tbody>
-	</table>
+    </table>
+
+    <p>
+        If you want more customization, you can also get the badge data as JSON that 
+        matches the <a href="https://shields.io/endpoint">the shields.io endpoint spec</a> 
+        by changing the extension from <code>.svg</code> to <code>.json</code> .
+    </p>
+
+    <p>
+        {%- set rand_badge = "https://docs.rs/rand/badge.json" -%}
+        
+        For example, the image at
+        <code>https://img.shields.io/endpoint?url={{ rand_badge }}&label=Documentation&color=yellow</code>
+        outputs 
+        <img src="https://img.shields.io/endpoint?url={{ rand_badge | safe}}&label=Documentation&color=yellow" alt="rand"/>
+    </p>
+
 	</div>
 {%- endblock body %}
