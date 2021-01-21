@@ -721,7 +721,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_success, wrapper, TestFrontend};
+    use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
     use chrono::TimeZone;
     use failure::Error;
     use kuchiki::traits::TendrilSink;
@@ -1100,7 +1100,12 @@ mod tests {
                 .github_stats("some/repo", 333, 22, 11)
                 .name("some_random_crate")
                 .create()?;
-            assert_success("/releases/search?query=&i-am-feeling-lucky=1", web)
+            assert_redirect(
+                "/releases/search?query=&i-am-feeling-lucky=1",
+                "/some_random_crate/1.0.0/some_random_crate/",
+                web,
+            )?;
+            Ok(())
         })
     }
 
@@ -1109,7 +1114,12 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
             env.fake_release().name("some_random_crate").create()?;
-            assert_success("/releases/search?query=some_random_crate", web)
+
+            let links = get_release_links("/releases/search?query=some_random_crate", web)?;
+
+            assert_eq!(links.len(), 1);
+            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/",);
+            Ok(())
         })
     }
 
