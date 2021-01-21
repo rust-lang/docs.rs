@@ -539,7 +539,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
             let url = ctry!(
                 req,
                 Url::parse(&format!(
-                    "{}/{}/{}/{}",
+                    "{}/{}/{}/{}/",
                     redirect_base(req),
                     name,
                     version,
@@ -618,7 +618,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 let url = if rustdoc_status {
                     ctry!(
                         req,
-                        Url::parse(&format!("{}/{}/{}", redirect_base(req), query, version)),
+                        Url::parse(&format!("{}/{}/{}/", redirect_base(req), query, version)),
                     )
                 } else {
                     ctry!(
