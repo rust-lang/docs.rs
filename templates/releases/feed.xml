@@ -13,7 +13,7 @@
 
     {%- for release in recent_releases -%}
         {%- if release.rustdoc_status -%}
-            {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name -%}
+            {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
         {%- else -%}
             {%- set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
         {%- endif %}
