@@ -12,7 +12,6 @@ use crate::{
 use iron::url::percent_encoding::percent_decode;
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
-    modifiers::Redirect,
     status, Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
@@ -37,8 +36,12 @@ impl RustLangRedirector {
 }
 
 impl iron::Handler for RustLangRedirector {
-    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-        Ok(Response::with((status::Found, Redirect(self.url.clone()))))
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let config = extension!(req, Config);
+        Ok(super::cached_redirect(
+            self.url.clone(),
+            config.cache_rustdoc_redirects,
+        ))
     }
 }
 
