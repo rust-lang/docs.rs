@@ -43,7 +43,11 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
     let limits = ctry!(req, Limits::for_crate(&mut conn, name));
 
-    let is_json = req.url.path().last().map_or(false, |segment| segment.ends_with(".json"));
+    let is_json = req
+        .url
+        .path()
+        .last()
+        .map_or(false, |segment| segment.ends_with(".json"));
 
     let version =
         match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
@@ -58,7 +62,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
                         redirect_base(req),
                         name,
                         version,
-                        ext
+                        ext,
                     )),
                 );
 
