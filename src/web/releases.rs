@@ -529,7 +529,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                     releases.rustdoc_status = TRUE AND
                     github_repos.stars >= 100
                 LIMIT 1",
-            &[&(config.random_crate_search_view_size as i32),]
+            &[&(config.random_crate_search_view_size as i32)]
         )
     );
 
@@ -1089,6 +1089,18 @@ mod tests {
     #[test]
     fn im_feeling_lucky_with_stars() {
         wrapper(|env| {
+            {
+                // The normal test-setup will offset all primary sequences by 10k
+                // to prevent errors with foreign key relations.
+                // Random-crate-search relies on the sequence for the crates-table
+                // to find a maximum possible ID. This combined with only one actual
+                // crate in the db breaks this test.
+                // That's why we reset the id-sequence to zero for this test.
+
+                let mut conn = env.db().conn();
+                conn.execute(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#, &[])?;
+            }
+
             let web = env.frontend();
             env.fake_release()
                 .github_stats("some/repo", 333, 22, 11)
