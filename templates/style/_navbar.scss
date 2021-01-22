@@ -39,6 +39,10 @@ div.nav-container {
         font-weight: 400;
         color: var(--color-navbar-standard);
 
+        &.description {
+            font-size: 0.9em;
+        }
+
         // Improves menu link readability when inverting the colors on focus.
         // Vendor do background-color #eee, looks weird on different theme.
         &:focus {
