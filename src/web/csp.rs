@@ -1,3 +1,4 @@
+use crate::config::Config;
 use iron::{AfterMiddleware, BeforeMiddleware, IronResult, Request, Response};
 
 pub(super) struct Csp {
@@ -94,6 +95,11 @@ impl BeforeMiddleware for CspMiddleware {
 
 impl AfterMiddleware for CspMiddleware {
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
+        let config = req
+            .extensions
+            .get::<Config>()
+            .expect("missing Config")
+            .clone();
         let csp = req.extensions.get_mut::<Csp>().expect("missing CSP");
 
         let content_type = res
@@ -110,7 +116,14 @@ impl AfterMiddleware for CspMiddleware {
 
         if let Some(rendered) = csp.render(preset) {
             res.headers.set_raw(
-                "Content-Security-Policy",
+                // The Report-Only header tells the browser to just log CSP failures instead of
+                // actually enforcing them. This is useful to check if the CSP works without
+                // impacting production traffic.
+                if config.csp_report_only {
+                    "Content-Security-Policy-Report-Only"
+                } else {
+                    "Content-Security-Policy"
+                },
                 vec![rendered.as_bytes().to_vec()],
             );
         }
