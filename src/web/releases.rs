@@ -5,7 +5,7 @@ use crate::{
     db::{Pool, PoolClient},
     impl_webpage,
     web::{error::Nope, match_version, page::WebPage, redirect_base},
-    BuildQueue,
+    BuildQueue, Config,
 };
 use chrono::{DateTime, Utc};
 use iron::{
@@ -498,13 +498,18 @@ impl Default for Search {
 }
 
 fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<Response> {
-    // since there is a chance of this query returning an empty result,
-    // we retry a certain amount of times, and log a warning.
-    for i in 0..20 {
-        let rows = ctry!(
-            req,
-            conn.query(
-                "WITH params AS (
+    // We try to find a random crate and redirect to it.
+    //
+    // The query is efficient, but relies on a static factor which depends
+    // on the amount of crates with > 100 GH stars over the amount of all crates.
+    //
+    // If random-crate-searches end up being empty, increase that value.
+
+    let config = extension!(req, Config);
+    let rows = ctry!(
+        req,
+        conn.query(
+            "WITH params AS (
                     -- get maximum possible id-value in crates-table
                     SELECT last_value AS max_id FROM crates_id_seq
                 )
@@ -513,12 +518,9 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                     releases.version,
                     releases.target_name
                 FROM (
-                    -- generate 500 random numbers in the ID-range. 
-                    -- this might have to be increased when we have to repeat 
-                    -- this query too often. 
-                    -- it depends on the percentage of crates with > 100 stars
+                    -- generate random numbers in the ID-range. 
                     SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
-                    FROM params, generate_series(1, 500)
+                    FROM params, generate_series(1, $1)
                 ) AS r
                 INNER JOIN crates ON r.id = crates.id
                 INNER JOIN releases ON crates.latest_version_id = releases.id
@@ -526,42 +528,34 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                 WHERE
                     releases.rustdoc_status = TRUE AND
                     github_repos.stars >= 100
-                LIMIT 1
-                ",
-                &[]
-            ),
+                LIMIT 1",
+            &[&(config.random_crate_search_view_size as i32),]
+        )
+    );
+
+    if let Some(row) = rows.into_iter().next() {
+        let name: String = row.get("name");
+        let version: String = row.get("version");
+        let target_name: String = row.get("target_name");
+        let url = ctry!(
+            req,
+            Url::parse(&format!(
+                "{}/{}/{}/{}/",
+                redirect_base(req),
+                name,
+                version,
+                target_name
+            )),
         );
 
-        if let Some(row) = rows.into_iter().next() {
-            let name: String = row.get("name");
-            let version: String = row.get("version");
-            let target_name: String = row.get("target_name");
-            let url = ctry!(
-                req,
-                Url::parse(&format!(
-                    "{}/{}/{}/{}/",
-                    redirect_base(req),
-                    name,
-                    version,
-                    target_name
-                )),
-            );
+        let metrics = extension!(req, crate::Metrics).clone();
+        metrics.im_feeling_lucky_searches.inc();
 
-            let mut resp = Response::with((status::Found, Redirect(url)));
-            resp.headers.set(Expires(HttpDate(time::now())));
-
-            let metrics = extension!(req, crate::Metrics).clone();
-            metrics.im_feeling_lucky_searches.inc();
-
-            log::debug!("finished random crate search on iteration {}", i);
-            return Ok(resp);
-        } else {
-            log::warn!("retrying random crate search");
-        }
+        Ok(super::redirect(url))
+    } else {
+        log::error!("found no result in random crate search");
+        Err(Nope::NoResults.into())
     }
-    log::error!("found no result in random crate search");
-
-    Err(Nope::NoResults.into())
 }
 
 impl_webpage! {
