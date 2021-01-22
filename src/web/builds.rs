@@ -43,18 +43,22 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
     let limits = ctry!(req, Limits::for_crate(&mut conn, name));
 
+    let is_json = req.url.path().join("/").ends_with(".json");
+
     let version =
         match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
             MatchSemver::Exact((version, _)) => version,
 
             MatchSemver::Semver((version, _)) => {
+                let ext = if is_json { ".json" } else { "" };
                 let url = ctry!(
                     req,
                     Url::parse(&format!(
-                        "{}/crate/{}/{}/builds",
+                        "{}/crate/{}/{}/builds{}",
                         redirect_base(req),
                         name,
-                        version
+                        version,
+                        ext
                     )),
                 );
 
@@ -95,7 +99,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         })
         .collect();
 
-    if req.url.path().join("/").ends_with(".json") {
+    if is_json {
         let mut resp = Response::with((status::Ok, serde_json::to_string(&builds).unwrap()));
         resp.headers.set(ContentType::json());
         resp.headers.set(Expires(HttpDate(time::now())));
