@@ -99,7 +99,7 @@ use extensions::InjectExtensions;
 use failure::Error;
 use iron::{
     self,
-    headers::{Expires, HttpDate},
+    headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
     status,
     status::Status,
@@ -492,6 +492,28 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
 fn redirect(url: Url) -> Response {
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.headers.set(Expires(HttpDate(time::now())));
+
+    resp
+}
+
+/// creates a redirect-response which is cached on the CDN level for
+/// the given amount of seconds. Browser-Local caching is deactivated.
+/// The used s-maxage is respected by CloudFront (which we can invalidate
+/// if we need to), and perhaps by other proxies in between.
+/// When the cache-seconds are reasonably small, this should be fine.
+///
+/// CloudFront doesn't have `surrogate-control` headers which would be only
+/// used by CloudFront and dropped (Fastly has them).
+///
+/// The `Expires` header from `redirect` is still kept to be safe,
+/// CloudFront ignores it when it gets `Cache-Control: max-age` or
+/// `s-maxage`.
+fn cached_redirect(url: Url, cache_seconds: u32) -> Response {
+    let mut resp = redirect(url);
+    resp.headers.set(CacheControl(vec![
+        CacheDirective::MaxAge(0),
+        CacheDirective::SMaxAge(cache_seconds),
+    ]));
 
     resp
 }

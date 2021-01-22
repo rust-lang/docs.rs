@@ -70,14 +70,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         }
         let url = ctry!(req, Url::parse(&url_str));
         let config = extension!(req, Config);
-        let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.headers.set(CacheControl(vec![
-            CacheDirective::MaxAge(0),
-            // s-maxage is only for the CDN.
-            CacheDirective::SMaxAge(config.cache_rustdoc_redirects),
-        ]));
 
-        Ok(resp)
+        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
     }
 
     fn redirect_to_crate(req: &Request, name: &str, vers: &str) -> IronResult<Response> {
@@ -87,14 +81,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         );
 
         let config = extension!(req, Config);
-        let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.headers.set(CacheControl(vec![
-            CacheDirective::MaxAge(0),
-            // s-maxage is only for the CDN.
-            CacheDirective::SMaxAge(config.cache_rustdoc_redirects),
-        ]));
-
-        Ok(resp)
+        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
     }
 
     let metrics = extension!(req, Metrics).clone();
@@ -292,7 +279,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         );
         let url = ctry!(req, Url::parse(&redirect_path));
 
-        Ok(super::redirect(url))
+        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
     };
 
     rendering_time.step("match version");
@@ -561,10 +548,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     );
 
     let url = ctry!(req, Url::parse(&url));
-    let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.headers.set(Expires(HttpDate(time::now())));
-
-    Ok(resp)
+    Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
