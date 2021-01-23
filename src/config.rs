@@ -38,6 +38,15 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 
+    // random crate search generates a number of random IDs to
+    // efficiently find a random crate with > 100 GH stars.
+    // The amount depends on the ratio of crates with >100 stars
+    // to the count of all crates.
+    // At the time of creating this setting, it is set to
+    // `500` for a ratio of 7249 over 54k crates.
+    // For unit-tests the number has to be higher.
+    pub(crate) random_crate_search_view_size: u32,
+
     // Build params
     pub(crate) build_attempts: u16,
     pub(crate) rustwide_workspace: PathBuf,
@@ -83,6 +92,8 @@ impl Config {
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
+
+            random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
 
             rustwide_workspace: env("CRATESFYI_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCS_RS_DOCKER", false)?,
