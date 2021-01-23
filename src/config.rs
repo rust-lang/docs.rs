@@ -46,8 +46,17 @@ pub struct Config {
     // `500` for a ratio of 7249 over 54k crates.
     // For unit-tests the number has to be higher.
     pub(crate) random_crate_search_view_size: u32,
-    // CDN / caching settings
-    pub(crate) cache_rustdoc_redirects: u32,
+
+    // Time to cache crate-level redirects in rustdoc, in seconds.
+    // This is for redirects where the destination
+    // can change after the release of a new version
+    // of a crate.
+    pub(crate) cache_rustdoc_redirects_crate: u32,
+
+    // Time to cache release-level redirects in rustdoc, in seconds.
+    // Here the destination can only change after
+    // rebuilds or yanks, so very infrequently.
+    pub(crate) cache_rustdoc_redirects_version: u32,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -96,7 +105,11 @@ impl Config {
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
-            cache_rustdoc_redirects: env("DOCSRS_CACHE_RUSTDOC_REDIRECTS", 30 * 60)?,
+            cache_rustdoc_redirects_crate: env("DOCSRS_CACHE_RUSTDOC_REDIRECTS_CRATE", 15 * 60)?, // 15 minutes
+            cache_rustdoc_redirects_version: env(
+                "DOCSRS_CACHE_RUSTDOC_REDIRECTS_RELEASE",
+                7 * 24 * 60 * 60, // 7 days
+            )?,
 
             rustwide_workspace: env("CRATESFYI_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCS_RS_DOCKER", false)?,

@@ -40,7 +40,7 @@ impl iron::Handler for RustLangRedirector {
         let config = extension!(req, Config);
         Ok(super::cached_redirect(
             self.url.clone(),
-            config.cache_rustdoc_redirects,
+            config.cache_rustdoc_redirects_crate,
         ))
     }
 }
@@ -54,6 +54,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         vers: &str,
         target: Option<&str>,
         target_name: &str,
+        cache_seconds: u32,
     ) -> IronResult<Response> {
         let mut url_str = if let Some(target) = target {
             format!(
@@ -72,21 +73,25 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push_str(query);
         }
         let url = ctry!(req, Url::parse(&url_str));
-        let config = extension!(req, Config);
 
-        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
+        Ok(super::cached_redirect(url, cache_seconds))
     }
 
-    fn redirect_to_crate(req: &Request, name: &str, vers: &str) -> IronResult<Response> {
+    fn redirect_to_crate(
+        req: &Request,
+        name: &str,
+        vers: &str,
+        cache_seconds: u32,
+    ) -> IronResult<Response> {
         let url = ctry!(
             req,
             Url::parse(&format!("{}/crate/{}/{}", redirect_base(req), name, vers)),
         );
 
-        let config = extension!(req, Config);
-        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
+        Ok(super::cached_redirect(url, cache_seconds))
     }
 
+    let config = extension!(req, Config);
     let metrics = extension!(req, Metrics).clone();
     let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
 
@@ -145,6 +150,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let req_version = router.find("version");
     let mut target = router.find("target");
 
+    // redirects with an existing version in the URL can be cached for longer.
+    let cache_redirect_for = if let Some(_) = req_version {
+        config.cache_rustdoc_redirects_version
+    } else {
+        config.cache_rustdoc_redirects_crate
+    };
+
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     rendering_time.step("match version");
@@ -179,10 +191,17 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     if has_docs {
         rendering_time.step("redirect to doc");
-        redirect_to_doc(req, &crate_name, &version, target, &target_name)
+        redirect_to_doc(
+            req,
+            &crate_name,
+            &version,
+            target,
+            &target_name,
+            cache_redirect_for,
+        )
     } else {
         rendering_time.step("redirect to crate");
-        redirect_to_crate(req, &crate_name, &version)
+        redirect_to_crate(req, &crate_name, &version, cache_redirect_for)
     }
 }
 
@@ -282,7 +301,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         );
         let url = ctry!(req, Url::parse(&redirect_path));
 
-        Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
+        Ok(super::cached_redirect(
+            url,
+            config.cache_rustdoc_redirects_version,
+        ))
     };
 
     rendering_time.step("match version");
@@ -551,7 +573,10 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     );
 
     let url = ctry!(req, Url::parse(&url));
-    Ok(super::cached_redirect(url, config.cache_rustdoc_redirects))
+    Ok(super::cached_redirect(
+        url,
+        config.cache_rustdoc_redirects_version,
+    ))
 }
 
 pub fn badge_handler(req: &mut Request) -> IronResult<Response> {

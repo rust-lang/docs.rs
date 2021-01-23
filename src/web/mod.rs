@@ -496,7 +496,7 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
-/// creates a redirect-response which is cached on the CDN level for
+/// Creates a redirect-response which is cached on the CDN level for
 /// the given amount of seconds. Browser-Local caching is deactivated.
 /// The used s-maxage is respected by CloudFront (which we can invalidate
 /// if we need to), and perhaps by other proxies in between.
