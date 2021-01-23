@@ -310,7 +310,7 @@ mod tests {
     fn latest_redirect() {
         wrapper(|env| {
             env.fake_release()
-                .name("foo")
+                .name("aquarelle")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc 1.0.0")
@@ -318,15 +318,31 @@ mod tests {
                 .create()?;
 
             env.fake_release()
-                .name("foo")
+                .name("aquarelle")
                 .version("0.2.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc 1.0.0")
                     .docsrs_version("docs.rs 1.0.0")])
                 .create()?;
 
-            let resp = env.frontend().get("/crate/foo/latest/builds").send()?;
-            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/builds"));
+            let resp = env
+                .frontend()
+                .get("/crate/aquarelle/latest/builds")
+                .send()?;
+            assert!(resp
+                .url()
+                .as_str()
+                .ends_with("/crate/aquarelle/0.2.0/builds"));
+
+            let resp_json = env
+                .frontend()
+                .get("/crate/aquarelle/latest/builds.json")
+                .send()?;
+            assert!(resp_json
+                .url()
+                .as_str()
+                .ends_with("/crate/aquarelle/0.2.0/builds.json"));
+
             Ok(())
         });
     }
