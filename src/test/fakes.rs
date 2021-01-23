@@ -325,7 +325,7 @@ impl<'a> FakeRelease<'a> {
         if let Some(markdown) = self.readme {
             fs::write(crate_dir.join("README.md"), markdown)?;
         }
-        let default_target = self.default_target.unwrap_or(docsrs_metadata::HOST_TARGET);
+        let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
         let release_id = crate::db::add_package_into_database(
             &mut db.conn(),
             &package,
