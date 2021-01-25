@@ -152,7 +152,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // redirects with an existing version in the URL can be cached for longer.
     let cache_redirect_for = if let Some(_) = req_version {
-        config.cache_rustdoc_redirects_version
+        config.cache_rustdoc_redirects_release
     } else {
         config.cache_rustdoc_redirects_crate
     };
@@ -303,7 +303,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
         Ok(super::cached_redirect(
             url,
-            config.cache_rustdoc_redirects_version,
+            config.cache_rustdoc_redirects_release,
         ))
     };
 
@@ -575,7 +575,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let url = ctry!(req, Url::parse(&url));
     Ok(super::cached_redirect(
         url,
-        config.cache_rustdoc_redirects_version,
+        config.cache_rustdoc_redirects_release,
     ))
 }
 

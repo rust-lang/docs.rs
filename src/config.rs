@@ -56,7 +56,7 @@ pub struct Config {
     // Time to cache release-level redirects in rustdoc, in seconds.
     // Here the destination can only change after
     // rebuilds or yanks, so very infrequently.
-    pub(crate) cache_rustdoc_redirects_version: u32,
+    pub(crate) cache_rustdoc_redirects_release: u32,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -106,7 +106,7 @@ impl Config {
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
             cache_rustdoc_redirects_crate: env("DOCSRS_CACHE_RUSTDOC_REDIRECTS_CRATE", 15 * 60)?, // 15 minutes
-            cache_rustdoc_redirects_version: env(
+            cache_rustdoc_redirects_release: env(
                 "DOCSRS_CACHE_RUSTDOC_REDIRECTS_RELEASE",
                 7 * 24 * 60 * 60, // 7 days
             )?,

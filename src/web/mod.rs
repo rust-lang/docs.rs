@@ -491,7 +491,8 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
 /// `Request`.
 fn redirect(url: Url) -> Response {
     let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.headers.set(Expires(HttpDate(time::now())));
+    resp.headers
+        .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
 
     resp
 }
@@ -509,7 +510,7 @@ fn redirect(url: Url) -> Response {
 /// CloudFront ignores it when it gets `Cache-Control: max-age` or
 /// `s-maxage`.
 fn cached_redirect(url: Url, cache_seconds: u32) -> Response {
-    let mut resp = redirect(url);
+    let mut resp = Response::with((status::Found, Redirect(url)));
     resp.headers.set(CacheControl(vec![
         CacheDirective::MaxAge(0),
         CacheDirective::SMaxAge(cache_seconds),
