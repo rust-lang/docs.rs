@@ -150,13 +150,6 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     let req_version = router.find("version");
     let mut target = router.find("target");
 
-    // redirects with an existing version in the URL can be cached for longer.
-    let cache_redirect_for = if let Some(_) = req_version {
-        config.cache_rustdoc_redirects_release
-    } else {
-        config.cache_rustdoc_redirects_crate
-    };
-
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     rendering_time.step("match version");
@@ -166,6 +159,15 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         // use that instead
         crate_name = new_name;
     }
+
+    // Redirects with an exact SemVer match can be cached for longer.
+    // This is also true for corrected names.
+    let cache_redirect_for = if let MatchSemver::Exact(_) = v.version {
+        config.cache_rustdoc_redirects_release
+    } else {
+        config.cache_rustdoc_redirects_crate
+    };
+
     let (version, id) = v.version.into_parts();
 
     // get target name and whether it has docs

@@ -99,7 +99,7 @@ use extensions::InjectExtensions;
 use failure::Error;
 use iron::{
     self,
-    headers::{CacheControl, CacheDirective, Expires, HttpDate},
+    headers::{CacheControl, CacheDirective},
     modifiers::Redirect,
     status,
     status::Status,
