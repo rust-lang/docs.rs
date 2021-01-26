@@ -11,7 +11,7 @@ use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, RequestBuilder},
-    Method,
+    redirect, Method, StatusCode, Url,
 };
 use std::{panic, sync::Arc};
 
@@ -52,21 +52,39 @@ pub(crate) fn assert_redirect(
     expected_target: &str,
     web: &TestFrontend,
 ) -> Result<(), Error> {
-    // Reqwest follows redirects automatically
     let response = web.get(path).send()?;
+
     let status = response.status();
+    assert_eq!(status, StatusCode::FOUND);
+
+    println!("path: {:?}", path);
+    println!("expected target: {:?}", expected_target);
+
+    let redirect_target = Url::parse(
+        response
+            .headers()
+            .get("Location")
+            .expect("Response doesn't have Location header")
+            .to_str()
+            .unwrap(),
+    )
+    .expect("could not parse redirect location");
+
+    println!("\nredirect target: {:?}", redirect_target);
 
     let mut tmp;
     let redirect_target = if expected_target.starts_with("https://") {
-        response.url().as_str()
+        redirect_target.as_str()
     } else {
-        tmp = String::from(response.url().path());
-        if let Some(query) = response.url().query() {
+        tmp = String::from(redirect_target.path());
+        if let Some(query) = redirect_target.query() {
             tmp.push('?');
             tmp.push_str(query);
         }
         &tmp
     };
+    println!("converted redirect target: {:?}", redirect_target);
+
     // Either we followed a redirect to the wrong place, or there was no redirect
     if redirect_target != expected_target {
         // wrong place
@@ -83,6 +101,9 @@ pub(crate) fn assert_redirect(
             );
         }
     }
+
+    let target_response = web.get(redirect_target).send()?;
+    let status = target_response.status();
     assert!(
         status.is_success(),
         "failed to GET {}: {}",
@@ -333,7 +354,10 @@ impl TestFrontend {
         Self {
             server: Server::start(Some("127.0.0.1:0"), false, context)
                 .expect("failed to start the web server"),
-            client: Client::new(),
+            client: Client::builder()
+                .redirect(redirect::Policy::none())
+                .build()
+                .unwrap(),
         }
     }
 
