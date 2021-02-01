@@ -7,7 +7,7 @@ use crate::{
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue, Config,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
@@ -17,7 +17,7 @@ use iron::{
 use postgres::Client;
 use router::Router;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -668,20 +668,34 @@ impl_webpage! {
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let activity_data: Value = ctry!(
+
+    let data: Vec<(NaiveDate, i64, i64)> = ctry!(
         req,
         conn.query(
-            "SELECT value FROM config WHERE name = 'release_activity'",
-            &[]
-        ),
+            "SELECT 
+                date,
+                counts, 
+                failures 
+            FROM releases_statistics
+            WHERE date >= CURRENT_DATE - INTERVAL '30 days' 
+            ORDER BY date DESC
+            ",
+            &[],
+        )
     )
-    .iter()
-    .next()
-    .map_or(Value::Null, |row| row.get("value"));
+    .into_iter()
+    .map(|row| (row.get(0), row.get(1), row.get(2)))
+    .collect();
 
     ReleaseActivity {
         description: "Monthly release activity",
-        activity_data,
+        activity_data: json!(
+            {
+                "dates": data.iter().map(|&d| d.0.format("%d %b").to_string()).collect::<Vec<_>>(),
+                "counts": data.iter().map(|&d| d.1).collect::<Vec<_>>(),
+                "failures": data.iter().map(|&d| d.2).collect::<Vec<_>>(),
+            }
+        ),
     }
     .into_response(req)
 }

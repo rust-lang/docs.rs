@@ -618,6 +618,28 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             DROP INDEX github_repos_stars_idx;
             ",
         ),
+        migration!(
+            context, 
+            27, 
+            "create materialized view for release-statistics", 
+            "
+            CREATE MATERIALIZED VIEW releases_statistics AS 
+            SELECT
+                release_time::date as date,
+                count(*) AS counts,
+                count(CASE WHEN is_library = TRUE AND build_status = FALSE THEN 1 ELSE 0 END) AS failures
+            FROM
+                releases
+            GROUP BY
+                release_time::date
+            ;
+            CREATE INDEX releases_statistics_date_idx ON releases_statistics (date);
+            ",
+            "
+            DROP INDEX releases_statistics_date_idx;
+            DROP MATERIALIZED VIEW releases_statistics;
+            ",
+        ),
     ];
 
     for migration in migrations {
