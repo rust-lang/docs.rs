@@ -23,7 +23,7 @@
                     </li>
 
                     <li class="pure-menu-item">
-                        <a href="{{ crate_url | safe }}" class="pure-menu-link description">
+                        <a href="{{ crate_url | safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
                             {{ "cube" | fas(fw=true) }} Docs.rs crate page
                         </a>
                     </li>
@@ -86,12 +86,6 @@
                                 <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
                                     {{ "folder-open" | fas(fw=true) }}
                                     <span class="title">Source</span>
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="{{ crate_url | safe }}" class="pure-menu-link" title="See {{ krate.name }} in docs.rs">
-                                    {{ "cube" | fas(fw=true) }} More information
                                 </a>
                             </li>
                         </ul>
