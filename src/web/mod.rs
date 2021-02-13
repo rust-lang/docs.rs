@@ -614,10 +614,12 @@ mod test {
         Some(version)
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn semver(version: &'static str) -> Option<String> {
         Some(version.into())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn exact(version: &'static str) -> Option<String> {
         Some(version.into())
     }

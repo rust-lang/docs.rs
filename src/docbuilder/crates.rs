@@ -3,9 +3,9 @@ use failure::err_msg;
 use serde_json::Value;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{fs, path::Path, str::FromStr};
 
-fn crates_from_file<F>(path: &PathBuf, func: &mut F) -> Result<()>
+fn crates_from_file<F>(path: &Path, func: &mut F) -> Result<()>
 where
     F: FnMut(&str, &str),
 {
@@ -61,7 +61,7 @@ where
     Ok(())
 }
 
-pub fn crates_from_path<F>(path: &PathBuf, func: &mut F) -> Result<()>
+pub fn crates_from_path<F>(path: &Path, func: &mut F) -> Result<()>
 where
     F: FnMut(&str, &str),
 {

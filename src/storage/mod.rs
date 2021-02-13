@@ -139,7 +139,7 @@ impl Storage {
                 conn = db.start_connection()?;
                 Box::new(conn.start_storage_transaction()?)
             }
-            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()?),
+            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()),
         };
 
         let res = f(trans.as_mut())?;
@@ -173,7 +173,7 @@ impl Storage {
                 let content = compress(file, alg)?;
                 let bucket_path = Path::new(prefix).join(&file_path).to_slash().unwrap();
 
-                let mime = detect_mime(&file_path)?;
+                let mime = detect_mime(&file_path);
                 file_paths_and_mimes.insert(file_path, mime.to_string());
                 algs.insert(alg);
 
@@ -207,7 +207,7 @@ impl Storage {
         let content = content.into();
         let alg = CompressionAlgorithm::default();
         let content = compress(&*content, alg)?;
-        let mime = detect_mime(&path)?.to_owned();
+        let mime = detect_mime(&path).to_owned();
 
         self.store_inner(std::iter::once(Ok(Blob {
             path,
@@ -272,11 +272,11 @@ trait StorageTransaction {
     fn complete(self: Box<Self>) -> Result<(), Error>;
 }
 
-fn detect_mime(file_path: impl AsRef<Path>) -> Result<&'static str, Error> {
+fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
     let mime = mime_guess::from_path(file_path.as_ref())
         .first_raw()
         .unwrap_or("text/plain");
-    Ok(match mime {
+    match mime {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.as_ref().extension().and_then(OsStr::to_str) {
                 Some("md") => "text/markdown",
@@ -291,7 +291,7 @@ fn detect_mime(file_path: impl AsRef<Path>) -> Result<&'static str, Error> {
         }
         "image/svg" => "image/svg+xml",
         _ => mime,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -327,7 +327,6 @@ mod test {
 
     fn check_mime(path: &str, expected_mime: &str) {
         let detected_mime = detect_mime(Path::new(&path));
-        let detected_mime = detected_mime.expect("no mime was given");
         assert_eq!(detected_mime, expected_mime);
     }
 }
