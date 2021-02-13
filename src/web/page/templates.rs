@@ -86,7 +86,7 @@ fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
 
     if let Ok(vers) = res[0].try_get::<_, Value>("value") {
         if let Some(vers_str) = vers.as_str() {
-            return Ok(crate::utils::parse_rustc_version(vers_str)?);
+            return crate::utils::parse_rustc_version(vers_str);
         }
     }
 
@@ -200,6 +200,7 @@ impl tera::Function for ReturnValue {
 
 /// Prettily format a timestamp
 // TODO: This can be replaced by chrono
+#[allow(clippy::unnecessary_wraps)]
 fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let fmt = if let Some(Value::Bool(true)) = args.get("relative") {
         let value = DateTime::parse_from_rfc3339(value.as_str().unwrap())
@@ -235,6 +236,7 @@ fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value>
 }
 
 /// Print a tera value to stdout
+#[allow(clippy::unnecessary_wraps)]
 fn dbg(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
     println!("{:?}", value);
 
@@ -242,6 +244,7 @@ fn dbg(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
 }
 
 /// Dedent a string by removing all leading whitespace
+#[allow(clippy::unnecessary_wraps)]
 fn dedent(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let string = value.as_str().expect("dedent takes a string");
 

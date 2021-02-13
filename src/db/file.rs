@@ -29,21 +29,21 @@ pub fn add_path_into_database<P: AsRef<Path>>(
 ) -> Result<(Value, CompressionAlgorithms)> {
     let (file_list, algorithms) = storage.store_all(prefix, path.as_ref())?;
     Ok((
-        file_list_to_json(file_list.into_iter().collect())?,
+        file_list_to_json(file_list.into_iter().collect()),
         algorithms,
     ))
 }
 
-fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Result<Value> {
-    let file_list: Vec<_> = file_list
-        .into_iter()
-        .map(|(path, name)| {
-            Value::Array(vec![
-                Value::String(name),
-                Value::String(path.into_os_string().into_string().unwrap()),
-            ])
-        })
-        .collect();
-
-    Ok(Value::Array(file_list))
+fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Value {
+    Value::Array(
+        file_list
+            .into_iter()
+            .map(|(path, name)| {
+                Value::Array(vec![
+                    Value::String(name),
+                    Value::String(path.into_os_string().into_string().unwrap()),
+                ])
+            })
+            .collect(),
+    )
 }

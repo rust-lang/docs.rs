@@ -20,9 +20,9 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
     let file = file.join("/");
 
     Ok(match file.as_str() {
-        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap()))?,
-        "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap()))?,
-        "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap()))?,
+        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap())),
+        "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap())),
+        "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap())),
         file => serve_file(file)?,
     })
 }
@@ -79,10 +79,10 @@ fn serve_file(file: &str) -> IronResult<Response> {
         ));
     }
 
-    serve_resource(contents, content_type)
+    Ok(serve_resource(contents, content_type))
 }
 
-fn serve_resource<R, C>(resource: R, content_type: C) -> IronResult<Response>
+fn serve_resource<R, C>(resource: R, content_type: C) -> Response
 where
     R: AsRef<[u8]>,
     C: Into<Option<ContentType>>,
@@ -110,7 +110,7 @@ where
         response.headers.set(content_type);
     }
 
-    Ok(response)
+    response
 }
 
 pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {

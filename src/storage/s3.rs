@@ -132,8 +132,8 @@ impl S3Backend {
         })
     }
 
-    pub(super) fn start_storage_transaction(&self) -> Result<S3StorageTransaction, Error> {
-        Ok(S3StorageTransaction { s3: self })
+    pub(super) fn start_storage_transaction(&self) -> S3StorageTransaction {
+        S3StorageTransaction { s3: self }
     }
 
     #[cfg(test)]
@@ -146,7 +146,7 @@ impl S3Backend {
             panic!("safeguard to prevent deleting the production bucket");
         }
 
-        let mut transaction = Box::new(self.start_storage_transaction()?);
+        let mut transaction = Box::new(self.start_storage_transaction());
         transaction.delete_prefix("")?;
         transaction.complete()?;
 
