@@ -119,7 +119,10 @@ impl S3Backend {
                 content.write_all(data.as_ref())?;
             }
 
-            let date_updated = parse_timespec(&res.last_modified.unwrap())?;
+            let date_updated = res
+                .last_modified
+                .map_or(Ok(Utc::now()), |lm| parse_timespec(&lm))?;
+
             let compression = res.content_encoding.and_then(|s| s.parse().ok());
 
             Ok(Blob {
