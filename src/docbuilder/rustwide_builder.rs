@@ -11,6 +11,7 @@ use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, GithubUpdat
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
+use failure::bail;
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
@@ -309,6 +310,24 @@ impl RustwideBuilder {
         }
 
         let limits = Limits::for_crate(&mut conn, name)?;
+        #[cfg(target_os = "linux")]
+        if !self.config.disable_memory_limit {
+            let mem_info = procfs::Meminfo::new().context("failed to read /proc/meminfo")?;
+            let available = mem_info
+                .mem_available
+                .expect("kernel version too old for determining memory limit");
+            if limits.memory() as u64 > available {
+                bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
+                    name, version, limits.memory() / 1024 / 1024, available / 1024 / 1024
+                );
+            } else {
+                debug!(
+                    "had enough memory: {} MiB > {} MiB",
+                    limits.memory() / 1024 / 1024,
+                    available / 1024 / 1024
+                );
+            }
+        }
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
         build_dir.purge()?;
