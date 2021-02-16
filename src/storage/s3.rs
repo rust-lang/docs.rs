@@ -119,7 +119,12 @@ impl S3Backend {
                 content.write_all(data.as_ref())?;
             }
 
-            let date_updated = parse_timespec(&res.last_modified.unwrap())?;
+            let date_updated = res
+                .last_modified
+                // This is a bug from AWS, it should always have a modified date of when it was created if nothing else.
+                // Workaround it by passing now as the modification time, since the exact time doesn't really matter.
+                .map_or(Ok(Utc::now()), |lm| parse_timespec(&lm))?;
+
             let compression = res.content_encoding.and_then(|s| s.parse().ok());
 
             Ok(Blob {
