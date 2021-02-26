@@ -322,7 +322,7 @@ impl RustwideBuilder {
                 );
             } else {
                 debug!(
-                    "had enough memory: {} MiB > {} MiB",
+                    "had enough memory: {} MiB <= {} MiB",
                     limits.memory() / 1024 / 1024,
                     available / 1024 / 1024
                 );
