@@ -626,8 +626,8 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             CREATE MATERIALIZED VIEW releases_statistics AS 
             SELECT
                 release_time::date as date,
-                count(*) AS counts,
-                count(CASE WHEN is_library = TRUE AND build_status = FALSE THEN 1 ELSE 0 END) AS failures
+                COUNT(*) AS counts,
+                SUM(CASE WHEN is_library = TRUE AND build_status = FALSE THEN 1 ELSE 0 END) AS failures
             FROM
                 releases
             GROUP BY
