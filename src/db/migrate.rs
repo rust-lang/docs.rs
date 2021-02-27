@@ -622,6 +622,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             context, 
             27, 
             "create materialized view for release-statistics", 
+            // upgrade
             "
             CREATE MATERIALIZED VIEW releases_statistics AS 
             SELECT
@@ -635,6 +636,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             ;
             CREATE INDEX releases_statistics_date_idx ON releases_statistics (date);
             ",
+            // downgrade 
             "
             DROP INDEX releases_statistics_date_idx;
             DROP MATERIALIZED VIEW releases_statistics;
