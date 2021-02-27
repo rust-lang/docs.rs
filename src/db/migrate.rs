@@ -619,9 +619,9 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
             ",
         ),
         migration!(
-            context, 
-            27, 
-            "create materialized view for release-statistics", 
+            context,
+            27,
+            "create materialized view for release-statistics",
             // upgrade
             "
             CREATE MATERIALIZED VIEW releases_statistics AS 
