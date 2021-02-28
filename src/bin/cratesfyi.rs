@@ -392,9 +392,6 @@ enum DatabaseSubcommand {
         prefix: String,
     },
 
-    /// Updates monthly release activity chart
-    UpdateReleaseActivity,
-
     /// Remove documentation from the database
     Delete {
         #[structopt(subcommand)]
@@ -449,12 +446,6 @@ impl DatabaseSubcommand {
             Self::AddDirectory { directory, prefix } => {
                 add_path_into_database(&*ctx.storage()?, &prefix, directory)
                     .context("Failed to add directory into database")?;
-            }
-
-            // FIXME: This is actually util command not database
-            Self::UpdateReleaseActivity => {
-                docs_rs::utils::update_release_activity(&mut *ctx.conn()?)
-                    .context("Failed to update release activity")?
             }
 
             Self::Delete {

@@ -672,13 +672,38 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let data: Vec<(NaiveDate, i64, i64)> = ctry!(
         req,
         conn.query(
-            "SELECT 
-                date,
-                counts, 
-                failures 
-            FROM releases_statistics
-            WHERE date >= CURRENT_DATE - INTERVAL '30 days' 
-            ORDER BY date DESC
+            "
+            WITH dates AS (
+                -- we need this series to we have also days in the statistic that don't have any releases
+                SELECT generate_series( 
+                        CURRENT_DATE - interval '30 days',
+                        CURRENT_DATE - interval '1 day',
+                        '1 day'::interval
+                    )::date AS date_
+            ), 
+            release_stats AS (
+                SELECT
+                    release_time::date AS date_,
+                    count(*) AS counts,
+                    sum(CASE WHEN is_library = TRUE AND build_status = FALSE THEN 1 ELSE 0 END) AS failures
+                FROM
+                    releases
+                WHERE
+                    release_time >= CURRENT_DATE - INTERVAL '30 days' AND
+                    release_time < CURRENT_DATE
+                GROUP BY
+                    release_time::date
+            ) 
+            SELECT 
+                dates.date_ as date,
+                COALESCE(rs.counts, 0) as counts,
+                COALESCE(rs.failures, 0) as failures 
+            FROM
+                dates 
+                left outer join release_stats as rs on dates.date_ = rs.date_
+
+            ORDER BY 
+                dates.date_
             ",
             &[],
         )
