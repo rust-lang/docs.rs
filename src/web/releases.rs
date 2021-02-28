@@ -17,7 +17,6 @@ use iron::{
 use postgres::Client;
 use router::Router;
 use serde::Serialize;
-use serde_json::{json, Value};
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -659,7 +658,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseActivity {
     description: &'static str,
-    activity_data: Value,
+    dates: Vec<String>,
+    counts: Vec<i64>,
+    failures: Vec<i64>,
 }
 
 impl_webpage! {
@@ -714,13 +715,12 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 
     ReleaseActivity {
         description: "Monthly release activity",
-        activity_data: json!(
-            {
-                "dates": data.iter().map(|&d| d.0.format("%d %b").to_string()).collect::<Vec<_>>(),
-                "counts": data.iter().map(|&d| d.1).collect::<Vec<_>>(),
-                "failures": data.iter().map(|&d| d.2).collect::<Vec<_>>(),
-            }
-        ),
+        dates: data
+            .iter()
+            .map(|&d| d.0.format("%d %b").to_string())
+            .collect(),
+        counts: data.iter().map(|&d| d.1).collect(),
+        failures: data.iter().map(|&d| d.2).collect(),
     }
     .into_response(req)
 }

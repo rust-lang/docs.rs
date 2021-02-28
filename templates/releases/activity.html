@@ -28,27 +28,21 @@
         new Chart(ctx, {
             type: "line",
             data: {
-                labels: [
-                    {% if activity_data.dates -%}
-                        {%- for date in activity_data.dates -%}
-                            {{ "'" ~ date ~ "'," }}
-                        {%- endfor -%}
-                    {%- endif %}
-                ],
+                labels: {{ dates | json_encode() | safe }},
                 datasets: [
                     {
                         label: "Releases",
                         borderColor: "#4d76ae",
                         backgroundColor: "#4d76ae",
                         fill: false,
-                        data: [{{ activity_data.counts | default(value=[]) | join(sep=", ") }}],
+                        data: {{ counts | json_encode() | safe }},
                     },
                     {
                         label: "Build Failures",
                         borderColor: "#434348",
                         backgroundColor: "#434348",
                         fill: false,
-                        data: [{{ activity_data.failures | default(value=[]) | join(sep=", ") }}],
+                        data: {{ failures | json_encode() | safe }},
                     },
                 ]
             },
