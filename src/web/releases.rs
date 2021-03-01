@@ -7,7 +7,7 @@ use crate::{
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue, Config,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
@@ -17,7 +17,6 @@ use iron::{
 use postgres::Client;
 use router::Router;
 use serde::Serialize;
-use serde_json::Value;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -659,7 +658,9 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseActivity {
     description: &'static str,
-    activity_data: Value,
+    dates: Vec<String>,
+    counts: Vec<i64>,
+    failures: Vec<i64>,
 }
 
 impl_webpage! {
@@ -668,20 +669,58 @@ impl_webpage! {
 
 pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let activity_data: Value = ctry!(
+
+    let data: Vec<(NaiveDate, i64, i64)> = ctry!(
         req,
         conn.query(
-            "SELECT value FROM config WHERE name = 'release_activity'",
-            &[]
-        ),
+            "
+            WITH dates AS (
+                -- we need this series so that days in the statistic that don't have any releases are included
+                SELECT generate_series( 
+                        CURRENT_DATE - INTERVAL '30 days',
+                        CURRENT_DATE - INTERVAL '1 day',
+                        '1 day'::interval
+                    )::date AS date_
+            ), 
+            release_stats AS (
+                SELECT
+                    release_time::date AS date_,
+                    COUNT(*) AS counts,
+                    SUM(CAST((is_library = TRUE AND build_status = FALSE) AS INT)) AS failures
+                FROM
+                    releases
+                WHERE
+                    release_time >= CURRENT_DATE - INTERVAL '30 days' AND
+                    release_time < CURRENT_DATE
+                GROUP BY
+                    release_time::date
+            ) 
+            SELECT 
+                dates.date_ AS date,
+                COALESCE(rs.counts, 0) AS counts,
+                COALESCE(rs.failures, 0) AS failures 
+            FROM
+                dates 
+                LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
+
+            ORDER BY 
+                dates.date_
+            ",
+            &[],
+        )
     )
-    .iter()
-    .next()
-    .map_or(Value::Null, |row| row.get("value"));
+    .into_iter()
+    .map(|row| (row.get(0), row.get(1), row.get(2)))
+    .collect();
 
     ReleaseActivity {
         description: "Monthly release activity",
-        activity_data,
+        dates: data
+            .iter()
+            .map(|&d| d.0.format("%d %b").to_string())
+            .collect(),
+        counts: data.iter().map(|&d| d.1).collect(),
+        failures: data.iter().map(|&d| d.2).collect(),
     }
     .into_response(req)
 }
@@ -716,7 +755,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
-    use chrono::TimeZone;
+    use chrono::{Duration, TimeZone};
     use failure::Error;
     use kuchiki::traits::TendrilSink;
     use std::collections::HashSet;
@@ -1305,7 +1344,44 @@ mod tests {
     fn release_activity() {
         wrapper(|env| {
             let web = env.frontend();
-            assert_success("/releases/activity", web)?;
+
+            let empty_data = format!("data: [{}]", vec!["0"; 30].join(","));
+
+            // no data / only zeros without releases
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text().unwrap().matches(&empty_data).count(), 2);
+
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_failed()
+                .create()?;
+
+            // same when the release is on the current day, since we ignore today.
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text().unwrap().matches(&empty_data).count(), 2);
+
+            env.fake_release()
+                .name("some_random_crate_yesterday")
+                .release_time(Utc::now() - Duration::days(1))
+                .create()?;
+            env.fake_release()
+                .name("some_random_crate_that_failed_yesterday")
+                .build_result_failed()
+                .release_time(Utc::now() - Duration::days(1))
+                .create()?;
+
+            // with releases yesterday we get the data we want
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            let text = response.text().unwrap();
+            // counts contain both releases
+            assert!(text.contains(&format!("data: [{},2]", vec!["0"; 29].join(","))));
+            // failures only one
+            assert!(text.contains(&format!("data: [{},1]", vec!["0"; 29].join(","))));
+
             Ok(())
         })
     }

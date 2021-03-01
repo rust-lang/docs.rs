@@ -3,10 +3,9 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    utils::{queue_builder, update_release_activity, GithubUpdater},
+    utils::{queue_builder, GithubUpdater},
     Context, DocBuilder, RustwideBuilder,
 };
-use chrono::{Timelike, Utc};
 use failure::Error;
 use log::{debug, error, info};
 use std::thread;
@@ -77,21 +76,6 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
             queue_builder(doc_builder, rustwide_builder, build_queue).unwrap();
         })
         .unwrap();
-
-    // update release activity everyday at 23:55
-    let pool = context.pool()?;
-    cron(
-        "release activity updater",
-        Duration::from_secs(60),
-        move || {
-            let now = Utc::now();
-            if now.hour() == 23 && now.minute() == 55 {
-                info!("Updating release activity");
-                update_release_activity(&mut *pool.get()?)?;
-            }
-            Ok(())
-        },
-    )?;
 
     if let Some(github_updater) = GithubUpdater::new(config, context.pool()?)? {
         cron(
