@@ -677,16 +677,16 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
             WITH dates AS (
                 -- we need this series so that days in the statistic that don't have any releases are included
                 SELECT generate_series( 
-                        CURRENT_DATE - interval '30 days',
-                        CURRENT_DATE - interval '1 day',
+                        CURRENT_DATE - INTERVAL '30 days',
+                        CURRENT_DATE - INTERVAL '1 day',
                         '1 day'::interval
                     )::date AS date_
             ), 
             release_stats AS (
                 SELECT
                     release_time::date AS date_,
-                    count(*) AS counts,
-                    sum(CASE WHEN is_library = TRUE AND build_status = FALSE THEN 1 ELSE 0 END) AS failures
+                    COUNT(*) AS counts,
+                    SUM(CAST((is_library = TRUE AND build_status = FALSE) AS INT)) AS failures
                 FROM
                     releases
                 WHERE
@@ -696,12 +696,12 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
                     release_time::date
             ) 
             SELECT 
-                dates.date_ as date,
-                COALESCE(rs.counts, 0) as counts,
-                COALESCE(rs.failures, 0) as failures 
+                dates.date_ AS date,
+                COALESCE(rs.counts, 0) AS counts,
+                COALESCE(rs.failures, 0) AS failures 
             FROM
                 dates 
-                left outer join release_stats as rs on dates.date_ = rs.date_
+                LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
 
             ORDER BY 
                 dates.date_
