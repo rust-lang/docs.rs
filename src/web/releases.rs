@@ -675,7 +675,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
         conn.query(
             "
             WITH dates AS (
-                -- we need this series to we have also days in the statistic that don't have any releases
+                -- we need this series so that days in the statistic that don't have any releases are included
                 SELECT generate_series( 
                         CURRENT_DATE - interval '30 days',
                         CURRENT_DATE - interval '1 day',
