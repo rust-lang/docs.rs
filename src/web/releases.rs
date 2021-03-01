@@ -755,7 +755,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
-    use chrono::TimeZone;
+    use chrono::{Duration, TimeZone};
     use failure::Error;
     use kuchiki::traits::TendrilSink;
     use std::collections::HashSet;
@@ -1344,7 +1344,44 @@ mod tests {
     fn release_activity() {
         wrapper(|env| {
             let web = env.frontend();
-            assert_success("/releases/activity", web)?;
+
+            let empty_data = format!("data: [{}]", vec!["0"; 30].join(","));
+
+            // no data / only zeros without releases
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text().unwrap().matches(&empty_data).count(), 2);
+
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release()
+                .name("some_random_crate_that_failed")
+                .build_result_failed()
+                .create()?;
+
+            // same when the release is on the current day, since we ignore today.
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text().unwrap().matches(&empty_data).count(), 2);
+
+            env.fake_release()
+                .name("some_random_crate_yesterday")
+                .release_time(Utc::now() - Duration::days(1))
+                .create()?;
+            env.fake_release()
+                .name("some_random_crate_that_failed_yesterday")
+                .build_result_failed()
+                .release_time(Utc::now() - Duration::days(1))
+                .create()?;
+
+            // with releases yesterday we get the data we want
+            let response = web.get("/releases/activity/").send()?;
+            assert!(response.status().is_success());
+            let text = response.text().unwrap();
+            // counts contain both releases
+            assert!(text.contains(&format!("data: [{},2]", vec!["0"; 29].join(","))));
+            // failures only one
+            assert!(text.contains(&format!("data: [{},1]", vec!["0"; 29].join(","))));
+
             Ok(())
         })
     }
