@@ -43,10 +43,13 @@ const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "source-script.js",
     "noscript.css",
     "rust-logo.png",
+    "crates.js",
 ];
 const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "FiraSans-Medium.woff",
+    "FireSans-Medium.woff2",
     "FiraSans-Regular.woff",
+    "FireSans-Regular.woff2",
     "SourceCodePro-Regular.woff",
     "SourceCodePro-Semibold.woff",
     "SourceSerifPro-Bold.ttf.woff",
