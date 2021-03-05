@@ -14,47 +14,16 @@ use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
-use rustwide::cmd::{Command, SandboxBuilder, SandboxImage};
+use rustwide::cmd::{Binary, Command, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
-    "brush.svg",
-    "favicon.svg",
-    "wheel.svg",
-    "down-arrow.svg",
-    "dark.css",
-    "light.css",
-    "ayu.css",
-    "main.js",
-    "normalize.css",
-    "rustdoc.css",
-    "settings.css",
-    "settings.js",
-    "storage.js",
-    "theme.js",
-    "source-script.js",
-    "noscript.css",
-    "rust-logo.png",
-];
-const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
-    "FiraSans-Medium.woff",
-    "FiraSans-Medium.woff2",
-    "FiraSans-Regular.woff",
-    "FiraSans-Regular.woff2",
-    "SourceCodePro-Regular.woff",
-    "SourceCodePro-Semibold.woff",
-    "SourceSerifPro-Bold.ttf.woff",
-    "SourceSerifPro-Regular.ttf.woff",
-    "SourceSerifPro-It.ttf.woff",
-];
-
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
@@ -213,6 +182,20 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
+        // TODO: remove this when https://github.com/rust-lang/rustwide/pull/53 lands.
+        struct Rustdoc<'a> {
+            toolchain_version: &'a str,
+        }
+        impl rustwide::cmd::Runnable for Rustdoc<'_> {
+            fn name(&self) -> Binary {
+                Binary::ManagedByRustwide(PathBuf::from("rustdoc"))
+            }
+
+            fn prepare_command<'w, 'pl>(&self, cmd: Command<'w, 'pl>) -> Command<'w, 'pl> {
+                cmd.args(&[format!("+{}", self.toolchain_version)])
+            }
+        }
+
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
@@ -229,19 +212,29 @@ impl RustwideBuilder {
                     .prefix("essential-files")
                     .tempdir()?;
 
-                let files = ESSENTIAL_FILES_VERSIONED
+                let toolchain_version = self.toolchain.as_dist().unwrap().name();
+                let output = build.cmd(Rustdoc { toolchain_version })
+                    .args(&["-Zunstable-options", "--print=unversioned-files"])
+                    .run_capture()
+                    .context("failed to learn about unversioned files - make sure you have nightly-2021-03-07 or later")?;
+                let essential_files_unversioned = output
+                    .stdout_lines()
                     .iter()
-                    .map(|f| (f, true))
-                    .chain(ESSENTIAL_FILES_UNVERSIONED.iter().map(|f| (f, false)));
-                for (&file, versioned) in files {
-                    let segments = file.rsplitn(2, '.').collect::<Vec<_>>();
-                    let file_name = if versioned {
-                        format!("{}-{}.{}", segments[1], rustc_version, segments[0])
-                    } else {
-                        file.to_string()
-                    };
+                    .map(PathBuf::from);
+                let resource_suffix = format!("-{}", parse_rustc_version(&self.rustc_version)?);
+                let essential_files_versioned: Vec<_> = source.read_dir()?
+                    .collect::<std::result::Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .filter_map(|entry| {
+                        entry.file_name().to_str().and_then(|name| if name.contains(&resource_suffix) {
+                            Some(entry.file_name().into())
+                        } else { None })
+                    })
+                    .collect();
+                for file_name in essential_files_unversioned.chain(essential_files_versioned) {
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
+                    debug!("copying {} to {}", source_path.display(), dest_path.display());
                     ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
                         format!(
                             "couldn't copy '{}' to '{}'",
