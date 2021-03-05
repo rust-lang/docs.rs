@@ -25,8 +25,8 @@ impl DocBuilder {
     pub fn new(config: Arc<Config>, db: Pool, build_queue: Arc<BuildQueue>) -> DocBuilder {
         DocBuilder {
             config,
-            build_queue,
             db,
+            build_queue,
         }
     }
 

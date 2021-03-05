@@ -193,7 +193,7 @@ impl ReturnValue {
 
 impl tera::Function for ReturnValue {
     fn call(&self, args: &HashMap<String, Value>) -> TeraResult<Value> {
-        debug_assert!(args.is_empty(), format!("{} takes no args", self.name));
+        debug_assert!(args.is_empty(), "{} takes no args", self.name);
         Ok(self.value.clone())
     }
 }
