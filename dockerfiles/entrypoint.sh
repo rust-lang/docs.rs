@@ -27,8 +27,6 @@ while true; do
 done
 set -e
 
-cratesfyi database update-release-activity
-
 if ! [ -d "${CRATESFYI_PREFIX}/crates.io-index/.git" ]; then
     git clone https://github.com/rust-lang/crates.io-index "${CRATESFYI_PREFIX}/crates.io-index"
     # Prevent new crates built before the container creation to be built
