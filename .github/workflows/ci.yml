@@ -60,8 +60,13 @@ jobs:
       - name: Build
         run: cargo build --workspace --locked
 
-      - name: Test
+      - name: fast tests
         run: cargo test --workspace --locked
+
+      - name: slow tests
+        env:
+          DOCSRS_INCLUDE_DEFAULT_TARGETS: true
+        run: cargo test --workspace --locked -- --ignored
 
       - name: Clean up the database
         run: docker-compose down --volumes

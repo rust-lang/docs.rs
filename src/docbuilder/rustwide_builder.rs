@@ -757,15 +757,94 @@ pub(crate) struct BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::test::{assert_redirect, assert_success, wrapper};
 
     #[test]
+    #[ignore]
     fn test_build_crate() {
         wrapper(|env| {
+            let crate_ = "log";
+            let version = "0.4.14";
+            let default_target = "x86_64-unknown-linux-gnu";
+
+            assert_eq!(env.config().include_default_targets, true);
+
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder
-                .build_package("log", "0.4.14", PackageKind::CratesIo)
-                .map(|_| ())
+                .build_package(crate_, version, PackageKind::CratesIo)
+                .map(|_| ())?;
+
+            // check release record in the db (default and other targets)
+            let mut conn = env.db().conn();
+            let rows = conn
+                .query(
+                    "SELECT 
+                        r.rustdoc_status,
+                        r.default_target,
+                        r.doc_targets
+                    FROM 
+                        crates as c 
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                    WHERE 
+                        c.name = $1 AND 
+                        r.version = $2",
+                    &[&crate_, &version],
+                )
+                .unwrap();
+            let row = rows.get(0).unwrap();
+
+            assert_eq!(row.get::<_, bool>("rustdoc_status"), true);
+            assert_eq!(row.get::<_, String>("default_target"), default_target);
+
+            let mut targets: Vec<String> = row
+                .get::<_, Value>("doc_targets")
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect();
+            targets.sort();
+            assert_eq!(
+                targets,
+                vec![
+                    "i686-pc-windows-msvc",
+                    "i686-unknown-linux-gnu",
+                    "x86_64-apple-darwin",
+                    "x86_64-pc-windows-msvc",
+                    "x86_64-unknown-linux-gnu",
+                ]
+            );
+
+            let storage = env.storage();
+            let web = env.frontend();
+
+            let base = format!("rustdoc/{}/{}", crate_, version);
+
+            // default target was built and is accessible
+            assert!(storage.exists(&format!("{}/{}/index.html", base, crate_))?);
+            assert_success(&format!("/{0}/{1}/{0}", crate_, version), web)?;
+
+            // other targets too
+            for target in DEFAULT_TARGETS {
+                let target_docs_present =
+                    storage.exists(&format!("{}/{}/{}/index.html", base, target, crate_))?;
+
+                let target_url = format!("/{0}/{1}/{2}/{0}/index.html", crate_, version, target);
+
+                if target == &default_target {
+                    assert!(!target_docs_present);
+                    assert_redirect(
+                        &target_url,
+                        &format!("/{0}/{1}/{0}/index.html", crate_, version),
+                        web,
+                    )?;
+                } else {
+                    assert!(target_docs_present);
+                    assert_success(&target_url, web)?;
+                }
+            }
+
+            Ok(())
         })
     }
 }
