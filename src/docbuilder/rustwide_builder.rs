@@ -753,3 +753,19 @@ pub(crate) struct BuildResult {
     pub(crate) docsrs_version: String,
     pub(crate) successful: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::wrapper;
+
+    #[test]
+    fn test_build_crate() {
+        wrapper(|env| {
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder
+                .build_package("log", "0.4.14", PackageKind::CratesIo)
+                .map(|_| ())
+        })
+    }
+}
