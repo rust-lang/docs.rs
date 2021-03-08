@@ -11,7 +11,6 @@ use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, GithubUpdat
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
-use failure::bail;
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
@@ -320,7 +319,7 @@ impl RustwideBuilder {
                 .mem_available
                 .expect("kernel version too old for determining memory limit");
             if limits.memory() as u64 > available {
-                bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
+                failure::bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
                     name, version, limits.memory() / 1024 / 1024, available / 1024 / 1024
                 );
             } else {
