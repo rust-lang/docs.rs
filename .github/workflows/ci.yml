@@ -63,9 +63,14 @@ jobs:
       - name: fast tests
         run: cargo test --workspace --locked
 
+      - name: create small build-environment
+        run: |
+          docker build -t buildenv - < dockerfiles/Dockerfile-small-build-env
+
       - name: slow tests
         env:
           DOCSRS_INCLUDE_DEFAULT_TARGETS: true
+          DOCS_RS_LOCAL_DOCKER_IMAGE: buildenv
         run: cargo test --workspace --locked -- --ignored
 
       - name: Clean up the database

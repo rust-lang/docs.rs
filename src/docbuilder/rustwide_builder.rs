@@ -763,8 +763,9 @@ mod tests {
     #[ignore]
     fn test_build_crate() {
         wrapper(|env| {
-            let crate_ = "log";
-            let version = "0.4.14";
+            let crate_ = DUMMY_CRATE_NAME;
+            let crate_path = crate_.replace("-", "_");
+            let version = DUMMY_CRATE_VERSION;
             let default_target = "x86_64-unknown-linux-gnu";
 
             assert_eq!(env.config().include_default_targets, true);
@@ -821,21 +822,24 @@ mod tests {
             let base = format!("rustdoc/{}/{}", crate_, version);
 
             // default target was built and is accessible
-            assert!(storage.exists(&format!("{}/{}/index.html", base, crate_))?);
-            assert_success(&format!("/{0}/{1}/{0}", crate_, version), web)?;
+            assert!(storage.exists(&format!("{}/{}/index.html", base, crate_path))?);
+            assert_success(&format!("/{}/{}/{}", crate_, version, crate_path), web)?;
 
             // other targets too
             for target in DEFAULT_TARGETS {
                 let target_docs_present =
-                    storage.exists(&format!("{}/{}/{}/index.html", base, target, crate_))?;
+                    storage.exists(&format!("{}/{}/{}/index.html", base, target, crate_path))?;
 
-                let target_url = format!("/{0}/{1}/{2}/{0}/index.html", crate_, version, target);
+                let target_url = format!(
+                    "/{}/{}/{}/{}/index.html",
+                    crate_, version, target, crate_path
+                );
 
                 if target == &default_target {
                     assert!(!target_docs_present);
                     assert_redirect(
                         &target_url,
-                        &format!("/{0}/{1}/{0}/index.html", crate_, version),
+                        &format!("/{}/{}/{}/index.html", crate_, version, crate_path),
                         web,
                     )?;
                 } else {
