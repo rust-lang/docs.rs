@@ -87,6 +87,9 @@ impl RustwideBuilder {
         if let Some(custom_image) = &config.local_docker_image {
             builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
         }
+        if cfg!(test) {
+            builder = builder.fast_init(true);
+        }
 
         let workspace = builder.init()?;
         workspace.purge_all_build_dirs()?;
