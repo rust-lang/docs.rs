@@ -13,6 +13,7 @@ use reqwest::{
     blocking::{Client, RequestBuilder},
     Method,
 };
+use std::fs;
 use std::{panic, sync::Arc};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
@@ -103,10 +104,12 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) fn init_logger() {
-    // If this fails it's probably already initialized
-    let _ = env_logger::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
-        .is_test(true)
-        .try_init();
+    // initializing rustwide logging also sets the global logger
+    rustwide::logging::init_with(
+        env_logger::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
+            .is_test(true)
+            .build(),
+    );
 }
 
 impl TestEnvironment {
@@ -137,8 +140,11 @@ impl TestEnvironment {
     fn base_config(&self) -> Config {
         let mut config = Config::from_env().expect("failed to get base config");
 
+        // create index directory
+        fs::create_dir_all(config.registry_index_path.clone()).unwrap();
+
         // Use less connections for each test compared to production.
-        config.max_pool_size = 2;
+        config.max_pool_size = 4;
         config.min_pool_idle = 0;
 
         // Use the database for storage, as it's faster than S3.

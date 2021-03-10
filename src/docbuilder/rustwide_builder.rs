@@ -86,6 +86,9 @@ impl RustwideBuilder {
         if let Some(custom_image) = &config.local_docker_image {
             builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
         }
+        if cfg!(test) {
+            builder = builder.fast_init(true);
+        }
 
         let workspace = builder.init()?;
         workspace.purge_all_build_dirs()?;
@@ -751,4 +754,103 @@ pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
     pub(crate) successful: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::{assert_redirect, assert_success, wrapper};
+
+    #[test]
+    #[ignore]
+    fn test_build_crate() {
+        wrapper(|env| {
+            let crate_ = DUMMY_CRATE_NAME;
+            let crate_path = crate_.replace("-", "_");
+            let version = DUMMY_CRATE_VERSION;
+            let default_target = "x86_64-unknown-linux-gnu";
+
+            assert_eq!(env.config().include_default_targets, true);
+
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo)
+                .map(|_| ())?;
+
+            // check release record in the db (default and other targets)
+            let mut conn = env.db().conn();
+            let rows = conn
+                .query(
+                    "SELECT 
+                        r.rustdoc_status,
+                        r.default_target,
+                        r.doc_targets
+                    FROM 
+                        crates as c 
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                    WHERE 
+                        c.name = $1 AND 
+                        r.version = $2",
+                    &[&crate_, &version],
+                )
+                .unwrap();
+            let row = rows.get(0).unwrap();
+
+            assert_eq!(row.get::<_, bool>("rustdoc_status"), true);
+            assert_eq!(row.get::<_, String>("default_target"), default_target);
+
+            let mut targets: Vec<String> = row
+                .get::<_, Value>("doc_targets")
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect();
+            targets.sort();
+            assert_eq!(
+                targets,
+                vec![
+                    "i686-pc-windows-msvc",
+                    "i686-unknown-linux-gnu",
+                    "x86_64-apple-darwin",
+                    "x86_64-pc-windows-msvc",
+                    "x86_64-unknown-linux-gnu",
+                ]
+            );
+
+            let storage = env.storage();
+            let web = env.frontend();
+
+            let base = format!("rustdoc/{}/{}", crate_, version);
+
+            // default target was built and is accessible
+            assert!(storage.exists(&format!("{}/{}/index.html", base, crate_path))?);
+            assert_success(&format!("/{}/{}/{}", crate_, version, crate_path), web)?;
+
+            // other targets too
+            for target in DEFAULT_TARGETS {
+                let target_docs_present =
+                    storage.exists(&format!("{}/{}/{}/index.html", base, target, crate_path))?;
+
+                let target_url = format!(
+                    "/{}/{}/{}/{}/index.html",
+                    crate_, version, target, crate_path
+                );
+
+                if target == &default_target {
+                    assert!(!target_docs_present);
+                    assert_redirect(
+                        &target_url,
+                        &format!("/{}/{}/{}/index.html", crate_, version, crate_path),
+                        web,
+                    )?;
+                } else {
+                    assert!(target_docs_present);
+                    assert_success(&target_url, web)?;
+                }
+            }
+
+            Ok(())
+        })
+    }
 }
