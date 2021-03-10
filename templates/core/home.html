@@ -14,7 +14,7 @@
 
             <div class="buttons">
                 <button type="submit" class="pure-button pure-button-normal">Search</button>
-                <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button">
+                <button type="submit" class="pure-button pure-button-normal" id="i-am-feeling-lucky-button" name="i-am-feeling-lucky" value="1">
                     I'm Feeling Lucky
                 </button>
             </div>
@@ -80,16 +80,6 @@
 
             return String.fromCharCode(ev.charCode || ev.keyCode);
         }
-
-        document.getElementById("i-am-feeling-lucky-button").onclick = function () {
-            var form = document.getElementsByClassName("landing-search-form");
-            var input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'i-am-feeling-lucky';
-            input.value = 1;
-            document.getElementsByClassName("landing-search-form")[0].appendChild(input);
-            return true;
-        };
 
         function handleShortcut(ev) {
             if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
