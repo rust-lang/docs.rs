@@ -60,12 +60,10 @@ fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::O
 where
     S: Serializer,
 {
-    if let Some(ref markdown) = markdown {
-        Some(render_markdown(&markdown))
-    } else {
-        None
-    }
-    .serialize(serializer)
+    markdown
+        .as_ref()
+        .map(|markdown| render_markdown(&markdown))
+        .serialize(serializer)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]

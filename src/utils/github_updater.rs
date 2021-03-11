@@ -210,10 +210,8 @@ impl GithubUpdater {
         // When a node is missing (for example if the repository was deleted or made private) the
         // GraphQL API will return *both* a `null` instead of the data in the nodes list and a
         // `NOT_FOUND` error in the errors list.
-        for node in &response.data.nodes {
-            if let Some(node) = node {
-                self.store_repository(conn, &node)?;
-            }
+        for node in response.data.nodes.iter().flatten() {
+            self.store_repository(conn, &node)?;
         }
         for error in &response.errors {
             use GraphErrorPath::*;
