@@ -42,7 +42,6 @@ const ESSENTIAL_FILES_VERSIONED: &[&str] = &[
     "source-script.js",
     "noscript.css",
     "rust-logo.png",
-    "crates.js",
 ];
 const ESSENTIAL_FILES_UNVERSIONED: &[&str] = &[
     "FiraSans-Medium.woff",
