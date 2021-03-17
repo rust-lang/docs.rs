@@ -60,6 +60,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     let row = cexpect!(req, rows.get(0));
 
     let mut features = None;
+    // features enabled by the default feature flag
     let mut default_len = 0;
 
     if let Some(raw) = row.get(0) {
@@ -79,15 +80,22 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
 fn order_features_and_count_default_len(raw: Vec<Feature>) -> (Vec<Feature>, usize) {
     let mut feature_map = get_feature_map(raw);
     let mut features = get_tree_structure_from_default(&mut feature_map);
-    let mut remaining: Vec<_> = feature_map
+    let remaining: Vec<_> = feature_map
         .into_iter()
         .map(|(_, feature)| feature)
         .collect();
-    remaining.sort_by_key(|feature| feature.subfeatures.len());
 
     let default_len = features.len();
 
     features.extend(remaining.into_iter().rev());
+    features.sort_by(|a, b| {
+        // 'default' feature is special and should always stay on top
+        if b.name == "default" {
+            std::cmp::Ordering::Greater
+        } else {
+            a.name.partial_cmp(&b.name).unwrap()
+        }
+    });
     (features, default_len)
 }
 
