@@ -91,15 +91,15 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                         </ul>
                     </div>
 
-                    {# Show the crate authors #}
+                    {# Show the crate owners #}
                     <div class="pure-u-1-2">
                         <ul class="pure-menu-list">
-                            <li class="pure-menu-heading">Authors</li>
+                            <li class="pure-menu-heading">Owners</li>
 
-                            {%- for author in krate.authors -%}
+                            {%- for owner in krate.owners -%}
                                 <li class="pure-menu-item">
-                                    <a href="/releases/{{ author[1] }}" class="pure-menu-link">
-                                        {{ "user" | fas(fw=true) }} {{ author[0] }}
+                                    <a href="/releases/{{ owner[0] }}" class="pure-menu-link">
+                                        {{ "user" | fas(fw=true) }} {{ owner[0] }}
                                     </a>
                                 </li>
                             {%- endfor -%}

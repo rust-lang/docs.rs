@@ -109,61 +109,11 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         .collect()
 }
 
-fn get_releases_by_author(
-    conn: &mut Client,
-    page: i64,
-    limit: i64,
-    author: &str,
-) -> (String, Vec<Release>) {
-    let offset = (page - 1) * limit;
-
-    let query = "
-        SELECT crates.name,
-               releases.version,
-               releases.description,
-               releases.target_name,
-               releases.release_time,
-               releases.rustdoc_status,
-               github_repos.stars,
-               authors.name
-        FROM crates
-        INNER JOIN releases ON releases.id = crates.latest_version_id
-        INNER JOIN author_rels ON releases.id = author_rels.rid
-        INNER JOIN authors ON authors.id = author_rels.aid
-        LEFT JOIN github_repos ON releases.github_repo = github_repos.id
-        WHERE authors.slug = $1
-        ORDER BY github_repos.stars DESC NULLS LAST
-        LIMIT $2 OFFSET $3";
-    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
-
-    let mut author_name = None;
-    let packages = query
-        .into_iter()
-        .map(|row| {
-            if author_name.is_none() {
-                author_name = Some(row.get(7));
-            }
-
-            Release {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                release_time: row.get(4),
-                rustdoc_status: row.get(5),
-                stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
-            }
-        })
-        .collect();
-
-    (author_name.unwrap_or_default(), packages)
-}
-
 fn get_releases_by_owner(
     conn: &mut Client,
     page: i64,
     limit: i64,
-    author: &str,
+    owner: &str,
 ) -> (String, Vec<Release>) {
     let offset = (page - 1) * limit;
 
@@ -184,14 +134,14 @@ fn get_releases_by_owner(
                  WHERE owners.login = $1
                  ORDER BY github_repos.stars DESC NULLS LAST
                  LIMIT $2 OFFSET $3";
-    let query = conn.query(query, &[&author, &limit, &offset]).unwrap();
+    let query = conn.query(query, &[&owner, &limit, &offset]).unwrap();
 
-    let mut author_name = None;
+    let mut owner_name = None;
     let packages = query
         .into_iter()
         .map(|row| {
-            if author_name.is_none() {
-                author_name = Some(if !row.get::<usize, String>(7).is_empty() {
+            if owner_name.is_none() {
+                owner_name = Some(if !row.get::<usize, String>(7).is_empty() {
                     row.get(7)
                 } else {
                     row.get(8)
@@ -210,7 +160,7 @@ fn get_releases_by_owner(
         })
         .collect();
 
-    (author_name.unwrap_or_default(), packages)
+    (owner_name.unwrap_or_default(), packages)
 }
 
 /// Get the search results for a crate search query
@@ -336,7 +286,7 @@ struct ViewReleases {
     show_next_page: bool,
     show_previous_page: bool,
     page_number: i64,
-    author: Option<String>,
+    owner: Option<String>,
 }
 
 impl_webpage! {
@@ -350,7 +300,7 @@ pub(super) enum ReleaseType {
     Stars,
     RecentFailures,
     Failures,
-    Author,
+    Owner,
     Search,
 }
 
@@ -369,8 +319,8 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
             Order::FailuresByGithubStars,
         ),
 
-        ReleaseType::Author | ReleaseType::Search => panic!(
-            "The authors and search page have special requirements and cannot use this handler",
+        ReleaseType::Owner | ReleaseType::Search => panic!(
+            "The owners and search page have special requirements and cannot use this handler",
         ),
     };
 
@@ -392,7 +342,7 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         show_next_page,
         show_previous_page,
         page_number,
-        author: None,
+        owner: None,
     }
     .into_response(req)
 }
@@ -413,39 +363,29 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
     releases_handler(req, ReleaseType::Failures)
 }
 
-pub fn author_handler(req: &mut Request) -> IronResult<Response> {
+pub fn owner_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     // page number of releases
     let page_number: i64 = router
         .find("page")
         .and_then(|page_num| page_num.parse().ok())
         .unwrap_or(1);
-    let author = router
-        .find("author")
-        // TODO: Accurate error here, the author wasn't provided
-        .ok_or(Nope::CrateNotFound)?;
+    let owner_route_value = router.find("owner").unwrap();
 
-    let (author_name, releases) = {
+    let (owner_name, releases) = {
         let mut conn = extension!(req, Pool).get()?;
 
-        if author.starts_with('@') {
-            let mut author = author.split('@');
-
-            get_releases_by_owner(
-                &mut conn,
-                page_number,
-                RELEASES_IN_RELEASES,
-                // TODO: Is this fallible?
-                cexpect!(req, author.nth(1)),
-            )
-        } else {
-            get_releases_by_author(&mut conn, page_number, RELEASES_IN_RELEASES, author)
+        // We need to keep the owner_route_value unchanged, as we may render paginated links in the page.
+        // Changing the owner_route_value directly will cause the link to change, for example: @foobar -> foobar.
+        let mut owner = owner_route_value;
+        if owner.starts_with('@') {
+            owner = &owner[1..];
         }
+        get_releases_by_owner(&mut conn, page_number, RELEASES_IN_RELEASES, owner)
     };
 
     if releases.is_empty() {
-        // TODO: Accurate error here, the author wasn't found
-        return Err(Nope::CrateNotFound.into());
+        return Err(Nope::OwnerNotFound.into());
     }
 
     // Show next and previous page buttons
@@ -456,12 +396,12 @@ pub fn author_handler(req: &mut Request) -> IronResult<Response> {
 
     ViewReleases {
         releases,
-        description: format!("Crates from {}", author_name),
-        release_type: ReleaseType::Author,
+        description: format!("Crates from {}", owner_name),
+        release_type: ReleaseType::Owner,
         show_next_page,
         show_previous_page,
         page_number,
-        author: Some(author.into()),
+        owner: Some(owner_route_value.into()),
     }
     .into_response(req)
 }
@@ -754,6 +694,7 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::api::CrateOwner;
     use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
     use chrono::{Duration, TimeZone};
     use failure::Error;
@@ -1446,29 +1387,75 @@ mod tests {
     }
 
     #[test]
-    fn authors_page() {
+    fn nonexistent_owner_page() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("some_random_crate")
+                .add_owner(CrateOwner {
+                    login: "foobar".into(),
+                    avatar: "https://example.org/foobar".into(),
+                    name: "Foo Bar".into(),
+                    email: "foobar@example.org".into(),
+                })
+                .create()?;
+            let page = kuchiki::parse_html().one(
+                env.frontend()
+                    .get("/releases/random-author")
+                    .send()?
+                    .text()?,
+            );
+
+            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
+            assert_eq!(
+                page.select("#crate-title")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "The requested owner does not exist",
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn owners_page() {
         wrapper(|env| {
             let web = env.frontend();
             env.fake_release()
                 .name("some_random_crate")
-                .author("frankenstein <frankie@stein.com>")
+                .add_owner(CrateOwner {
+                    login: "foobar".into(),
+                    avatar: "https://example.org/foobar".into(),
+                    name: "Foo Bar".into(),
+                    email: "foobar@example.org".into(),
+                })
                 .create()?;
-            assert_success("/releases/frankenstein", web)
+            // Request an owner without @ sign.
+            assert_success("/releases/foobar", web)?;
+            // Request an owner with @ sign.
+            assert_success("/releases/@foobar", web)
         })
     }
 
     #[test]
-    fn authors_pagination() {
+    fn owners_pagination() {
         wrapper(|env| {
             let web = env.frontend();
             for i in 0..RELEASES_IN_RELEASES {
                 env.fake_release()
                     .name(&format!("some_random_crate_{}", i))
-                    .author("frankenstein <frankie@stein.com")
+                    .add_owner(CrateOwner {
+                        login: "foobar".into(),
+                        avatar: "https://example.org/foobar".into(),
+                        name: "Foo Bar".into(),
+                        email: "foobar@example.org".into(),
+                    })
                     .create()?;
             }
-            let page = kuchiki::parse_html().one(web.get("/releases/frankenstein").send()?.text()?);
-            let button = page.select_first("a[href='/releases/frankenstein/2']");
+            let page = kuchiki::parse_html().one(web.get("/releases/@foobar").send()?.text()?);
+            let button = page.select_first("a[href='/releases/@foobar/2']");
 
             assert!(button.is_ok());
 
@@ -1482,7 +1469,12 @@ mod tests {
             let web = env.frontend();
             env.fake_release()
                 .name("some_random_crate")
-                .author("frankenstein <frankie@stein.com>")
+                .add_owner(CrateOwner {
+                    login: "foobar".into(),
+                    avatar: "https://example.org/foobar".into(),
+                    name: "Foo Bar".into(),
+                    email: "foobar@example.org".into(),
+                })
                 .create()?;
 
             let mut urls = vec![];

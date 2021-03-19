@@ -41,8 +41,8 @@ pub(super) fn build_routes() -> Routes {
 
     routes.internal_page("/releases", super::releases::recent_releases_handler);
     routes.static_resource("/releases/feed", super::releases::releases_feed_handler);
-    routes.internal_page("/releases/:author", super::releases::author_handler);
-    routes.internal_page("/releases/:author/:page", super::releases::author_handler);
+    routes.internal_page("/releases/:owner", super::releases::owner_handler);
+    routes.internal_page("/releases/:owner/:page", super::releases::owner_handler);
     routes.internal_page("/releases/activity", super::releases::activity_handler);
     routes.internal_page("/releases/search", super::releases::search_handler);
     routes.internal_page("/releases/queue", super::releases::build_queue_handler);

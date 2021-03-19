@@ -9,10 +9,9 @@
         * `failures`
         * `activity`
         * `queue`
-        * `author`
-    * `author` A string, used for the authors page
+        * `owner` A string, used for the owners page
 #}
-{% macro header(title, description, tab, author=false) %}
+{% macro header(title, description, tab, owner=false) %}
     <div class="cratesfyi-package-container">
         <div class="container">
             <div class="description-container">
@@ -68,11 +67,11 @@
                                 </a>
                             </li>
 
-                            {%- if author -%}
+                            {%- if owner -%}
                                 <li class="pure-menu-item">
-                                    <a href="#" class="pure-menu-link{% if tab == 'author' %} pure-menu-active{% endif %}">
+                                    <a href="#" class="pure-menu-link{% if tab == 'owner' %} pure-menu-active{% endif %}">
                                         {{ "user" | fas(fw=true) }}
-                                        <span class="title">{{ author }}</span>
+                                        <span class="title">{{ owner }}</span>
                                     </a>
                                 </li>
                             {%- endif -%}

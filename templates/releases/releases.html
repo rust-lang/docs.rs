@@ -10,7 +10,7 @@
             title=title | default(value="Releases"),
             description=description | default(value=""),
             tab=release_type,
-            author=author | default(value=false)
+            owner=owner | default(value=false)
         )
     }}
 {%- endblock header -%}
@@ -38,7 +38,7 @@
                                     {{ release.description }}
                                 </div>
 
-                                {% if release_type == 'author' -%}
+                                {% if release_type == 'owner' -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
                                         title="Published {{ release.release_time | timeformat(relative=true) }}">
                                         {{ release.stars }}
@@ -57,8 +57,8 @@
             </ul>
 
             <div class="pagination">
-                {%- if release_type == 'author' -%}
-                    {%- set page_link = "/releases/" ~ author -%}
+                {%- if release_type == 'owner' -%}
+                    {%- set page_link = "/releases/" ~ owner -%}
                 {%- else -%}
                     {%- set page_link = "/releases/" ~ release_type -%}
                 {%- endif -%}
