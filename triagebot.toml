@@ -1,0 +1,6 @@
+[relabel]
+allow-unauthenticated = [
+    "S-waiting-on-review",
+    "S-waiting-on-author",
+    "S-blocked",
+]
