@@ -7,7 +7,7 @@ use iron::status::Status;
 use prometheus::{Encoder, HistogramVec, TextEncoder};
 use std::time::{Duration, Instant};
 
-pub fn metrics_handler(req: &mut Request) -> IronResult<Response> {
+pub(super) fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     let metrics = extension!(req, Metrics);
     let pool = extension!(req, Pool);
     let queue = extension!(req, BuildQueue);
@@ -30,7 +30,7 @@ fn duration_to_seconds(d: Duration) -> f64 {
     d.as_secs() as f64 + nanos
 }
 
-pub struct RequestRecorder {
+pub(super) struct RequestRecorder {
     handler: Box<dyn iron::Handler>,
     route_name: String,
 }
