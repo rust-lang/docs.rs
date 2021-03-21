@@ -171,12 +171,23 @@ impl Handler for CratesfyiHandler {
             }
         }
 
-        // try serving shared rustdoc resources first, then db/static file handler and last router
-        // return 404 if none of them return Ok. It is important that the router comes last,
-        // because it gives the most specific errors, e.g. CrateNotFound or VersionNotFound
-        self.shared_resource_handler
+        // This is kind of a mess.
+        //
+        // Almost all files should be served through the `router_handler`; eventually
+        // `shared_resource_handler` should go through the router too, and `database_file_handler`
+        // could be removed altogether.
+        //
+        // Unfortunately, combining `shared_resource_handler` with the `router_handler` breaks
+        // things, because right now `shared_resource_handler` allows requesting files from *any*
+        // subdirectory and the router requires us to give a specific path. Changing them to a
+        // specific path means that buggy docs from 2018 will have missing CSS (#1181) so until
+        // that's fixed, we need to keep the current (buggy) behavior.
+        //
+        // It's important that `router_handler` comes first so that local rustdoc files take
+        // precedence over global ones (see #1324).
+        self.router_handler
             .handle(req)
-            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
+            .or_else(|e| if_404(e, || self.shared_resource_handler.handle(req)))
             .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
