@@ -182,20 +182,6 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        // TODO: remove this when https://github.com/rust-lang/rustwide/pull/53 lands.
-        struct Rustdoc<'a> {
-            toolchain_version: &'a str,
-        }
-        impl rustwide::cmd::Runnable for Rustdoc<'_> {
-            fn name(&self) -> Binary {
-                Binary::ManagedByRustwide(PathBuf::from("rustdoc"))
-            }
-
-            fn prepare_command<'w, 'pl>(&self, cmd: Command<'w, 'pl>) -> Command<'w, 'pl> {
-                cmd.args(&[format!("+{}", self.toolchain_version)])
-            }
-        }
-
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
@@ -212,29 +198,14 @@ impl RustwideBuilder {
                     .prefix("essential-files")
                     .tempdir()?;
 
-                let toolchain_version = self.toolchain.as_dist().unwrap().name();
-                let output = build.cmd(Rustdoc { toolchain_version })
-                    .args(&["-Zunstable-options", "--print=unversioned-files"])
-                    .run_capture()
-                    .context("failed to learn about unversioned files - make sure you have nightly-2021-03-07 or later")?;
-                let essential_files_unversioned = output
-                    .stdout_lines()
-                    .iter()
-                    .map(PathBuf::from);
-                let resource_suffix = format!("-{}", parse_rustc_version(&self.rustc_version)?);
-                let essential_files_versioned: Vec<_> = source.read_dir()?
-                    .collect::<std::result::Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .filter_map(|entry| {
-                        entry.file_name().to_str().and_then(|name| if name.contains(&resource_suffix) {
-                            Some(entry.file_name().into())
-                        } else { None })
-                    })
-                    .collect();
-                for file_name in essential_files_unversioned.chain(essential_files_versioned) {
+                for file_name in self.essential_files(build, &source)? {
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
-                    debug!("copying {} to {}", source_path.display(), dest_path.display());
+                    debug!(
+                        "copying {} to {}",
+                        source_path.display(),
+                        dest_path.display()
+                    );
                     ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
                         format!(
                             "couldn't copy '{}' to '{}'",
@@ -363,7 +334,7 @@ impl RustwideBuilder {
                 let mut algs = HashSet::new();
                 if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
+                    self.copy_docs(build, local_storage.path(), "", true)?;
 
                     successful_targets.push(res.target.clone());
 
@@ -465,7 +436,7 @@ impl RustwideBuilder {
             // adding target to successfully_targets.
             if build.host_target_dir().join(target).join("doc").is_dir() {
                 debug!("adding documentation for target {} to the database", target,);
-                self.copy_docs(&build.host_target_dir(), local_storage, target, false)?;
+                self.copy_docs(build, local_storage, target, false)?;
                 successful_targets.push(target.to_string());
             }
         }
@@ -638,12 +609,12 @@ impl RustwideBuilder {
 
     fn copy_docs(
         &self,
-        target_dir: &Path,
+        build: &Build,
         local_storage: &Path,
         target: &str,
         is_default_target: bool,
     ) -> Result<()> {
-        let source = target_dir.join(target).join("doc");
+        let source = build.host_target_dir().join(target).join("doc");
 
         let mut dest = local_storage.to_path_buf();
         // only add target name to destination directory when we are copying a non-default target.
@@ -656,7 +627,49 @@ impl RustwideBuilder {
         }
 
         info!("{} {}", source.display(), dest.display());
-        copy_doc_dir(source, dest)
+        let essential_files = self.essential_files(build, &source)?;
+        copy_doc_dir(source, dest, &essential_files)
+    }
+
+    fn essential_files(&self, build: &Build, doc_dir: &Path) -> Result<Vec<PathBuf>> {
+        // TODO: remove this when https://github.com/rust-lang/rustwide/pull/53 lands.
+        struct Rustdoc<'a> {
+            toolchain_version: &'a str,
+        }
+        impl rustwide::cmd::Runnable for Rustdoc<'_> {
+            fn name(&self) -> Binary {
+                Binary::ManagedByRustwide(PathBuf::from("rustdoc"))
+            }
+
+            fn prepare_command<'w, 'pl>(&self, cmd: Command<'w, 'pl>) -> Command<'w, 'pl> {
+                cmd.args(&[format!("+{}", self.toolchain_version)])
+            }
+        }
+
+        let toolchain_version = self.toolchain.as_dist().unwrap().name();
+        let output = build.cmd(Rustdoc { toolchain_version })
+            .args(&["-Zunstable-options", "--print=unversioned-files"])
+            .run_capture()
+            .context("failed to learn about unversioned files - make sure you have nightly-2021-03-07 or later")?;
+        let mut essential_files: Vec<_> = output.stdout_lines().iter().map(PathBuf::from).collect();
+        let resource_suffix = format!("-{}", parse_rustc_version(&self.rustc_version)?);
+
+        let essential_files_versioned = doc_dir
+            .read_dir()?
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter_map(|entry| {
+                entry.file_name().to_str().and_then(|name| {
+                    if name.contains(&resource_suffix) {
+                        Some(entry.file_name().into())
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        essential_files.extend(essential_files_versioned);
+        Ok(essential_files)
     }
 
     fn upload_docs(
