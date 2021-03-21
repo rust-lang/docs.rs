@@ -29,7 +29,6 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -
         let metadata = file.metadata()?;
 
         if metadata.is_dir() {
-            fs::create_dir_all(&destination_full_path)?;
             copy_doc_dir(file.path(), destination_full_path)?
         } else if dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
