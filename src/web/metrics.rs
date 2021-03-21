@@ -108,6 +108,7 @@ impl Drop for RenderingTimesRecorder<'_> {
 #[cfg(test)]
 mod tests {
     use crate::test::{assert_success, wrapper};
+    use crate::Context;
     use std::collections::HashMap;
 
     #[test]
@@ -133,8 +134,8 @@ mod tests {
             ("/sitemap.xml", "static resource"),
             ("/-/static/style.css", "static resource"),
             ("/-/static/vendored.css", "static resource"),
-            ("/rustdoc/rcc/0.0.0/rcc/index.html", "database"),
-            ("/rustdoc/gcc/0.0.0/gcc/index.html", "database"),
+            ("/rustdoc/rcc/0.0.0/rcc/index.html", "rustdoc page"),
+            ("/rustdoc/gcc/0.0.0/gcc/index.html", "rustdoc page"),
         ];
 
         wrapper(|env| {
@@ -167,28 +168,42 @@ mod tests {
                 *entry += 2;
             }
 
+            // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
+            let metrics_serialized = metrics.gather(&env.pool()?, &env.build_queue())?;
+            let all_routes_visited = metrics_serialized
+                .iter()
+                .find(|x| x.get_name() == "docsrs_routes_visited")
+                .unwrap();
+            let routes_visited_pretty: Vec<_> = all_routes_visited
+                .get_metric()
+                .iter()
+                .map(|metric| {
+                    let labels = metric.get_label();
+                    assert_eq!(labels.len(), 1); // not sure when this would be false
+                    let route = labels[0].get_value();
+                    let count = metric.get_counter().get_value();
+                    format!("{}: {}", route, count)
+                })
+                .collect();
+            println!("routes: {:?}", routes_visited_pretty);
+
             for (label, count) in expected.iter() {
                 assert_eq!(
                     metrics.routes_visited.with_label_values(&[*label]).get(),
-                    *count
+                    *count,
+                    "routes_visited metrics for {} are incorrect",
+                    label,
                 );
                 assert_eq!(
                     metrics
                         .response_time
                         .with_label_values(&[*label])
                         .get_sample_count(),
-                    *count as u64
+                    *count as u64,
+                    "response_time metrics for {} are incorrect",
+                    label,
                 );
             }
-
-            // extra metrics for the "database success" hack
-            assert_eq!(
-                metrics
-                    .routes_visited
-                    .with_label_values(&["database success"])
-                    .get(),
-                2
-            );
 
             Ok(())
         })
