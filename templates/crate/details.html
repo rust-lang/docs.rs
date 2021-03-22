@@ -38,16 +38,6 @@
                                 {%- endif -%}
                             </li>
                         {%- endif -%}
-                        {# List the release author's names and a link to their docs.rs profile #}
-                        <li class="pure-menu-heading">Authors</li>
-                        {%- for author in details.authors -%}
-                            <li class="pure-menu-item">
-                                <a href="/releases/{{ author[1] }}" class="pure-menu-link">
-                                    {{ author[0] }}
-                                </a>
-                            </li>
-                        {%- endfor -%}
-
                         <li class="pure-menu-heading">Links</li>
 
                         {# If the crate has a homepage, show it #}

@@ -11,6 +11,7 @@ pub enum Nope {
     ResourceNotFound,
     BuildNotFound,
     CrateNotFound,
+    OwnerNotFound,
     VersionNotFound,
     NoResults,
     InternalServerError,
@@ -22,6 +23,7 @@ impl fmt::Display for Nope {
             Nope::ResourceNotFound => "Requested resource not found",
             Nope::BuildNotFound => "Requested build not found",
             Nope::CrateNotFound => "Requested crate not found",
+            Nope::OwnerNotFound => "Requested owner not found",
             Nope::VersionNotFound => "Requested crate does not have specified version",
             Nope::NoResults => "Search yielded no results",
             Nope::InternalServerError => "Internal server error",
@@ -39,6 +41,7 @@ impl From<Nope> for IronError {
             Nope::ResourceNotFound
             | Nope::BuildNotFound
             | Nope::CrateNotFound
+            | Nope::OwnerNotFound
             | Nope::VersionNotFound
             | Nope::NoResults => status::NotFound,
             Nope::InternalServerError => status::InternalServerError,
@@ -79,6 +82,13 @@ impl Handler for Nope {
                 }
                 .into_response(req)
             }
+
+            Nope::OwnerNotFound => ErrorPage {
+                title: "The requested owner does not exist",
+                message: Some("no such owner".into()),
+                status: Status::NotFound,
+            }
+            .into_response(req),
 
             Nope::VersionNotFound => {
                 // user tried to navigate to a crate with a version that does not exist
