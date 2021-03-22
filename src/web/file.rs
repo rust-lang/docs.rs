@@ -1,15 +1,15 @@
 //! Database based file handler
 
 use crate::storage::{Blob, Storage};
-use crate::{error::Result, Config, Metrics};
-use iron::{status, Handler, IronResult, Request, Response};
+use crate::{error::Result, Config};
+use iron::{status, Response};
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
 
 impl File {
     /// Gets file from database
-    pub fn from_path(storage: &Storage, path: &str, config: &Config) -> Result<File> {
+    pub(super) fn from_path(storage: &Storage, path: &str, config: &Config) -> Result<File> {
         let max_size = if path.ends_with(".html") {
             config.max_file_size_html
         } else {
@@ -20,7 +20,7 @@ impl File {
     }
 
     /// Consumes File and creates a iron response
-    pub fn serve(self) -> Response {
+    pub(super) fn serve(self) -> Response {
         use iron::headers::{CacheControl, CacheDirective, ContentType, HttpDate, LastModified};
 
         let mut response = Response::with((status::Ok, self.0.content));
@@ -44,35 +44,8 @@ impl File {
     }
 
     /// Checks if mime type of file is "application/x-empty"
-    pub fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.0.mime == "application/x-empty"
-    }
-}
-
-/// Database based file handler for iron
-///
-/// This is similar to staticfile crate, but its using getting files from database.
-pub struct DatabaseFileHandler;
-
-impl Handler for DatabaseFileHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let path = req.url.path().join("/");
-        let storage = extension!(req, Storage);
-        let config = extension!(req, Config);
-        if let Ok(file) = File::from_path(&storage, &path, &config) {
-            let metrics = extension!(req, Metrics);
-
-            // Because all requests that don't hit another handler go through here, we will get all
-            // requests successful or not recorded by the RequestRecorder, so we inject an extra
-            // "database success" route to keep track of how often we succeed vs 404
-            metrics
-                .routes_visited
-                .with_label_values(&["database success"])
-                .inc();
-            Ok(file.serve())
-        } else {
-            Err(super::error::Nope::CrateNotFound.into())
-        }
     }
 }
 

@@ -163,9 +163,6 @@ mod tests {
 
     #[test]
     fn check_404_page_content_resource() {
-        // Resources with a `.js` and `.ico` extension are special cased in the
-        // routes_handler which is currently run last. This means that `get("resource.exe")` will
-        // fail with a `no so such crate` instead of 'no such resource'
         wrapper(|env| {
             let page = kuchiki::parse_html().one(
                 env.frontend()
@@ -180,7 +177,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested crate does not exist",
+                "The requested resource does not exist",
             );
 
             Ok(())
@@ -200,7 +197,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested crate does not exist",
+                "The requested version does not exist",
             );
 
             Ok(())
@@ -219,7 +216,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested crate does not exist",
+                "The requested version does not exist",
             );
 
             Ok(())
@@ -242,7 +239,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested crate does not exist",
+                "The requested version does not exist",
             );
 
             Ok(())

@@ -516,7 +516,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let crate_details = match CrateDetails::new(&mut conn, &name, &version) {
         Some(krate) => krate,
-        None => return Err(Nope::ResourceNotFound.into()),
+        None => return Err(Nope::VersionNotFound.into()),
     };
 
     //   [crate, :name, :version, target-redirect, :target, *path]

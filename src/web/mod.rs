@@ -105,7 +105,6 @@ use iron::{
     status::Status,
     Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
 };
-use metrics::RequestRecorder;
 use page::TemplateData;
 use postgres::Client;
 use router::NoRoute;
@@ -121,7 +120,6 @@ const DEFAULT_BIND: &str = "0.0.0.0:3000";
 struct CratesfyiHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
-    database_file_handler: Box<dyn Handler>,
     inject_extensions: InjectExtensions,
 }
 
@@ -140,8 +138,6 @@ impl CratesfyiHandler {
         let inject_extensions = InjectExtensions::new(context, template_data)?;
 
         let routes = routes::build_routes();
-        let blacklisted_prefixes = routes.page_prefixes();
-
         let shared_resources =
             Self::chain(inject_extensions.clone(), rustdoc::SharedResourceHandler);
         let router_chain = Self::chain(inject_extensions.clone(), routes.iron_router());
@@ -149,10 +145,6 @@ impl CratesfyiHandler {
         Ok(CratesfyiHandler {
             shared_resource_handler: Box::new(shared_resources),
             router_handler: Box::new(router_chain),
-            database_file_handler: Box::new(routes::BlockBlacklistedPrefixes::new(
-                blacklisted_prefixes,
-                Box::new(RequestRecorder::new(file::DatabaseFileHandler, "database")),
-            )),
             inject_extensions,
         })
     }
@@ -165,7 +157,9 @@ impl Handler for CratesfyiHandler {
             handle: impl FnOnce() -> IronResult<Response>,
         ) -> IronResult<Response> {
             if e.response.status == Some(status::NotFound) {
-                handle()
+                // the routes are ordered from most specific to least; give precedence to the
+                // original error message.
+                handle().or(Err(e))
             } else {
                 Err(e)
             }
@@ -174,8 +168,7 @@ impl Handler for CratesfyiHandler {
         // This is kind of a mess.
         //
         // Almost all files should be served through the `router_handler`; eventually
-        // `shared_resource_handler` should go through the router too, and `database_file_handler`
-        // could be removed altogether.
+        // `shared_resource_handler` should go through the router too.
         //
         // Unfortunately, combining `shared_resource_handler` with the `router_handler` breaks
         // things, because right now `shared_resource_handler` allows requesting files from *any*
@@ -188,7 +181,6 @@ impl Handler for CratesfyiHandler {
         self.router_handler
             .handle(req)
             .or_else(|e| if_404(e, || self.shared_resource_handler.handle(req)))
-            .or_else(|e| if_404(e, || self.database_file_handler.handle(req)))
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
                     *err
