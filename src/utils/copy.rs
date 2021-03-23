@@ -1,17 +1,15 @@
 use crate::error::Result;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+use regex::Regex;
 
 /// Copies documentation from a crate's target directory to destination.
 ///
 /// Target directory must have doc directory.
 ///
-/// This does not copy any files with the same name as `shared_files`.
-pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(
-    source: P,
-    destination: Q,
-    shared_files: &[PathBuf],
-) -> Result<()> {
+/// This function is designed to avoid file duplications.
+pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -> Result<()> {
     let destination = destination.as_ref();
 
     // Make sure destination directory exists
@@ -19,19 +17,20 @@ pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(
         fs::create_dir_all(destination)?;
     }
 
+    // Avoid copying common files
+    let dup_regex = Regex::new(
+        r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
+        .unwrap();
+
     for file in source.as_ref().read_dir()? {
         let file = file?;
-        let filename = file.file_name();
-        let destination_full_path = destination.join(&filename);
+        let destination_full_path = destination.join(file.file_name());
 
         let metadata = file.metadata()?;
 
         if metadata.is_dir() {
-            copy_doc_dir(file.path(), destination_full_path, shared_files)?;
-            continue;
-        }
-
-        if shared_files.contains(&PathBuf::from(filename)) {
+            copy_doc_dir(file.path(), destination_full_path)?
+        } else if dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
             continue;
         } else {
             fs::copy(&file.path(), &destination_full_path)?;
@@ -66,13 +65,7 @@ mod test {
         fs::write(doc.join("inner").join("important.svg"), "<svg></svg>").unwrap();
 
         // lets try to copy a src directory to tempdir
-        let ignored_files = ["index.txt".into(), "important.svg".into()];
-        copy_doc_dir(
-            source.path().join("doc"),
-            destination.path(),
-            &ignored_files,
-        )
-        .unwrap();
+        copy_doc_dir(source.path().join("doc"), destination.path()).unwrap();
         assert!(destination.path().join("index.html").exists());
         assert!(!destination.path().join("index.txt").exists());
         assert!(destination.path().join("inner").join("index.html").exists());
