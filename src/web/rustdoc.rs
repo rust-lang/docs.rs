@@ -646,7 +646,10 @@ impl Handler for SharedResourceHandler {
         let path = req.url.path();
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
         if let Some(extension) = Path::new(filename).extension() {
-            if ["js", "css", "woff", "svg"].iter().any(|s| *s == extension) {
+            if ["js", "css", "woff", "woff2", "svg", "png"]
+                .iter()
+                .any(|s| *s == extension)
+            {
                 let storage = extension!(req, Storage);
                 let config = extension!(req, Config);
 
