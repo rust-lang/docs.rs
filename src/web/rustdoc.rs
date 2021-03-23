@@ -43,6 +43,19 @@ impl iron::Handler for RustLangRedirector {
     }
 }
 
+pub(super) fn rustdoc_static_file_hack(req: &mut Request) -> IronResult<Response> {
+    // HACK(#1327): If the crate incorrectly used a relative link to `/:crate/:version/static-resource.css`,
+    // then this will return a redirect instead of a 404, so the `shared_files_handler` won't serve the right file.
+    // Try to avoid this by only serving a redirect for valid targets.
+    let router = extension!(req, Router);
+    let target = router.find("target").unwrap();
+    if target.contains(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')) {
+        Err(Nope::ResourceNotFound.into())
+    } else {
+        rustdoc_redirector_handler(req)
+    }
+}
+
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
@@ -1733,6 +1746,18 @@ mod test {
                 1,
             );
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn static_file_hack() {
+        wrapper(|env| {
+            let static_file = "/hexponent/0.3.1/rustdoc-20181129-1.32.0-nightly-3e90a12a8.css";
+            let response = env.frontend().get(static_file).send()?;
+            // make sure there's no redirect
+            assert_eq!(response.url().path(), static_file);
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         })
     }
