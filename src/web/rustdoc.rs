@@ -18,6 +18,7 @@ use iron::{
 use lol_html::errors::RewritingError;
 use router::Router;
 use serde::Serialize;
+use std::path::Path;
 
 #[derive(Clone)]
 pub struct RustLangRedirector {
@@ -644,13 +645,17 @@ impl Handler for SharedResourceHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path();
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
-        let suffix = filename.split('.').last().unwrap(); // unwrap is fine: split always works
-        if ["js", "css", "woff", "svg"].contains(&suffix) {
-            let storage = extension!(req, Storage);
-            let config = extension!(req, Config);
+        if let Some(extension) = Path::new(filename).extension() {
+            if ["js", "css", "woff", "woff2", "svg", "png"]
+                .iter()
+                .any(|s| *s == extension)
+            {
+                let storage = extension!(req, Storage);
+                let config = extension!(req, Config);
 
-            if let Ok(file) = File::from_path(&storage, filename, &config) {
-                return Ok(file.serve());
+                if let Ok(file) = File::from_path(&storage, filename, &config) {
+                    return Ok(file.serve());
+                }
             }
         }
 
