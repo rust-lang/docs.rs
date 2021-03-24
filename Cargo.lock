@@ -122,7 +122,7 @@ dependencies = [
 name = "badge"
 version = "0.3.0"
 dependencies = [
- "base64 0.12.1",
+ "base64 0.13.0",
  "once_cell",
  "rusttype",
 ]
@@ -677,7 +677,7 @@ dependencies = [
  "arc-swap",
  "backtrace",
  "badge",
- "base64 0.12.1",
+ "base64 0.13.0",
  "chrono",
  "comrak",
  "crates-index",
