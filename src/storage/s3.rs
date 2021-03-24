@@ -50,12 +50,10 @@ impl S3Backend {
                     panic!("safeguard to prevent creating temporary buckets outside of tests");
                 }
 
-                runtime.handle().block_on(client.create_bucket(
-                    rusoto_s3::CreateBucketRequest {
-                        bucket: config.s3_bucket.clone(),
-                        ..Default::default()
-                    },
-                ))?;
+                runtime.block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
+                    bucket: config.s3_bucket.clone(),
+                    ..Default::default()
+                }))?;
             }
         }
 
@@ -70,7 +68,7 @@ impl S3Backend {
     }
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
-        self.runtime.handle().block_on(async {
+        self.runtime.block_on(async {
             let req = HeadObjectRequest {
                 bucket: self.bucket.clone(),
                 key: path.into(),
@@ -87,7 +85,7 @@ impl S3Backend {
     }
 
     pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
-        self.runtime.handle().block_on(async {
+        self.runtime.block_on(async {
             let res = self
                 .client
                 .get_object(GetObjectRequest {
@@ -157,11 +155,11 @@ impl S3Backend {
         transaction.delete_prefix("")?;
         transaction.complete()?;
 
-        self.runtime.handle().block_on(self.client.delete_bucket(
-            rusoto_s3::DeleteBucketRequest {
+        self.runtime
+            .block_on(self.client.delete_bucket(rusoto_s3::DeleteBucketRequest {
                 bucket: self.bucket.clone(),
-            },
-        ))?;
+                ..Default::default()
+            }))?;
 
         Ok(())
     }
@@ -173,7 +171,7 @@ pub(super) struct S3StorageTransaction<'a> {
 
 impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     fn store_batch(&mut self, mut batch: Vec<Blob>) -> Result<(), Error> {
-        self.s3.runtime.handle().block_on(async {
+        self.s3.runtime.block_on(async {
             // Attempt to upload the batch 3 times
             for _ in 0..3 {
                 let mut futures = FuturesUnordered::new();
@@ -221,7 +219,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     }
 
     fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
-        self.s3.runtime.handle().block_on(async {
+        self.s3.runtime.block_on(async {
             let mut continuation_token = None;
             loop {
                 let list = self
