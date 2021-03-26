@@ -67,6 +67,7 @@ pub const DEFAULT_TARGETS: &[&str] = &[
 
 /// The possible errors for [`Metadata::from_crate_root`].
 #[derive(Debug, Error)]
+#[allow(clippy::upper_case_acronyms)]
 #[non_exhaustive]
 pub enum MetadataError {
     /// The error returned when the manifest could not be read.
