@@ -29,12 +29,7 @@
     }
     function closeMenu() {
         if (this === backdrop) {
-            var rustdoc = document.querySelector(".rustdoc");
-            if (rustdoc) {
-                rustdoc.focus();
-            } else {
-                document.documentElement.focus();
-            }
+            document.documentElement.focus();
         } else if (currentMenu.querySelector(".pure-menu-link:focus")) {
             currentMenu.firstElementChild.focus();
         }
