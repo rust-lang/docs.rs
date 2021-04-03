@@ -14,13 +14,13 @@ use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
-use rustwide::cmd::{Binary, Command, SandboxBuilder, SandboxImage};
+use rustwide::cmd::{Command, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -182,26 +182,22 @@ impl RustwideBuilder {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(&self.workspace)?;
 
-        // TODO: remove this when https://github.com/rust-lang/rustwide/pull/53 lands.
-        struct Rustdoc<'a> {
-            toolchain_version: &'a str,
-        }
-        impl rustwide::cmd::Runnable for Rustdoc<'_> {
-            fn name(&self) -> Binary {
-                Binary::ManagedByRustwide(PathBuf::from("rustdoc"))
-            }
-
-            fn prepare_command<'w, 'pl>(&self, cmd: Command<'w, 'pl>) -> Command<'w, 'pl> {
-                cmd.args(&[format!("+{}", self.toolchain_version)])
-            }
-        }
-
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
 
-                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
+                let rustdoc_flags = vec![
+                    "--emit=unversioned-shared-resources,toolchain-shared-resources".to_string(),
+                ];
+                let res = self.execute_build(
+                    HOST_TARGET,
+                    true,
+                    build,
+                    &limits,
+                    &metadata,
+                    rustdoc_flags,
+                )?;
                 if !res.result.successful {
                     failure::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -211,39 +207,7 @@ impl RustwideBuilder {
                 let dest = tempfile::Builder::new()
                     .prefix("essential-files")
                     .tempdir()?;
-
-                let toolchain_version = self.toolchain.as_dist().unwrap().name();
-                let output = build.cmd(Rustdoc { toolchain_version })
-                    .args(&["-Zunstable-options", "--print=unversioned-files"])
-                    .run_capture()
-                    .context("failed to learn about unversioned files - make sure you have nightly-2021-03-07 or later")?;
-                let essential_files_unversioned = output
-                    .stdout_lines()
-                    .iter()
-                    .map(PathBuf::from);
-                let resource_suffix = format!("-{}", parse_rustc_version(&self.rustc_version)?);
-                let essential_files_versioned: Vec<_> = source.read_dir()?
-                    .collect::<std::result::Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .filter_map(|entry| {
-                        entry.file_name().to_str().and_then(|name| if name.contains(&resource_suffix) {
-                            Some(entry.file_name().into())
-                        } else { None })
-                    })
-                    .collect();
-                for file_name in essential_files_unversioned.chain(essential_files_versioned) {
-                    let source_path = source.join(&file_name);
-                    let dest_path = dest.path().join(&file_name);
-                    debug!("copying {} to {}", source_path.display(), dest_path.display());
-                    ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
-                        format!(
-                            "couldn't copy '{}' to '{}'",
-                            source_path.display(),
-                            dest_path.display()
-                        )
-                    })?;
-                }
-
+                crate::utils::copy_dir_all(source, &dest, |_| true)?;
                 add_path_into_database(&self.storage, "", &dest)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
@@ -352,7 +316,8 @@ impl RustwideBuilder {
                 } = metadata.targets(self.config.include_default_targets);
 
                 // Perform an initial build
-                let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
+                let res =
+                    self.execute_build(default_target, true, &build, &limits, &metadata, vec![])?;
                 if res.result.successful {
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
@@ -458,7 +423,7 @@ impl RustwideBuilder {
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
     ) -> Result<()> {
-        let target_res = self.execute_build(target, false, build, limits, metadata)?;
+        let target_res = self.execute_build(target, false, build, limits, metadata, Vec::new())?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -534,11 +499,10 @@ impl RustwideBuilder {
         build: &Build,
         limits: &Limits,
         metadata: &Metadata,
+        mut rustdoc_flags: Vec<String>,
     ) -> Result<FullBuildResult> {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
-
-        let mut rustdoc_flags = Vec::new();
 
         rustdoc_flags.extend(vec![
             "--resource-suffix".to_string(),

@@ -1,7 +1,9 @@
-use crate::error::Result;
+use std::ffi::OsStr;
 use std::fs;
+use std::io;
 use std::path::Path;
 
+use crate::error::Result;
 use regex::Regex;
 
 /// Copies documentation from a crate's target directory to destination.
@@ -9,31 +11,32 @@ use regex::Regex;
 /// Target directory must have doc directory.
 ///
 /// This function is designed to avoid file duplications.
-pub fn copy_doc_dir<P: AsRef<Path>, Q: AsRef<Path>>(source: P, destination: Q) -> Result<()> {
-    let destination = destination.as_ref();
-
-    // Make sure destination directory exists
-    if !destination.exists() {
-        fs::create_dir_all(destination)?;
-    }
-
+pub(crate) fn copy_doc_dir(source: impl AsRef<Path>, destination: impl AsRef<Path>) -> Result<()> {
     // Avoid copying common files
     let dup_regex = Regex::new(
         r"(\.lock|\.txt|\.woff|\.svg|\.css|main-.*\.css|main-.*\.js|normalize-.*\.js|rustdoc-.*\.css|storage-.*\.js|theme-.*\.js)$")
         .unwrap();
 
-    for file in source.as_ref().read_dir()? {
-        let file = file?;
-        let destination_full_path = destination.join(file.file_name());
+    copy_dir_all(source, destination, |filename| {
+        dup_regex.is_match(filename.to_str().unwrap())
+    })
+    .map_err(Into::into)
+}
 
-        let metadata = file.metadata()?;
-
-        if metadata.is_dir() {
-            copy_doc_dir(file.path(), destination_full_path)?
-        } else if dup_regex.is_match(&file.file_name().into_string().unwrap()[..]) {
-            continue;
-        } else {
-            fs::copy(&file.path(), &destination_full_path)?;
+pub(crate) fn copy_dir_all(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+    should_copy: impl Copy + Fn(&OsStr) -> bool,
+) -> io::Result<()> {
+    let dst = dst.as_ref();
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let filename = entry.file_name();
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(entry.path(), dst.join(filename), should_copy)?;
+        } else if should_copy(&filename) {
+            fs::copy(entry.path(), dst.join(filename))?;
         }
     }
     Ok(())
