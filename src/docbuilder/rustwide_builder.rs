@@ -7,7 +7,7 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::storage::CompressionAlgorithms;
-use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata, GithubUpdater};
+use crate::utils::{copy_dir_all, parse_rustc_version, CargoMetadata, GithubUpdater};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
@@ -187,17 +187,7 @@ impl RustwideBuilder {
             .run(|build| {
                 let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
 
-                let rustdoc_flags = vec![
-                    "--emit=unversioned-shared-resources,toolchain-shared-resources".to_string(),
-                ];
-                let res = self.execute_build(
-                    HOST_TARGET,
-                    true,
-                    build,
-                    &limits,
-                    &metadata,
-                    rustdoc_flags,
-                )?;
+                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
                 if !res.result.successful {
                     failure::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
@@ -207,7 +197,7 @@ impl RustwideBuilder {
                 let dest = tempfile::Builder::new()
                     .prefix("essential-files")
                     .tempdir()?;
-                crate::utils::copy_dir_all(source, &dest, |_| true)?;
+                copy_dir_all(source, &dest)?;
                 add_path_into_database(&self.storage, "", &dest)?;
                 conn.query(
                     "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
@@ -317,7 +307,7 @@ impl RustwideBuilder {
 
                 // Perform an initial build
                 let res =
-                    self.execute_build(default_target, true, &build, &limits, &metadata, vec![])?;
+                    self.execute_build(default_target, true, &build, &limits, &metadata, false)?;
                 if res.result.successful {
                     if let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
@@ -423,7 +413,7 @@ impl RustwideBuilder {
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
     ) -> Result<()> {
-        let target_res = self.execute_build(target, false, build, limits, metadata, Vec::new())?;
+        let target_res = self.execute_build(target, false, build, limits, metadata, false)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -499,11 +489,17 @@ impl RustwideBuilder {
         build: &Build,
         limits: &Limits,
         metadata: &Metadata,
-        mut rustdoc_flags: Vec<String>,
+        create_essential_files: bool,
     ) -> Result<FullBuildResult> {
         let cargo_metadata =
             CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
 
+        let mut rustdoc_flags = vec![if create_essential_files {
+            "--emit=unversioned-shared-resources,toolchain-shared-resources"
+        } else {
+            "--emit=invocation-specific"
+        }
+        .to_string()];
         rustdoc_flags.extend(vec![
             "--resource-suffix".to_string(),
             format!("-{}", parse_rustc_version(&self.rustc_version)?),
@@ -620,7 +616,7 @@ impl RustwideBuilder {
         }
 
         info!("{} {}", source.display(), dest.display());
-        copy_doc_dir(source, dest)
+        copy_dir_all(source, dest).map_err(Into::into)
     }
 
     fn upload_docs(
