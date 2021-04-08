@@ -8,8 +8,11 @@ pub(super) struct Csp {
 
 impl Csp {
     fn new() -> Self {
+        // Nonces need to be different for each single request in order to maintain security, so we
+        // generate a new one with a cryptographically-secure generator for each request.
         let mut random = [0u8; 36];
         getrandom::getrandom(&mut random).expect("failed to generate a nonce");
+
         Self {
             nonce: base64::encode(&random),
             suppress: false,
