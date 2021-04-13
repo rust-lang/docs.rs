@@ -47,6 +47,13 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error
     Ok(())
 }
 
+/// Make sure that a URL returns a 404
+pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<(), Error> {
+    let status = web.get(path).send()?.status();
+    assert_eq!(status, 404, "GET {} should have been a 404", path);
+    Ok(())
+}
+
 /// Make sure that a URL redirects to a specific page
 pub(crate) fn assert_redirect(
     path: &str,
