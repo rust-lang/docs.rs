@@ -16,7 +16,7 @@ macro_rules! ctry {
                 let request: &::iron::Request = $req;
 
                 ::log::error!(
-                    "called ctry!() on an `Err` value: {}\nnote: while attempting to fetch the route {:?}\n{:?}",
+                    "called ctry!() on an `Err` value: {:?}\nnote: while attempting to fetch the route {:?}\n{:?}",
                     error,
                     request.url,
                     ::backtrace::Backtrace::new(),
