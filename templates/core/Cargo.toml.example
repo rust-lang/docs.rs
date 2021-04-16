@@ -1,5 +1,4 @@
-{# The example Cargo.toml used in about.html #}
-[package]
+{# The example Cargo.toml used in about.html #}[package]
 name = "test"
 
 [package.metadata.docs.rs]
