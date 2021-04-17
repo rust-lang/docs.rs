@@ -19,7 +19,7 @@ body.blur {
     }
 
     > div.nav-container > *,
-    > div.cratesfyi-package-container > *,
+    > div.docsrs-package-container > *,
     > div.rustdoc > :not(#help) {
         filter: blur(8px);
         -webkit-filter: blur(8px);
