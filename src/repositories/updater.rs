@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::repositories::{GitHub, GitLab};
+use crate::repositories::{GitHub, GitLab, RateLimitReached};
 use crate::utils::MetadataPackage;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
@@ -128,7 +128,7 @@ impl RepositoryStatsUpdater {
 
     pub fn update_all_crates(&self) -> Result<()> {
         let mut conn = self.pool.get()?;
-        for updater in &self.updaters {
+        'updaters: for updater in &self.updaters {
             info!("started updating `{}` repositories stats", updater.host());
 
             let needs_update = conn
@@ -152,7 +152,19 @@ impl RepositoryStatsUpdater {
             // FIXME: The collect can be avoided if we use Itertools::chunks:
             // https://docs.rs/itertools/0.10.0/itertools/trait.Itertools.html#method.chunks.
             for chunk in needs_update.chunks(updater.chunk_size()) {
-                let res = updater.fetch_repositories(chunk)?;
+                let res = match updater.fetch_repositories(chunk) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        if err.downcast_ref::<RateLimitReached>().is_some() {
+                            warn!(
+                                "rate limit reached, skipping the `{}` repository stats updater",
+                                updater.host()
+                            );
+                            continue 'updaters;
+                        }
+                        return Err(err);
+                    }
+                };
                 for node in res.missing {
                     self.delete_repository(&mut conn, &node, updater.host())?;
                 }
