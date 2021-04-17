@@ -98,8 +98,11 @@ impl RepositoryForge for GitHub {
                 "repo": name.repo,
             }),
         )?;
-        if let Some(repo) = response.data.repository {
-            Ok(Some(Repository {
+
+        Ok(response
+            .data
+            .and_then(|data| data.repository)
+            .map(|repo| Repository {
                 id: repo.id,
                 name_with_owner: repo.name_with_owner,
                 description: repo.description,
@@ -108,9 +111,6 @@ impl RepositoryForge for GitHub {
                 forks: repo.fork_count,
                 issues: repo.issues.total_count,
             }))
-        } else {
-            Ok(None)
-        }
     }
 
     fn fetch_repositories(&self, node_ids: &[String]) -> Result<FetchRepositoriesResult> {
@@ -123,12 +123,14 @@ impl RepositoryForge for GitHub {
 
         // The error is returned *before* we reach the rate limit, to ensure we always have an
         // amount of API calls we can make at any time.
-        trace!(
-            "GitHub GraphQL rate limit remaining: {}",
-            response.data.rate_limit.remaining
-        );
-        if response.data.rate_limit.remaining < self.github_updater_min_rate_limit {
-            return Err(RateLimitReached.into());
+        if let Some(ref data) = response.data {
+            trace!(
+                "GitHub GraphQL rate limit remaining: {}",
+                data.rate_limit.remaining
+            );
+            if data.rate_limit.remaining < self.github_updater_min_rate_limit {
+                return Err(RateLimitReached.into());
+            }
         }
 
         let mut ret = FetchRepositoriesResult::default();
@@ -139,23 +141,29 @@ impl RepositoryForge for GitHub {
                 ("NOT_FOUND", [Segment(nodes), Index(idx)]) if nodes == "nodes" => {
                     ret.missing.push(node_ids[*idx as usize].clone());
                 }
+                ("RATE_LIMITED", []) => {
+                    return Err(RateLimitReached.into());
+                }
                 _ => failure::bail!("error updating repositories: {}", error.message),
             }
         }
-        // When a node is missing (for example if the repository was deleted or made private) the
-        // GraphQL API will return *both* a `null` instead of the data in the nodes list and a
-        // `NOT_FOUND` error in the errors list.
-        for node in response.data.nodes.into_iter().flatten() {
-            let repo = Repository {
-                id: node.id,
-                name_with_owner: node.name_with_owner,
-                description: node.description,
-                last_activity_at: node.pushed_at,
-                stars: node.stargazer_count,
-                forks: node.fork_count,
-                issues: node.issues.total_count,
-            };
-            ret.present.insert(repo.id.clone(), repo);
+
+        if let Some(data) = response.data {
+            // When a node is missing (for example if the repository was deleted or made private) the
+            // GraphQL API will return *both* a `null` instead of the data in the nodes list and a
+            // `NOT_FOUND` error in the errors list.
+            for node in data.nodes.into_iter().flatten() {
+                let repo = Repository {
+                    id: node.id,
+                    name_with_owner: node.name_with_owner,
+                    description: node.description,
+                    last_activity_at: node.pushed_at,
+                    stars: node.stargazer_count,
+                    forks: node.fork_count,
+                    issues: node.issues.total_count,
+                };
+                ret.present.insert(repo.id.clone(), repo);
+            }
         }
 
         Ok(ret)
@@ -190,7 +198,7 @@ impl GitHub {
 
 #[derive(Debug, Deserialize)]
 struct GraphResponse<T> {
-    data: T,
+    data: Option<T>,
     #[serde(default)]
     errors: Vec<GraphError>,
 }
@@ -199,6 +207,7 @@ struct GraphResponse<T> {
 struct GraphError {
     #[serde(rename = "type")]
     error_type: String,
+    #[serde(default)]
     path: Vec<GraphErrorPath>,
     message: String,
 }
@@ -252,7 +261,29 @@ mod tests {
     use mockito::mock;
 
     #[test]
-    fn test_rate_limit() {
+    fn test_rate_limit_fail() {
+        crate::test::wrapper(|env| {
+            let mut config = env.base_config();
+            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
+            let updater = GitHub::new(&config).expect("GitHub::new failed").unwrap();
+
+            let _m1 = mock("POST", "/graphql")
+                .with_header("content-type", "application/json")
+                .with_body(
+                    r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
+                )
+                .create();
+
+            match updater.fetch_repositories(&[String::new()]) {
+                Err(e) if format!("{:?}", e).contains("RateLimitReached") => {}
+                x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_rate_limit_manual() {
         crate::test::wrapper(|env| {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
