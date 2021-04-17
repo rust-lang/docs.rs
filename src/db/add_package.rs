@@ -172,7 +172,7 @@ pub(crate) fn add_build_into_database(
 ) -> Result<i32> {
     debug!("Adding build into database");
     let rows = conn.query(
-        "INSERT INTO builds (rid, rustc_version, cratesfyi_version, build_status)
+        "INSERT INTO builds (rid, rustc_version, docsrs_version, build_status)
         VALUES ($1, $2, $3, $4)
         RETURNING id",
         &[

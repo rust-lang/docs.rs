@@ -730,7 +730,12 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                     DROP COLUMN repository_id;
 
                 DROP TABLE repositories;
-            "
+            ",
+        ),
+        migration!(
+            context, 29, "Rename cratesfyi_version to docsrs_version",
+            "ALTER TABLE builds RENAME COLUMN cratesfyi_version TO docsrs_version",
+            "ALTER TABLE builds RENAME COLUMN docsrs_version TO cratesfyi_version",
         ),
     ];
 
