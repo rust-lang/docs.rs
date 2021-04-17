@@ -326,16 +326,16 @@ mod test {
 
         // gitlab checks
         assert_name(
-            "https://gitlab.com/onur/cratesfyi",
-            ("onur", "cratesfyi", "gitlab.com"),
+            "https://gitlab.com/pythondude325/hexponent",
+            ("pythondude325", "hexponent", "gitlab.com"),
         );
         assert_name(
-            "http://gitlab.com/onur/cratesfyi",
-            ("onur", "cratesfyi", "gitlab.com"),
+            "http://gitlab.com/pythondude325/hexponent",
+            ("pythondude325", "hexponent", "gitlab.com"),
         );
         assert_name(
-            "https://gitlab.com/onur/cratesfyi.git",
-            ("onur", "cratesfyi", "gitlab.com"),
+            "https://gitlab.com/pythondude325/hexponent.git",
+            ("pythondude325", "hexponent", "gitlab.com"),
         );
         assert_name(
             "https://gitlab.com/docopt/docopt.rs",
@@ -361,16 +361,16 @@ mod test {
 
         // github checks
         assert_name(
-            "https://github.com/onur/cratesfyi",
-            ("onur", "cratesfyi", "github.com"),
+            "https://github.com/rust-lang/rust",
+            ("rust-lang", "rust", "github.com"),
         );
         assert_name(
-            "http://github.com/onur/cratesfyi",
-            ("onur", "cratesfyi", "github.com"),
+            "http://github.com/rust-lang/rust",
+            ("rust-lang", "rust", "github.com"),
         );
         assert_name(
-            "https://github.com/onur/cratesfyi.git",
-            ("onur", "cratesfyi", "github.com"),
+            "https://github.com/rust-lang/rust.git",
+            ("rust-lang", "rust", "github.com"),
         );
         assert_name(
             "https://github.com/docopt/docopt.rs",

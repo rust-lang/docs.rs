@@ -1,6 +1,5 @@
 //! Database migrations
 
-use crate::error::Result as CratesfyiResult;
 use log::info;
 use postgres::{Client, Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
@@ -50,7 +49,7 @@ macro_rules! migration {
     }};
 }
 
-pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<()> {
+pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS database_versions (version BIGINT PRIMARY KEY);",
         &[],

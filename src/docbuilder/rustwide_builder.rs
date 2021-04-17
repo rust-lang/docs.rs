@@ -613,7 +613,7 @@ impl RustwideBuilder {
         // this is allowing us to host documents in the root of the crate documentation directory.
         // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
         // default target: x86_64-pc-windows-msvc. But since it will be built under
-        // cratesfyi/x86_64-pc-windows-msvc we still need target in this function.
+        // target/x86_64-pc-windows-msvc we still need target in this function.
         if !is_default_target {
             dest = dest.join(target);
         }
