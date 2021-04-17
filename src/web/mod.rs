@@ -799,7 +799,7 @@ mod test {
             assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
             assert_success("/crate/regex/0.3.0/source", web)?;
             assert_success("/crate/regex/0.3.0/source/src", web)?;
-            assert_success("/regex/0.3.0/src/regex/main.rs", web)?;
+            assert_success("/regex/0.3.0/src/regex/main.rs.html", web)?;
             Ok(())
         })
     }
