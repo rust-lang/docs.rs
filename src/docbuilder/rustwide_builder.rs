@@ -15,7 +15,7 @@ use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
-use rustwide::cmd::{Command, SandboxBuilder, SandboxImage};
+use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
@@ -53,8 +53,13 @@ impl RustwideBuilder {
 
         let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
             .running_inside_docker(config.inside_docker);
-        if let Some(custom_image) = &config.local_docker_image {
-            builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
+        if let Some(custom_image) = &config.docker_image {
+            let image = match SandboxImage::local(&custom_image) {
+                Ok(i) => i,
+                Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
+                Err(err) => return Err(err.into()),
+            };
+            builder = builder.sandbox_image(image);
         }
         if cfg!(test) {
             builder = builder.fast_init(true);
