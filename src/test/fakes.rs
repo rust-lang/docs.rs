@@ -4,7 +4,7 @@ use crate::index::api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
-use failure::Error;
+use failure::{Error, ResultExt};
 use postgres::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -251,8 +251,16 @@ impl<'a> FakeRelease<'a> {
         // In real life, these would be highlighted HTML, but for testing we just use the files themselves.
         for (source_path, data) in &self.source_files {
             if let Some(src) = source_path.strip_prefix("src/") {
-                let updated = ["src", &package.name, src].join("/");
-                rustdoc_files.push((Box::leak(Box::new(updated)), data));
+                let mut updated = ["src", &package.name, src].join("/");
+                updated += ".html";
+                let source_html = format!(
+                    "<html><head></head><body>{}</body></html>",
+                    std::str::from_utf8(data).expect("invalid utf8")
+                );
+                rustdoc_files.push((
+                    Box::leak(Box::new(updated)),
+                    Box::leak(source_html.into_bytes().into_boxed_slice()),
+                ));
             }
         }
 
@@ -264,9 +272,14 @@ impl<'a> FakeRelease<'a> {
             fs::create_dir(&path_prefix)?;
 
             for (path, data) in files {
+                if path.starts_with('/') {
+                    failure::bail!("absolute paths not supported");
+                }
                 // allow `src/main.rs`
                 if let Some(parent) = Path::new(path).parent() {
-                    fs::create_dir_all(path_prefix.join(parent))?;
+                    let path = path_prefix.join(parent);
+                    fs::create_dir_all(&path)
+                        .with_context(|_| format!("failed to create {}", path.display()))?;
                 }
                 let file = path_prefix.join(&path);
                 log::debug!("writing file {}", file.display());

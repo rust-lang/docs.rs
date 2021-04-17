@@ -501,6 +501,13 @@ fn path_for_version(
     } else {
         ""
     };
+    let is_source_view = if platform.is_empty() {
+        // /{name}/{version}/src/{crate}/index.html
+        req_path.get(3).copied() == Some("src")
+    } else {
+        // /{name}/{version}/{platform}/src/{crate}/index.html
+        req_path.get(4).copied() == Some("src")
+    };
     // this page doesn't exist in the latest version
     let last_component = *req_path.last().unwrap();
     let search_item = if last_component == "index.html" {
@@ -510,9 +517,12 @@ fn path_for_version(
     } else if last_component == platform {
         // nothing to search for
         None
-    } else {
+    } else if !is_source_view {
         // this is an item
         last_component.split('.').nth(1)
+    } else {
+        // this is a source file; try searching for the module
+        Some(last_component.strip_suffix(".rs.html").unwrap())
     };
     if let Some(search) = search_item {
         format!("{}?search={}", platform, search)
@@ -695,7 +705,7 @@ mod test {
     ) -> Result<Option<String>, failure::Error> {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
-        log::info!("fetched path {} and got content {}", path, data);
+        log::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom
@@ -1649,6 +1659,32 @@ mod test {
             );
             Ok(())
         });
+    }
+
+    #[test]
+    fn latest_version_works_when_source_deleted() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("pyo3")
+                .version("0.2.7")
+                .source_file("src/objects/exc.rs", b"//! some docs")
+                .create()?;
+            env.fake_release().name("pyo3").version("0.13.2").create()?;
+            let target_redirect = "/crate/pyo3/0.13.2/target-redirect/x86_64-unknown-linux-gnu/src/pyo3/objects/exc.rs.html";
+            assert_eq!(
+                latest_version_redirect(
+                    "/pyo3/0.2.7/src/pyo3/objects/exc.rs.html",
+                    env.frontend()
+                )?,
+                target_redirect
+            );
+            assert_redirect(
+                target_redirect,
+                "/pyo3/0.13.2/pyo3/?search=exc",
+                env.frontend(),
+            )?;
+            Ok(())
+        })
     }
 
     #[test]
