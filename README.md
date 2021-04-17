@@ -185,14 +185,14 @@ cargo run -- build crate --local /path/to/source
 
 ```sh
 # Adds a directory into database to serve with `staticfile` crate.
-docker-compose run -- database add-directory <DIRECTORY> [PREFIX]
+cargo run -- database add-directory <DIRECTORY> [PREFIX]
 
 # Updates github stats for crates.
 # You need to set CRATESFYI_GITHUB_USERNAME, CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
 # Set DOCSRS_GITLAB_ACCESSTOKEN to raise the rate limit,
 # or leave it blank to fetch repositories at a slower rate.
-# You can set this environment variables in ~/.cratesfyi.env file.
+# You can set this environment variables in the .env file.
 cargo run -- database update-repository-fields
 ```
 

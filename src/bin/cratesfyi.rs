@@ -79,7 +79,7 @@ enum CommandLine {
         reload_templates: bool,
     },
 
-    /// Starts cratesfyi daemon
+    /// Starts the daemon
     Daemon {
         /// Deprecated. Run the server in the foreground instead of detaching a child
         #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
@@ -278,10 +278,10 @@ enum BuildSubcommand {
     /// Adds essential files for the installed version of rustc
     AddEssentialFiles,
 
-    /// Locks cratesfyi daemon to stop building new crates
+    /// Locks the daemon, preventing it from building new crates
     Lock,
 
-    /// Unlocks cratesfyi daemon to continue building new crates
+    /// Unlocks the daemon to continue building new crates
     Unlock,
 }
 
