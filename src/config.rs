@@ -144,7 +144,7 @@ where
             .map(Some)
             .with_context(|_| format!("failed to parse configuration variable {}", var))?),
         Err(VarError::NotPresent) => {
-            log::debug!("optional configuration variable {} is not set", var);
+            log::trace!("optional configuration variable {} is not set", var);
             Ok(None)
         }
         Err(VarError::NotUnicode(_)) => bail!("configuration variable {} is not UTF-8", var),
