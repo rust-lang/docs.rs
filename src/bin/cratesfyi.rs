@@ -388,9 +388,6 @@ enum DatabaseSubcommand {
         /// Path of file or directory
         #[structopt(name = "DIRECTORY")]
         directory: PathBuf,
-        /// Prefix of files in database
-        #[structopt(name = "PREFIX", env = "CRATESFYI_PREFIX")]
-        prefix: String,
     },
 
     /// Remove documentation from the database
@@ -440,8 +437,8 @@ impl DatabaseSubcommand {
                 )?;
             }
 
-            Self::AddDirectory { directory, prefix } => {
-                add_path_into_database(&*ctx.storage()?, &prefix, directory)
+            Self::AddDirectory { directory } => {
+                add_path_into_database(&*ctx.storage()?, &ctx.config()?.prefix, directory)
                     .context("Failed to add directory into database")?;
             }
 
