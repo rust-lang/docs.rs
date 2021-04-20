@@ -152,7 +152,7 @@ impl Storage {
     // This returns (map<filename, mime type>, set<compression algorithms>).
     pub(crate) fn store_all(
         &self,
-        prefix: &str,
+        prefix: &Path,
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
         let mut file_paths_and_mimes = HashMap::new();
@@ -171,7 +171,7 @@ impl Storage {
             .map(|(file_path, file)| -> Result<_, Error> {
                 let alg = CompressionAlgorithm::default();
                 let content = compress(file, alg)?;
-                let bucket_path = Path::new(prefix).join(&file_path).to_slash().unwrap();
+                let bucket_path = prefix.join(&file_path).to_slash().unwrap();
 
                 let mime = detect_mime(&file_path);
                 file_paths_and_mimes.insert(file_path, mime.to_string());
@@ -464,7 +464,7 @@ mod backend_tests {
             fs::write(path, "data")?;
         }
 
-        let (stored_files, algs) = storage.store_all("prefix", dir.path())?;
+        let (stored_files, algs) = storage.store_all(Path::new("prefix"), dir.path())?;
         assert_eq!(stored_files.len(), files.len());
         for name in &files {
             let name = Path::new(name);
