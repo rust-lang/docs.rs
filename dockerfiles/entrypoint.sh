@@ -2,9 +2,9 @@
 
 set -euv
 
-export CRATESFYI_PREFIX=/opt/docsrs/prefix
-export DOCS_RS_DOCKER=true
-export DOCSRS_LOG=${DOCSRS_LOG-cratesfyi,rustwide=info}
+export DOCSRS_PREFIX=/opt/docsrs/prefix
+export DOCSRS_DOCKER=true
+export DOCSRS_LOG=${DOCSRS_LOG-"docs-rs,rustwide=info"}
 export PATH="$PATH:/build/target/release"
 
 # Try migrating the database multiple times if it fails
@@ -27,10 +27,10 @@ while true; do
 done
 set -e
 
-if ! [ -d "${CRATESFYI_PREFIX}/crates.io-index/.git" ]; then
-    git clone https://github.com/rust-lang/crates.io-index "${CRATESFYI_PREFIX}/crates.io-index"
+if ! [ -d "${DOCSRS_PREFIX}/crates.io-index/.git" ]; then
+    git clone https://github.com/rust-lang/crates.io-index "${DOCSRS_PREFIX}/crates.io-index"
     # Prevent new crates built before the container creation to be built
-    git --git-dir="$CRATESFYI_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
+    git --git-dir="$DOCSRS_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
 fi
 
 cratesfyi build update-toolchain --only-first-time
