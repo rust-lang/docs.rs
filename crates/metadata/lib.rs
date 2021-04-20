@@ -50,7 +50,7 @@ use toml::Value;
 /// This is directly passed on from the Cargo [`TARGET`] variable.
 ///
 /// [`TARGET`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
-pub const HOST_TARGET: &str = env!("DOCS_RS_METADATA_HOST_TARGET");
+pub const HOST_TARGET: &str = env!("DOCSRS_METADATA_HOST_TARGET");
 /// The targets that are built if no `targets` section is specified.
 ///
 /// Currently, this is guaranteed to have only [tier one] targets.

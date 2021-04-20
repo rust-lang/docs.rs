@@ -1,7 +1,7 @@
 fn main() {
     // Set the host target
     println!(
-        "cargo:rustc-env=DOCS_RS_METADATA_HOST_TARGET={}",
+        "cargo:rustc-env=DOCSRS_METADATA_HOST_TARGET={}",
         std::env::var("TARGET").unwrap(),
     );
     // This only needs to be rerun if the TARGET changed, in which case cargo reruns it anyway.

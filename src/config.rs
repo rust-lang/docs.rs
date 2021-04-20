@@ -66,16 +66,16 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, Error> {
-        let prefix: PathBuf = require_env("CRATESFYI_PREFIX")?;
+        let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
 
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
 
-            prefix: prefix.clone(),
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
+            prefix,
 
-            database_url: require_env("CRATESFYI_DATABASE_URL")?,
+            database_url: require_env("DOCSRS_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
@@ -90,7 +90,7 @@ impl Config {
             #[cfg(test)]
             s3_bucket_is_temporary: false,
 
-            github_accesstoken: maybe_env("CRATESFYI_GITHUB_ACCESSTOKEN")?,
+            github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
 
             gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
@@ -106,12 +106,12 @@ impl Config {
 
             csp_report_only: env("DOCSRS_CSP_REPORT_ONLY", false)?,
 
-            rustwide_workspace: env("CRATESFYI_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
-            inside_docker: env("DOCS_RS_DOCKER", false)?,
-            docker_image: maybe_env("DOCS_RS_LOCAL_DOCKER_IMAGE")?
+            rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
+            inside_docker: env("DOCSRS_DOCKER", false)?,
+            docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-            toolchain: env("CRATESFYI_TOOLCHAIN", "nightly".to_string())?,
-            build_cpu_limit: maybe_env("DOCS_RS_BUILD_CPU_LIMIT")?,
+            toolchain: env("DOCSRS_TOOLCHAIN", "nightly".to_string())?,
+            build_cpu_limit: maybe_env("DOCSRS_BUILD_CPU_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
         })

@@ -58,12 +58,12 @@ jobs:
         run: |
           cp .env.sample .env
           . .env
-          mkdir -p ${CRATESFYI_PREFIX}/public-html
+          mkdir -p ${DOCSRS_PREFIX}/public-html
           docker-compose up -d db s3
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
-          psql "${CRATESFYI_DATABASE_URL}"
+          psql "${DOCSRS_DATABASE_URL}"
 
       - name: run tests
         shell: bash
@@ -94,12 +94,12 @@ jobs:
         run: |
           cp .env.sample .env
           . .env
-          mkdir -p ${CRATESFYI_PREFIX}/public-html
+          mkdir -p ${DOCSRS_PREFIX}/public-html
           docker-compose up -d db s3
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
-          psql "${CRATESFYI_DATABASE_URL}"
+          psql "${DOCSRS_DATABASE_URL}"
 
       - name: slow tests
         env:

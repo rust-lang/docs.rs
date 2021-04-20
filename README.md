@@ -58,7 +58,7 @@ git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
 # Configure the default settings for external services
 cp .env.sample .env
-# Create the CRATESFYI_PREFIX directory
+# Create the DOCSRS_PREFIX directory
 mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 cargo build
@@ -200,7 +200,7 @@ cargo run -- build crate --local /path/to/source
 cargo run -- database add-directory <DIRECTORY> [PREFIX]
 
 # Updates repository stats for crates.
-# You need to set the CRATESFYI_GITHUB_ACCESSTOKEN
+# You need to set the DOCSRS_GITHUB_ACCESSTOKEN
 # environment variable in order to run this command.
 # Set DOCSRS_GITLAB_ACCESSTOKEN to raise the rate limit for GitLab repositories,
 # or leave it blank to fetch repositories at a slower rate.
@@ -212,7 +212,7 @@ with the `psql` command.
 
 ```sh
 . .env
-psql $CRATESFYI_DATABASE_URL
+psql $DOCSRS_DATABASE_URL
 ```
 
 The database contains a blacklist of crates that should not be built.
