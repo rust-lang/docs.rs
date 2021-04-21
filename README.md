@@ -187,10 +187,10 @@ cargo run -- build crate --local /path/to/source
 # Adds a directory into database to serve with `staticfile` crate.
 cargo run -- database add-directory <DIRECTORY> [PREFIX]
 
-# Updates github stats for crates.
+# Updates repository stats for crates.
 # You need to set CRATESFYI_GITHUB_ACCESSTOKEN
 # environment variables in order to run this command.
-# Set DOCSRS_GITLAB_ACCESSTOKEN to raise the rate limit,
+# Set DOCSRS_GITLAB_ACCESSTOKEN to raise the rate limit for GitLab repositories,
 # or leave it blank to fetch repositories at a slower rate.
 # You can set these environment variables in the .env file.
 cargo run -- database update-repository-fields
