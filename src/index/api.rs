@@ -41,7 +41,7 @@ impl Default for ReleaseData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CrateOwner {
     pub(crate) avatar: String,
     pub(crate) email: String,
