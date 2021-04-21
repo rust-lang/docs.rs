@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     io::{BufRead, BufReader},
     path::Path,
@@ -316,26 +317,42 @@ fn add_keywords_into_database(
     pkg: &MetadataPackage,
     release_id: i32,
 ) -> Result<()> {
-    for keyword in &pkg.keywords {
-        let slug = slugify(&keyword);
-        let keyword_id: i32 = {
-            let rows = conn.query("SELECT id FROM keywords WHERE slug = $1", &[&slug])?;
-            if !rows.is_empty() {
-                rows[0].get(0)
-            } else {
-                conn.query(
-                    "INSERT INTO keywords (name, slug) VALUES ($1, $2) RETURNING id",
-                    &[&keyword, &slug],
-                )?[0]
-                    .get(0)
-            }
-        };
+    let wanted_keywords: HashMap<String, String> = pkg
+        .keywords
+        .iter()
+        .map(|kw| (slugify(&kw), kw.clone()))
+        .collect();
 
-        // add releationship
-        let _ = conn.query(
-            "INSERT INTO keyword_rels (rid, kid) VALUES ($1, $2)",
-            &[&release_id, &keyword_id],
-        );
+    let existing_keyword_slugs: HashSet<String> = conn
+        .query(
+            "SELECT slug FROM keywords WHERE slug = ANY($1)",
+            &[&wanted_keywords.keys().collect::<Vec<_>>()],
+        )?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+
+    // we create new keywords one-by-one, since most of the time we already have them,
+    // and because support for multi-record inserts is a mess without adding a new
+    // library
+    let insert_keyword_query = conn.prepare("INSERT INTO keywords (name, slug) VALUES ($1, $2)")?;
+    for (slug, name) in wanted_keywords
+        .iter()
+        .filter(|(k, _)| !(existing_keyword_slugs.contains(*k)))
+    {
+        conn.execute(&insert_keyword_query, &[&name, &slug])?;
+    }
+
+    let affected_rows = conn.execute(
+        "INSERT INTO keyword_rels (rid, kid) 
+        SELECT $1 as rid, id as kid 
+        FROM keywords 
+        WHERE slug = ANY($2)",
+        &[&release_id, &wanted_keywords.keys().collect::<Vec<_>>()],
+    )?;
+
+    if affected_rows != pkg.keywords.len() as u64 {
+        failure::bail!("not all keywords added to database");
     }
 
     Ok(())
@@ -347,7 +364,9 @@ pub fn update_crate_data_in_database(
     registry_data: &CrateData,
 ) -> Result<()> {
     info!("Updating crate data for {}", name);
-    let crate_id = conn.query("SELECT id FROM crates WHERE crates.name = $1", &[&name])?[0].get(0);
+    let crate_id = conn
+        .query_one("SELECT id FROM crates WHERE crates.name = $1", &[&name])?
+        .get(0);
 
     update_owners_in_database(conn, &registry_data.owners, crate_id)?;
 
@@ -360,64 +379,51 @@ fn update_owners_in_database(
     owners: &[CrateOwner],
     crate_id: i32,
 ) -> Result<()> {
-    let rows = conn.query(
-        "
-            SELECT login
-            FROM owners
-            INNER JOIN owner_rels
-                ON owner_rels.oid = owners.id
-            WHERE owner_rels.cid = $1
-        ",
-        &[&crate_id],
+    // Update any existing owner data since it is mutable and could have changed since last
+    // time we pulled it
+    let owner_upsert = conn.prepare(
+        "INSERT INTO owners (login, avatar, name, email)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (login) DO UPDATE
+            SET
+                avatar = EXCLUDED.avatar,
+                name = EXCLUDED.name,
+                email = EXCLUDED.email",
     )?;
-    let existing_owners = rows.into_iter().map(|row| -> String { row.get(0) });
-
     for owner in owners {
-        debug!("Updating owner data for {}: {:?}", owner.login, owner);
-
-        // Update any existing owner data since it is mutable and could have changed since last
-        // time we pulled it
-        let owner_id: i32 = {
-            conn.query(
-                "
-                    INSERT INTO owners (login, avatar, name, email)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (login) DO UPDATE
-                        SET
-                            avatar = $2,
-                            name = $3,
-                            email = $4
-                    RETURNING id
-                ",
-                &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-            )?[0]
-                .get(0)
-        };
-
-        // add relationship
-        conn.query(
-            "INSERT INTO owner_rels (cid, oid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-            &[&crate_id, &owner_id],
+        conn.execute(
+            &owner_upsert,
+            &[&owner.login, &owner.avatar, &owner.name, &owner.email],
         )?;
     }
 
-    let to_remove =
-        existing_owners.filter(|login| !owners.iter().any(|owner| &owner.login == login));
+    let updated_oids: Vec<i32> = conn
+        .query(
+            "INSERT INTO owner_rels (cid, oid)
+             SELECT $1,id
+             FROM owners 
+             WHERE login = ANY($2)
+             ON CONFLICT (cid,oid) 
+             DO UPDATE -- we need this so the existing/updated records end 
+                       -- up being in the returned OIDs
+                 SET oid=excluded.oid 
+             RETURNING oid",
+            &[
+                &crate_id,
+                &owners.iter().map(|o| o.login.clone()).collect::<Vec<_>>(),
+            ],
+        )?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
 
-    for login in to_remove {
-        debug!("Removing owner relationship {}", login);
-        // remove relationship
-        conn.query(
-            "
-                DELETE FROM owner_rels
-                USING owners
-                WHERE owner_rels.cid = $1
-                    AND owner_rels.oid = owners.id
-                    AND owners.login = $2
-            ",
-            &[&crate_id, &login],
-        )?;
-    }
+    conn.execute(
+        "DELETE FROM owner_rels
+         WHERE 
+            cid = $1 AND 
+            NOT (oid = ANY($2))",
+        &[&crate_id, &updated_oids],
+    )?;
 
     Ok(())
 }
@@ -427,13 +433,274 @@ fn add_compression_into_database<I>(conn: &mut Client, algorithms: I, release_id
 where
     I: Iterator<Item = CompressionAlgorithm>,
 {
-    let sql = "
-    INSERT INTO compression_rels (release, algorithm)
-    VALUES ($1, $2)
-    ON CONFLICT DO NOTHING;";
-    let prepared = conn.prepare(sql)?;
+    let prepared = conn.prepare(
+        "INSERT INTO compression_rels (release, algorithm)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING;",
+    )?;
     for alg in algorithms {
-        conn.query(&prepared, &[&release_id, &(alg as i32)])?;
+        conn.execute(&prepared, &[&release_id, &(alg as i32)])?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test::*;
+    use crate::utils::MetadataPackage;
+
+    #[test]
+    fn new_keywords() {
+        wrapper(|env| {
+            let mut conn = env.db().conn();
+
+            let release_id = env
+                .fake_release()
+                .name("dummy")
+                .version("0.13.0")
+                .keywords(vec!["kw 1".into(), "kw 2".into()])
+                .create()?;
+
+            let kw_r = conn
+                .query(
+                    "SELECT kw.name,kw.slug 
+                    FROM keywords as kw
+                    INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
+                    WHERE kwr.rid = $1
+                    ORDER BY kw.name,kw.slug",
+                    &[&release_id],
+                )?
+                .into_iter()
+                .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+                .collect::<Vec<_>>();
+
+            assert_eq!(kw_r[0], ("kw 1".into(), "kw-1".into()));
+            assert_eq!(kw_r[1], ("kw 2".into(), "kw-2".into()));
+
+            let all_kw = conn
+                .query("SELECT slug FROM keywords ORDER BY slug", &[])?
+                .into_iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect::<Vec<_>>();
+
+            assert_eq!(all_kw, vec![String::from("kw-1"), "kw-2".into()]);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn updated_keywords() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.13.0")
+                .keywords(vec!["kw 3".into(), "kw 4".into()])
+                .create()?;
+
+            let release_id = env
+                .fake_release()
+                .name("dummy")
+                .version("0.13.0")
+                .keywords(vec!["kw 1".into(), "kw 2".into()])
+                .create()?;
+
+            let mut conn = env.db().conn();
+            let kw_r = conn
+                .query(
+                    "SELECT kw.name,kw.slug 
+                    FROM keywords as kw
+                    INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
+                    WHERE kwr.rid = $1
+                    ORDER BY kw.name,kw.slug",
+                    &[&release_id],
+                )?
+                .into_iter()
+                .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+                .collect::<Vec<_>>();
+
+            assert_eq!(kw_r[0], ("kw 1".into(), "kw-1".into()));
+            assert_eq!(kw_r[1], ("kw 2".into(), "kw-2".into()));
+
+            let all_kw = conn
+                .query("SELECT slug FROM keywords ORDER BY slug", &[])?
+                .into_iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                all_kw,
+                vec![
+                    String::from("kw-1"),
+                    "kw-2".into(),
+                    "kw-3".into(),
+                    "kw-4".into(),
+                ]
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn new_owners() {
+        wrapper(|env| {
+            let mut conn = env.db().conn();
+
+            let crate_id = initialize_package_in_database(
+                &mut conn,
+                &MetadataPackage {
+                    ..Default::default()
+                },
+            )?;
+
+            let owner1 = CrateOwner {
+                avatar: "avatar".into(),
+                email: "email".into(),
+                login: "login".into(),
+                name: "name".into(),
+            };
+
+            update_owners_in_database(&mut conn, &[owner1.clone()], crate_id)?;
+
+            let owner_def = conn.query_one(
+                "SELECT login, name, email, avatar 
+                FROM owners",
+                &[],
+            )?;
+            assert_eq!(owner_def.get::<_, String>(0), owner1.login);
+            assert_eq!(owner_def.get::<_, String>(1), owner1.name);
+            assert_eq!(owner_def.get::<_, String>(2), owner1.email);
+            assert_eq!(owner_def.get::<_, String>(3), owner1.avatar);
+
+            let owner_rel = conn.query_one(
+                "SELECT o.login 
+                FROM owners o, owner_rels r 
+                WHERE 
+                    o.id = r.oid AND 
+                    r.cid = $1",
+                &[&crate_id],
+            )?;
+            assert_eq!(owner_rel.get::<_, String>(0), owner1.login);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn update_owner_detais() {
+        wrapper(|env| {
+            let mut conn = env.db().conn();
+            let crate_id = initialize_package_in_database(&mut conn, &MetadataPackage::default())?;
+
+            // set initial owner details
+            update_owners_in_database(
+                &mut conn,
+                &[CrateOwner {
+                    login: "login".into(),
+                    avatar: "avatar".into(),
+                    email: "email".into(),
+                    name: "name".into(),
+                }],
+                crate_id,
+            )?;
+
+            let updated_owner = CrateOwner {
+                login: "login".into(),
+                avatar: "avatar2".into(),
+                email: "email2".into(),
+                name: "name2".into(),
+            };
+            update_owners_in_database(&mut conn, &[updated_owner.clone()], crate_id)?;
+
+            let owner_def = conn.query_one(
+                "SELECT login, name, email, avatar 
+                FROM owners",
+                &[],
+            )?;
+            assert_eq!(owner_def.get::<_, String>(0), updated_owner.login);
+            assert_eq!(owner_def.get::<_, String>(1), updated_owner.name);
+            assert_eq!(owner_def.get::<_, String>(2), updated_owner.email);
+            assert_eq!(owner_def.get::<_, String>(3), updated_owner.avatar);
+
+            let owner_rel = conn.query_one(
+                "SELECT o.login 
+                FROM owners o, owner_rels r 
+                WHERE 
+                    o.id = r.oid AND 
+                    r.cid = $1",
+                &[&crate_id],
+            )?;
+            assert_eq!(owner_rel.get::<_, String>(0), updated_owner.login);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn add_new_owners_and_delete_old() {
+        wrapper(|env| {
+            let mut conn = env.db().conn();
+            let crate_id = initialize_package_in_database(
+                &mut conn,
+                &MetadataPackage {
+                    ..Default::default()
+                },
+            )?;
+
+            // set initial owner details
+            update_owners_in_database(
+                &mut conn,
+                &[CrateOwner {
+                    login: "login".into(),
+                    avatar: "avatar".into(),
+                    email: "email".into(),
+                    name: "name".into(),
+                }],
+                crate_id,
+            )?;
+
+            let new_owners: Vec<CrateOwner> = (1..5)
+                .map(|i| CrateOwner {
+                    login: format!("login{}", i),
+                    avatar: format!("avatar{}", i),
+                    email: format!("email{}", i),
+                    name: format!("name{}", i),
+                })
+                .collect();
+
+            update_owners_in_database(&mut conn, &new_owners, crate_id)?;
+
+            let all_owners: Vec<String> = conn
+                .query("SELECT login FROM owners order by login", &[])?
+                .into_iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect();
+
+            // we still have all owners in the database.
+            assert_eq!(
+                all_owners,
+                vec!["login", "login1", "login2", "login3", "login4"]
+            );
+
+            let crate_owners: Vec<String> = conn
+                .query(
+                    "SELECT o.login 
+                     FROM owners o, owner_rels r 
+                     WHERE 
+                         o.id = r.oid AND 
+                         r.cid = $1",
+                    &[&crate_id],
+                )?
+                .into_iter()
+                .map(|row| row.get::<_, String>(0))
+                .collect();
+
+            // the owner-rel is deleted
+            assert_eq!(crate_owners, vec!["login1", "login2", "login3", "login4"]);
+
+            Ok(())
+        })
+    }
 }

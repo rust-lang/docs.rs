@@ -188,6 +188,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn keywords(mut self, keywords: Vec<String>) -> Self {
+        self.package.keywords = keywords;
+        self
+    }
+
     pub(crate) fn add_platform<S: Into<String>>(mut self, platform: S) -> Self {
         let platform = platform.into();
         let name = self.package.targets[0].name.clone();
