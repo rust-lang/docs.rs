@@ -170,6 +170,10 @@ body {
     g.highcharts-grid > path {
         stroke: var(--chart-grid) !important;
     }
+
+    > .about-page {
+        padding-bottom: calc(#{$footer-height} + 2px);
+    }
 }
 
 pre {
