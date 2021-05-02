@@ -516,16 +516,24 @@ impl RustwideBuilder {
         let mut storage = LogStorage::new(LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
+        // we have to run coverage before the doc-build because currently it
+        // deletes the doc-target folder.
+        // https://github.com/rust-lang/cargo/issues/9447
+        let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
+            Ok(cov) => cov,
+            Err(err) => {
+                log::info!("error when trying to get coverage: {}", err);
+                log::info!("continuing anyways.");
+                None
+            }
+        };
+
         let successful = logging::capture(&storage, || {
             self.prepare_command(build, target, metadata, limits, rustdoc_flags)
                 .and_then(|command| command.run().map_err(failure::Error::from))
                 .is_ok()
         });
-        let doc_coverage = if successful {
-            self.get_coverage(target, build, metadata, limits)?
-        } else {
-            None
-        };
+
         // If we're passed a default_target which requires a cross-compile,
         // cargo will put the output in `target/<target>/doc`.
         // However, if this is the default build, we don't want it there,
