@@ -728,10 +728,12 @@ mod tests {
                     "SELECT 
                         r.rustdoc_status,
                         r.default_target,
-                        r.doc_targets
+                        r.doc_targets,
+                        cov.total_items
                     FROM 
                         crates as c 
                         INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
                     WHERE 
                         c.name = $1 AND 
                         r.version = $2",
@@ -742,6 +744,7 @@ mod tests {
 
             assert_eq!(row.get::<_, bool>("rustdoc_status"), true);
             assert_eq!(row.get::<_, String>("default_target"), default_target);
+            assert!(row.get::<_, Option<i32>>("total_items").is_some());
 
             let mut targets: Vec<String> = row
                 .get::<_, Value>("doc_targets")
