@@ -31,11 +31,12 @@ jobs:
             -executable -type f \
             -exec cp {} ./test-binaries/ \;
 
-      - name: set up test binaries to cache
-        uses: actions/cache@v2
+      - uses: actions/upload-artifact@v2
+        name: set up test binaries to cache
         with:
-          path: "./test-binaries"
-          key: test-binaries-${{ github.sha }}
+          name: test-binaries-${{ github.sha }}
+          path: ./test-binaries/
+          retention-days: 1
 
   test:
     runs-on: ubuntu-latest
@@ -44,10 +45,10 @@ jobs:
       - uses: actions/checkout@master
 
       - name: get test binaries from cache
-        uses: actions/cache@v2
+        uses: actions/download-artifact@v2
         with:
-          path: "./test-binaries"
-          key: test-binaries-${{ github.sha }}
+          name: test-binaries-${{ github.sha }}
+          path: ./test-binaries/
 
       - name: Launch postgres and min.io
         run: |
@@ -65,6 +66,7 @@ jobs:
         run: |
           for f in ./test-binaries/*; do
             echo "running $f"
+            chmod +x $f  # GH action artifacts don't handle permissions
             $f || exit 1
           done
 
@@ -79,10 +81,10 @@ jobs:
       - uses: actions/checkout@master
 
       - name: get test binaries from cache
-        uses: actions/cache@v2
+        uses: actions/download-artifact@v2
         with:
-          path: "./test-binaries"
-          key: test-binaries-${{ github.sha }}
+          name: test-binaries-${{ github.sha }}
+          path: ./test-binaries/
 
       - name: Launch postgres and min.io
         run: |
@@ -102,6 +104,7 @@ jobs:
         run: |
           for f in ./test-binaries/*; do
             echo "running $f"
+            chmod +x $f  # GH action artifacts don't handle permissions
             $f --ignored || exit 1
           done
 
