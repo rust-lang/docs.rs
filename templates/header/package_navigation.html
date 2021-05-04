@@ -27,7 +27,7 @@
                         {{ title }}
                     {%- else -%}
                         {{ metadata.name }} {{ metadata.version }}
-                        {{ "copy" | far(id="clipboard", aria_label="Copy crate name and version information", fa=true) }}
+                        <span id="clipboard" aria-label="Copy crate name and version information">⎘</span>
                     {%- endif -%}
                 </h1>
 

@@ -20,6 +20,9 @@ function copyTextHandler() {
 
     temporaryInput.remove();
     crateTitleAndVersion.style.textTransform = oldTransform;
+
+    const clipboard = document.getElementById("clipboard");
+    clipboard.innerHTML = "✓";
 }
 
 (function() {
