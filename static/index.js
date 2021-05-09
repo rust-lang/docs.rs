@@ -6,10 +6,11 @@ function formatCrateName(crateTitleAndVersion) {
 (function() {
     const clipboard = document.getElementById("clipboard");
     let resetClipboardTimeout = null;
+    let resetClipboardIcon = clipboard.innerHTML;
 
     function resetClipboard() {
         resetClipboardTimeout = null;
-        clipboard.textContent = '📋︎';
+        clipboard.innerHTML = resetClipboardIcon;
     }
 
     function copyTextHandler() {
