@@ -9,7 +9,7 @@ function formatCrateName(crateTitleAndVersion) {
 
     function resetClipboard() {
         resetClipboardTimeout = null;
-        clipboard.textContent = '⎘';
+        clipboard.textContent = '📋︎';
     }
 
     function copyTextHandler() {
