@@ -447,7 +447,8 @@ impl RustwideBuilder {
                         &mut conn,
                         cargo_metadata,
                         &build.host_source_dir(),
-                        &res.result,
+                        res.result.successful,
+                        &res.result.rustc_version,
                         &res.target,
                         files_list,
                         successful_targets,
@@ -780,23 +781,23 @@ struct FullBuildResult {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct DocCoverage {
+pub struct DocCoverage {
     /// The total items that could be documented in the current crate, used to calculate
     /// documentation coverage.
-    pub(crate) total_items: i32,
+    pub total_items: i32,
     /// The items of the crate that are documented, used to calculate documentation coverage.
-    pub(crate) documented_items: i32,
+    pub documented_items: i32,
     /// The total items that could have code examples in the current crate, used to calculate
     /// documentation coverage.
-    pub(crate) total_items_needing_examples: i32,
+    pub total_items_needing_examples: i32,
     /// The items of the crate that have a code example, used to calculate documentation coverage.
-    pub(crate) items_with_examples: i32,
+    pub items_with_examples: i32,
 }
 
-pub(crate) struct BuildResult {
-    pub(crate) rustc_version: String,
-    pub(crate) docsrs_version: String,
-    pub(crate) successful: bool,
+pub struct BuildResult {
+    pub rustc_version: String,
+    pub docsrs_version: String,
+    pub successful: bool,
 }
 
 #[cfg(test)]

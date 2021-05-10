@@ -1,5 +1,5 @@
 use crate::error::Result;
-use anyhow::bail;
+use anyhow::{bail, Context};
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -21,30 +21,19 @@ impl CargoMetadata {
             .log_output(false)
             .run_capture()?;
 
-        let mut iter = res.stdout_lines().iter();
-        let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
-            serde_json::from_str::<DeserializedMetadata>(serialized)?
-        } else {
-            bail!("invalid output returned by `cargo metadata`");
-        };
-
-        let root = metadata.resolve.root;
+        let iter = res.stdout_lines().iter();
         Ok(CargoMetadata {
-            root: metadata
-                .packages
-                .into_iter()
-                .find(|pkg| pkg.id == root)
-                .unwrap(),
+            root: Package::from_lines(iter)?,
         })
     }
 
-    pub(crate) fn root(&self) -> &Package {
+    pub fn root(&self) -> &Package {
         &self.root
     }
 }
 
 #[derive(Deserialize, Serialize, Default)]
-pub(crate) struct Package {
+pub struct Package {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) version: String,
@@ -75,7 +64,17 @@ impl Package {
         name.replace('-', "_")
     }
 
-    pub(crate) fn package_name(&self) -> String {
+    /// Returns the package name without normalization.
+    pub fn as_raw_name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the package version.
+    pub fn package_version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn package_name(&self) -> String {
         self.library_name()
             .unwrap_or_else(|| self.normalize_package_name(&self.targets[0].name))
     }
@@ -84,10 +83,26 @@ impl Package {
         self.library_target()
             .map(|target| self.normalize_package_name(&target.name))
     }
+
+    /// Deserialize metadata from lines.
+    pub fn from_lines<'a, T: AsRef<str>>(mut iter: impl Iterator<Item = T> + 'a) -> Result<Self> {
+        let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
+            serde_json::from_str::<DeserializedMetadata>(serialized.as_ref())?
+        } else {
+            bail!("invalid output returned by `cargo metadata`");
+        };
+
+        let root = metadata.resolve.root;
+        metadata
+            .packages
+            .into_iter()
+            .find(|pkg| pkg.id == root)
+            .context("failed to find the root package")
+    }
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct Target {
+pub struct Target {
     pub(crate) name: String,
     #[cfg(not(test))]
     crate_types: Vec<String>,
@@ -108,7 +123,7 @@ impl Target {
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct Dependency {
+pub struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,
     pub(crate) kind: Option<String>,

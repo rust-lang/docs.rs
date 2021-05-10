@@ -7,7 +7,7 @@ use self::api::Api;
 use crate::error::Result;
 use crate::utils::report_error;
 
-pub(crate) mod api;
+pub mod api;
 #[cfg(feature = "consistency_check")]
 mod crates;
 

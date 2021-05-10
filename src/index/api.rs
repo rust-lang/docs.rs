@@ -19,13 +19,13 @@ pub struct Api {
     client: reqwest::blocking::Client,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CrateData {
     pub(crate) owners: Vec<CrateOwner>,
 }
 
 #[derive(Debug)]
-pub(crate) struct ReleaseData {
+pub struct ReleaseData {
     pub(crate) release_time: DateTime<Utc>,
     pub(crate) yanked: bool,
     pub(crate) downloads: i32,
@@ -41,7 +41,7 @@ impl Default for ReleaseData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct CrateOwner {
     pub(crate) avatar: String,
     pub(crate) email: String,

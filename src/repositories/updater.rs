@@ -79,6 +79,11 @@ impl RepositoryStatsUpdater {
         Self { updaters, pool }
     }
 
+    /// Pushes a new repo updater.
+    pub fn push_updater(updater: Box<dyn RepositoryForge + Send + Sync>) {
+        self.updaters.push(updater);
+    }
+
     pub(crate) fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         let url = match &metadata.repository {
             Some(url) => url,
@@ -238,7 +243,7 @@ impl RepositoryStatsUpdater {
         "code-branch"
     }
 
-    fn store_repository(&self, conn: &mut Client, host: &str, repo: Repository) -> Result<i32> {
+    pub fn store_repository(&self, conn: &mut Client, host: &str, repo: Repository) -> Result<i32> {
         trace!(
             "storing {} repository stats for {}",
             host,
