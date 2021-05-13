@@ -6,6 +6,10 @@
     min-height: calc(100vh - #{$top-navbar-height + $footer-height + 2});
 }
 
+#clipboard {
+    cursor: pointer;
+}
+
 // Force the navbar to be left-aligned on rustdoc pages
 body.rustdoc-page > .nav-container > .container {
     margin-left: 0;
