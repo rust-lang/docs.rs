@@ -6,13 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        If you need a system dependency added for your crate to build,
-        consider making a PR to https://github.com/rust-lang/crates-build-env
-        instead of opening an issue here. There are detailed instructions for
-        this at https://forge.rust-lang.org/docs-rs/add-dependencies.html.
+        If you need a system dependency added for your crate to build, consider making a PR to [rust-lang/crates-build-env](https://github.com/rust-lang/crates-build-env) instead of opening an issue here. There are detailed instructions for this [on this page](https://forge.rust-lang.org/docs-rs/add-dependencies.html).
   - type: input
     attributes:
-      label: crate name
+      label: Crate name
     validations:
       required: true
   - type: input

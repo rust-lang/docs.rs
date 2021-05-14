@@ -6,12 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please note we *won't* enable network access or allow
-        the crate to write in read-only directories, to avoid
-        compromising the security of docs.rs itself.
+        Please note we *won't* enable network access or allow the crate to write in read-only directories, to avoid compromising the security of docs.rs itself.
   - type: input
     attributes:
-      label: crate name
+      label: Crate name
     validations:
       required: true
   - type: input
@@ -22,12 +20,17 @@ body:
   - type: input
     attributes:
       label: requested RAM limit
+      placeholder: "default: 3 GB"
   - type: input
     attributes:
       label: requested timeout
+      placeholder: "default: 15 minutes"
   - type: input
     attributes:
       label: requested number of targets
+      placeholder: "default: 10"
   - type: textarea
     attributes:
       label: Why your crate needs the resource increases
+    validations:
+      required: true
