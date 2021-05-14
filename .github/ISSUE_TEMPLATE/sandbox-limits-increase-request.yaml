@@ -14,20 +14,20 @@ body:
       required: true
   - type: input
     attributes:
-      label: build failure link
+      label: Build failure link
     validations:
       required: true
   - type: input
     attributes:
-      label: requested RAM limit
+      label: Requested RAM limit
       placeholder: "default: 3 GB"
   - type: input
     attributes:
-      label: requested timeout
+      label: Requested timeout
       placeholder: "default: 15 minutes"
   - type: input
     attributes:
-      label: requested number of targets
+      label: Requested number of targets
       placeholder: "default: 10"
   - type: textarea
     attributes:

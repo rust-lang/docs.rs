@@ -14,9 +14,9 @@ body:
       required: true
   - type: input
     attributes:
-      label: build failure link
+      label: Build failure link
     validations:
       required: true
   - type: textarea
     attributes:
-      label: additional details
+      label: Additional details
