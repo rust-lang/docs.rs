@@ -109,7 +109,7 @@ use iron::{
 };
 use page::TemplateData;
 use postgres::Client;
-use router::NoRoute;
+use router::{NoRoute, TrailingSlash};
 use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::{borrow::Cow, fmt, net::SocketAddr, sync::Arc};
@@ -167,6 +167,18 @@ impl Handler for MainHandler {
             }
         }
 
+        fn pass_iron_errors_with_redirect(e: IronError) -> IronResult<Response> {
+            // in some cases the iron router will return a redirect as an `IronError`.
+            // Here we convert these into an `Ok(Response)`.
+            if e.error.downcast_ref::<TrailingSlash>().is_some()
+                || e.response.status == Some(status::MovedPermanently)
+            {
+                Ok(e.response)
+            } else {
+                Err(e)
+            }
+        }
+
         // This is kind of a mess.
         //
         // Almost all files should be served through the `router_handler`; eventually
@@ -183,6 +195,7 @@ impl Handler for MainHandler {
         self.shared_resource_handler
             .handle(req)
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
+            .or_else(pass_iron_errors_with_redirect)
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
                     *err
@@ -736,6 +749,20 @@ mod test {
             // with or without slash
             assert_redirect("/proc-macro", target, web)?;
             assert_redirect("/proc-macro/", target, web)?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn double_slash_does_redirect_and_remove_slash() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("bat")
+                .version("0.2.0")
+                .create()
+                .unwrap();
+            let web = env.frontend();
+            assert_redirect("/bat//", "/bat/0.2.0/bat/", web)?;
             Ok(())
         })
     }
