@@ -167,18 +167,6 @@ impl Handler for MainHandler {
             }
         }
 
-        fn pass_iron_errors_with_redirect(e: IronError) -> IronResult<Response> {
-            // in some cases the iron router will return a redirect as an `IronError`.
-            // Here we convert these into an `Ok(Response)`.
-            if e.error.downcast_ref::<TrailingSlash>().is_some()
-                || e.response.status == Some(status::MovedPermanently)
-            {
-                Ok(e.response)
-            } else {
-                Err(e)
-            }
-        }
-
         // This is kind of a mess.
         //
         // Almost all files should be served through the `router_handler`; eventually
@@ -195,7 +183,17 @@ impl Handler for MainHandler {
         self.shared_resource_handler
             .handle(req)
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
-            .or_else(pass_iron_errors_with_redirect)
+            .or_else(|e| {
+                // in some cases the iron router will return a redirect as an `IronError`.
+                // Here we convert these into an `Ok(Response)`.
+                if e.error.downcast_ref::<TrailingSlash>().is_some()
+                    || e.response.status == Some(status::MovedPermanently)
+                {
+                    Ok(e.response)
+                } else {
+                    Err(e)
+                }
+            })
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
                     *err
