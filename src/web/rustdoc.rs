@@ -363,6 +363,14 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
             return if ctry!(req, storage.exists(&path)) {
                 redirect(&name, &version, &req_path[3..])
+            } else if req_path.get(3).map_or(false, |p| p.contains('-')) {
+                // This is a target, not a module; it may not have been built.
+                // Redirect to the default target and show a search page instead of a hard 404.
+                redirect(
+                    &format!("/crate/{}", name),
+                    &format!("{}/target-redirect", version),
+                    &req_path[3..],
+                )
             } else {
                 Err(Nope::ResourceNotFound.into())
             };
@@ -1742,6 +1750,26 @@ mod test {
                     .count(),
                 1,
             );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_missing_target_redirects_to_search() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("winapi")
+                .version("0.3.9")
+                .rustdoc_file("winapi/macro.ENUM.html")
+                .create()?;
+
+            assert_redirect(
+                "/winapi/0.3.9/x86_64-unknown-linux-gnu/winapi/macro.ENUM.html",
+                "/winapi/0.3.9/winapi/macro.ENUM.html",
+                env.frontend(),
+            )?;
+            assert_not_found("/winapi/0.3.9/winapi/struct.not_here.html", env.frontend())?;
 
             Ok(())
         })
