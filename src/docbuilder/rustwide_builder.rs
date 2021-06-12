@@ -580,7 +580,17 @@ impl RustwideBuilder {
             // We know that `metadata` unconditionally passes `-Z rustdoc-map`.
             // Don't copy paste this, since that fact is not stable and may change in the future.
             "-Zunstable-options".into(),
-            r#"--config=doc.extern-map.registries.crates-io="https://docs.rs""#.into(),
+            // Add `target` so that if a dependency has target-specific docs, this links to them properly.
+            //
+            // Note that this includes the target even if this is the default, since the dependency
+            // may have a different default (and the web backend will take care of redirecting if
+            // necessary).
+            //
+            // FIXME: host-only crates like proc-macros should probably not have this passed? but #1417 should make it OK
+            format!(
+                r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{}""#,
+                target
+            ),
         ];
         if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
