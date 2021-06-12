@@ -83,40 +83,25 @@ If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
-### Pure docker-compose
-
-If you have trouble with the above commands, consider using `docker-compose up`,
-which uses docker-compose for the web server as well.
-This will not cache dependencies as well - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
-but makes sure that you're in a known environment so you should have fewer problems getting started.
-
-Please file bugs for any trouble you have running docs.rs!
+Running the database and S3 server outside of docker-compose is possible, but not recommended or supported.
+Note that you will need docker installed no matter what, since it's used for Rustwide sandboxing.
 
 ### Running tests
-
-Tests are only supported via cargo and do not work in docker-compose
 
 ```
 cargo test
 ```
 
-Most tests require access to the database. To run them, set the
-`CRATESFYI_DATABASE_URL` in `.env` to the url of a PostgreSQL database,
-and set the `AWS_ACCESS_KEY_ID`, `S3_ENDPOINT`, and `AWS_SECRET_ACCESS_KEY` variables.
-We have some reasonable default parameters in `.env.sample`.
+### Pure docker-compose
 
-For example, if you are using the `docker-compose` environment to run tests against, you can launch only the database and s3 server like so:
+If you have trouble with the above commands, consider using `docker-compose up --build`,
+which uses docker-compose for the web server as well.
+This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
+but makes sure that you're in a known environment so you should have fewer problems getting started.
 
-```console
-docker-compose up -d db s3
-```
+Note that running tests is not supported when using pure docker-compose.
 
-If you don't want to use docker-compose, see the
-[wiki page on developing outside docker-compose][wiki-no-compose]
-for more information on how to setup this environment.
-Note that either way, you will need docker installed for sandboxing with Rustwide.
-
-[wiki-no-compose]: https://forge.rust-lang.org/docs-rs/no-docker-compose.html
+Please file bugs for any trouble you have running docs.rs!
 
 ### Docker-Compose
 
@@ -127,7 +112,7 @@ Three services are defined:
 |------|-------------------------------------------------|----------------------------|----------------------------------------|
 | web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
 | db   | postgresql://cratesfyi:password@localhost:15432 | -                          | Postgres database used by web          |
-| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | Minio (simulates AWS S3) used by web   |
+| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | MinIO (simulates AWS S3) used by web   |
 
 [docker-compose.yml]: ./docker-compose.yml
 
@@ -145,12 +130,18 @@ $ docker-compose down --volumes
 
 #### FAQ
 
-##### I keep getting the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
+##### I see the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
 
 You probably have [CRLF line endings](https://en.wikipedia.org/wiki/CRLF).
 This causes the hashbang in the docker-entrypoint to be `/bin/sh\r` instead of `/bin/sh`.
 This is probably because you have `git.autocrlf` set to true,
 [set it to `input`](https://stackoverflow.com/questions/10418975) instead.
+
+##### I see the error `/opt/rustwide/cargo-home/bin/cargo: cannot execute binary file: Exec format error` when running builds.
+
+You are most likely not on a Linux platform. Currently, running builds is only supported on `x86_64-unknown-linux-gnu`.
+
+See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details.
 
 ### CLI
 
