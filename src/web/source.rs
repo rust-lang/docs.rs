@@ -305,4 +305,18 @@ mod tests {
             Ok(())
         })
     }
+    #[test]
+    fn literal_krate_description() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("rustc-ap-syntax")
+                .version("178.0.0")
+                .description("some stuff with krate")
+                .source_file("fold.rs", b"fn foo() {}")
+                .create()?;
+            let web = env.frontend();
+            assert_success("/crate/rustc-ap-syntax/178.0.0/source/fold.rs", web)?;
+            Ok(())
+        })
+    }
 }
