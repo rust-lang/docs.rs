@@ -320,7 +320,7 @@ fn add_keywords_into_database(
     let wanted_keywords: HashMap<String, String> = pkg
         .keywords
         .iter()
-        .map(|kw| (slugify(&kw), kw.clone()))
+        .map(|kw| (slugify(kw), kw.clone()))
         .collect();
 
     let existing_keyword_slugs: HashSet<String> = conn
@@ -388,41 +388,37 @@ fn update_owners_in_database(
             SET
                 avatar = EXCLUDED.avatar,
                 name = EXCLUDED.name,
-                email = EXCLUDED.email",
+                email = EXCLUDED.email
+        RETURNING id",
     )?;
-    for owner in owners {
-        conn.execute(
-            &owner_upsert,
-            &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-        )?;
-    }
 
-    let updated_oids: Vec<i32> = conn
-        .query(
-            "INSERT INTO owner_rels (cid, oid)
-             SELECT $1,id
-             FROM owners 
-             WHERE login = ANY($2)
-             ON CONFLICT (cid,oid) 
-             DO UPDATE -- we need this so the existing/updated records end 
-                       -- up being in the returned OIDs
-                 SET oid=excluded.oid 
-             RETURNING oid",
-            &[
-                &crate_id,
-                &owners.iter().map(|o| o.login.clone()).collect::<Vec<_>>(),
-            ],
-        )?
+    let oids: Vec<i32> = owners
         .iter()
-        .map(|row| row.get(0))
-        .collect();
+        .map(|owner| -> Result<_> {
+            Ok(conn
+                .query_one(
+                    &owner_upsert,
+                    &[&owner.login, &owner.avatar, &owner.name, &owner.email],
+                )?
+                .get(0))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    conn.execute(
+        "INSERT INTO owner_rels (cid, oid)
+             SELECT $1,oid
+             FROM UNNEST($2::int[]) as oid
+             ON CONFLICT (cid,oid) 
+             DO NOTHING",
+        &[&crate_id, &oids],
+    )?;
 
     conn.execute(
         "DELETE FROM owner_rels
          WHERE 
             cid = $1 AND 
             NOT (oid = ANY($2))",
-        &[&crate_id, &updated_oids],
+        &[&crate_id, &oids],
     )?;
 
     Ok(())
