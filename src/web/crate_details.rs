@@ -61,7 +61,7 @@ where
 {
     markdown
         .as_ref()
-        .map(|markdown| render_markdown(&markdown))
+        .map(|markdown| render_markdown(markdown))
         .serialize(serializer)
 }
 
@@ -280,10 +280,10 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut conn = extension!(req, Pool).get()?;
 
-    match match_version(&mut conn, &name, req_version).and_then(|m| m.assume_exact())? {
+    match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
         MatchSemver::Exact((version, _)) => {
             let updater = extension!(req, RepositoryStatsUpdater);
-            let details = cexpect!(req, CrateDetails::new(&mut conn, &name, &version, &updater));
+            let details = cexpect!(req, CrateDetails::new(&mut conn, name, &version, updater));
 
             CrateDetailsPage { details }.into_response(req)
         }

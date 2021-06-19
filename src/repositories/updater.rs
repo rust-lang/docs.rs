@@ -67,7 +67,7 @@ impl fmt::Debug for RepositoryStatsUpdater {
 impl RepositoryStatsUpdater {
     pub fn new(config: &Config, pool: Pool) -> Self {
         let mut updaters: Vec<Box<dyn RepositoryForge + Send + Sync>> = Vec::new();
-        if let Ok(Some(updater)) = GitHub::new(&config) {
+        if let Ok(Some(updater)) = GitHub::new(config) {
             updaters.push(Box::new(updater));
         }
         if let Ok(updater) = GitLab::new("gitlab.com", &config.gitlab_accesstoken) {
