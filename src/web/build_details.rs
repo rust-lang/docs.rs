@@ -63,7 +63,7 @@ pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
         } else {
             let target: String = row.get("default_target");
             let path = format!("build-logs/{}/{}.txt", id, target);
-            let file = ctry!(req, File::from_path(&storage, &path, &config));
+            let file = ctry!(req, File::from_path(storage, &path, config));
             ctry!(req, String::from_utf8(file.0.content))
         };
         BuildDetails {
@@ -79,7 +79,7 @@ pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     BuildDetailsPage {
-        metadata: cexpect!(req, MetaData::from_crate(&mut conn, &name, &version)),
+        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, version)),
         build_details,
     }
     .into_response(req)

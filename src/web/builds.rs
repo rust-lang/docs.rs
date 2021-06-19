@@ -117,7 +117,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     } else {
         BuildsPage {
-            metadata: cexpect!(req, MetaData::from_crate(&mut conn, &name, &version)),
+            metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, &version)),
             builds,
             limits,
         }

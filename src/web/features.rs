@@ -69,7 +69,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     FeaturesPage {
-        metadata: cexpect!(req, MetaData::from_crate(&mut conn, &name, &version)),
+        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, &version)),
         features,
         default_len,
     }

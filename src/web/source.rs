@@ -172,7 +172,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     // remove first elements from path which is /crate/:name/:version/source
     req_path.drain(0..4);
 
-    let v = match_version(&mut conn, &crate_name, Some(req_version))?;
+    let v = match_version(&mut conn, crate_name, Some(req_version))?;
     if let Some(new_name) = &v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should
         // use that instead
@@ -222,7 +222,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     // try to get actual file first
     // skip if request is a directory
     let file = if !file_path.ends_with('/') {
-        DbFile::from_path(&storage, &file_path, &config).ok()
+        DbFile::from_path(storage, &file_path, config).ok()
     } else {
         None
     };
@@ -243,7 +243,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (None, false)
     };
 
-    let file_list = FileList::from_path(&mut conn, &crate_name, &version, &req_path)
+    let file_list = FileList::from_path(&mut conn, crate_name, &version, &req_path)
         .ok_or(Nope::ResourceNotFound)?;
 
     SourcePage {

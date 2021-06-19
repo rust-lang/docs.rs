@@ -101,7 +101,7 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = f(&to_process);
+        let res = f(to_process);
         self.metrics.total_builds.inc();
         match res {
             Ok(()) => {

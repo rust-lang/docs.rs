@@ -120,7 +120,7 @@ pub(crate) fn add_package_into_database(
 
     let release_id: i32 = rows[0].get(0);
 
-    add_keywords_into_database(conn, &metadata_pkg, release_id)?;
+    add_keywords_into_database(conn, metadata_pkg, release_id)?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
 
     // Update the crates table with the new release

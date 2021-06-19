@@ -116,7 +116,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
             let path = req.url.path();
             let path = path.join("/");
-            return match File::from_path(&storage, &path, &config) {
+            return match File::from_path(storage, &path, config) {
                 Ok(f) => Ok(f.serve()),
                 Err(..) => Err(Nope::ResourceNotFound.into()),
             };
@@ -328,7 +328,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = cexpect!(req, CrateDetails::new(&mut conn, &name, &version, &updater));
+    let krate = cexpect!(req, CrateDetails::new(&mut conn, &name, &version, updater));
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
@@ -353,7 +353,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let mut path = ctry!(req, percent_decode(path.as_bytes()).decode_utf8());
 
     // Attempt to load the file from the database
-    let file = match File::from_path(&storage, &path, &config) {
+    let file = match File::from_path(storage, &path, config) {
         Ok(file) => file,
         Err(err) => {
             log::debug!("got error serving {}: {}", path, err);
@@ -543,7 +543,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let base = redirect_base(req);
     let updater = extension!(req, RepositoryStatsUpdater);
 
-    let crate_details = match CrateDetails::new(&mut conn, &name, &version, &updater) {
+    let crate_details = match CrateDetails::new(&mut conn, name, version, updater) {
         Some(krate) => krate,
         None => return Err(Nope::VersionNotFound.into()),
     };
@@ -568,8 +568,8 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let path = path_for_version(
         &file_path,
         &crate_details.metadata.doc_targets,
-        &storage,
-        &config,
+        storage,
+        config,
     );
     let url = format!(
         "{base}/{name}/{version}/{path}",
@@ -601,7 +601,7 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
 
     let options =
-        match match_version(&mut conn, &name, Some(&version)).and_then(|m| m.assume_exact()) {
+        match match_version(&mut conn, name, Some(&version)).and_then(|m| m.assume_exact()) {
             Ok(MatchSemver::Exact((version, id))) => {
                 let rows = ctry!(
                     req,
@@ -681,7 +681,7 @@ impl Handler for SharedResourceHandler {
                 let storage = extension!(req, Storage);
                 let config = extension!(req, Config);
 
-                if let Ok(file) = File::from_path(&storage, filename, &config) {
+                if let Ok(file) = File::from_path(storage, filename, config) {
                     return Ok(file.serve());
                 }
             }
