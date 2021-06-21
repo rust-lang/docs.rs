@@ -521,8 +521,9 @@ fn path_for_version(
         // this is an item
         last_component.split('.').nth(1)
     } else {
-        // this is a source file; try searching for the module
-        Some(last_component.strip_suffix(".rs.html").unwrap())
+        // if this is a Rust source file, try searching for the module;
+        // else, don't try searching at all, we don't know how to find it
+        last_component.strip_suffix(".rs.html")
     };
     if let Some(search) = search_item {
         format!("{}?search={}", platform, search)
@@ -1807,6 +1808,31 @@ mod test {
             )?;
             assert_not_found("/winapi/0.3.9/winapi/struct.not_here.html", env.frontend())?;
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_redirect_source_not_rust() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("winapi")
+                .version("0.3.8")
+                .source_file("src/docs.md", b"created by Peter Rabbit")
+                .create()?;
+
+            env.fake_release()
+                .name("winapi")
+                .version("0.3.9")
+                .create()?;
+
+            assert_success("/winapi/0.3.8/src/winapi/docs.md.html", env.frontend())?;
+            // people can end up here from clicking "go to latest" while in source view
+            assert_redirect(
+                "/crate/winapi/0.3.9/target-redirect/src/winapi/docs.md.html",
+                "/winapi/0.3.9/winapi/",
+                env.frontend(),
+            )?;
             Ok(())
         })
     }
