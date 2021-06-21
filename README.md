@@ -99,6 +99,16 @@ which uses docker-compose for the web server as well.
 This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
 but makes sure that you're in a known environment so you should have fewer problems getting started.
 
+You can also use the `web` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+```sh
+# run a build for a single crate
+docker-compose run web build crate regex 1.3.1
+# or build essential files
+docker-compose run web build add-essential-files
+# rebuild the web container when you changed code.
+docker-comose build web
+```
+
 Note that running tests is not supported when using pure docker-compose.
 
 Please file bugs for any trouble you have running docs.rs!
@@ -124,7 +134,7 @@ so this will be necessary anytime you make changes.
 
 If you want to completely clean up the database, don't forget to remove the volumes too:
 
-```
+```sh
 $ docker-compose down --volumes
 ```
 
@@ -139,10 +149,18 @@ This is probably because you have `git.autocrlf` set to true,
 
 ##### I see the error `/opt/rustwide/cargo-home/bin/cargo: cannot execute binary file: Exec format error` when running builds.
 
-You are most likely not on a Linux platform. Currently, running builds is only supported on `x86_64-unknown-linux-gnu`.
+You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker-compose run web build [...]` workaround described above.
 
-See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details.
+See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details about supporting more platforms directly.
 
+##### All tests are failing or timing out
+
+Our test setup needs a certain about of file descriptors.
+
+At least 4096 should be enough, you can set it via:
+```sh
+$ ulimit -n 4096
+```
 ### CLI
 
 See `cargo run -- --help` for a full list of commands.
@@ -161,6 +179,9 @@ cargo run -- start-web-server
 # This is the main command to build and add a documentation into docs.rs.
 # For example, `docker-compose run web build crate regex 1.1.6`
 cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
+
+# alternatively, via the web container
+docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
 
 # Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)
