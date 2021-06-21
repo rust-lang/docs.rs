@@ -166,20 +166,14 @@ pub struct BuildTargets<'a> {
 impl Metadata {
     /// Read the `Cargo.toml` from a source directory, then parse the build metadata.
     ///
-    /// If both `Cargo.toml` and `Cargo.toml.orig` exist in the directory,
-    /// `Cargo.toml.orig` will take precedence.
-    ///
     /// If you already have the path to a TOML file, use [`Metadata::from_manifest`] instead.
     pub fn from_crate_root<P: AsRef<Path>>(source_dir: P) -> Result<Metadata, MetadataError> {
-        let source_dir = source_dir.as_ref();
-        for &c in &["Cargo.toml.orig", "Cargo.toml"] {
-            let manifest_path = source_dir.join(c);
-            if manifest_path.exists() {
-                return Metadata::from_manifest(manifest_path);
-            }
+        let manifest_path = source_dir.as_ref().join("Cargo.toml");
+        if manifest_path.exists() {
+            Metadata::from_manifest(manifest_path)
+        } else {
+            Err(io::Error::new(io::ErrorKind::NotFound, "no Cargo.toml").into())
         }
-
-        Err(io::Error::new(io::ErrorKind::NotFound, "no Cargo.toml").into())
     }
 
     /// Read the given file into a string, then parse the build metadata.
