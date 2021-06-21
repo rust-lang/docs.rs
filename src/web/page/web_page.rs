@@ -59,17 +59,23 @@ pub trait WebPage: Serialize + Sized {
             page: &self,
         })
         .unwrap();
-        let rendered = ctry!(
-            req,
-            req.extensions
-                .get::<TemplateData>()
-                .expect("missing TemplateData from the request extensions")
-                .templates
-                .load()
-                .render(&self.template(), &ctx)
-        );
+        let status = self.get_status();
+        let result = req
+            .extensions
+            .get::<TemplateData>()
+            .expect("missing TemplateData from the request extensions")
+            .templates
+            .load()
+            .render(&self.template(), &ctx);
 
-        let mut response = Response::with((self.get_status(), rendered));
+        let rendered = if status.is_server_error() {
+            // avoid infinite loop if error.html somehow fails to load
+            result.expect("error while serving error page")
+        } else {
+            ctry!(req, result)
+        };
+
+        let mut response = Response::with((status, rendered));
         response.headers.set(Self::content_type());
 
         Ok(response)
