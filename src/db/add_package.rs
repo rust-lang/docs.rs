@@ -343,17 +343,14 @@ fn add_keywords_into_database(
         conn.execute(&insert_keyword_query, &[&name, &slug])?;
     }
 
-    let affected_rows = conn.execute(
+    conn.execute(
         "INSERT INTO keyword_rels (rid, kid) 
         SELECT $1 as rid, id as kid 
         FROM keywords 
-        WHERE slug = ANY($2)",
+        WHERE slug = ANY($2)
+        ON CONFLICT DO NOTHING;",
         &[&release_id, &wanted_keywords.keys().collect::<Vec<_>>()],
     )?;
-
-    if affected_rows != pkg.keywords.len() as u64 {
-        failure::bail!("not all keywords added to database");
-    }
 
     Ok(())
 }
@@ -481,6 +478,26 @@ mod test {
                 .collect::<Vec<_>>();
 
             assert_eq!(all_kw, vec![String::from("kw-1"), "kw-2".into()]);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn keyword_conflict_when_rebuilding_release() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.13.0")
+                .keywords(vec!["kw 3".into(), "kw 4".into()])
+                .create()?;
+
+            // same version so we have the same release
+            env.fake_release()
+                .name("dummy")
+                .version("0.13.0")
+                .keywords(vec!["kw 3".into(), "kw 4".into()])
+                .create()?;
 
             Ok(())
         })
