@@ -1,6 +1,6 @@
 //! Database migrations
 
-use log::info;
+use log::{log, Level};
 use postgres::{Client, Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
@@ -27,9 +27,16 @@ macro_rules! migration {
                 $description.to_owned()
             }
         }
+
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
-                info!(
+                let level = if cfg!(test) {
+                    Level::Trace
+                } else {
+                    Level::Info
+                };
+                log!(
+                    level,
                     "Applying migration {}: {}",
                     self.version(),
                     self.description()
@@ -37,7 +44,13 @@ macro_rules! migration {
                 transaction.batch_execute($up).map(|_| ())
             }
             fn down(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
-                info!(
+                let level = if cfg!(test) {
+                    Level::Trace
+                } else {
+                    Level::Info
+                };
+                log!(
+                    level,
                     "Removing migration {}: {}",
                     self.version(),
                     self.description()
