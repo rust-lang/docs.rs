@@ -147,6 +147,13 @@ impl RustwideBuilder {
             log::info!("continuing anyway, since this must be the first build");
         }
 
+        let cargo =
+            Command::new(&self.workspace, self.toolchain.cargo()).args(&["install", "bindgen"]);
+        if let Err(err) = cargo.run() {
+            log::warn!("failed to install bindgen: {}", err);
+            log::info!("continuing anyway, since bindgen is non-essential");
+        }
+
         self.rustc_version = self.detect_rustc_version()?;
         if old_version.as_deref() != Some(&self.rustc_version) {
             self.add_essential_files()?;
