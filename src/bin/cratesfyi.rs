@@ -8,8 +8,7 @@ use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
 use docs_rs::{
-    BuildQueue, Config, Context, DocBuilder, Index, Metrics, PackageKind, RustwideBuilder, Server,
-    Storage,
+    BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
@@ -289,7 +288,7 @@ enum BuildSubcommand {
 
 impl BuildSubcommand {
     pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
-        let docbuilder = DocBuilder::new(ctx.build_queue()?);
+        let build_queue = ctx.build_queue()?;
 
         let rustwide_builder = || -> Result<RustwideBuilder> {
             let mut builder = RustwideBuilder::init(&ctx)?;
@@ -358,8 +357,8 @@ impl BuildSubcommand {
                     .context("failed to add essential files")?;
             }
 
-            Self::Lock => docbuilder.lock().context("Failed to lock")?,
-            Self::Unlock => docbuilder.unlock().context("Failed to unlock")?,
+            Self::Lock => build_queue.lock().context("Failed to lock")?,
+            Self::Unlock => build_queue.unlock().context("Failed to unlock")?,
         }
 
         Ok(())
