@@ -550,78 +550,51 @@ impl BinContext {
     }
 }
 
+macro_rules! lazy {
+    ( $(fn $name:ident($self:ident) -> $type:ty = $init:expr);+ $(;)? ) => {
+        $(fn $name(&$self) -> Result<Arc<$type>, Error> {
+            Ok($self
+                .$name
+                .get_or_try_init::<_, Error>(|| Ok(Arc::new($init)))?
+                .clone())
+        })*
+    }
+}
+
 impl Context for BinContext {
-    fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
-        Ok(self
-            .build_queue
-            .get_or_try_init::<_, Error>(|| {
-                Ok(Arc::new(BuildQueue::new(
-                    self.pool()?,
-                    self.metrics()?,
-                    &*self.config()?,
-                )))
-            })?
-            .clone())
-    }
-
-    fn storage(&self) -> Result<Arc<Storage>, Error> {
-        Ok(self
-            .storage
-            .get_or_try_init::<_, Error>(|| {
-                Ok(Arc::new(Storage::new(
-                    self.pool()?,
-                    self.metrics()?,
-                    &*self.config()?,
-                )?))
-            })?
-            .clone())
-    }
-
-    fn config(&self) -> Result<Arc<Config>, Error> {
-        Ok(self
-            .config
-            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Config::from_env()?)))?
-            .clone())
+    lazy! {
+        fn build_queue(self) -> BuildQueue = BuildQueue::new(
+            self.pool()?,
+            self.metrics()?,
+            &*self.config()?,
+        );
+        fn storage(self) -> Storage = Storage::new(
+            self.pool()?,
+            self.metrics()?,
+            &*self.config()?,
+        )?;
+        fn config(self) -> Config = Config::from_env()?;
+        fn metrics(self) -> Metrics = Metrics::new()?;
+        fn index(self) -> Index = {
+            let config = self.config()?;
+            let path = config.registry_index_path.clone();
+            if let Some(registry_url) = config.registry_url.clone() {
+                Index::from_url(path, registry_url)
+            } else {
+                Index::new(path)
+            }?
+        };
+        fn repository_stats_updater(self) -> RepositoryStatsUpdater = {
+            let config = self.config()?;
+            let pool = self.pool()?;
+            RepositoryStatsUpdater::new(&config, pool)
+        };
     }
 
     fn pool(&self) -> Result<Pool, Error> {
         Ok(self
             .pool
             .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?, self.metrics()?)?))?
-            .clone())
-    }
-
-    fn metrics(&self) -> Result<Arc<Metrics>, Error> {
-        Ok(self
-            .metrics
-            .get_or_try_init::<_, Error>(|| Ok(Arc::new(Metrics::new()?)))?
-            .clone())
-    }
-
-    fn index(&self) -> Result<Arc<Index>, Error> {
-        Ok(self
-            .index
-            .get_or_try_init::<_, Error>(|| {
-                let config = self.config()?;
-                Ok(Arc::new(
-                    if let Some(registry_url) = config.registry_url.clone() {
-                        Index::from_url(config.registry_index_path.clone(), registry_url)
-                    } else {
-                        Index::new(config.registry_index_path.clone())
-                    }?,
-                ))
-            })?
-            .clone())
-    }
-
-    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>, Error> {
-        Ok(self
-            .repository_stats_updater
-            .get_or_try_init::<_, Error>(|| {
-                let config = self.config()?;
-                let pool = self.pool()?;
-                Ok(Arc::new(RepositoryStatsUpdater::new(&config, pool)))
-            })?
             .clone())
     }
 }
