@@ -178,7 +178,7 @@ impl TestEnvironment {
                 Arc::new(BuildQueue::new(
                     self.db().pool(),
                     self.metrics(),
-                    &self.config(),
+                    self.config(),
                 ))
             })
             .clone()
