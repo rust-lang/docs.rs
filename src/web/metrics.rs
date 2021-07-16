@@ -120,6 +120,7 @@ mod tests {
             ("/crate/rcc/0.0.0", "/crate/:name/:version"),
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
+            ("/-/static/keyboard.js", "static resource"),
             ("/-/static/opensearch.xml", "static resource"),
             ("/releases", "/releases"),
             ("/releases/feed", "static resource"),
