@@ -15,24 +15,33 @@
     src: local('Fira Sans Medium'), url("FiraSans-Medium.woff") format('woff');
 }
 
-/* See SourceSerifPro-LICENSE.txt for the Source Serif Pro license. */
+/* See SourceSerif4-LICENSE.md for the Source Serif 4 license. */
 @font-face {
-    font-family: 'Source Serif Pro';
+    font-family: 'Source Serif';
     font-style: normal;
     font-weight: 400;
-    src: local('Source Serif Pro'), url("SourceSerifPro-Regular.ttf.woff") format('woff');
+    src:
+      local('Source Serif 4'),
+      url("SourceSerif4-Regular.ttf.woff2") format('woff2'),
+      url("SourceSerif4-Regular.ttf.woff") format('woff');
 }
 @font-face {
-    font-family: 'Source Serif Pro';
+    font-family: 'Source Serif';
     font-style: italic;
     font-weight: 400;
-    src: local('Source Serif Pro Italic'), url("SourceSerifPro-It.ttf.woff") format('woff');
+    src:
+      local('Source Serif 4'),
+      url("SourceSerif4-It.ttf.woff2") format('woff2'),
+      url("SourceSerif4-It.ttf.woff") format('woff');
 }
 @font-face {
-    font-family: 'Source Serif Pro';
+    font-family: 'Source Serif';
     font-style: normal;
     font-weight: 700;
-    src: local('Source Serif Pro Bold'), url("SourceSerifPro-Bold.ttf.woff") format('woff');
+    src:
+      local('Source Serif 4'),
+      url("SourceSerif4-Bold.ttf.woff2") format('woff2'),
+      url("SourceSerif4-Bold.ttf.woff") format('woff');
 }
 
 /* See SourceCodePro-LICENSE.md for the Source Code Pro license. */
