@@ -40,7 +40,10 @@
                 case "s":
                 case "S":
                     ev.preventDefault();
-                    document.getElementsByClassName("search-input-nav")[0].focus();
+                    var searchInputNav = document.getElementsByClassName("search-input-nav");
+                    if (searchInputNav.length > 0) {
+                        searchInputNav[0].focus();
+                    }
                     break;
             }
         }
