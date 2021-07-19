@@ -211,6 +211,24 @@ mod tests {
     }
 
     #[test]
+    fn keyboard_js() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let resp = web.get("/-/static/keyboard.js").send()?;
+            assert!(resp.status().is_success());
+            assert_eq!(
+                resp.headers().get("Content-Type"),
+                Some(&"application/javascript".parse().unwrap()),
+            );
+            assert!(resp.content_length().unwrap() > 10);
+            assert!(resp.text()?.contains("handleKey"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn static_files() {
         wrapper(|env| {
             let web = env.frontend();
