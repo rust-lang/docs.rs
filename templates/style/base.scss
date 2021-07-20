@@ -272,11 +272,11 @@ div.recent-releases-container {
     }
 
     .release:hover,
-    li.selected > .release {
+    a.release:focus {
         background-color: var(--color-background-code);
     }
 
-    li:last-child .release {
+    li:last-of-type .release {
         border-bottom: none;
     }
 
