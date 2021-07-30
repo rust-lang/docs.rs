@@ -19,7 +19,7 @@ use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
-use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -32,7 +32,7 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
-    Registry(&'a str),
+    Registry { url: &'a str, key: Option<String> },
 }
 
 pub struct RustwideBuilder {
@@ -242,7 +242,10 @@ impl RustwideBuilder {
                 let registry_url = self.config.registry_url.clone();
                 let package_kind = registry_url
                     .as_ref()
-                    .map(|r| PackageKind::Registry(r.as_str()))
+                    .map(|r| PackageKind::Registry {
+                        url: r.as_str(),
+                        key: self.config.registry_key.clone(),
+                    })
                     .unwrap_or(PackageKind::CratesIo);
                 if let Err(err) = self.build_package(name, version, package_kind) {
                     warn!("failed to build package {} {}: {}", name, version, err);
@@ -309,7 +312,13 @@ impl RustwideBuilder {
         let krate = match kind {
             PackageKind::Local(path) => Crate::local(path),
             PackageKind::CratesIo => Crate::crates_io(name, version),
-            PackageKind::Registry(registry) => Crate::registry(registry, name, version),
+            PackageKind::Registry { url, key } => {
+                let mut registry = AlternativeRegistry::new(url);
+                if let Some(key) = key {
+                    registry.authenticate_with_ssh_key(key);
+                }
+                Crate::registry(registry, name, version)
+            }
         };
         krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 

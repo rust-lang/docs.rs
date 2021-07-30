@@ -15,6 +15,7 @@ pub struct Index {
     path: PathBuf,
     api: Api,
     repository_url: Option<String>,
+    registry_key: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, Clone)]
@@ -39,12 +40,31 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
     Ok(config)
 }
 
+fn fetch_options(key: &str) -> git2::FetchOptions<'_> {
+    let mut fo = git2::FetchOptions::new();
+    fo.remote_callbacks({
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+            git2::Cred::ssh_key_from_memory(username_from_url.unwrap(), None, key, None)
+        });
+        callbacks
+    });
+    fo
+}
+
 impl Index {
-    pub fn from_url(path: PathBuf, repository_url: String) -> Result<Self> {
+    pub fn from_url(
+        path: PathBuf,
+        repository_url: String,
+        registry_key: Option<String>,
+    ) -> Result<Self> {
         let url = repository_url.clone();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
-            crates_index_diff::CloneOptions { repository_url },
+            crates_index_diff::CloneOptions {
+                repository_url,
+                fetch_options: registry_key.as_ref().map(|s| fetch_options(s.as_str())),
+            },
         )
         .context("initialising registry index repository")?;
 
@@ -54,6 +74,7 @@ impl Index {
             path,
             api,
             repository_url: Some(url),
+            registry_key,
         })
     }
 
@@ -68,17 +89,23 @@ impl Index {
             path,
             api,
             repository_url: None,
+            registry_key: None,
         })
     }
 
     pub(crate) fn diff(&self) -> Result<crates_index_diff::Index> {
-        let options = self
-            .repository_url
-            .clone()
-            .map(|repository_url| crates_index_diff::CloneOptions { repository_url })
-            .unwrap_or_default();
-        let diff = crates_index_diff::Index::from_path_or_cloned_with_options(&self.path, options)
-            .context("re-opening registry index for diff")?;
+        let fetch_options = self.registry_key.as_deref().map(fetch_options);
+        let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
+            &self.path,
+            self.repository_url
+                .clone()
+                .map(move |repository_url| crates_index_diff::CloneOptions {
+                    repository_url,
+                    fetch_options,
+                })
+                .unwrap_or_default(),
+        )
+        .context("re-opening registry index for diff")?;
         Ok(diff)
     }
 

@@ -257,7 +257,10 @@ impl BuildQueue {
             let kind = krate
                 .registry
                 .as_ref()
-                .map(|r| PackageKind::Registry(r.as_str()))
+                .map(|r| PackageKind::Registry {
+                    url: r.as_str(),
+                    key: self.config.registry_key.clone(),
+                })
                 .unwrap_or(PackageKind::CratesIo);
 
             if let Err(err) = builder

@@ -27,7 +27,7 @@ log = "0.4"
 regex = "1"
 structopt = "0.3"
 crates-index = { version = "0.15.1", optional = true }
-crates-index-diff = "7.1.1"
+crates-index-diff = "8.0.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "0.9", features = ["serde"] }
 slug = "=0.1.1"
@@ -48,7 +48,7 @@ schemamama = "0.3"
 schemamama_postgres = "0.3"
 systemstat = "0.1.4"
 prometheus = { version = "0.10.0", default-features = false }
-rustwide = "0.13"
+rustwide = { git = "https://github.com/l4l/rustwide.git", branch = "registry-key" }
 mime_guess = "2"
 dotenv = "0.15"
 zstd = "0.5"

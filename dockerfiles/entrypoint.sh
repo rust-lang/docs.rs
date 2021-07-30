@@ -6,6 +6,7 @@ export DOCSRS_PREFIX=/opt/docsrs/prefix
 export DOCSRS_DOCKER=true
 export DOCSRS_LOG=${DOCSRS_LOG-"docs-rs,rustwide=info"}
 export PATH="$PATH:/build/target/release"
+export REGISTRY_URL=${REGISTRY_URL:-https://github.com/rust-lang/crates.io-index}
 
 # Try migrating the database multiple times if it fails
 # This avoids the docker container crashing the first time it's started with
@@ -28,7 +29,7 @@ done
 set -e
 
 if ! [ -d "${DOCSRS_PREFIX}/crates.io-index/.git" ]; then
-    git clone https://github.com/rust-lang/crates.io-index "${DOCSRS_PREFIX}/crates.io-index"
+    git clone ${REGISTRY_URL} "${DOCSRS_PREFIX}/crates.io-index"
     # Prevent new crates built before the container creation to be built
     git --git-dir="$DOCSRS_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
 fi

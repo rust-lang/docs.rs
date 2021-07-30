@@ -334,7 +334,9 @@ impl BuildSubcommand {
                         .build_local_package(&path)
                         .context("Building documentation failed")?;
                 } else {
-                    let registry_url = ctx.config()?.registry_url.clone();
+                    let config = ctx.config()?;
+                    let registry_url = config.registry_url.clone();
+                    let registry_key = config.registry_key.clone();
                     builder
                         .build_package(
                             &crate_name
@@ -343,7 +345,10 @@ impl BuildSubcommand {
                                 .with_context(|| anyhow!("must specify version if not local"))?,
                             registry_url
                                 .as_ref()
-                                .map(|s| PackageKind::Registry(s.as_str()))
+                                .map(|s| PackageKind::Registry {
+                                    url: s.as_str(),
+                                    key: registry_key,
+                                })
                                 .unwrap_or(PackageKind::CratesIo),
                         )
                         .context("Building documentation failed")?;
@@ -598,7 +603,7 @@ impl Context for BinContext {
             let config = self.config()?;
             let path = config.registry_index_path.clone();
             if let Some(registry_url) = config.registry_url.clone() {
-                Index::from_url(path, registry_url)
+                Index::from_url(path, registry_url, config.registry_key.clone())
             } else {
                 Index::new(path)
             }?

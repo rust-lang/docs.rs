@@ -11,6 +11,7 @@ pub struct Config {
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
+    pub registry_key: Option<String>,
 
     // Database connection params
     pub(crate) database_url: String,
@@ -98,6 +99,15 @@ impl Config {
 
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
+            registry_key: maybe_env::<String>("REGISTRY_KEY").and_then(|key| {
+                Ok(if let Some(key) = key {
+                    Some(key)
+                } else {
+                    maybe_env::<String>("REGISTRY_KEY_PATH")?
+                        .map(std::fs::read_to_string)
+                        .transpose()?
+                })
+            })?,
             prefix: prefix.clone(),
 
             database_url: require_env("DOCSRS_DATABASE_URL")?,

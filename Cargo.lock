@@ -473,9 +473,9 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "7.1.2"
+version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64af39a9a6805d715f8b72307d70815ed1ee38ef84e9de250fcdd56fe75a0e19"
+checksum = "9f04ef23e6e584a3f8f7860274e0daf1c46e859d387cebdad1de54091d7cea08"
 dependencies = [
  "git2",
  "serde",
@@ -3106,9 +3106,8 @@ dependencies = [
 
 [[package]]
 name = "rustwide"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "689b0858f1118c80702a03f9cee1ab09955b55b4166b72457859212790afe129"
+version = "0.14.0"
+source = "git+https://github.com/l4l/rustwide.git?branch=registry-key#bd25fcf067ad47c42bc2431a83a4306de005f85a"
 dependencies = [
  "attohttpc",
  "base64 0.13.0",
