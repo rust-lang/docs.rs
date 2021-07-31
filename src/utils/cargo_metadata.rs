@@ -1,4 +1,5 @@
 use crate::error::Result;
+use anyhow::bail;
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,9 +25,7 @@ impl CargoMetadata {
         let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
             serde_json::from_str::<DeserializedMetadata>(serialized)?
         } else {
-            return Err(::failure::err_msg(
-                "invalid output returned by `cargo metadata`",
-            ));
+            bail!("invalid output returned by `cargo metadata`");
         };
 
         let root = metadata.resolve.root;

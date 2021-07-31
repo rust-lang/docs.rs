@@ -1,6 +1,5 @@
+use anyhow::Context;
 use crates_index::Crate;
-use failure::ResultExt;
-
 pub(crate) struct Crates {
     repo: git2::Repository,
 }
@@ -10,7 +9,7 @@ impl Crates {
         Self { repo }
     }
 
-    pub(crate) fn walk(&self, mut f: impl FnMut(Crate)) -> Result<(), failure::Error> {
+    pub(crate) fn walk(&self, mut f: impl FnMut(Crate)) -> Result<(), anyhow::Error> {
         log::debug!("Walking crates in index");
         let tree = self
             .repo
@@ -28,9 +27,9 @@ impl Crates {
                         log::warn!("not a crate '{}'", entry.name().unwrap());
                     }
                 }
-                Result::<(), failure::Error>::Ok(())
+                Result::<(), anyhow::Error>::Ok(())
             })()
-            .with_context(|_| {
+            .with_context(|| {
                 format!(
                     "loading crate details from '{}'",
                     entry.name().unwrap_or("<unknown>")

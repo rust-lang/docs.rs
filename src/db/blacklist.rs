@@ -1,17 +1,17 @@
-use failure::{Error, Fail};
+use crate::error::Result;
 use postgres::Client;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 enum BlacklistError {
-    #[fail(display = "crate {} is already on the blacklist", _0)]
+    #[error("crate {0} is already on the blacklist")]
     CrateAlreadyOnBlacklist(String),
 
-    #[fail(display = "crate {} is not on the blacklist", _0)]
+    #[error("crate {0} is not on the blacklist")]
     CrateNotOnBlacklist(String),
 }
 
 /// Returns whether the given name is blacklisted.
-pub fn is_blacklisted(conn: &mut Client, name: &str) -> Result<bool, Error> {
+pub fn is_blacklisted(conn: &mut Client, name: &str) -> Result<bool> {
     let rows = conn.query(
         "SELECT COUNT(*) FROM blacklisted_crates WHERE crate_name = $1;",
         &[&name],
@@ -22,7 +22,7 @@ pub fn is_blacklisted(conn: &mut Client, name: &str) -> Result<bool, Error> {
 }
 
 /// Returns the crate names on the blacklist, sorted ascending.
-pub fn list_crates(conn: &mut Client) -> Result<Vec<String>, Error> {
+pub fn list_crates(conn: &mut Client) -> Result<Vec<String>> {
     let rows = conn.query(
         "SELECT crate_name FROM blacklisted_crates ORDER BY crate_name asc;",
         &[],
@@ -32,7 +32,7 @@ pub fn list_crates(conn: &mut Client) -> Result<Vec<String>, Error> {
 }
 
 /// Adds a crate to the blacklist.
-pub fn add_crate(conn: &mut Client, name: &str) -> Result<(), Error> {
+pub fn add_crate(conn: &mut Client, name: &str) -> Result<()> {
     if is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()).into());
     }
@@ -46,7 +46,7 @@ pub fn add_crate(conn: &mut Client, name: &str) -> Result<(), Error> {
 }
 
 /// Removes a crate from the blacklist.
-pub fn remove_crate(conn: &mut Client, name: &str) -> Result<(), Error> {
+pub fn remove_crate(conn: &mut Client, name: &str) -> Result<()> {
     if !is_blacklisted(conn, name)? {
         return Err(BlacklistError::CrateNotOnBlacklist(name.into()).into());
     }

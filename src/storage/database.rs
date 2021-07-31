@@ -1,7 +1,7 @@
 use super::{Blob, StorageTransaction};
 use crate::db::Pool;
+use crate::error::Result;
 use crate::Metrics;
-use failure::Error;
 use postgres::Transaction;
 use std::sync::Arc;
 
@@ -15,13 +15,13 @@ impl DatabaseBackend {
         Self { pool, metrics }
     }
 
-    pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
+    pub(super) fn exists(&self, path: &str) -> Result<bool> {
         let query = "SELECT COUNT(*) > 0 FROM files WHERE path = $1";
         let mut conn = self.pool.get()?;
         Ok(conn.query(query, &[&path])?[0].get(0))
     }
 
-    pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
+    pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         use std::convert::TryInto;
 
         // The maximum size for a BYTEA (the type used for `content`) is 1GB, so this cast is safe:
@@ -67,7 +67,7 @@ impl DatabaseBackend {
         }
     }
 
-    pub(super) fn start_connection(&self) -> Result<DatabaseClient, Error> {
+    pub(super) fn start_connection(&self) -> Result<DatabaseClient> {
         Ok(DatabaseClient {
             conn: self.pool.get()?,
             metrics: self.metrics.clone(),
@@ -81,9 +81,7 @@ pub(super) struct DatabaseClient {
 }
 
 impl DatabaseClient {
-    pub(super) fn start_storage_transaction(
-        &mut self,
-    ) -> Result<DatabaseStorageTransaction<'_>, Error> {
+    pub(super) fn start_storage_transaction(&mut self) -> Result<DatabaseStorageTransaction<'_>> {
         Ok(DatabaseStorageTransaction {
             transaction: self.conn.transaction()?,
             metrics: &self.metrics,
@@ -97,7 +95,7 @@ pub(super) struct DatabaseStorageTransaction<'a> {
 }
 
 impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
-    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error> {
+    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<()> {
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
             self.transaction.query(
@@ -112,7 +110,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
         Ok(())
     }
 
-    fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error> {
+    fn delete_prefix(&mut self, prefix: &str) -> Result<()> {
         self.transaction.execute(
             "DELETE FROM files WHERE path LIKE $1;",
             &[&format!("{}%", prefix.replace('%', "\\%"))],
@@ -120,7 +118,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
         Ok(())
     }
 
-    fn complete(self: Box<Self>) -> Result<(), Error> {
+    fn complete(self: Box<Self>) -> Result<()> {
         self.transaction.commit()?;
         Ok(())
     }

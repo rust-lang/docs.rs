@@ -1,5 +1,5 @@
 use crate::{docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue, DocBuilder};
-use failure::Error;
+use anyhow::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;

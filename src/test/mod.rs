@@ -2,11 +2,11 @@ mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
 use crate::db::{Pool, PoolClient};
+use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
 use crate::{BuildQueue, Config, Context, Index, Metrics};
-use failure::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
@@ -17,7 +17,7 @@ use reqwest::{
 use std::fs;
 use std::{panic, sync::Arc};
 
-pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
+pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     let _ = dotenv::dotenv();
 
     let env = TestEnvironment::new();
@@ -31,7 +31,7 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
 
     if let Err(err) = result {
         eprintln!("the test failed: {}", err);
-        for cause in err.iter_causes() {
+        for cause in err.chain() {
             eprintln!("  caused by: {}", cause);
         }
 
@@ -42,25 +42,21 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
 }
 
 /// Make sure that a URL returns a status code between 200-299
-pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<(), Error> {
+pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
     let status = web.get(path).send()?.status();
     assert!(status.is_success(), "failed to GET {}: {}", path, status);
     Ok(())
 }
 
 /// Make sure that a URL returns a 404
-pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<(), Error> {
+pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
     let status = web.get(path).send()?.status();
     assert_eq!(status, 404, "GET {} should have been a 404", path);
     Ok(())
 }
 
 /// Make sure that a URL redirects to a specific page
-pub(crate) fn assert_redirect(
-    path: &str,
-    expected_target: &str,
-    web: &TestFrontend,
-) -> Result<(), Error> {
+pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
     // Reqwest follows redirects automatically
     let response = web.get(path).send()?;
     let status = response.status();
@@ -249,31 +245,31 @@ impl TestEnvironment {
 }
 
 impl Context for TestEnvironment {
-    fn config(&self) -> Result<Arc<Config>, Error> {
+    fn config(&self) -> Result<Arc<Config>> {
         Ok(TestEnvironment::config(self))
     }
 
-    fn build_queue(&self) -> Result<Arc<BuildQueue>, Error> {
+    fn build_queue(&self) -> Result<Arc<BuildQueue>> {
         Ok(TestEnvironment::build_queue(self))
     }
 
-    fn storage(&self) -> Result<Arc<Storage>, Error> {
+    fn storage(&self) -> Result<Arc<Storage>> {
         Ok(TestEnvironment::storage(self))
     }
 
-    fn pool(&self) -> Result<Pool, Error> {
+    fn pool(&self) -> Result<Pool> {
         Ok(self.db().pool())
     }
 
-    fn metrics(&self) -> Result<Arc<Metrics>, Error> {
+    fn metrics(&self) -> Result<Arc<Metrics>> {
         Ok(self.metrics())
     }
 
-    fn index(&self) -> Result<Arc<Index>, Error> {
+    fn index(&self) -> Result<Arc<Index>> {
         Ok(self.index())
     }
 
-    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>, Error> {
+    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>> {
         Ok(self.repository_stats_updater())
     }
 }
@@ -285,7 +281,7 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Self, Error> {
+    fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());

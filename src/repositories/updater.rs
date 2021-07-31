@@ -119,7 +119,7 @@ impl RepositoryStatsUpdater {
             };
             return match res {
                 Ok(repo_id) => Ok(Some(repo_id)),
-                Err(err) => failure::bail!("failed to collect `{}` stats: {}", updater.host(), err),
+                Err(err) => anyhow::bail!("failed to collect `{}` stats: {}", updater.host(), err),
             };
         }
         // It means that none of our updaters have a matching host.

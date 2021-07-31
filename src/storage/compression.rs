@@ -1,4 +1,4 @@
-use failure::Error;
+use anyhow::Error;
 use std::{collections::HashSet, fmt, io::Read};
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;

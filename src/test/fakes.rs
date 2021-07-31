@@ -3,8 +3,8 @@ use crate::docbuilder::{BuildResult, DocCoverage};
 use crate::index::api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::Storage;
 use crate::utils::{Dependency, MetadataPackage, Target};
+use anyhow::{Context, Error};
 use chrono::{DateTime, Utc};
-use failure::{Error, ResultExt};
 use postgres::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -278,13 +278,13 @@ impl<'a> FakeRelease<'a> {
 
             for (path, data) in files {
                 if path.starts_with('/') {
-                    failure::bail!("absolute paths not supported");
+                    anyhow::bail!("absolute paths not supported");
                 }
                 // allow `src/main.rs`
                 if let Some(parent) = Path::new(path).parent() {
                     let path = path_prefix.join(parent);
                     fs::create_dir_all(&path)
-                        .with_context(|_| format!("failed to create {}", path.display()))?;
+                        .with_context(|| format!("failed to create {}", path.display()))?;
                 }
                 let file = path_prefix.join(&path);
                 log::debug!("writing file {}", file.display());

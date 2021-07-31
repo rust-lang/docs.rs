@@ -11,7 +11,9 @@ use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_dir_all, parse_rustc_version, CargoMetadata};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
+use anyhow::{anyhow, bail, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
+use failure::Error as FailureError;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
@@ -64,8 +66,10 @@ impl RustwideBuilder {
             builder = builder.fast_init(true);
         }
 
-        let workspace = builder.init()?;
-        workspace.purge_all_build_dirs()?;
+        let workspace = builder.init().map_err(FailureError::compat)?;
+        workspace
+            .purge_all_build_dirs()
+            .map_err(FailureError::compat)?;
 
         let toolchain = Toolchain::dist(&config.toolchain);
 
@@ -109,7 +113,7 @@ impl RustwideBuilder {
                 if let Some(&ToolchainError::NotInstalled) = err.downcast_ref::<ToolchainError>() {
                     Vec::new()
                 } else {
-                    return Err(err);
+                    return Err(err.compat().into());
                 }
             }
         };
@@ -128,14 +132,20 @@ impl RustwideBuilder {
         // and will not be reinstalled until explicitly requested by a crate.
         for target in installed_targets {
             if !targets_to_install.remove(&target) {
-                self.toolchain.remove_target(&self.workspace, &target)?;
+                self.toolchain
+                    .remove_target(&self.workspace, &target)
+                    .map_err(FailureError::compat)?;
             }
         }
 
-        self.toolchain.install(&self.workspace)?;
+        self.toolchain
+            .install(&self.workspace)
+            .map_err(FailureError::compat)?;
 
         for target in &targets_to_install {
-            self.toolchain.add_target(&self.workspace, target)?;
+            self.toolchain
+                .add_target(&self.workspace, target)
+                .map_err(FailureError::compat)?;
         }
         // NOTE: rustup will automatically refuse to update the toolchain
         // if `rustfmt` is not available in the newer version
@@ -165,9 +175,7 @@ impl RustwideBuilder {
             info!("found rustc {}", line);
             Ok(line.clone())
         } else {
-            Err(::failure::err_msg(
-                "invalid output returned by `rustc --version`",
-            ))
+            Err(anyhow!("invalid output returned by `rustc --version`",))
         }
     }
 
@@ -183,40 +191,47 @@ impl RustwideBuilder {
         let mut build_dir = self
             .workspace
             .build_dir(&format!("essential-files-{}", rustc_version));
-        build_dir.purge()?;
+        build_dir.purge().map_err(FailureError::compat)?;
 
         // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        krate.fetch(&self.workspace)?;
+        krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
+                (|| -> Result<()> {
+                    let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
 
-                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
-                if !res.result.successful {
-                    failure::bail!("failed to build dummy crate for {}", self.rustc_version);
-                }
+                    let res =
+                        self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
+                    if !res.result.successful {
+                        bail!("failed to build dummy crate for {}", self.rustc_version);
+                    }
 
-                info!("copying essential files for {}", self.rustc_version);
-                let source = build.host_target_dir().join("doc");
-                let dest = tempfile::Builder::new()
-                    .prefix("essential-files")
-                    .tempdir()?;
-                copy_dir_all(source, &dest)?;
-                add_path_into_database(&self.storage, "", &dest)?;
-                conn.query(
-                    "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
+                    info!("copying essential files for {}", self.rustc_version);
+                    let source = build.host_target_dir().join("doc");
+                    let dest = tempfile::Builder::new()
+                        .prefix("essential-files")
+                        .tempdir()?;
+                    copy_dir_all(source, &dest)?;
+                    add_path_into_database(&self.storage, "", &dest)?;
+                    conn.query(
+                        "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
                      ON CONFLICT (name) DO UPDATE SET value = $1;",
-                    &[&Value::String(self.rustc_version.clone())],
-                )?;
+                        &[&Value::String(self.rustc_version.clone())],
+                    )?;
 
-                Ok(())
-            })?;
+                    Ok(())
+                })()
+                .map_err(|e| failure::Error::from_boxed_compat(e.into()))
+            })
+            .map_err(|e| e.compat())?;
 
-        build_dir.purge()?;
-        krate.purge_from_cache(&self.workspace)?;
+        build_dir.purge().map_err(FailureError::compat)?;
+        krate
+            .purge_from_cache(&self.workspace)
+            .map_err(FailureError::compat)?;
         Ok(())
     }
 
@@ -270,14 +285,13 @@ impl RustwideBuilder {
         let limits = Limits::for_crate(&mut conn, name)?;
         #[cfg(target_os = "linux")]
         if !self.config.disable_memory_limit {
-            use failure::ResultExt;
-
+            use anyhow::Context;
             let mem_info = procfs::Meminfo::new().context("failed to read /proc/meminfo")?;
             let available = mem_info
                 .mem_available
                 .expect("kernel version too old for determining memory limit");
             if limits.memory() as u64 > available {
-                failure::bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
+                bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
                     name, version, limits.memory() / 1024 / 1024, available / 1024 / 1024
                 );
             } else {
@@ -290,125 +304,133 @@ impl RustwideBuilder {
         }
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
-        build_dir.purge()?;
+        build_dir.purge().map_err(FailureError::compat)?;
 
         let krate = match kind {
             PackageKind::Local(path) => Crate::local(path),
             PackageKind::CratesIo => Crate::crates_io(name, version),
             PackageKind::Registry(registry) => Crate::registry(registry, name, version),
         };
-        krate.fetch(&self.workspace)?;
+        krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 
         let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                use docsrs_metadata::BuildTargets;
+                (|| -> Result<bool> {
+                    use docsrs_metadata::BuildTargets;
 
-                let mut has_docs = false;
-                let mut successful_targets = Vec::new();
-                let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
-                let BuildTargets {
-                    default_target,
-                    other_targets,
-                } = metadata.targets(self.config.include_default_targets);
+                    let mut has_docs = false;
+                    let mut successful_targets = Vec::new();
+                    let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
+                    let BuildTargets {
+                        default_target,
+                        other_targets,
+                    } = metadata.targets(self.config.include_default_targets);
 
-                // Perform an initial build
-                let res =
-                    self.execute_build(default_target, true, build, &limits, &metadata, false)?;
-                if res.result.successful {
-                    if let Some(name) = res.cargo_metadata.root().library_name() {
-                        let host_target = build.host_target_dir();
-                        has_docs = host_target.join("doc").join(name).is_dir();
+                    // Perform an initial build
+                    let res =
+                        self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+                    if res.result.successful {
+                        if let Some(name) = res.cargo_metadata.root().library_name() {
+                            let host_target = build.host_target_dir();
+                            has_docs = host_target.join("doc").join(name).is_dir();
+                        }
                     }
-                }
 
-                let mut algs = HashSet::new();
-                if has_docs {
-                    debug!("adding documentation for the default target to the database");
-                    self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
+                    let mut algs = HashSet::new();
+                    if has_docs {
+                        debug!("adding documentation for the default target to the database");
+                        self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
-                    successful_targets.push(res.target.clone());
+                        successful_targets.push(res.target.clone());
 
-                    // Then build the documentation for all the targets
-                    // Limit the number of targets so that no one can try to build all 200000 possible targets
-                    for target in other_targets.into_iter().take(limits.targets()) {
-                        debug!("building package {} {} for {}", name, version, target);
-                        self.build_target(
-                            target,
-                            build,
-                            &limits,
-                            local_storage.path(),
-                            &mut successful_targets,
-                            &metadata,
-                        )?;
-                    }
-                    let new_algs = self.upload_docs(name, version, local_storage.path())?;
+                        // Then build the documentation for all the targets
+                        // Limit the number of targets so that no one can try to build all 200000 possible targets
+                        for target in other_targets.into_iter().take(limits.targets()) {
+                            debug!("building package {} {} for {}", name, version, target);
+                            self.build_target(
+                                target,
+                                build,
+                                &limits,
+                                local_storage.path(),
+                                &mut successful_targets,
+                                &metadata,
+                            )?;
+                        }
+                        let new_algs = self.upload_docs(name, version, local_storage.path())?;
+                        algs.extend(new_algs);
+                    };
+
+                    // Store the sources even if the build fails
+                    debug!("adding sources into database");
+                    let prefix = format!("sources/{}/{}", name, version);
+                    let (files_list, new_algs) =
+                        add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
                     algs.extend(new_algs);
-                };
 
-                // Store the sources even if the build fails
-                debug!("adding sources into database");
-                let prefix = format!("sources/{}/{}", name, version);
-                let (files_list, new_algs) =
-                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
-                algs.extend(new_algs);
-
-                let has_examples = build.host_source_dir().join("examples").is_dir();
-                if res.result.successful {
-                    self.metrics.successful_builds.inc();
-                } else if res.cargo_metadata.root().is_library() {
-                    self.metrics.failed_builds.inc();
-                } else {
-                    self.metrics.non_library_builds.inc();
-                }
-
-                let release_data = match self.index.api().get_release_data(name, version) {
-                    Ok(data) => data,
-                    Err(err) => {
-                        warn!("{:#?}", err);
-                        ReleaseData::default()
+                    let has_examples = build.host_source_dir().join("examples").is_dir();
+                    if res.result.successful {
+                        self.metrics.successful_builds.inc();
+                    } else if res.cargo_metadata.root().is_library() {
+                        self.metrics.failed_builds.inc();
+                    } else {
+                        self.metrics.non_library_builds.inc();
                     }
-                };
 
-                let cargo_metadata = res.cargo_metadata.root();
-                let repository = self.get_repo(cargo_metadata)?;
+                    let release_data = match self.index.api().get_release_data(name, version) {
+                        Ok(data) => data,
+                        Err(err) => {
+                            warn!("{:#?}", err);
+                            ReleaseData::default()
+                        }
+                    };
 
-                let release_id = add_package_into_database(
-                    &mut conn,
-                    cargo_metadata,
-                    &build.host_source_dir(),
-                    &res.result,
-                    &res.target,
-                    files_list,
-                    successful_targets,
-                    &release_data,
-                    has_docs,
-                    has_examples,
-                    algs,
-                    repository,
-                )?;
+                    let cargo_metadata = res.cargo_metadata.root();
+                    let repository = self.get_repo(cargo_metadata)?;
 
-                if let Some(doc_coverage) = res.doc_coverage {
-                    add_doc_coverage(&mut conn, release_id, doc_coverage)?;
-                }
+                    let release_id = add_package_into_database(
+                        &mut conn,
+                        cargo_metadata,
+                        &build.host_source_dir(),
+                        &res.result,
+                        &res.target,
+                        files_list,
+                        successful_targets,
+                        &release_data,
+                        has_docs,
+                        has_examples,
+                        algs,
+                        repository,
+                    )?;
 
-                let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
-                let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
-                self.storage.store_one(build_log_path, res.build_log)?;
+                    if let Some(doc_coverage) = res.doc_coverage {
+                        add_doc_coverage(&mut conn, release_id, doc_coverage)?;
+                    }
 
-                // Some crates.io crate data is mutable, so we proactively update it during a release
-                match self.index.api().get_crate_data(name) {
-                    Ok(crate_data) => update_crate_data_in_database(&mut conn, name, &crate_data)?,
-                    Err(err) => warn!("{:#?}", err),
-                }
+                    let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
+                    let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
+                    self.storage.store_one(build_log_path, res.build_log)?;
 
-                Ok(res.result.successful)
-            })?;
+                    // Some crates.io crate data is mutable, so we proactively update it during a release
+                    match self.index.api().get_crate_data(name) {
+                        Ok(crate_data) => {
+                            update_crate_data_in_database(&mut conn, name, &crate_data)?
+                        }
+                        Err(err) => warn!("{:#?}", err),
+                    }
 
-        build_dir.purge()?;
-        krate.purge_from_cache(&self.workspace)?;
+                    Ok(res.result.successful)
+                })()
+                .map_err(|e| failure::Error::from_boxed_compat(e.into()))
+            })
+            .map_err(|e| e.compat())?;
+
+        build_dir.purge().map_err(FailureError::compat)?;
+        krate
+            .purge_from_cache(&self.workspace)
+            .map_err(FailureError::compat)?;
         local_storage.close()?;
         Ok(successful)
     }
@@ -531,7 +553,7 @@ impl RustwideBuilder {
 
         let successful = logging::capture(&storage, || {
             self.prepare_command(build, target, metadata, limits, rustdoc_flags)
-                .and_then(|command| command.run().map_err(failure::Error::from))
+                .and_then(|command| command.run().map_err(Error::from))
                 .is_ok()
         });
 
@@ -573,7 +595,9 @@ impl RustwideBuilder {
         // If the explicit target is not a tier one target, we need to install it.
         if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
             // This is a no-op if the target is already installed.
-            self.toolchain.add_target(&self.workspace, target)?;
+            self.toolchain
+                .add_target(&self.workspace, target)
+                .map_err(FailureError::compat)?;
         }
 
         // Add docs.rs specific arguments
@@ -679,7 +703,9 @@ impl RustwideBuilder {
     }
 
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
-        self.repository_stats_updater.load_repository(metadata)
+        self.repository_stats_updater
+            .load_repository(metadata)
+            .map_err(Into::into)
     }
 }
 

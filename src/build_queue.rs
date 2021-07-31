@@ -170,7 +170,7 @@ mod tests {
             let assert_next_and_fail = |name| -> Result<()> {
                 queue.process_next_crate(|krate| {
                     assert_eq!(name, krate.name);
-                    failure::bail!("simulate a failure");
+                    anyhow::bail!("simulate a failure");
                 })?;
                 Ok(())
             };
@@ -278,7 +278,7 @@ mod tests {
                 assert_eq!(queue.failed_count()?, 0);
                 queue.process_next_crate(|krate| {
                     assert_eq!("foo", krate.name);
-                    failure::bail!("this failed");
+                    anyhow::bail!("this failed");
                 })?;
             }
             assert_eq!(queue.failed_count()?, 1);

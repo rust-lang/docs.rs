@@ -1,7 +1,7 @@
 use super::data::{Crate, CrateName, Data, Release, Version};
 use std::collections::BTreeMap;
 
-pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, failure::Error> {
+pub(crate) fn load(conn: &mut postgres::Client) -> Result<Data, anyhow::Error> {
     let rows = conn.query(
         "
         SELECT

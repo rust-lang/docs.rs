@@ -1,5 +1,5 @@
+use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
-use failure::{err_msg, ResultExt};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::Deserialize;
@@ -68,7 +68,7 @@ impl Api {
     fn api_base(&self) -> Result<Url> {
         self.api_base
             .clone()
-            .ok_or_else(|| err_msg("index is missing an api base url"))
+            .with_context(|| anyhow!("index is missing an api base url"))
     }
 
     pub fn get_crate_data(&self, name: &str) -> Result<CrateData> {
@@ -100,7 +100,7 @@ impl Api {
         let url = {
             let mut url = self.api_base()?;
             url.path_segments_mut()
-                .map_err(|()| err_msg("Invalid API url"))?
+                .map_err(|()| anyhow!("Invalid API url"))?
                 .extend(&["api", "v1", "crates", name, "versions"]);
             url
         };
@@ -128,7 +128,7 @@ impl Api {
             .versions
             .into_iter()
             .find(|data| data.num == version)
-            .ok_or_else(|| err_msg("Could not find version in response"))?;
+            .with_context(|| anyhow!("Could not find version in response"))?;
 
         Ok((version.created_at, version.yanked, version.downloads))
     }
@@ -138,7 +138,7 @@ impl Api {
         let url = {
             let mut url = self.api_base()?;
             url.path_segments_mut()
-                .map_err(|()| err_msg("Invalid API url"))?
+                .map_err(|()| anyhow!("Invalid API url"))?
                 .extend(&["api", "v1", "crates", name, "owners"]);
             url
         };

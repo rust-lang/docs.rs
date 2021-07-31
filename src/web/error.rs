@@ -2,36 +2,25 @@ use crate::{
     db::PoolError,
     web::{page::WebPage, releases::Search, ErrorPage},
 };
-use failure::Fail;
 use iron::{status::Status, Handler, IronError, IronResult, Request, Response};
-use std::{error::Error, fmt};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, thiserror::Error)]
 pub enum Nope {
+    #[error("Requested resource not found")]
     ResourceNotFound,
+    #[error("Requested build not found")]
     BuildNotFound,
+    #[error("Requested crate not found")]
     CrateNotFound,
+    #[error("Requested owner not found")]
     OwnerNotFound,
+    #[error("Requested crate does not have specified version")]
     VersionNotFound,
+    #[error("Search yielded no results")]
     NoResults,
+    #[error("Internal server error")]
     InternalServerError,
 }
-
-impl fmt::Display for Nope {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match *self {
-            Nope::ResourceNotFound => "Requested resource not found",
-            Nope::BuildNotFound => "Requested build not found",
-            Nope::CrateNotFound => "Requested crate not found",
-            Nope::OwnerNotFound => "Requested owner not found",
-            Nope::VersionNotFound => "Requested crate does not have specified version",
-            Nope::NoResults => "Search yielded no results",
-            Nope::InternalServerError => "Internal server error",
-        })
-    }
-}
-
-impl Error for Nope {}
 
 impl From<Nope> for IronError {
     fn from(err: Nope) -> IronError {
@@ -139,7 +128,7 @@ impl Handler for Nope {
 
 impl From<PoolError> for IronError {
     fn from(err: PoolError) -> IronError {
-        IronError::new(err.compat(), Status::InternalServerError)
+        IronError::new(err, Status::InternalServerError)
     }
 }
 

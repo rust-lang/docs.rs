@@ -1,7 +1,7 @@
 use super::{Blob, StorageTransaction};
 use crate::{Config, Metrics};
+use anyhow::{anyhow, Context, Error};
 use chrono::{DateTime, NaiveDateTime, Utc};
-use failure::Error;
 use futures_util::{
     future::TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
@@ -113,7 +113,7 @@ impl S3Backend {
 
             let mut body = res
                 .body
-                .ok_or_else(|| failure::err_msg("Received a response from S3 with no body"))?;
+                .with_context(|| anyhow!("Received a response from S3 with no body"))?;
 
             while let Some(data) = body.next().await.transpose()? {
                 content.write_all(data.as_ref())?;
@@ -262,7 +262,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                         log::error!("error deleting file from s3: {:?}", err);
                     }
 
-                    failure::bail!("deleting from s3 failed");
+                    anyhow::bail!("deleting from s3 failed");
                 }
 
                 continuation_token = list.next_continuation_token;

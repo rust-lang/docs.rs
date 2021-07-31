@@ -309,7 +309,7 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{wrapper, TestDatabase};
-    use failure::Error;
+    use anyhow::{Context, Error};
     use kuchiki::traits::TendrilSink;
     use std::collections::HashMap;
 
@@ -325,7 +325,7 @@ mod tests {
             version,
             db.repository_stats_updater(),
         )
-        .ok_or_else(|| failure::err_msg("could not fetch crate details"))?;
+        .with_context(|| anyhow::anyhow!("could not fetch crate details"))?;
 
         assert_eq!(
             details.last_successful_build,

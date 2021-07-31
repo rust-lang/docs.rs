@@ -5,9 +5,10 @@ mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
+use crate::error::Result;
 use crate::{db::Pool, Config, Metrics};
+use anyhow::ensure;
 use chrono::{DateTime, Utc};
-use failure::{err_msg, Error};
 use path_slash::PathExt;
 use std::{
     collections::{HashMap, HashSet},
@@ -19,8 +20,8 @@ use std::{
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
-#[derive(Debug, failure::Fail)]
-#[fail(display = "path not found")]
+#[derive(Debug, thiserror::Error)]
+#[error("path not found")]
 pub(crate) struct PathNotFoundError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -32,7 +33,7 @@ pub(crate) struct Blob {
     pub(crate) compression: Option<CompressionAlgorithm>,
 }
 
-fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> Result<(), Error> {
+fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> Result<()> {
     let path = path.as_ref();
 
     for file in path.read_dir()? {
@@ -48,13 +49,13 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> 
     Ok(())
 }
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
+pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     let mut files = Vec::new();
 
-    if !path.exists() {
-        return Err(err_msg("File not found"));
-    } else if path.is_file() {
+    ensure!(path.exists(), "File not found");
+
+    if path.is_file() {
         files.push(PathBuf::from(path.file_name().unwrap()));
     } else if path.is_dir() {
         get_file_list_from_dir(path, &mut files)?;
@@ -67,8 +68,8 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     Ok(files)
 }
 
-#[derive(Debug, failure::Fail)]
-#[fail(display = "invalid storage backend")]
+#[derive(Debug, thiserror::Error)]
+#[error("invalid storage backend")]
 pub(crate) struct InvalidStorageBackendError;
 
 #[derive(Debug)]
@@ -99,7 +100,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
+    pub fn new(pool: Pool, metrics: Arc<Metrics>, config: &Config) -> Result<Self> {
         Ok(Storage {
             backend: match config.storage_backend {
                 StorageKind::Database => {
@@ -110,14 +111,14 @@ impl Storage {
         })
     }
 
-    pub(crate) fn exists(&self, path: &str) -> Result<bool, Error> {
+    pub(crate) fn exists(&self, path: &str) -> Result<bool> {
         match &self.backend {
             StorageBackend::Database(db) => db.exists(path),
             StorageBackend::S3(s3) => s3.exists(path),
         }
     }
 
-    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
+    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         let mut blob = match &self.backend {
             StorageBackend::Database(db) => db.get(path, max_size),
             StorageBackend::S3(s3) => s3.get(path, max_size),
@@ -129,9 +130,9 @@ impl Storage {
         Ok(blob)
     }
 
-    fn transaction<T, F>(&self, f: F) -> Result<T, Error>
+    fn transaction<T, F>(&self, f: F) -> Result<T>
     where
-        F: FnOnce(&mut dyn StorageTransaction) -> Result<T, Error>,
+        F: FnOnce(&mut dyn StorageTransaction) -> Result<T>,
     {
         let mut conn;
         let mut trans: Box<dyn StorageTransaction> = match &self.backend {
@@ -154,7 +155,7 @@ impl Storage {
         &self,
         prefix: &Path,
         root_dir: &Path,
-    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>), Error> {
+    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>)> {
         let mut file_paths_and_mimes = HashMap::new();
         let mut algs = HashSet::with_capacity(1);
 
@@ -168,7 +169,7 @@ impl Storage {
                     .ok()
                     .map(|file| (file_path, file))
             })
-            .map(|(file_path, file)| -> Result<_, Error> {
+            .map(|(file_path, file)| -> Result<_> {
                 let alg = CompressionAlgorithm::default();
                 let content = compress(file, alg)?;
                 let bucket_path = prefix.join(&file_path).to_slash().unwrap();
@@ -192,7 +193,7 @@ impl Storage {
     }
 
     #[cfg(test)]
-    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<(), Error> {
+    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
         self.store_inner(blobs.into_iter().map(Ok))
     }
 
@@ -202,7 +203,7 @@ impl Storage {
         &self,
         path: impl Into<String>,
         content: impl Into<Vec<u8>>,
-    ) -> Result<CompressionAlgorithm, Error> {
+    ) -> Result<CompressionAlgorithm> {
         let path = path.into();
         let content = content.into();
         let alg = CompressionAlgorithm::default();
@@ -221,17 +222,14 @@ impl Storage {
         Ok(alg)
     }
 
-    fn store_inner(
-        &self,
-        blobs: impl IntoIterator<Item = Result<Blob, Error>>,
-    ) -> Result<(), Error> {
+    fn store_inner(&self, blobs: impl IntoIterator<Item = Result<Blob>>) -> Result<()> {
         let mut blobs = blobs.into_iter();
         self.transaction(|trans| {
             loop {
                 let batch: Vec<_> = blobs
                     .by_ref()
                     .take(MAX_CONCURRENT_UPLOADS)
-                    .collect::<Result<_, Error>>()?;
+                    .collect::<Result<_>>()?;
                 if batch.is_empty() {
                     break;
                 }
@@ -241,7 +239,7 @@ impl Storage {
         })
     }
 
-    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
+    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
         self.transaction(|trans| trans.delete_prefix(prefix))
     }
 
@@ -249,7 +247,7 @@ impl Storage {
     // we leak the web server, and Drop isn't executed in that case (since the leaked web server
     // still holds a reference to the storage).
     #[cfg(test)]
-    pub(crate) fn cleanup_after_test(&self) -> Result<(), Error> {
+    pub(crate) fn cleanup_after_test(&self) -> Result<()> {
         if let StorageBackend::S3(s3) = &self.backend {
             s3.cleanup_after_test()?;
         }
@@ -267,9 +265,9 @@ impl std::fmt::Debug for Storage {
 }
 
 trait StorageTransaction {
-    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<(), Error>;
-    fn delete_prefix(&mut self, prefix: &str) -> Result<(), Error>;
-    fn complete(self: Box<Self>) -> Result<(), Error>;
+    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<()>;
+    fn delete_prefix(&mut self, prefix: &str) -> Result<()>;
+    fn complete(self: Box<Self>) -> Result<()>;
 }
 
 fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
@@ -343,7 +341,7 @@ mod backend_tests {
     use super::*;
     use std::fs;
 
-    fn test_exists(storage: &Storage) -> Result<(), Error> {
+    fn test_exists(storage: &Storage) -> Result<()> {
         assert!(!storage.exists("path/to/file.txt").unwrap());
         let blob = Blob {
             path: "path/to/file.txt".into(),
@@ -358,7 +356,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_get_object(storage: &Storage) -> Result<(), Error> {
+    fn test_get_object(storage: &Storage) -> Result<()> {
         let blob = Blob {
             path: "foo/bar.txt".into(),
             mime: "text/plain".into(),
@@ -384,7 +382,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_get_too_big(storage: &Storage) -> Result<(), Error> {
+    fn test_get_too_big(storage: &Storage) -> Result<()> {
         const MAX_SIZE: usize = 1024;
 
         let small_blob = Blob {
@@ -418,7 +416,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_blobs(storage: &Storage, metrics: &Metrics) -> Result<(), Error> {
+    fn test_store_blobs(storage: &Storage, metrics: &Metrics) -> Result<()> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -451,7 +449,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_all(storage: &Storage, metrics: &Metrics) -> Result<(), Error> {
+    fn test_store_all(storage: &Storage, metrics: &Metrics) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -498,7 +496,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_batched_uploads(storage: &Storage) -> Result<(), Error> {
+    fn test_batched_uploads(storage: &Storage) -> Result<()> {
         let now = Utc::now();
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| {
@@ -523,7 +521,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_delete_prefix(storage: &Storage) -> Result<(), Error> {
+    fn test_delete_prefix(storage: &Storage) -> Result<()> {
         test_deletion(
             storage,
             "foo/bar/",
@@ -539,7 +537,7 @@ mod backend_tests {
         )
     }
 
-    fn test_delete_percent(storage: &Storage) -> Result<(), Error> {
+    fn test_delete_percent(storage: &Storage) -> Result<()> {
         // PostgreSQL treats "%" as a special char when deleting a prefix. Make sure any "%" in the
         // provided prefix is properly escaped.
         test_deletion(
@@ -557,7 +555,7 @@ mod backend_tests {
         start: &[&str],
         present: &[&str],
         missing: &[&str],
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         storage.store_blobs(
             start
                 .iter()

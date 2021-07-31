@@ -1,18 +1,18 @@
+use crate::error::Result;
 use crate::Storage;
-use failure::{Error, Fail};
 use postgres::Client;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
 static STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
 
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 enum CrateDeletionError {
-    #[fail(display = "crate is missing: {}", _0)]
+    #[error("crate is missing: {}", .0)]
     MissingCrate(String),
 }
 
-pub fn delete_crate(conn: &mut Client, storage: &Storage, name: &str) -> Result<(), Error> {
+pub fn delete_crate(conn: &mut Client, storage: &Storage, name: &str) -> Result<()> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
@@ -28,7 +28,7 @@ pub fn delete_version(
     storage: &Storage,
     name: &str,
     version: &str,
-) -> Result<(), Error> {
+) -> Result<()> {
     delete_version_from_database(conn, name, version)?;
 
     for prefix in STORAGE_PATHS_TO_DELETE {
@@ -38,7 +38,7 @@ pub fn delete_version(
     Ok(())
 }
 
-fn get_id(conn: &mut Client, name: &str) -> Result<i32, Error> {
+fn get_id(conn: &mut Client, name: &str) -> Result<i32> {
     let crate_id_res = conn.query("SELECT id FROM crates WHERE name = $1", &[&name])?;
     if let Some(row) = crate_id_res.into_iter().next() {
         Ok(row.get("id"))
@@ -56,7 +56,7 @@ const METADATA: &[(&str, &str)] = &[
     ("doc_coverage", "release_id"),
 ];
 
-fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<(), Error> {
+fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<()> {
     let crate_id = get_id(conn, name)?;
     let mut transaction = conn.transaction()?;
     for &(table, column) in METADATA {
@@ -88,7 +88,7 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
     transaction.commit().map_err(Into::into)
 }
 
-fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> Result<(), Error> {
+fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> Result<()> {
     let mut transaction = conn.transaction()?;
 
     transaction.execute(
@@ -120,16 +120,15 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{assert_success, wrapper};
-    use failure::Error;
     use postgres::Client;
 
-    fn crate_exists(conn: &mut Client, name: &str) -> Result<bool, Error> {
+    fn crate_exists(conn: &mut Client, name: &str) -> Result<bool> {
         Ok(!conn
             .query("SELECT * FROM crates WHERE name = $1;", &[&name])?
             .is_empty())
     }
 
-    fn release_exists(conn: &mut Client, id: i32) -> Result<bool, Error> {
+    fn release_exists(conn: &mut Client, id: i32) -> Result<bool> {
         Ok(!conn
             .query("SELECT * FROM releases WHERE id = $1;", &[&id])?
             .is_empty())
@@ -179,7 +178,7 @@ mod tests {
     #[test]
     fn test_delete_version() {
         wrapper(|env| {
-            fn owners(conn: &mut Client, crate_id: i32) -> Result<Vec<String>, Error> {
+            fn owners(conn: &mut Client, crate_id: i32) -> Result<Vec<String>> {
                 Ok(conn
                     .query(
                         "SELECT name FROM owners

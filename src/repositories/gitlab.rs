@@ -126,7 +126,7 @@ impl RepositoryForge for GitLab {
 
         if let Some(data) = response.data {
             if !response.errors.is_empty() {
-                failure::bail!("error updating repositories: {:?}", response.errors);
+                anyhow::bail!("error updating repositories: {:?}", response.errors);
             }
             for node in data.projects.nodes.into_iter().flatten() {
                 let repo = Repository {
@@ -154,7 +154,7 @@ impl RepositoryForge for GitLab {
         } else if rate_limit.map(|x| x < 1).unwrap_or(false) {
             Err(RateLimitReached.into())
         } else {
-            failure::bail!("no data")
+            anyhow::bail!("no data")
         }
     }
 }
@@ -248,6 +248,7 @@ struct GraphProject {
 mod tests {
     use super::GitLab;
     use crate::repositories::updater::{repository_name, RepositoryForge};
+    use crate::repositories::RateLimitReached;
     use mockito::mock;
 
     #[test]
@@ -263,11 +264,11 @@ mod tests {
         match updater.fetch_repository(
             &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
         ) {
-            Err(e) if format!("{:?}", e).contains("RateLimitReached") => {}
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
             x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
         }
         match updater.fetch_repositories(&[String::new()]) {
-            Err(e) if format!("{:?}", e).contains("RateLimitReached") => {}
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
             x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
         }
     }
