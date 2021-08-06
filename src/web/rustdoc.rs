@@ -831,19 +831,19 @@ mod test {
             let web = env.frontend();
 
             // check it works at all
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", &web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             // check it keeps the subpage
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", &web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", web)?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
             );
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", web)?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/blah.html"
@@ -851,7 +851,7 @@ mod test {
 
             // check it also works for deleted pages
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", &web)?;
+                latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", web)?;
             assert_eq!(redirect, "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
 
             Ok(())
@@ -891,7 +891,7 @@ mod test {
 
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/struct.Blah.html",
-                &web,
+                web,
             )?;
             assert_eq!(
                 redirect,
@@ -1049,7 +1049,7 @@ mod test {
             assert_redirect(
                 "/zstd/badge.svg",
                 "/zstd/badge.svg?version=0.5.1%2Bzstd.1.4.4",
-                &frontend,
+                frontend,
             )?;
             Ok(())
         })

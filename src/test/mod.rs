@@ -290,7 +290,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(&config, metrics, &schema)?;
+        let pool = Pool::new_with_schema(config, metrics, &schema)?;
         let repository_stats_updater = RepositoryStatsUpdater::new(config, pool.clone());
 
         let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
