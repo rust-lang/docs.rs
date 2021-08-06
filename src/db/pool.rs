@@ -61,7 +61,7 @@ impl Pool {
     ) -> R {
         #[cfg(test)]
         {
-            f(&self.pool.lock().unwrap().as_ref().unwrap())
+            f(self.pool.lock().unwrap().as_ref().unwrap())
         }
         #[cfg(not(test))]
         {

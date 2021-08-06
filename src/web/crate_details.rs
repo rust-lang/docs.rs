@@ -323,7 +323,7 @@ mod tests {
             &mut db.conn(),
             package,
             version,
-            &db.repository_stats_updater(),
+            db.repository_stats_updater(),
         )
         .ok_or_else(|| failure::err_msg("could not fetch crate details"))?;
 
@@ -358,11 +358,11 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
-            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.3", Some("0.0.2"))?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.4", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.5", Some("0.0.2"))?;
+            assert_last_successful_build_equals(db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.2", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.3", Some("0.0.2"))?;
+            assert_last_successful_build_equals(db, "foo", "0.0.4", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.5", Some("0.0.2"))?;
             Ok(())
         });
     }
@@ -388,9 +388,9 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
-            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.2", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.2", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.3", None)?;
             Ok(())
         });
     }
@@ -413,10 +413,10 @@ mod tests {
                 .create()?;
             env.fake_release().name("foo").version("0.0.4").create()?;
 
-            assert_last_successful_build_equals(&db, "foo", "0.0.1", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.2", Some("0.0.4"))?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.3", None)?;
-            assert_last_successful_build_equals(&db, "foo", "0.0.4", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.1", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.2", Some("0.0.4"))?;
+            assert_last_successful_build_equals(db, "foo", "0.0.3", None)?;
+            assert_last_successful_build_equals(db, "foo", "0.0.4", None)?;
             Ok(())
         });
     }
@@ -456,7 +456,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.2.0",
-                &db.repository_stats_updater(),
+                db.repository_stats_updater(),
             )
             .unwrap();
             assert_eq!(
@@ -531,7 +531,7 @@ mod tests {
                     &mut db.conn(),
                     "foo",
                     version,
-                    &db.repository_stats_updater(),
+                    db.repository_stats_updater(),
                 )
                 .unwrap();
                 assert_eq!(
@@ -561,7 +561,7 @@ mod tests {
                     &mut db.conn(),
                     "foo",
                     version,
-                    &db.repository_stats_updater(),
+                    db.repository_stats_updater(),
                 )
                 .unwrap();
                 assert_eq!(
@@ -592,7 +592,7 @@ mod tests {
                     &mut db.conn(),
                     "foo",
                     version,
-                    &db.repository_stats_updater(),
+                    db.repository_stats_updater(),
                 )
                 .unwrap();
                 assert_eq!(
@@ -631,7 +631,7 @@ mod tests {
                     &mut db.conn(),
                     "foo",
                     version,
-                    &db.repository_stats_updater(),
+                    db.repository_stats_updater(),
                 )
                 .unwrap();
                 assert_eq!(
@@ -693,7 +693,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
-                &db.repository_stats_updater(),
+                db.repository_stats_updater(),
             )
             .unwrap();
             assert_eq!(
@@ -723,7 +723,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
-                &db.repository_stats_updater(),
+                db.repository_stats_updater(),
             )
             .unwrap();
             let mut owners = details.owners;
@@ -752,7 +752,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
-                &db.repository_stats_updater(),
+                db.repository_stats_updater(),
             )
             .unwrap();
             assert_eq!(
@@ -776,7 +776,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
-                &db.repository_stats_updater(),
+                db.repository_stats_updater(),
             )
             .unwrap();
             assert_eq!(
