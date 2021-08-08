@@ -1,7 +1,7 @@
 {%- extends "base.html" -%}
 {%- import "releases/header.html" as release_macros -%}
 
-{%- block title -%}Releases - Docs.rs{%- endblock title -%}
+{%- block title -%}{{ title | default(value="Releases - Docs.rs")}}{%- endblock title -%}
 
 {%- block header -%}
     {# These all have defaults so searches work #}
