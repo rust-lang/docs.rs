@@ -12,7 +12,6 @@ use crate::utils::{copy_dir_all, parse_rustc_version, CargoMetadata};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
-use failure::ResultExt;
 use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
@@ -271,6 +270,8 @@ impl RustwideBuilder {
         let limits = Limits::for_crate(&mut conn, name)?;
         #[cfg(target_os = "linux")]
         if !self.config.disable_memory_limit {
+            use failure::ResultExt;
+
             let mem_info = procfs::Meminfo::new().context("failed to read /proc/meminfo")?;
             let available = mem_info
                 .mem_available
