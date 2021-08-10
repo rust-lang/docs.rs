@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context as ErrContext, Error, Result};
+use anyhow::{anyhow, Context as _, Error, Result};
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
@@ -26,7 +26,7 @@ pub fn main() {
         }
         eprintln!("{}", msg);
 
-        let backtrace = format!("{}", err.backtrace());
+        let backtrace = err.backtrace().to_string();
         if !backtrace.is_empty() {
             eprintln!("\nStack backtrace:\n{}", backtrace);
         }

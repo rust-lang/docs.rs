@@ -8,7 +8,7 @@ static STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
 
 #[derive(Debug, thiserror::Error)]
 enum CrateDeletionError {
-    #[error("crate is missing: {}", .0)]
+    #[error("crate is missing: {0}")]
     MissingCrate(String),
 }
 
