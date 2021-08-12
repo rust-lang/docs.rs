@@ -121,6 +121,7 @@ mod tests {
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
             ("/-/static/keyboard.js", "static resource"),
+            ("/-/static/source.js", "static resource"),
             ("/-/static/opensearch.xml", "static resource"),
             ("/releases", "/releases"),
             ("/releases/feed", "static resource"),
