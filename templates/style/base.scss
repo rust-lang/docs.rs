@@ -459,7 +459,7 @@ div.package-page-container {
             margin-top: 0;
         }
 
-        a.pure-menu-link {
+        .pure-menu-link {
             font-size: 14px;
             color: var(--color-standard);
             white-space: nowrap;
@@ -468,7 +468,7 @@ div.package-page-container {
             padding: 7px 8px;
         }
 
-        a.pure-menu-link:hover {
+        .pure-menu-link:hover {
             background-color: var(--color-background-code);
         }
 
@@ -779,4 +779,65 @@ div.search-page-search-form {
 h3 > code,
 h4 > code {
     display: inline-block;
+}
+
+ul.pure-menu-list {
+    li.toggle-source {
+        cursor: pointer;
+        border: 1px solid var(--color-border);
+        display: none;
+    }
+}
+
+@media screen and (min-width: 35.5em) {
+    ul.pure-menu-list {
+        li.toggle-source {
+            display: list-item;
+
+            button {
+                font-size: 14px;
+                color: var(--color-standard);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                padding: 7px 8px;
+                background: transparent;
+                border: 0;
+                width: 100%;
+            }
+
+            .right {
+                display: none;
+            }
+        }
+    }
+
+    #side-menu.collapsed {
+        max-width: 46px;
+
+        ul {
+            li:not(.toggle-source), .text {
+                display: none;
+            }
+            li.toggle-source {
+                .left {
+                    display: none;
+                }
+                .right {
+                    display: inline-block;
+                    margin-left: -4px;
+                }
+            }
+        }
+    }
+
+    #source-code {
+        pre {
+            margin-top: 0;
+        }
+
+        &.expanded {
+            width: calc(100% - 46px);
+        }
+    }
 }

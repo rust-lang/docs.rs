@@ -24,13 +24,19 @@
 {%- block body -%}
     <div class="container package-page-container">
         <div class="pure-g">
-            <div class="pure-u-1 {% if file_content %}pure-u-sm-7-24 pure-u-md-5-24{% endif %}">
+            <div id="side-menu" class="pure-u-1 {% if file_content %}pure-u-sm-7-24 pure-u-md-5-24{% endif %}">
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
+                        {# If we are displaying a file, we also add a button to hide the file sidebar #}
+                        {% if file_content %}
+                            <li class="pure-menu-item toggle-source">
+                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left" | fas(fw=true) }}</span><span class="right">{{ "chevron-right" | fas(fw=true) }}</span> <span class="text">Hide files</span></button>
+                            </li>
+                        {% endif %}
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ "folder-open" | far(fw=true) }} ..</a>
+                                <a href="../" class="pure-menu-link">{{ "folder-open" | far(fw=true) }} <span class="text">..</span></a>
                             </li>
                         {%- endif -%}
 
@@ -88,7 +94,7 @@
                                         {{ "file-archive" | far(fw=true) }}
                                     {%- endif -%}
 
-                                    {{ file.name }}
+                                    <span class="text">{{ file.name }}</span>
                                 </a>
                             </li>
                         {%- endfor -%}
@@ -98,7 +104,7 @@
 
             {# If the file has content, then display it in a codeblock #}
             {%- if file_content -%}
-                <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
+                <div id="source-code" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
                     <pre><code>{{ file_content }}</code></pre>
                 </div>
             {%- endif -%}
@@ -114,4 +120,7 @@
 {%- block javascript -%}
     {# Highlight.js JavaScript #}
     {{ macros::highlight_js(languages=["rust", "ini", "markdown"]) }}
+    {% if file_content %}
+        <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ docsrs_version() | slugify }}"></script>
+    {% endif %}
 {%- endblock javascript -%}
