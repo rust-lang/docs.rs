@@ -229,10 +229,10 @@ impl RustdocPage {
                 metrics.html_rewrite_ooms.inc();
 
                 let config = extension!(req, Config);
-                let err = failure::err_msg(format!(
+                let err = anyhow::anyhow!(
                     "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
                     file_path, config.max_parse_memory,
-                ));
+                );
 
                 ctry!(req, Err(err))
             }
@@ -696,6 +696,7 @@ impl Handler for SharedResourceHandler {
 #[cfg(test)]
 mod test {
     use crate::test::*;
+    use anyhow::Context;
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use std::collections::BTreeMap;
@@ -703,7 +704,7 @@ mod test {
     fn try_latest_version_redirect(
         path: &str,
         web: &TestFrontend,
-    ) -> Result<Option<String>, failure::Error> {
+    ) -> Result<Option<String>, anyhow::Error> {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         log::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
@@ -722,9 +723,9 @@ mod test {
         }
     }
 
-    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
+    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, anyhow::Error> {
         try_latest_version_redirect(path, web)?
-            .ok_or_else(|| failure::format_err!("no redirect found for {}", path))
+            .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
     }
 
     #[test]
@@ -1002,7 +1003,7 @@ mod test {
 
     #[test]
     fn yanked_release_shows_warning_in_nav() {
-        fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, failure::Error> {
+        fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             Ok(kuchiki::parse_html()
@@ -1206,7 +1207,7 @@ mod test {
         fn get_platform_links(
             path: &str,
             web: &TestFrontend,
-        ) -> Result<Vec<(String, String, String)>, failure::Error> {
+        ) -> Result<Vec<(String, String, String)>, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             let dom = kuchiki::parse_html().one(data);
@@ -1227,7 +1228,7 @@ mod test {
             web: &TestFrontend,
             path: &str,
             links: &[(&str, &str)],
-        ) -> Result<(), failure::Error> {
+        ) -> Result<(), anyhow::Error> {
             let mut links: BTreeMap<_, _> = links.iter().copied().collect();
 
             for (platform, link, rel) in get_platform_links(path, web)? {
@@ -1587,7 +1588,7 @@ mod test {
                 .create()?;
             let web = env.frontend();
 
-            let status = |version| -> Result<_, failure::Error> {
+            let status = |version| -> Result<_, anyhow::Error> {
                 let page =
                     kuchiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
                 let selector = format!(r#"ul > li a[href="/crate/hexponent/{}"]"#, version);

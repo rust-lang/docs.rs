@@ -180,7 +180,7 @@ fn get_search_results(
     mut query: &str,
     page: i64,
     limit: i64,
-) -> Result<(i64, Vec<Release>), failure::Error> {
+) -> Result<(i64, Vec<Release>), anyhow::Error> {
     query = query.trim();
     if query.is_empty() {
         return Ok((0, Vec::new()));
@@ -696,8 +696,8 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
+    use anyhow::Error;
     use chrono::{Duration, TimeZone};
-    use failure::Error;
     use kuchiki::traits::TendrilSink;
     use std::collections::HashSet;
 

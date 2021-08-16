@@ -1,7 +1,7 @@
 use crate::{db::Pool, error::Result};
+use anyhow::Context;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
-use failure::ResultExt;
 use notify::{watcher, RecursiveMode, Watcher};
 use path_slash::PathExt;
 use postgres::Client;
@@ -81,7 +81,7 @@ fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
     )?;
 
     if res.is_empty() {
-        failure::bail!("missing rustc version");
+        anyhow::bail!("missing rustc version");
     }
 
     if let Ok(vers) = res[0].try_get::<_, Value>("value") {
@@ -90,7 +90,7 @@ fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
         }
     }
 
-    failure::bail!("failed to parse the rustc version");
+    anyhow::bail!("failed to parse the rustc version");
 }
 
 pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
@@ -105,13 +105,13 @@ pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
     //
     // TODO: remove this when https://github.com/Gilnaa/globwalk/issues/29 is fixed
     let mut tera = Tera::default();
-    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY).with_context(|_| {
+    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY).with_context(|| {
         format!(
             "failed to search {:?} for tera templates",
             TEMPLATES_DIRECTORY
         )
     })?;
-    tera.add_template_files(template_files).with_context(|_| {
+    tera.add_template_files(template_files).with_context(|| {
         format!(
             "failed while loading tera templates in {:?}",
             TEMPLATES_DIRECTORY
@@ -170,9 +170,9 @@ fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<Strin
         // Strip the root directory from the path and use it as the template name.
         let name = path
             .strip_prefix(&root)
-            .with_context(|_| format!("{} is not a child of {}", path.display(), root.display()))?
+            .with_context(|| format!("{} is not a child of {}", path.display(), root.display()))?
             .to_slash()
-            .ok_or_else(|| failure::format_err!("failed to normalize {}", path.display()))?;
+            .with_context(|| anyhow::anyhow!("failed to normalize {}", path.display()))?;
         files.push((path.to_path_buf(), Some(name)));
     }
 

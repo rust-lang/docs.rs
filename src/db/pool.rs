@@ -122,14 +122,14 @@ impl r2d2::CustomizeConnection<Client, postgres::Error> for SetSchema {
     }
 }
 
-#[derive(Debug, failure::Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum PoolError {
-    #[fail(display = "the provided database URL was not valid")]
-    InvalidDatabaseUrl(#[fail(cause)] postgres::Error),
+    #[error("the provided database URL was not valid")]
+    InvalidDatabaseUrl(#[from] postgres::Error),
 
-    #[fail(display = "failed to create the database connection pool")]
-    PoolCreationFailed(#[fail(cause)] r2d2::Error),
+    #[error("failed to create the database connection pool")]
+    PoolCreationFailed(r2d2::Error),
 
-    #[fail(display = "failed to get a database connection")]
-    ClientError(#[fail(cause)] r2d2::Error),
+    #[error("failed to get a database connection")]
+    ClientError(r2d2::Error),
 }

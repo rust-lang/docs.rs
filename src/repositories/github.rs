@@ -144,7 +144,7 @@ impl RepositoryForge for GitHub {
                 ("RATE_LIMITED", []) => {
                     return Err(RateLimitReached.into());
                 }
-                _ => failure::bail!("error updating repositories: {}", error.message),
+                _ => anyhow::bail!("error updating repositories: {}", error.message),
             }
         }
 
@@ -258,6 +258,7 @@ struct GraphIssues {
 mod tests {
     use super::GitHub;
     use crate::repositories::updater::{repository_name, RepositoryForge};
+    use crate::repositories::RateLimitReached;
     use mockito::mock;
 
     #[test]
@@ -275,7 +276,7 @@ mod tests {
                 .create();
 
             match updater.fetch_repositories(&[String::new()]) {
-                Err(e) if format!("{:?}", e).contains("RateLimitReached") => {}
+                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
                 x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
             }
             Ok(())
@@ -295,7 +296,7 @@ mod tests {
                 .create();
 
             match updater.fetch_repositories(&[String::new()]) {
-                Err(e) if format!("{:?}", e).contains("RateLimitReached") => {}
+                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
                 x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
             }
             Ok(())

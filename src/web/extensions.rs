@@ -2,7 +2,7 @@ use crate::web::page::TemplateData;
 use crate::{
     db::Pool, repositories::RepositoryStatsUpdater, BuildQueue, Config, Context, Metrics, Storage,
 };
-use failure::Error;
+use anyhow::Error;
 use iron::{BeforeMiddleware, IronResult, Request};
 use std::sync::Arc;
 

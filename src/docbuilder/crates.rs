@@ -1,5 +1,5 @@
 use crate::error::Result;
-use failure::err_msg;
+use anyhow::{ensure, Context};
 use serde_json::Value;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -29,17 +29,15 @@ where
             continue;
         };
 
-        let obj = data
-            .as_object()
-            .ok_or_else(|| err_msg("Not a JSON object"))?;
+        let obj = data.as_object().context("Not a JSON object")?;
         let crate_name = obj
             .get("name")
             .and_then(|n| n.as_str())
-            .ok_or_else(|| err_msg("`name` not found in JSON object"))?;
+            .context("`name` not found in JSON object")?;
         let vers = obj
             .get("vers")
             .and_then(|n| n.as_str())
-            .ok_or_else(|| err_msg("`vers` not found in JSON object"))?;
+            .context("`vers` not found in JSON object")?;
 
         // Skip yanked crates
         if obj.get("yanked").and_then(|n| n.as_bool()).unwrap_or(false) {
@@ -65,9 +63,7 @@ pub fn crates_from_path<F>(path: &Path, func: &mut F) -> Result<()>
 where
     F: FnMut(&str, &str),
 {
-    if !path.is_dir() {
-        return Err(err_msg("Not a directory"));
-    }
+    ensure!(!path.is_dir(), "Not a directory");
 
     for file in path.read_dir()? {
         let file = file?;

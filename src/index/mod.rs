@@ -1,10 +1,10 @@
 use std::{path::PathBuf, process::Command};
 
+use anyhow::Context;
 use url::Url;
 
 use self::api::Api;
 use crate::error::Result;
-use failure::ResultExt;
 
 pub(crate) mod api;
 #[cfg(feature = "consistency_check")]
@@ -36,7 +36,7 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
         .tree()?;
     let file = tree
         .get_name("config.json")
-        .ok_or_else(|| failure::format_err!("registry index missing config"))?;
+        .with_context(|| anyhow::anyhow!("registry index missing config"))?;
     let config = serde_json::from_slice(repo.find_blob(file.id())?.content())?;
     Ok(config)
 }

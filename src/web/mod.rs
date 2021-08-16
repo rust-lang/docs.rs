@@ -94,11 +94,11 @@ mod source;
 mod statics;
 
 use crate::{impl_webpage, Context};
+use anyhow::Error;
 use chrono::{DateTime, Utc};
 use csp::CspMiddleware;
 use error::Nope;
 use extensions::InjectExtensions;
-use failure::Error;
 use iron::{
     self,
     headers::{Expires, HttpDate},

@@ -5,8 +5,8 @@ use self::macros::MetricFromOpts;
 use crate::db::Pool;
 use crate::target::TargetAtom;
 use crate::BuildQueue;
+use anyhow::Error;
 use dashmap::DashMap;
-use failure::Error;
 use prometheus::proto::MetricFamily;
 use std::time::{Duration, Instant};
 

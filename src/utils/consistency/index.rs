@@ -1,7 +1,7 @@
 use super::data::{Crate, CrateName, Data, Release, Version};
 use crate::Index;
 
-pub(crate) fn load(index: &Index) -> Result<Data, failure::Error> {
+pub(crate) fn load(index: &Index) -> Result<Data, anyhow::Error> {
     let mut data = Data::default();
 
     index.crates()?.walk(|krate| {

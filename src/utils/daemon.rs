@@ -3,7 +3,7 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{utils::queue_builder, Context, DocBuilder, RustwideBuilder};
-use failure::Error;
+use anyhow::Error;
 use log::{debug, error, info};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -87,11 +87,11 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     )?;
 
     // Never returns; `server` blocks indefinitely when dropped
-    // NOTE: if a failure occurred earlier in `start_daemon`, the server will _not_ be joined -
+    // NOTE: if a anyhow occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.
     server_thread
         .join()
-        .map_err(|_| failure::err_msg("web server panicked"))
+        .map_err(|_| anyhow::anyhow!("web server panicked"))
 }
 
 pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>

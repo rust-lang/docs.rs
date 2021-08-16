@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use anyhow::{anyhow, Context as _, Error, Result};
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{remove_crate_priority, set_crate_priority};
@@ -10,7 +11,6 @@ use docs_rs::{
     BuildQueue, Config, Context, DocBuilder, Index, Metrics, PackageKind, RustwideBuilder, Server,
     Storage,
 };
-use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 use strum::VariantNames;
@@ -21,12 +21,14 @@ pub fn main() {
 
     if let Err(err) = CommandLine::from_args().handle_args() {
         let mut msg = format!("Error: {}", err);
-        for cause in err.iter_causes() {
+        for cause in err.chain() {
             write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
         }
         eprintln!("{}", msg);
-        if !err.backtrace().is_empty() {
-            eprintln!("\nStack backtrace:\n{}", err.backtrace());
+
+        let backtrace = err.backtrace().to_string();
+        if !backtrace.is_empty() {
+            eprintln!("\nStack backtrace:\n{}", backtrace);
         }
         std::process::exit(1);
     }
@@ -108,7 +110,7 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    pub fn handle_args(self) -> Result<(), Error> {
+    pub fn handle_args(self) -> Result<()> {
         let ctx = BinContext::new();
 
         match self {
@@ -166,7 +168,7 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Add {
                 crate_name,
@@ -205,7 +207,7 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Set { pattern, priority } => {
                 set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
@@ -239,7 +241,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
         self.subcommand.handle_args(ctx, self.skip_if_exists)
     }
 }
@@ -286,10 +288,10 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
         let docbuilder = DocBuilder::new(ctx.config()?, ctx.pool()?, ctx.build_queue()?);
 
-        let rustwide_builder = || -> Result<RustwideBuilder, Error> {
+        let rustwide_builder = || -> Result<RustwideBuilder> {
             let mut builder = RustwideBuilder::init(&ctx)?;
             builder.set_skip_build_if_exists(skip_if_exists);
             Ok(builder)
@@ -317,9 +319,10 @@ impl BuildSubcommand {
                     let registry_url = ctx.config()?.registry_url.clone();
                     builder
                         .build_package(
-                            &crate_name.ok_or_else(|| err_msg("must specify name if not local"))?,
+                            &crate_name
+                                .with_context(|| anyhow!("must specify name if not local"))?,
                             &crate_version
-                                .ok_or_else(|| err_msg("must specify version if not local"))?,
+                                .with_context(|| anyhow!("must specify version if not local"))?,
                             registry_url
                                 .as_ref()
                                 .map(|s| PackageKind::Registry(s.as_str()))
@@ -412,7 +415,7 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
+    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Migrate { version } => {
                 db::migrate(version, &mut *ctx.conn()?)
@@ -482,7 +485,7 @@ enum BlacklistSubcommand {
 }
 
 impl BlacklistSubcommand {
-    fn handle_args(self, ctx: BinContext) -> Result<(), Error> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         let mut conn = &mut *ctx.conn()?;
         match self {
             Self::List => {
@@ -545,14 +548,14 @@ impl BinContext {
         }
     }
 
-    fn conn(&self) -> Result<PoolClient, Error> {
+    fn conn(&self) -> Result<PoolClient> {
         Ok(self.pool()?.get()?)
     }
 }
 
 macro_rules! lazy {
     ( $(fn $name:ident($self:ident) -> $type:ty = $init:expr);+ $(;)? ) => {
-        $(fn $name(&$self) -> Result<Arc<$type>, Error> {
+        $(fn $name(&$self) -> Result<Arc<$type>> {
             Ok($self
                 .$name
                 .get_or_try_init::<_, Error>(|| Ok(Arc::new($init)))?
@@ -591,7 +594,7 @@ impl Context for BinContext {
         };
     }
 
-    fn pool(&self) -> Result<Pool, Error> {
+    fn pool(&self) -> Result<Pool> {
         Ok(self
             .pool
             .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?, self.metrics()?)?))?
