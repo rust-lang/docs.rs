@@ -52,7 +52,6 @@ where
     }
 
     if !name.is_empty() {
-        versions.reverse();
         for version in versions {
             func(&name, &version);
         }
