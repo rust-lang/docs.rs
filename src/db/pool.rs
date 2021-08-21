@@ -1,5 +1,6 @@
 use crate::metrics::Metrics;
 use crate::Config;
+use log::debug;
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 use std::sync::Arc;
@@ -20,6 +21,9 @@ pub struct Pool {
 
 impl Pool {
     pub fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Pool, PoolError> {
+        debug!(
+            "creating database pool (if this hangs, consider running `docker-compose up -d db s3`)"
+        );
         Self::new_inner(config, metrics, DEFAULT_SCHEMA)
     }
 
