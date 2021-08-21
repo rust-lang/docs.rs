@@ -707,6 +707,7 @@ impl RustwideBuilder {
             "--static-root-path", "/",
             "--cap-lints", "warn",
             "--disable-per-crate-search",
+            "--extern-html-root-takes-precedence",
         ];
 
         rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
