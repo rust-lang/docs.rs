@@ -152,4 +152,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --workspace --locked -- -D warnings
+          args: --all-features --all-targets --workspace --locked -- -D warnings
