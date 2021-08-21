@@ -41,6 +41,6 @@ impl Crates {
             }
         })?;
 
-        Ok(result?)
+        result
     }
 }

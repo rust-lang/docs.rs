@@ -1,5 +1,6 @@
 use self::diff::{Diff, Diffable};
 use crate::Index;
+use anyhow::Context;
 
 mod data;
 mod db;
