@@ -436,6 +436,10 @@ div.package-sheet-container {
 div.package-page-container {
     padding-bottom: 50px;
 
+    &.small-bottom-pad {
+        padding-bottom: 30px;
+    }
+
     div.package-menu {
         padding: 0 10px;
 
