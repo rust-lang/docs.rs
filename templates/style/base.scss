@@ -433,6 +433,8 @@ div.package-sheet-container {
     }
 }
 
+$sidebar-side-padding: 10px;
+
 div.package-page-container {
     padding-bottom: 50px;
 
@@ -441,7 +443,7 @@ div.package-page-container {
     }
 
     div.package-menu {
-        padding: 0 10px;
+        padding: 0 $sidebar-side-padding;
 
         li.pure-menu-heading {
             font-size: 1.3em;
@@ -816,6 +818,32 @@ ul.pure-menu-list {
         }
     }
 
+    #side-menu.source-view {
+        position: relative;
+
+        .package-menu {
+            position: -webkit-sticky;
+            position: sticky;
+            top: $top-navbar-height;
+            overflow: auto;
+            max-height: calc(100vh - #{$top-navbar-height});
+            height: calc(100% - #{$top-navbar-height});
+
+            .pure-menu-list {
+                position: absolute;
+                top: 0;
+                max-height: 100vh;
+                height: 100%;
+                width: calc(100% - #{$sidebar-side-padding} * 2);
+                padding-top: 5px;
+
+                .pure-menu-item {
+                    height: initial;
+                }
+            }
+        }
+    }
+
     #side-menu.collapsed {
         max-width: 46px;
 
@@ -838,6 +866,12 @@ ul.pure-menu-list {
     #source-code {
         pre {
             margin-top: 0;
+            margin-bottom: 0;
+            height: 100%;
+
+            code {
+                height: 100%;
+            }
         }
 
         &.expanded {
