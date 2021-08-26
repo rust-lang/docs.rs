@@ -300,12 +300,19 @@ impl std::str::FromStr for Metadata {
             }
         }
 
-        let table = manifest
+        let plain_table = manifest
+            .clone()
             .and_then(|t| table(t, "package"))
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs"))
             .and_then(|t| table(t, "rs"));
-        let mut metadata = if let Some(table) = table {
+        let quoted_table = manifest
+            .and_then(|t| table(t, "package"))
+            .and_then(|t| table(t, "metadata"))
+            .and_then(|t| table(t, "docs.rs"));
+        let mut metadata = if let Some(table) = plain_table {
+            Value::Table(table).try_into()?
+        } else if let Some(table) = quoted_table {
             Value::Table(table).try_into()?
         } else {
             Metadata::default()
@@ -408,6 +415,26 @@ mod test_parsing {
         )
         .unwrap();
         assert!(metadata.targets.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_quoted_table() {
+        // parse quoted keys
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata."docs.rs"]
+            features = [ "feature1", "feature2" ]
+            all-features = true
+            no-default-features = true
+            default-target = "x86_64-unknown-linux-gnu"
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+
+        assert!(metadata.features.is_some());
+        assert!(metadata.all_features);
+        assert!(metadata.no_default_features);
+        assert!(metadata.default_target.is_some());
     }
 }
 
