@@ -11,7 +11,6 @@ use docs_rs::{
     BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
 use once_cell::sync::OnceCell;
-use sentry_anyhow::capture_anyhow;
 use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
@@ -46,10 +45,6 @@ pub fn main() {
         if !backtrace.is_empty() {
             eprintln!("\nStack backtrace:\n{}", backtrace);
         }
-
-        capture_anyhow(&err);
-
-        eprintln!("{}", msg);
 
         // we need to drop the sentry guard here so all unsent
         // errors are sent to sentry
