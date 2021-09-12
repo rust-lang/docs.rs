@@ -1,4 +1,5 @@
 use crate::web::page::TemplateData;
+use lol_html::element;
 use lol_html::errors::RewritingError;
 use tera::Context;
 
@@ -15,20 +16,13 @@ pub(crate) fn rewrite_lol(
     templates: &TemplateData,
 ) -> Result<Vec<u8>, RewritingError> {
     use lol_html::html_content::{ContentType, Element};
-    use lol_html::{ElementContentHandlers, HtmlRewriter, MemorySettings, Settings};
+    use lol_html::{HtmlRewriter, MemorySettings, Settings};
 
     let templates = templates.templates.load();
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
     let tera_vendored_css = templates.render("rustdoc/vendored.html", &ctx).unwrap();
     let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();
     let tera_rustdoc_topbar = templates.render("rustdoc/topbar.html", &ctx).unwrap();
-
-    // Append `style.css` stylesheet after all head elements.
-    let head_handler = |head: &mut Element| {
-        head.append(&tera_head, ContentType::Html);
-
-        Ok(())
-    };
 
     // Before: <body> ... rustdoc content ... </body>
     // After:
@@ -64,35 +58,24 @@ pub(crate) fn rewrite_lol(
         Ok(())
     };
 
-    // Append `vendored.css` before `rustdoc.css`, so that the duplicate copy of
-    // `normalize.css` will be overridden by the later version.
-    let first_stylesheet_handler = |head: &mut Element| {
-        head.before(&tera_vendored_css, ContentType::Html);
-
-        Ok(())
-    };
-
-    let (head_selector, body_selector, first_stylesheet_selector) = (
-        "head".parse().unwrap(),
-        "body".parse().unwrap(),
-        "link[type='text/css'][href*='rustdoc']".parse().unwrap(),
-    );
-    let element_content_handlers = vec![
-        (
-            &head_selector,
-            ElementContentHandlers::default().element(head_handler),
-        ),
-        (
-            &body_selector,
-            ElementContentHandlers::default().element(body_handler),
-        ),
-        (
-            &first_stylesheet_selector,
-            ElementContentHandlers::default().element(first_stylesheet_handler),
-        ),
-    ];
     let settings = Settings {
-        element_content_handlers,
+        element_content_handlers: vec![
+            // Append `style.css` stylesheet after all head elements.
+            element!("head", |head: &mut Element| {
+                head.append(&tera_head, ContentType::Html);
+                Ok(())
+            }),
+            element!("body", body_handler),
+            // Append `vendored.css` before `rustdoc.css`, so that the duplicate copy of
+            // `normalize.css` will be overridden by the later version.
+            element!(
+                "link[type='text/css'][href*='rustdoc']",
+                |rustdoc_css: &mut Element| {
+                    rustdoc_css.before(&tera_vendored_css, ContentType::Html);
+                    Ok(())
+                }
+            ),
+        ],
         memory_settings: MemorySettings {
             max_allowed_memory_usage,
             ..MemorySettings::default()
@@ -103,10 +86,9 @@ pub(crate) fn rewrite_lol(
     // The input and output are always strings, we just use `&[u8]` so we only have to validate once.
     let mut buffer = Vec::new();
     // TODO: Make the rewriter persistent?
-    let mut writer = HtmlRewriter::try_new(settings, |bytes: &[u8]| {
+    let mut writer = HtmlRewriter::new(settings, |bytes: &[u8]| {
         buffer.extend_from_slice(bytes);
-    })
-    .expect("utf8 is a valid encoding");
+    });
 
     writer.write(html)?;
     writer.end()?;
