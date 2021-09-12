@@ -129,11 +129,8 @@ impl BuildQueue {
                 }
 
                 error!(
-                    "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
-                    to_process.name,
-                    to_process.version,
-                    e,
-                    e.backtrace()
+                    "Failed to build package {}-{} from queue: {}",
+                    to_process.name, to_process.version, e,
                 );
             }
         }

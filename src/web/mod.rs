@@ -15,11 +15,11 @@ macro_rules! ctry {
             Err(error) => {
                 let request: &::iron::Request = $req;
 
+                // TODO this should be `capture_anyhow` if error is `anyhow::Error`
                 ::log::error!(
-                    "called ctry!() on an `Err` value: {:?}\nnote: while attempting to fetch the route {:?}\n{:?}",
+                    "called ctry!() on an `Err` value: {:?}\nnote: while attempting to fetch the route {:?}",
                     error,
                     request.url,
-                    ::backtrace::Backtrace::new(),
                 );
 
                 // This is very ugly, but it makes it impossible to get a type inference error
@@ -48,9 +48,8 @@ macro_rules! cexpect {
                 let request: &::iron::Request = $req;
 
                 ::log::error!(
-                    "called cexpect!() on a `None` value while attempting to fetch the route {:?}\n{:?}",
+                    "called cexpect!() on a `None` value while attempting to fetch the route {:?}",
                     request.url,
-                    ::backtrace::Backtrace::new(),
                 );
 
                 // This is very ugly, but it makes it impossible to get a type inference error
