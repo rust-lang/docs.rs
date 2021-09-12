@@ -330,8 +330,23 @@ impl RustwideBuilder {
                     } = metadata.targets(self.config.include_default_targets);
 
                     // Perform an initial build
-                    let res =
+                    let mut res =
                         self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+
+                    // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
+                    let cargo_lock = build.host_source_dir().join("Cargo.lock");
+                    if !res.result.successful && cargo_lock.exists() {
+                        std::fs::remove_file(cargo_lock)?;
+                        res = self.execute_build(
+                            default_target,
+                            true,
+                            build,
+                            &limits,
+                            &metadata,
+                            false,
+                        )?;
+                    }
+
                     if res.result.successful {
                         if let Some(name) = res.cargo_metadata.root().library_name() {
                             let host_target = build.host_target_dir();
