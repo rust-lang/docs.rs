@@ -40,14 +40,14 @@
 
                                 {% if release_type == 'owner' -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="Published {{ release.release_time | timeformat(relative=true) }}">
+                                        title="Published {{ release.build_time | timeformat(relative=true) }}">
                                         {{ release.stars }}
                                         {{ "star" | fas }}
                                     </div>
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="{{ release.release_time | date(format='%FT%TZ') }}">
-                                        {{ release.release_time | timeformat(relative=true) }}
+                                        title="{{ release.build_time | date(format='%FT%TZ') }}">
+                                        {{ release.build_time | timeformat(relative=true) }}
                                     </div>
                                 {%- endif %}
                             </div>

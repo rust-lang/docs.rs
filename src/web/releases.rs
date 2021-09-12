@@ -32,22 +32,8 @@ pub struct Release {
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
-    pub(crate) release_time: DateTime<Utc>,
+    pub(crate) build_time: DateTime<Utc>,
     stars: i32,
-}
-
-impl Default for Release {
-    fn default() -> Release {
-        Release {
-            name: String::new(),
-            version: String::new(),
-            description: None,
-            target_name: None,
-            rustdoc_status: false,
-            release_time: Utc::now(),
-            stars: 0,
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -69,9 +55,9 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
-        Order::ReleaseTime => ("releases.release_time", false),
+        Order::ReleaseTime => ("builds.build_time", false),
         Order::GithubStars => ("repositories.stars", false),
-        Order::RecentFailures => ("releases.release_time", true),
+        Order::RecentFailures => ("builds.build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
     };
     let query = format!(
@@ -79,11 +65,12 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             releases.version,
             releases.description,
             releases.target_name,
-            releases.release_time,
             releases.rustdoc_status,
+            builds.build_time,
             repositories.stars
         FROM crates
         INNER JOIN releases ON crates.latest_version_id = releases.id
+        INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
             ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)) 
@@ -102,8 +89,8 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
-            release_time: row.get(4),
-            rustdoc_status: row.get(5),
+            rustdoc_status: row.get(4),
+            build_time: row.get(5),
             stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
         })
         .collect()
@@ -121,13 +108,14 @@ fn get_releases_by_owner(
                         releases.version,
                         releases.description,
                         releases.target_name,
-                        releases.release_time,
+                        builds.build_time,
                         releases.rustdoc_status,
                         repositories.stars,
                         owners.name,
                         owners.login
                  FROM crates
                  INNER JOIN releases ON releases.id = crates.latest_version_id
+                 INNER JOIN builds ON releases.id = builds.rid
                  INNER JOIN owner_rels ON owner_rels.cid = crates.id
                  INNER JOIN owners ON owners.id = owner_rels.oid
                  LEFT JOIN repositories ON releases.repository_id = repositories.id
@@ -153,7 +141,7 @@ fn get_releases_by_owner(
                 version: row.get(1),
                 description: row.get(2),
                 target_name: row.get(3),
-                release_time: row.get(4),
+                build_time: row.get(4),
                 rustdoc_status: row.get(5),
                 stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
             }
@@ -189,13 +177,13 @@ fn get_search_results(
 
     let statement = "
         SELECT
-            crates.name AS name,
-            releases.version AS version,
-            releases.description AS description,
-            releases.target_name AS target_name,
-            releases.release_time AS release_time,
-            releases.rustdoc_status AS rustdoc_status,
-            repositories.stars AS stars,
+            crates.name,
+            releases.version,
+            releases.description,
+            releases.target_name,
+            releases.release_time,
+            releases.rustdoc_status,
+            repositories.stars,
             COUNT(*) OVER() as total
         FROM crates
         INNER JOIN (
@@ -236,7 +224,8 @@ fn get_search_results(
             version: row.get("version"),
             description: row.get("description"),
             target_name: row.get("target_name"),
-            release_time: row.get("release_time"),
+            // FIXME: this is not great, but also doesn't seem the end of the world to show release time instead
+            build_time: row.get("release_time"),
             rustdoc_status: row.get("rustdoc_status"),
             stars: row.get::<_, Option<i32>>("stars").unwrap_or(0),
         })
