@@ -1,4 +1,36 @@
 (function() {
+    function focusSearchInput() {
+        // On the index page, we have a "#search" input. If we are on this page, we want to go back
+        // to this one and not the one in the header navbar.
+        var searchInput = document.getElementById("search");
+        if (searchInput) {
+            searchInput.focus();
+        } else {
+            document.getElementById("nav-search").focus()
+        }
+    }
+
+    function focusFirstSearchResult() {
+        var elem = document.querySelector(".recent-releases-container a.release");
+        if (elem) {
+            elem.focus();
+        }
+    }
+
+    function getWrappingLi(elem) {
+        while (elem.tagName !== "LI") {
+            elem = elem.parentElement;
+        }
+        return elem;
+    }
+
+    function focusOnLi(li) {
+        var elem = li.querySelector(".release");
+        if (elem) {
+            elem.focus();
+        }
+    }
+
     function getKey(ev) {
         if ("key" in ev && typeof ev.key != "undefined") {
             return ev.key;
@@ -6,44 +38,59 @@
         return String.fromCharCode(ev.charCode || ev.keyCode);
     }
 
-    var active = null;
+    function checkIfHasParent(elem, className) {
+        while (elem && elem.tagName !== "BODY") {
+            elem = elem.parentElement;
+            if (elem.classList.constains(className)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function handleKey(ev) {
-        if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
+        if (ev.ctrlKey || ev.altKey || ev.metaKey) {
+            return;
+        }
+        var tagName = document.activeElement.tagName;
+        if (["BODY", "INPUT"].indexOf(tagName) === -1 &&
+            tagName !== "A" &&
+            !checkIfHasParent(document.activeElement, "recent-releases-container"))
+        {
             return;
         }
 
         if (ev.which === 40) { // Down arrow
             ev.preventDefault();
-            if (active === null) {
-                active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
-            } else if (active.nextElementSibling) {
-                active.classList.remove("selected");
-                active = active.nextElementSibling;
+            if (tagName === "BODY") {
+                focusFirstSearchResult();
+            } else {
+                var wrappingLi = getWrappingLi(document.activeElement);
+                if (wrappingLi.nextElementSibling) {
+                    focusOnLi(wrappingLi.nextElementSibling);
+                }
             }
-            active.classList.add("selected");
         } else if (ev.which === 38) { // Up arrow
             ev.preventDefault();
-            if (active === null) {
-                active = document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li")[0];
-            } else if (active.previousElementSibling) {
-                active.classList.remove("selected");
-                active = active.previousElementSibling;
+            if (tagName === "A") {
+                var wrappingLi = getWrappingLi(document.activeElement);
+                if (wrappingLi.previousElementSibling)
+                {
+                    focusOnLi(wrappingLi.previousElementSibling);
+                } else {
+                    focusSearchInput();
+                }
+            } else if (tagName === "BODY") {
+                focusFirstSearchResult();
             }
-            active.classList.add("selected");
-            active.focus();
-        } else if (ev.which === 13) { // Return
-            if (active !== null) {
-                document.location.href = active.getElementsByTagName("a")[0].href;
-            }
-        } else {
+        } else if (ev.which === 27) { // Escape
+            document.activeElement.blur();
+        } else if (tagName !== "INPUT") {
             switch (getKey(ev)) {
                 case "s":
                 case "S":
                     ev.preventDefault();
-                    var searchInputNav = document.getElementsByClassName("search-input-nav");
-                    if (searchInputNav.length > 0) {
-                        searchInputNav[0].focus();
-                    }
+                    focusSearchInput();
                     break;
             }
         }
@@ -51,16 +98,4 @@
 
     document.onkeypress = handleKey;
     document.onkeydown = handleKey;
-
-    var crates = Array.prototype.slice.call(document.getElementsByClassName("recent-releases-container")[0].getElementsByTagName("li"));
-    for (var i = 0; i < crates.length; ++i) {
-        crates[i].addEventListener("mouseover", function (event) {
-            this.classList.remove("selected");
-            active = null;
-        });
-        crates[i].addEventListener("mouseout", function (event) {
-            this.classList.remove("selected");
-            active = null;
-        });
-    }
 })();
