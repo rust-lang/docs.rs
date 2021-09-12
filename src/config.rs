@@ -98,7 +98,7 @@ impl Config {
 
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
-            prefix,
+            prefix: prefix.clone(),
 
             database_url: require_env("DOCSRS_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
@@ -133,7 +133,7 @@ impl Config {
 
             local_archive_cache_path: env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
-                PathBuf::from(".archive_cache"),
+                prefix.join("archive_cache"),
             )?,
 
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
