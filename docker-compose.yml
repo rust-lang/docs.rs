@@ -53,15 +53,16 @@ services:
         entrypoint: >
             /bin/sh -c "
                 mkdir -p /data/rust-docs-rs;
-                minio server /data;
+                minio server /data --console-address ":9001";
             "
         ports:
             - "9000:9000"
+            - "9001:9001"
         volumes:
             - minio-data:/data
         environment:
-            MINIO_ACCESS_KEY: cratesfyi
-            MINIO_SECRET_KEY: secret_key
+            MINIO_ROOT_USER: cratesfyi
+            MINIO_ROOT_PASSWORD: secret_key
         healthcheck:
             test:
                 [

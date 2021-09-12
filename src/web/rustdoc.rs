@@ -338,11 +338,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     rendering_time.step("fetch from storage");
 
-    // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-    req_path.insert(0, "rustdoc");
-    req_path.insert(1, &name);
-    req_path.insert(2, &version);
-
     // Create the path to access the file from
     let mut path = req_path.join("/");
     if path.ends_with('/') {
@@ -353,7 +348,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let mut path = ctry!(req, percent_decode(path.as_bytes()).decode_utf8());
 
     // Attempt to load the file from the database
-    let file = match File::from_path(storage, &path, config) {
+    let blob = match storage.fetch_rustdoc_file(&name, &version, &path, krate.archive_storage) {
         Ok(file) => file,
         Err(err) => {
             log::debug!("got error serving {}: {}", path, err);
@@ -361,15 +356,18 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             path.to_mut().push_str("/index.html");
             req_path.push("index.html");
 
-            return if ctry!(req, storage.exists(&path)) {
-                redirect(&name, &version, &req_path[3..])
-            } else if req_path.get(3).map_or(false, |p| p.contains('-')) {
+            return if ctry!(
+                req,
+                storage.rustdoc_file_exists(&name, &version, &path, krate.archive_storage)
+            ) {
+                redirect(&name, &version, &req_path)
+            } else if req_path.get(0).map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
                 redirect(
                     &format!("/crate/{}", name),
                     &format!("{}/target-redirect", version),
-                    &req_path[3..],
+                    &req_path,
                 )
             } else {
                 Err(Nope::ResourceNotFound.into())
@@ -381,7 +379,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     if !path.ends_with(".html") {
         rendering_time.step("serve asset");
 
-        return Ok(file.serve());
+        return Ok(File(blob).serve());
     }
 
     rendering_time.step("find latest path");
@@ -408,9 +406,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // The path within this crate version's rustdoc output
     let (target, inner_path) = {
         let mut inner_path = req_path.clone();
-
-        // Drop the `rustdoc/:crate/:version[/:platform]` prefix
-        inner_path.drain(..3).for_each(drop);
 
         let target = if inner_path.len() > 1
             && krate
@@ -470,7 +465,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         metadata: krate.metadata.clone(),
         krate,
     }
-    .into_response(&file.0.content, config.max_parse_memory, req, &path)
+    .into_response(&blob.content, config.max_parse_memory, req, &path)
 }
 
 /// Checks whether the given path exists.
@@ -483,36 +478,32 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
-fn path_for_version(
-    req_path: &[&str],
-    known_platforms: &[String],
-    storage: &Storage,
-    config: &Config,
-) -> String {
-    // Simple case: page exists in the latest version, so just change the version number
-    if File::from_path(storage, &req_path.join("/"), config).is_ok() {
-        // NOTE: this adds 'index.html' if it wasn't there before
-        return req_path[3..].join("/");
-    }
+fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String {
     // check if req_path[3] is the platform choice or the name of the crate
     // Note we don't require the platform to have a trailing slash.
-    let platform = if known_platforms.iter().any(|s| s == req_path[3]) && req_path.len() >= 4 {
-        req_path[3]
+    let platform = if crate_details
+        .metadata
+        .doc_targets
+        .iter()
+        .any(|s| s == file_path[0])
+        && !file_path.is_empty()
+    {
+        file_path[0]
     } else {
         ""
     };
     let is_source_view = if platform.is_empty() {
         // /{name}/{version}/src/{crate}/index.html
-        req_path.get(3).copied() == Some("src")
+        file_path.get(0).copied() == Some("src")
     } else {
         // /{name}/{version}/{platform}/src/{crate}/index.html
-        req_path.get(4).copied() == Some("src")
+        file_path.get(1).copied() == Some("src")
     };
     // this page doesn't exist in the latest version
-    let last_component = *req_path.last().unwrap();
+    let last_component = *file_path.last().unwrap();
     let search_item = if last_component == "index.html" {
         // this is a module
-        req_path.get(req_path.len() - 2).copied()
+        file_path.get(file_path.len() - 2).copied()
     // no trailing slash; no one should be redirected here but we handle it gracefully anyway
     } else if last_component == platform {
         // nothing to search for
@@ -540,7 +531,6 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let pool = extension!(req, Pool);
     let mut conn = pool.get()?;
     let storage = extension!(req, Storage);
-    let config = extension!(req, Config);
     let base = redirect_base(req);
     let updater = extension!(req, RepositoryStatsUpdater);
 
@@ -551,27 +541,37 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     //   [crate, :name, :version, target-redirect, :target, *path]
     // is transformed to
-    //   [rustdoc, :name, :version, :target?, *path]
+    //   [:target?, *path]
     // path might be empty, but target is guaranteed to be there because of the route used
     let file_path = {
-        let mut file_path = req.url.path();
-        file_path[0] = "rustdoc";
-        file_path.remove(3);
-        if file_path[3] == crate_details.metadata.default_target {
-            file_path.remove(3);
+        let mut path = req.url.path();
+        path.drain(0..4); // crate, name, version, target-redirect
+
+        if path[0] == crate_details.metadata.default_target {
+            path.remove(0);
         }
-        if let Some(last @ &mut "") = file_path.last_mut() {
+        // if it ends with a `/`, we add `index.html`.
+        if let Some(last @ &mut "") = path.last_mut() {
             *last = "index.html";
         }
-        file_path
+        path
     };
 
-    let path = path_for_version(
-        &file_path,
-        &crate_details.metadata.doc_targets,
-        storage,
-        config,
-    );
+    let path = if ctry!(
+        req,
+        storage.rustdoc_file_exists(
+            name,
+            version,
+            &file_path.join("/"),
+            crate_details.archive_storage
+        )
+    ) {
+        // Simple case: page exists in the other target & version, so just change these
+        file_path.join("/")
+    } else {
+        path_for_version(&file_path, &crate_details)
+    };
+
     let url = format!(
         "{base}/{name}/{version}/{path}",
         base = base,
@@ -640,6 +640,7 @@ mod test {
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use std::collections::BTreeMap;
+    use test_case::test_case;
 
     fn try_latest_version_redirect(
         path: &str,
@@ -668,14 +669,16 @@ mod test {
             .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
     }
 
-    #[test]
+    #[test_case(true)]
+    #[test_case(false)]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
-    fn settings_html() {
+    fn settings_html(archive_storage: bool) {
         wrapper(|env| {
             // first release works, second fails
             env.fake_release()
                 .name("buggy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("settings.html")
                 .rustdoc_file("directory_1/index.html")
                 .rustdoc_file("directory_2.html/index.html")
@@ -686,6 +689,7 @@ mod test {
             env.fake_release()
                 .name("buggy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .build_result_failed()
                 .create()?;
             let web = env.frontend();
@@ -701,12 +705,14 @@ mod test {
         });
     }
 
-    #[test]
-    fn default_target_redirects_to_base() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn default_target_redirects_to_base(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
 
@@ -721,6 +727,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .default_target(target)
                 .create()?;
@@ -734,6 +741,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("all.html")
                 .default_target(target)
@@ -752,12 +760,14 @@ mod test {
         });
     }
 
-    #[test]
-    fn go_to_latest_version() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn go_to_latest_version(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/blah/index.html")
                 .rustdoc_file("dummy/blah/blah.html")
                 .rustdoc_file("dummy/struct.will-be-deleted.html")
@@ -765,6 +775,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/blah/index.html")
                 .rustdoc_file("dummy/blah/blah.html")
                 .create()?;
@@ -799,18 +810,21 @@ mod test {
         })
     }
 
-    #[test]
-    fn go_to_latest_version_keeps_platform() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn go_to_latest_version_keeps_platform(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .add_platform("x86_64-pc-windows-msvc")
                 .rustdoc_file("dummy/struct.Blah.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .add_platform("x86_64-pc-windows-msvc")
                 .create()?;
 
@@ -843,17 +857,20 @@ mod test {
         })
     }
 
-    #[test]
-    fn redirect_latest_goes_to_crate_if_build_failed() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn redirect_latest_goes_to_crate_if_build_failed(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .build_result_failed()
                 .create()?;
 
@@ -865,22 +882,26 @@ mod test {
         })
     }
 
-    #[test]
-    fn redirect_latest_does_not_go_to_yanked_versions() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn redirect_latest_does_not_go_to_yanked_versions(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
@@ -902,24 +923,28 @@ mod test {
         })
     }
 
-    #[test]
-    fn redirect_latest_with_all_yanked() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn redirect_latest_with_all_yanked(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
             env.fake_release()
                 .name("dummy")
                 .version("0.2.1")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
@@ -941,8 +966,9 @@ mod test {
         })
     }
 
-    #[test]
-    fn yanked_release_shows_warning_in_nav() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn yanked_release_shows_warning_in_nav(archive_storage: bool) {
         fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
@@ -959,6 +985,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
@@ -968,6 +995,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()?;
@@ -1022,12 +1050,14 @@ mod test {
         })
     }
 
-    #[test]
-    fn crate_name_percent_decoded_redirect() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn crate_name_percent_decoded_redirect(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("fake-crate")
                 .version("0.0.1")
+                .archive_storage(archive_storage)
                 .rustdoc_file("fake_crate/index.html")
                 .create()?;
 
@@ -1038,8 +1068,9 @@ mod test {
         });
     }
 
-    #[test]
-    fn base_redirect_handles_mismatched_separators() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn base_redirect_handles_mismatched_separators(archive_storage: bool) {
         wrapper(|env| {
             let rels = [
                 ("dummy-dash", "0.1.0"),
@@ -1054,6 +1085,7 @@ mod test {
                 env.fake_release()
                     .name(name)
                     .version(version)
+                    .archive_storage(archive_storage)
                     .rustdoc_file(&(name.replace("-", "_") + "/index.html"))
                     .create()?;
             }
@@ -1098,18 +1130,21 @@ mod test {
         })
     }
 
-    #[test]
-    fn specific_pages_do_not_handle_mismatched_separators() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn specific_pages_do_not_handle_mismatched_separators(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy-dash")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy_dash/index.html")
                 .create()?;
 
             env.fake_release()
                 .name("dummy_mixed-separators")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy_mixed_separators/index.html")
                 .create()?;
 
@@ -1168,8 +1203,9 @@ mod test {
         })
     }
 
-    #[test]
-    fn platform_links_go_to_current_path() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn platform_links_go_to_current_path(archive_storage: bool) {
         fn get_platform_links(
             path: &str,
             web: &TestFrontend,
@@ -1214,6 +1250,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .add_target("x86_64-unknown-linux-gnu")
@@ -1244,6 +1281,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-pc-windows-msvc")
@@ -1274,6 +1312,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.3.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-unknown-linux-gnu")
@@ -1304,6 +1343,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.4.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("settings.html")
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
@@ -1442,12 +1482,14 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_fully_yanked_crate_404s() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_fully_yanked_crate_404s(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
                 .version("1.0.0")
+                .archive_storage(archive_storage)
                 .yanked(true)
                 .create()?;
 
@@ -1465,11 +1507,16 @@ mod test {
         })
     }
 
-    #[test]
-    // regression test for https://github.com/rust-lang/docs.rs/issues/856
-    fn test_no_trailing_target_slash() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_no_trailing_target_slash(archive_storage: bool) {
+        // regression test for https://github.com/rust-lang/docs.rs/issues/856
         wrapper(|env| {
-            env.fake_release().name("dummy").version("0.1.0").create()?;
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(archive_storage)
+                .create()?;
             let web = env.frontend();
             assert_redirect(
                 "/crate/dummy/0.1.0/target-redirect/x86_64-apple-darwin",
@@ -1479,6 +1526,7 @@ mod test {
             env.fake_release()
                 .name("dummy")
                 .version("0.2.0")
+                .archive_storage(archive_storage)
                 .add_platform("x86_64-apple-darwin")
                 .create()?;
             assert_redirect(
@@ -1574,12 +1622,14 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_no_trailing_rustdoc_slash() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_no_trailing_rustdoc_slash(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("tokio")
                 .version("0.2.21")
+                .archive_storage(archive_storage)
                 .rustdoc_file("tokio/time/index.html")
                 .create()?;
             assert_redirect(
@@ -1590,12 +1640,14 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_non_ascii() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_non_ascii(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("const_unit_poc")
                 .version("1.0.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("const_unit_poc/units/constant.Ω.html")
                 .create()?;
             assert_success(
@@ -1605,17 +1657,20 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_latest_version_keeps_query() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_latest_version_keeps_query(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("tungstenite")
                 .version("0.10.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("tungstenite/index.html")
                 .create()?;
             env.fake_release()
                 .name("tungstenite")
                 .version("0.11.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("tungstenite/index.html")
                 .create()?;
             assert_eq!(
@@ -1629,12 +1684,14 @@ mod test {
         });
     }
 
-    #[test]
-    fn latest_version_works_when_source_deleted() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn latest_version_works_when_source_deleted(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("pyo3")
                 .version("0.2.7")
+                .archive_storage(archive_storage)
                 .source_file("src/objects/exc.rs", b"//! some docs")
                 .create()?;
             env.fake_release().name("pyo3").version("0.13.2").create()?;
@@ -1655,17 +1712,20 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_version_link_goes_to_docs() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_version_link_goes_to_docs(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("hexponent")
                 .version("0.3.0")
+                .archive_storage(archive_storage)
                 .rustdoc_file("hexponent/index.html")
                 .create()?;
             env.fake_release()
                 .name("hexponent")
                 .version("0.3.1")
+                .archive_storage(archive_storage)
                 .rustdoc_file("hexponent/index.html")
                 .create()?;
 
@@ -1759,12 +1819,14 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_missing_target_redirects_to_search() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_missing_target_redirects_to_search(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("winapi")
                 .version("0.3.9")
+                .archive_storage(archive_storage)
                 .rustdoc_file("winapi/macro.ENUM.html")
                 .create()?;
 
@@ -1779,18 +1841,21 @@ mod test {
         })
     }
 
-    #[test]
-    fn test_redirect_source_not_rust() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_redirect_source_not_rust(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .name("winapi")
                 .version("0.3.8")
+                .archive_storage(archive_storage)
                 .source_file("src/docs.md", b"created by Peter Rabbit")
                 .create()?;
 
             env.fake_release()
                 .name("winapi")
                 .version("0.3.9")
+                .archive_storage(archive_storage)
                 .create()?;
 
             assert_success("/winapi/0.3.8/src/winapi/docs.md.html", env.frontend())?;

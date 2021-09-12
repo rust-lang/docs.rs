@@ -1,12 +1,14 @@
 use super::TestDatabase;
+
 use crate::docbuilder::{BuildResult, DocCoverage};
+use crate::error::Result;
 use crate::index::api::{CrateData, CrateOwner, ReleaseData};
-use crate::storage::Storage;
+use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
 use crate::utils::{Dependency, MetadataPackage, Target};
-use anyhow::{Context, Error};
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use postgres::Client;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
@@ -25,6 +27,7 @@ pub(crate) struct FakeRelease<'a> {
     registry_release_data: ReleaseData,
     has_docs: bool,
     has_examples: bool,
+    archive_storage: bool,
     /// This stores the content, while `package.readme` stores the filename
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
@@ -90,6 +93,7 @@ impl<'a> FakeRelease<'a> {
             readme: None,
             github_stats: None,
             doc_coverage: None,
+            archive_storage: false,
         }
     }
 
@@ -147,6 +151,11 @@ impl<'a> FakeRelease<'a> {
 
     pub(crate) fn yanked(mut self, new: bool) -> Self {
         self.registry_release_data.yanked = new;
+        self
+    }
+
+    pub(crate) fn archive_storage(mut self, new: bool) -> Self {
+        self.archive_storage = new;
         self
     }
 
@@ -242,15 +251,15 @@ impl<'a> FakeRelease<'a> {
     }
 
     /// Returns the release_id
-    pub(crate) fn create(mut self) -> Result<i32, Error> {
+    pub(crate) fn create(mut self) -> Result<i32> {
         use std::fs;
         use std::path::Path;
 
-        let tempdir = tempfile::Builder::new().prefix("docs.rs-fake").tempdir()?;
         let package = self.package;
         let db = self.db;
         let mut rustdoc_files = self.rustdoc_files;
         let storage = self.storage;
+        let archive_storage = self.archive_storage;
 
         // Upload all source files as rustdoc files
         // In real life, these would be highlighted HTML, but for testing we just use the files themselves.
@@ -269,40 +278,71 @@ impl<'a> FakeRelease<'a> {
             }
         }
 
-        let upload_files = |prefix: &str, files: &[(&str, &[u8])], target: Option<&str>| {
-            let mut path_prefix = tempdir.path().join(prefix);
-            if let Some(target) = target {
-                path_prefix.push(target);
-            }
-            fs::create_dir(&path_prefix)?;
+        #[derive(Debug)]
+        enum FileKind {
+            Rustdoc,
+            Sources,
+        }
 
+        let create_temp_dir = || {
+            tempfile::Builder::new()
+                .prefix("docs.rs-fake")
+                .tempdir()
+                .unwrap()
+        };
+
+        let store_files_into = |files: &[(&str, &[u8])], base_path: &Path| {
             for (path, data) in files {
                 if path.starts_with('/') {
                     anyhow::bail!("absolute paths not supported");
                 }
                 // allow `src/main.rs`
                 if let Some(parent) = Path::new(path).parent() {
-                    let path = path_prefix.join(parent);
+                    let path = base_path.join(parent);
                     fs::create_dir_all(&path)
                         .with_context(|| format!("failed to create {}", path.display()))?;
                 }
-                let file = path_prefix.join(&path);
+                let file = base_path.join(&path);
                 log::debug!("writing file {}", file.display());
                 fs::write(file, data)?;
             }
-
-            let prefix = format!(
-                "{}/{}/{}/{}",
-                prefix,
-                package.name,
-                package.version,
-                target.unwrap_or("")
-            );
-            log::debug!("adding directory {} from {}", prefix, path_prefix.display());
-            crate::db::add_path_into_database(&storage, &prefix, path_prefix)
+            Ok(())
         };
 
-        let (source_meta, mut algs) = upload_files("source", &self.source_files, None)?;
+        let upload_files = |kind: FileKind, source_directory: &Path| {
+            log::debug!(
+                "adding directory {:?} from {}",
+                kind,
+                source_directory.display()
+            );
+            if archive_storage {
+                let archive = match kind {
+                    FileKind::Rustdoc => rustdoc_archive_path(&package.name, &package.version),
+                    FileKind::Sources => source_archive_path(&package.name, &package.version),
+                };
+                log::debug!("store in archive: {:?}", archive);
+                let (files_list, new_alg) =
+                    crate::db::add_path_into_remote_archive(&storage, &archive, source_directory)?;
+                let mut hm = HashSet::new();
+                hm.insert(new_alg);
+                Ok((files_list, hm))
+            } else {
+                let prefix = match kind {
+                    FileKind::Rustdoc => "rustdoc",
+                    FileKind::Sources => "sources",
+                };
+                crate::db::add_path_into_database(
+                    &storage,
+                    &format!("{}/{}/{}/", prefix, package.name, package.version),
+                    source_directory,
+                )
+            }
+        };
+
+        log::debug!("before upload source");
+        let source_tmp = create_temp_dir();
+        store_files_into(&self.source_files, source_tmp.path())?;
+        let (source_meta, algs) = upload_files(FileKind::Sources, source_tmp.path())?;
         log::debug!("added source files {}", source_meta);
 
         // If the test didn't add custom builds, inject a default one
@@ -317,15 +357,24 @@ impl<'a> FakeRelease<'a> {
                 rustdoc_files.push((&index, DEFAULT_CONTENT));
             }
 
-            let (rustdoc_meta, new_algs) = upload_files("rustdoc", &rustdoc_files, None)?;
-            algs.extend(new_algs);
-            log::debug!("added rustdoc files {}", rustdoc_meta);
+            let rustdoc_tmp = create_temp_dir();
+            let rustdoc_path = rustdoc_tmp.path();
+
+            // store default target files
+            store_files_into(&rustdoc_files, rustdoc_path)?;
+            log::debug!("added rustdoc files");
 
             for target in &package.targets[1..] {
                 let platform = target.src_path.as_ref().unwrap();
-                upload_files("rustdoc", &rustdoc_files, Some(platform))?;
+                let platform_dir = rustdoc_path.join(platform);
+                fs::create_dir(&platform_dir)?;
+
+                store_files_into(&rustdoc_files, &platform_dir)?;
                 log::debug!("added platform files for {}", platform);
             }
+
+            let (rustdoc_meta, _) = upload_files(FileKind::Rustdoc, rustdoc_path)?;
+            log::debug!("uploaded rustdoc files: {}", rustdoc_meta);
         }
 
         let repository = match self.github_stats {
@@ -333,7 +382,8 @@ impl<'a> FakeRelease<'a> {
             None => None,
         };
 
-        let crate_dir = tempdir.path();
+        let crate_tmp = create_temp_dir();
+        let crate_dir = crate_tmp.path();
         if let Some(markdown) = self.readme {
             fs::write(crate_dir.join("README.md"), markdown)?;
         }
@@ -355,6 +405,7 @@ impl<'a> FakeRelease<'a> {
             self.has_examples,
             algs,
             repository,
+            archive_storage,
         )?;
         crate::db::update_crate_data_in_database(
             &mut db.conn(),
@@ -380,7 +431,7 @@ struct FakeGithubStats {
 }
 
 impl FakeGithubStats {
-    fn create(&self, conn: &mut Client) -> Result<i32, Error> {
+    fn create(&self, conn: &mut Client) -> Result<i32> {
         let existing_count: i64 = conn
             .query_one("SELECT COUNT(*) FROM repositories;", &[])?
             .get(0);
@@ -455,7 +506,7 @@ impl FakeBuild {
         storage: &Storage,
         release_id: i32,
         default_target: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let build_id = crate::db::add_build_into_database(conn, release_id, &self.result)?;
 
         if let Some(db_build_log) = self.db_build_log.as_deref() {
