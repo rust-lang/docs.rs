@@ -2,7 +2,7 @@
 
 pub(crate) mod page;
 
-use log::{debug, info};
+use log::info;
 use serde_json::Value;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
@@ -112,7 +112,7 @@ use postgres::Client;
 use router::{NoRoute, TrailingSlash};
 use semver::{Version, VersionReq};
 use serde::Serialize;
-use std::{borrow::Cow, fmt, net::SocketAddr, sync::Arc};
+use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
@@ -213,30 +213,6 @@ impl Handler for MainHandler {
                     // TODO: add in support for other errors that are actually used
                     error::Nope::InternalServerError
                 };
-
-                if let error::Nope::ResourceNotFound = err {
-                    // print the path of the URL that triggered a 404 error
-                    struct DebugPath<'a>(&'a iron::Url);
-                    impl<'a> fmt::Display for DebugPath<'a> {
-                        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                            for path_elem in self.0.path() {
-                                write!(f, "/{}", path_elem)?;
-                            }
-
-                            if let Some(query) = self.0.query() {
-                                write!(f, "?{}", query)?;
-                            }
-
-                            if let Some(hash) = self.0.fragment() {
-                                write!(f, "#{}", hash)?;
-                            }
-
-                            Ok(())
-                        }
-                    }
-
-                    debug!("Path not found: {}; {}", DebugPath(&req.url), e.error);
-                }
 
                 Self::chain(self.inject_extensions.clone(), err).handle(req)
             })

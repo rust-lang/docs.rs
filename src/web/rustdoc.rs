@@ -351,7 +351,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let blob = match storage.fetch_rustdoc_file(&name, &version, &path, krate.archive_storage) {
         Ok(file) => file,
         Err(err) => {
-            log::debug!("got error serving {}: {}", path, err);
+            if !matches!(err.downcast_ref(), Some(Nope::ResourceNotFound))
+                && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+            {
+                log::debug!("got error serving {}: {}", path, err);
+            }
             // If it fails, we try again with /index.html at the end
             path.to_mut().push_str("/index.html");
             req_path.push("index.html");
