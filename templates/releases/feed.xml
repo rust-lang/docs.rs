@@ -9,7 +9,7 @@
     <link href="https://pubsubhubbub.superfeedr.com" rel="hub" />
 
     <id>urn:docs-rs:{{ docsrs_version() }}</id>
-    <updated>{{ recent_releases[0].release_time | default(value=now()) | date(format="%+") }}</updated>
+    <updated>{{ recent_releases[0].build_time | default(value=now()) | date(format="%+") }}</updated>
 
     {%- for release in recent_releases -%}
         {%- if release.rustdoc_status -%}
@@ -23,7 +23,7 @@
 
             <link href="{{ link | safe }}" />
             <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id>
-            <updated>{{ release.release_time | date(format="%+") }}</updated>
+            <updated>{{ release.build_time | date(format="%+") }}</updated>
 
             <summary>
                 {{ release.description | default(value="") | escape_xml }}
