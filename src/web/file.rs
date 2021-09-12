@@ -42,11 +42,6 @@ impl File {
         )));
         response
     }
-
-    /// Checks if mime type of file is "application/x-empty"
-    pub(super) fn is_empty(&self) -> bool {
-        self.0.mime == "application/x-empty"
-    }
 }
 
 #[cfg(test)]

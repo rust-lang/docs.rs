@@ -7,7 +7,7 @@ use crate::{
         error::Nope, file::File as DbFile, match_version, page::WebPage, redirect_base,
         MatchSemver, MetaData, Url,
     },
-    Config, Storage,
+    Storage,
 };
 use iron::{IronResult, Request, Response};
 use postgres::Client;
@@ -198,7 +198,12 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 
     // get path (req_path) for FileList::from_path and actual path for super::file::File::from_path
     let (req_path, file_path) = {
-        let file_path = format!("sources/{}/{}/{}", crate_name, version, req_path.join("/"));
+        let mut req_path = req.url.path();
+        // remove first elements from path which is /crate/:name/:version/source
+        for _ in 0..4 {
+            req_path.remove(0);
+        }
+        let file_path = req_path.join("/");
 
         // FileList::from_path is only working for directories
         // remove file name if it's not a directory
@@ -217,24 +222,46 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let storage = extension!(req, Storage);
-    let config = extension!(req, Config);
+    let archive_storage: bool = {
+        let rows = ctry!(
+            req,
+            conn.query(
+                "
+                SELECT archive_storage
+                FROM releases 
+                INNER JOIN crates ON releases.crate_id = crates.id
+                WHERE 
+                    name = $1 AND 
+                    version = $2
+                ",
+                &[&crate_name, &version]
+            )
+        );
+        // this unwrap is safe because `match_version` guarantees that the `crate_name`/`version`
+        // combination exists.
+        let row = rows.get(0).unwrap();
+
+        row.get::<_, bool>(0)
+    };
 
     // try to get actual file first
     // skip if request is a directory
-    let file = if !file_path.ends_with('/') {
-        DbFile::from_path(storage, &file_path, config).ok()
+    let blob = if !file_path.ends_with('/') {
+        storage
+            .fetch_source_file(crate_name, &version, &file_path, archive_storage)
+            .ok()
     } else {
         None
     };
 
-    let (file_content, is_rust_source) = if let Some(file) = file {
+    let (file_content, is_rust_source) = if let Some(blob) = blob {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
-        if !file.0.mime.starts_with("text") && !file.is_empty() {
-            return Ok(file.serve());
-        } else if file.0.mime.starts_with("text") && !file.is_empty() {
+        if !blob.mime.starts_with("text") && !blob.is_empty() {
+            return Ok(DbFile(blob).serve());
+        } else if blob.mime.starts_with("text") && !blob.is_empty() {
             (
-                String::from_utf8(file.0.content).ok(),
-                file.0.path.ends_with(".rs"),
+                String::from_utf8(blob.content).ok(),
+                blob.path.ends_with(".rs"),
             )
         } else {
             (None, false)
@@ -258,11 +285,35 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
 #[cfg(test)]
 mod tests {
     use crate::test::*;
+    use test_case::test_case;
 
-    #[test]
-    fn cargo_ok_not_skipped() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn fetch_source_file_content(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
+                .archive_storage(archive_storage)
+                .name("fake")
+                .version("0.1.0")
+                .source_file("some_filename.rs", b"some_random_content")
+                .create()?;
+            let web = env.frontend();
+            assert_success("/crate/fake/0.1.0/source/", web)?;
+            let response = web
+                .get("/crate/fake/0.1.0/source/some_filename.rs")
+                .send()?;
+            assert!(response.status().is_success());
+            assert!(response.text()?.contains("some_random_content"));
+            Ok(())
+        });
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn cargo_ok_not_skipped(archive_storage: bool) {
+        wrapper(|env| {
+            env.fake_release()
+                .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file(".cargo-ok", b"ok")
@@ -274,10 +325,12 @@ mod tests {
         });
     }
 
-    #[test]
-    fn directory_not_found() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn directory_not_found(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
+                .archive_storage(archive_storage)
                 .name("mbedtls")
                 .version("0.2.0")
                 .create()?;
@@ -287,10 +340,12 @@ mod tests {
         })
     }
 
-    #[test]
-    fn semver_handled() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn semver_handled(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
+                .archive_storage(archive_storage)
                 .name("mbedtls")
                 .version("0.2.0")
                 .source_file("README.md", b"hello")
@@ -305,10 +360,13 @@ mod tests {
             Ok(())
         })
     }
-    #[test]
-    fn literal_krate_description() {
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn literal_krate_description(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
+                .archive_storage(archive_storage)
                 .name("rustc-ap-syntax")
                 .version("178.0.0")
                 .description("some stuff with krate")

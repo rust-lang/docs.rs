@@ -574,7 +574,7 @@ impl Context for BinContext {
         fn storage(self) -> Storage = Storage::new(
             self.pool()?,
             self.metrics()?,
-            &*self.config()?,
+            self.config()?,
         )?;
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;

@@ -51,6 +51,10 @@ pub struct Config {
     // For unit-tests the number has to be higher.
     pub(crate) random_crate_search_view_size: u32,
 
+    // where do we want to store the locally cached index files
+    // for the remote archives?
+    pub(crate) local_archive_cache_path: PathBuf,
+
     // Content Security Policy
     pub(crate) csp_report_only: bool,
 
@@ -126,6 +130,11 @@ impl Config {
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
 
             csp_report_only: env("DOCSRS_CSP_REPORT_ONLY", false)?,
+
+            local_archive_cache_path: env(
+                "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
+                PathBuf::from(".archive_cache"),
+            )?,
 
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,

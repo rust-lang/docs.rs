@@ -1,13 +1,13 @@
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
-    update_crate_data_in_database, Pool,
+    add_path_into_remote_archive, update_crate_data_in_database, Pool,
 };
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::repositories::RepositoryStatsUpdater;
-use crate::storage::CompressionAlgorithms;
+use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{copy_dir_all, parse_rustc_version, CargoMetadata};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
@@ -359,16 +359,25 @@ impl RustwideBuilder {
                                 &metadata,
                             )?;
                         }
-                        let new_algs = self.upload_docs(name, version, local_storage.path())?;
-                        algs.extend(new_algs);
+                        let (_, new_alg) = add_path_into_remote_archive(
+                            &self.storage,
+                            &rustdoc_archive_path(name, version),
+                            local_storage.path(),
+                        )?;
+                        algs.insert(new_alg);
                     };
 
                     // Store the sources even if the build fails
                     debug!("adding sources into database");
-                    let prefix = format!("sources/{}/{}", name, version);
-                    let (files_list, new_algs) =
-                        add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
-                    algs.extend(new_algs);
+                    let files_list = {
+                        let (files_list, new_alg) = add_path_into_remote_archive(
+                            &self.storage,
+                            &source_archive_path(name, version),
+                            build.host_source_dir(),
+                        )?;
+                        algs.insert(new_alg);
+                        files_list
+                    };
 
                     let has_examples = build.host_source_dir().join("examples").is_dir();
                     if res.result.successful {
@@ -403,6 +412,7 @@ impl RustwideBuilder {
                         has_examples,
                         algs,
                         repository,
+                        true,
                     )?;
 
                     if let Some(doc_coverage) = res.doc_coverage {
@@ -670,21 +680,6 @@ impl RustwideBuilder {
         copy_dir_all(source, dest).map_err(Into::into)
     }
 
-    fn upload_docs(
-        &self,
-        name: &str,
-        version: &str,
-        local_storage: &Path,
-    ) -> Result<CompressionAlgorithms> {
-        debug!("Adding documentation into database");
-        add_path_into_database(
-            &self.storage,
-            &format!("rustdoc/{}/{}", name, version),
-            local_storage,
-        )
-        .map(|t| t.1)
-    }
-
     fn should_build(&self, conn: &mut Client, name: &str, version: &str) -> Result<bool> {
         if self.skip_build_if_exists {
             // Check whether no successful builds are present in the database.
@@ -751,8 +746,6 @@ mod tests {
             let version = DUMMY_CRATE_VERSION;
             let default_target = "x86_64-unknown-linux-gnu";
 
-            assert!(env.config().include_default_targets);
-
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder
                 .build_package(crate_, version, PackageKind::CratesIo)
@@ -766,6 +759,7 @@ mod tests {
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
+                        r.archive_storage,
                         cov.total_items
                     FROM 
                         crates as c 
@@ -782,6 +776,7 @@ mod tests {
             assert!(row.get::<_, bool>("rustdoc_status"));
             assert_eq!(row.get::<_, String>("default_target"), default_target);
             assert!(row.get::<_, Option<i32>>("total_items").is_some());
+            assert!(row.get::<_, bool>("archive_storage"));
 
             let mut targets: Vec<String> = row
                 .get::<_, Value>("doc_targets")
@@ -805,16 +800,31 @@ mod tests {
             let storage = env.storage();
             let web = env.frontend();
 
-            let base = format!("rustdoc/{}/{}", crate_, version);
+            // doc archive exists
+            let doc_archive = rustdoc_archive_path(crate_, version);
+            assert!(storage.exists(&doc_archive)?);
+
+            // source archive exists
+            let source_archive = source_archive_path(crate_, version);
+            assert!(storage.exists(&source_archive)?);
 
             // default target was built and is accessible
-            assert!(storage.exists(&format!("{}/{}/index.html", base, crate_path))?);
+            assert!(storage.exists_in_archive(&doc_archive, &format!("{}/index.html", crate_path))?);
             assert_success(&format!("/{}/{}/{}", crate_, version, crate_path), web)?;
+
+            // source is also packaged
+            assert!(storage.exists_in_archive(&source_archive, "src/lib.rs")?);
+            assert_success(
+                &format!("/crate/{}/{}/source/src/lib.rs", crate_, version),
+                web,
+            )?;
 
             // other targets too
             for target in DEFAULT_TARGETS {
-                let target_docs_present =
-                    storage.exists(&format!("{}/{}/{}/index.html", base, target, crate_path))?;
+                let target_docs_present = storage.exists_in_archive(
+                    &doc_archive,
+                    &format!("{}/{}/index.html", target, crate_path),
+                )?;
 
                 let target_url = format!(
                     "/{}/{}/{}/{}/index.html",

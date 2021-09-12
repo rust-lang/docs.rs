@@ -109,7 +109,8 @@ jobs:
           for f in ./test-binaries/*; do
             echo "running $f"
             chmod +x $f  # GH action artifacts don't handle permissions
-            $f --ignored || exit 1
+            # run build-tests. Limited to one thread since we don't support parallel builds.
+            $f --ignored --test-threads=1 || exit 1  
           done
 
       - name: Clean up the database
