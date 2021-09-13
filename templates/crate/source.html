@@ -21,6 +21,10 @@
     {{ navigation::package_navigation(metadata=file_list.metadata, active_tab="source") }}
 {%- endblock header -%}
 
+{%- block body_classes -%}
+    {%- if file_content -%}flex{%- endif -%}
+{%- endblock body_classes -%}
+
 {%- block body -%}
     <div class="container package-page-container small-bottom-pad">
         <div class="pure-g">
