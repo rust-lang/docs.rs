@@ -4,9 +4,11 @@ use crate::{
     build_queue::QueuedCrate,
     db::{Pool, PoolClient},
     impl_webpage,
+    utils::report_error,
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue, Config,
 };
+use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
@@ -481,7 +483,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
 
         Ok(super::redirect(url))
     } else {
-        log::error!("found no result in random crate search");
+        report_error(&anyhow!("found no result in random crate search"));
         Err(Nope::NoResults.into())
     }
 }

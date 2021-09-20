@@ -47,7 +47,8 @@ pub fn main() {
         }
 
         // we need to drop the sentry guard here so all unsent
-        // errors are sent to sentry
+        // errors are sent to sentry before
+        // process::exit kills everything.
         drop(_sentry_guard);
         std::process::exit(1);
     }

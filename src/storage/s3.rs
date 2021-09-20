@@ -200,7 +200,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                 self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
-                                log::error!("Failed to upload blob to S3: {:?}", err);
+                                log::warn!("Failed to upload blob to S3: {:?}", err);
                                 // Reintroduce failed blobs for a retry
                                 blob
                             }),
