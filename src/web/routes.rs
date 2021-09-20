@@ -170,6 +170,11 @@ pub(super) fn build_routes() -> Routes {
         "/rustc",
         super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc"),
     );
+    // redirect rustdoc to nightly rustdoc docs
+    routes.internal_page(
+        "/rustdoc",
+        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc/rustdoc"),
+    );
 
     routes
 }
