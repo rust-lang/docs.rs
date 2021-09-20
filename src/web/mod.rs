@@ -728,6 +728,12 @@ mod test {
             // with or without slash
             assert_redirect("/rustc", target, web)?;
             assert_redirect("/rustc/", target, web)?;
+
+            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/";
+            // with or without slash
+            assert_redirect("/rustdoc", target, web)?;
+            assert_redirect("/rustdoc/", target, web)?;
+
             Ok(())
         })
     }
