@@ -1,5 +1,9 @@
-use crate::{docbuilder::RustwideBuilder, utils::pubsubhubbub, BuildQueue};
-use anyhow::Error;
+use crate::{
+    docbuilder::RustwideBuilder,
+    utils::{pubsubhubbub, report_error},
+    BuildQueue,
+};
+use anyhow::{anyhow, Error};
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -44,7 +48,7 @@ pub fn queue_builder(
             status = BuilderState::QueueInProgress(0);
 
             match pubsubhubbub::ping_hubs() {
-                Err(e) => error!("Failed to ping hub: {}", e),
+                Err(e) => report_error(&anyhow!(e).context("Failed to ping hub")),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
             }
         }
@@ -53,7 +57,9 @@ pub fn queue_builder(
         debug!("Checking build queue");
         match build_queue.pending_count() {
             Err(e) => {
-                error!("Failed to read the number of crates in the queue: {}", e);
+                report_error(
+                    &anyhow!(e).context("Failed to read the number of crates in the queue"),
+                );
                 continue;
             }
 
@@ -61,7 +67,7 @@ pub fn queue_builder(
                 if status.count() > 0 {
                     // ping the hubs before continuing
                     match pubsubhubbub::ping_hubs() {
-                        Err(e) => error!("Failed to ping hub: {}", e),
+                        Err(e) => report_error(&anyhow!(e).context("Failed to ping hub")),
                         Ok(n) => debug!("Succesfully pinged {} hubs", n),
                     }
                 }
@@ -82,7 +88,7 @@ pub fn queue_builder(
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
         let res = catch_unwind(AssertUnwindSafe(|| {
             match build_queue.build_next_queue_package(&mut builder) {
-                Err(e) => error!("Failed to build crate from queue: {}", e),
+                Err(e) => warn!("Failed to build crate from queue: {}", e),
                 Ok(crate_built) => {
                     if crate_built {
                         status.increment();
@@ -92,6 +98,7 @@ pub fn queue_builder(
         }));
 
         if let Err(e) = res {
+            // TODO: how to report this?
             error!("GRAVE ERROR Building new crates panicked: {:?}", e);
             // If we panic here something is really truly wrong and trying to handle the error won't help.
             build_queue.lock().expect("failed to lock queue");

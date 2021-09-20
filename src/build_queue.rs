@@ -1,11 +1,12 @@
 use crate::db::Pool;
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
-use crate::utils::get_crate_priority;
+use crate::utils::{get_crate_priority, report_error};
 use crate::{Config, Index, Metrics, RustwideBuilder};
+use anyhow::anyhow;
 
 use crates_index_diff::ChangeKind;
-use log::{debug, error};
+use log::{debug, warn};
 
 use std::fs;
 use std::path::PathBuf;
@@ -128,9 +129,12 @@ impl BuildQueue {
                     self.metrics.failed_builds.inc();
                 }
 
-                error!(
-                    "Failed to build package {}-{} from queue: {}",
-                    to_process.name, to_process.version, e,
+                warn!(
+                    "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
+                    to_process.name,
+                    to_process.version,
+                    e,
+                    e.backtrace()
                 );
             }
         }
@@ -201,10 +205,10 @@ impl BuildQueue {
                     );
                     match res {
                         Ok(_) => debug!("{}-{} yanked", krate.name, krate.version),
-                        Err(err) => error!(
-                            "error while setting {}-{} to yanked: {}",
-                            krate.name, krate.version, err
-                        ),
+                        Err(err) => report_error(&anyhow!(err).context(format!(
+                            "error while setting {}-{} to yanked",
+                            krate.name, krate.version
+                        ))),
                     }
                 }
 
@@ -221,10 +225,10 @@ impl BuildQueue {
                             debug!("{}-{} added into build queue", krate.name, krate.version);
                             crates_added += 1;
                         }
-                        Err(err) => error!(
-                            "failed adding {}-{} into build queue: {}",
-                            krate.name, krate.version, err
-                        ),
+                        Err(err) => report_error(&anyhow!(err).context(format!(
+                            "failed adding {}-{} into build queue",
+                            krate.name, krate.version
+                        ))),
                     }
                 }
             }
@@ -250,7 +254,8 @@ impl BuildQueue {
                 .unwrap_or(PackageKind::CratesIo);
 
             if let Err(err) = builder.update_toolchain() {
-                log::error!("Updating toolchain failed, locking queue: {}", err);
+                let err = anyhow!(err).context("Updating toolchain failed, locking queue");
+                report_error(&err);
                 self.lock()?;
                 return Err(err);
             }

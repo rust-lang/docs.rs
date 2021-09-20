@@ -1,10 +1,11 @@
 use std::{path::PathBuf, process::Command};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use url::Url;
 
 use self::api::Api;
 use crate::error::Result;
+use crate::utils::report_error;
 
 pub(crate) mod api;
 #[cfg(feature = "consistency_check")]
@@ -108,11 +109,10 @@ impl Index {
             .output();
 
         if let Err(err) = gc {
-            log::error!(
-                "failed to run `git gc --auto`\npath: {:#?}\nerror: {:#?}",
-                &self.path,
-                err
-            );
+            report_error(&anyhow!(err).context(format!(
+                "failed to run `git gc --auto`\npath: {:#?}",
+                &self.path
+            )));
         }
     }
 

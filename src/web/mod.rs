@@ -2,6 +2,8 @@
 
 pub(crate) mod page;
 
+use crate::utils::report_error;
+use anyhow::anyhow;
 use log::info;
 use serde_json::Value;
 
@@ -15,24 +17,19 @@ macro_rules! ctry {
             Err(error) => {
                 let request: &::iron::Request = $req;
 
-                // TODO this should be `capture_anyhow` if error is `anyhow::Error`
-                ::log::error!(
-                    "called ctry!() on an `Err` value: {:?}\nnote: while attempting to fetch the route {:?}",
-                    error,
-                    request.url,
-                );
-
                 // This is very ugly, but it makes it impossible to get a type inference error
                 // from this macro
-                let error = $crate::web::ErrorPage {
+                let web_error = $crate::web::ErrorPage {
                     title: "Internal Server Error",
-                    message: ::std::option::Option::Some(::std::borrow::Cow::Owned(
-                        ::std::format!("{}", error),
-                    )),
+                    message: ::std::option::Option::Some(::std::borrow::Cow::Owned(error.to_string())),
                     status: ::iron::status::InternalServerError,
                 };
 
-                return $crate::web::page::WebPage::into_response(error, request);
+                let error = anyhow::anyhow!(error)
+                    .context(format!("called `ctry!()` on an `Err` value while attempting to fetch the route {:?}", request.url));
+                $crate::utils::report_error(&error);
+
+                return $crate::web::page::WebPage::into_response(web_error, request);
             }
         }
     };
@@ -47,20 +44,18 @@ macro_rules! cexpect {
             None => {
                 let request: &::iron::Request = $req;
 
-                ::log::error!(
-                    "called cexpect!() on a `None` value while attempting to fetch the route {:?}",
-                    request.url,
-                );
-
                 // This is very ugly, but it makes it impossible to get a type inference error
                 // from this macro
-                let error = $crate::web::ErrorPage {
+                let web_error = $crate::web::ErrorPage {
                     title: "Internal Server Error",
                     message: None,
                     status: ::iron::status::InternalServerError,
                 };
 
-                return $crate::web::page::WebPage::into_response(error, request);
+                let error = anyhow::anyhow!("called `cexpect!()` on a `None` value while attempting to fetch the route {:?}", request.url);
+                $crate::utils::report_error(&error);
+
+                return $crate::web::page::WebPage::into_response(web_error, request);
             }
         }
     };
@@ -201,14 +196,13 @@ impl Handler for MainHandler {
                 {
                     error::Nope::ResourceNotFound
                 } else if e.response.status == Some(status::InternalServerError) {
-                    log::error!("internal server error: {}", e.error);
+                    report_error(&anyhow!(format!("internal server error: {}", e.error)));
                     error::Nope::InternalServerError
                 } else {
-                    log::error!(
+                    report_error(&anyhow!(format!(
                         "No error page for status {:?}; {}",
-                        e.response.status,
-                        e.error
-                    );
+                        e.response.status, e.error
+                    )));
                     // TODO: add in support for other errors that are actually used
                     error::Nope::InternalServerError
                 };
@@ -332,12 +326,10 @@ fn match_version(
             // in theory a crate must always have a semver compatible version,
             // but check result just in case
             let version_sem = Version::parse(&version.0).map_err(|err| {
-                log::error!(
-                    "invalid semver in database for crate {}: {}. Err: {}",
-                    name,
-                    version.0,
-                    err
-                );
+                report_error(&anyhow!(err).context(format!(
+                    "invalid semver in database for crate {}: {}",
+                    name, version.0
+                )));
                 Nope::InternalServerError
             })?;
             versions_sem.push((version_sem, version.1));

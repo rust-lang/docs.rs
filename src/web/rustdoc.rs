@@ -10,6 +10,7 @@ use crate::{
     },
     Config, Metrics, Storage,
 };
+use anyhow::anyhow;
 use iron::url::percent_encoding::percent_decode;
 use iron::{
     headers::{Expires, HttpDate},
@@ -228,7 +229,7 @@ impl RustdocPage {
                 metrics.html_rewrite_ooms.inc();
 
                 let config = extension!(req, Config);
-                let err = anyhow::anyhow!(
+                let err = anyhow!(
                     "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
                     file_path, config.max_parse_memory,
                 );
@@ -396,12 +397,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         // should be impossible unless there is a semver incompatible version in the db
         // Note that there is a redirect earlier for semver matches to the exact version
         .map_err(|err| {
-            log::error!(
-                "invalid semver in database for crate {}: {}. Err: {}",
-                name,
-                &version,
-                err
-            );
+            utils::report_error(&anyhow!(err).context(format!(
+                "invalid semver in database for crate {}: {}",
+                name, &version,
+            )));
             Nope::InternalServerError
         })?
         .is_prerelease();

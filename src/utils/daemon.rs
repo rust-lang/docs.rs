@@ -2,9 +2,12 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-use crate::{utils::queue_builder, Context, RustwideBuilder};
-use anyhow::Error;
-use log::{debug, error, info};
+use crate::{
+    utils::{queue_builder, report_error},
+    Context, RustwideBuilder,
+};
+use anyhow::{anyhow, Error};
+use log::{debug, info, warn};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -27,7 +30,7 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
                     debug!("Checking new crates");
                     match build_queue.get_new_crates(&index) {
                         Ok(n) => debug!("{} crates added to queue", n),
-                        Err(e) => error!("Failed to get new crates: {}", e),
+                        Err(e) => warn!("Failed to get new crates: {}", e),
                     }
                 }
 
@@ -83,7 +86,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     // instead it will get killed when the process exits.
     server_thread
         .join()
-        .map_err(|_| anyhow::anyhow!("web server panicked"))
+        .map_err(|_| anyhow!("web server panicked"))
 }
 
 pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>
@@ -95,7 +98,9 @@ where
         .spawn(move || loop {
             thread::sleep(interval);
             if let Err(err) = exec() {
-                error!("failed to run scheduled task '{}': {:?}", name, err);
+                report_error(
+                    &anyhow!(err).context(format!("failed to run scheduled task '{}'", name)),
+                );
             }
         })?;
     Ok(())

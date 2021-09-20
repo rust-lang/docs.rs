@@ -1,4 +1,6 @@
 use super::{error::Nope, redirect, redirect_base, STATIC_FILE_CACHE_DURATION};
+use crate::utils::report_error;
+use anyhow::anyhow;
 use chrono::Utc;
 use iron::{
     headers::CacheDirective,
@@ -31,7 +33,7 @@ fn serve_file(file: &str) -> IronResult<Response> {
     // Find the first path that actually exists
     let path = STATIC_SEARCH_PATHS
         .iter()
-        .filter_map(|root| {
+        .find_map(|root| {
             let path = Path::new(root).join(file);
             if !path.exists() {
                 return None;
@@ -48,10 +50,9 @@ fn serve_file(file: &str) -> IronResult<Response> {
                 None
             }
         })
-        .next()
         .ok_or(Nope::ResourceNotFound)?;
     let contents = fs::read(&path).map_err(|e| {
-        log::error!("failed to read static file {}: {}", path.display(), e);
+        report_error(&anyhow!(e).context(format!("failed to read static file {}", path.display())));
         Nope::InternalServerError
     })?;
 
