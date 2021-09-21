@@ -72,30 +72,5 @@
 {%- endblock body -%}
 
 {%- block javascript -%}
-    <script type="text/javascript" nonce="{{ csp_nonce }}">
-        function getKey(ev) {
-            if ("key" in ev && typeof ev.key != "undefined") {
-                return ev.key;
-            }
-
-            return String.fromCharCode(ev.charCode || ev.keyCode);
-        }
-
-        function handleShortcut(ev) {
-            if (ev.ctrlKey || ev.altKey || ev.metaKey || document.activeElement.tagName === "INPUT") {
-                return;
-            }
-
-            switch (getKey(ev)) {
-                case "s":
-                case "S":
-                    ev.preventDefault();
-                    document.getElementById("search").focus();
-                    break;
-            }
-        }
-
-        document.onkeypress = handleShortcut;
-        document.onkeydown = handleShortcut;
-    </script>
+    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ docsrs_version() | slugify }}"></script>
 {%- endblock javascript -%}
