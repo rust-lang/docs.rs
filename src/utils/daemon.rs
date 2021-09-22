@@ -100,10 +100,10 @@ where
         .name(name.into())
         .spawn(move || loop {
             thread::sleep(interval);
-            if let Err(err) = exec() {
-                report_error(
-                    &anyhow!(err).context(format!("failed to run scheduled task '{}'", name)),
-                );
+            if let Err(err) =
+                exec().with_context(|| format!("failed to run scheduled task '{}'", name))
+            {
+                report_error(&err);
             }
         })?;
     Ok(())
