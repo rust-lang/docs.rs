@@ -88,7 +88,7 @@ pub fn queue_builder(
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
         let res = catch_unwind(AssertUnwindSafe(|| {
             match build_queue.build_next_queue_package(&mut builder) {
-                Err(e) => warn!("Failed to build crate from queue: {}", e),
+                Err(e) => report_error(&anyhow!(e).context("Failed to build crate from queue")),
                 Ok(crate_built) => {
                     if crate_built {
                         status.increment();
