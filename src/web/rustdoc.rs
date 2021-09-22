@@ -10,7 +10,7 @@ use crate::{
     },
     Config, Metrics, Storage,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use iron::url::percent_encoding::percent_decode;
 use iron::{
     headers::{Expires, HttpDate},
@@ -394,13 +394,16 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let latest_version = latest_release.version.to_string();
     let is_latest_version = latest_version == version;
     let is_prerelease = semver::Version::parse(&version)
+        .with_context(|| {
+            format!(
+                "invalid semver in database for crate {}: {}",
+                name, &version
+            )
+        })
         // should be impossible unless there is a semver incompatible version in the db
         // Note that there is a redirect earlier for semver matches to the exact version
         .map_err(|err| {
-            utils::report_error(&anyhow!(err).context(format!(
-                "invalid semver in database for crate {}: {}",
-                name, &version,
-            )));
+            utils::report_error(&err);
             Nope::InternalServerError
         })?
         .is_prerelease();

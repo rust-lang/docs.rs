@@ -3,7 +3,7 @@ use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::utils::{get_crate_priority, report_error};
 use crate::{Config, Index, Metrics, RustwideBuilder};
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 
 use crates_index_diff::ChangeKind;
 use log::debug;
@@ -111,7 +111,12 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = f(to_process);
+        let res = f(to_process).with_context(|| {
+            format!(
+                "Failed to build package {}-{} from queue",
+                to_process.name, to_process.version
+            )
+        });
         self.metrics.total_builds.inc();
         match res {
             Ok(()) => {
@@ -129,10 +134,7 @@ impl BuildQueue {
                     self.metrics.failed_builds.inc();
                 }
 
-                report_error(&anyhow!(e).context(format!(
-                    "Failed to build package {}-{} from queue",
-                    to_process.name, to_process.version
-                )));
+                report_error(&e);
             }
         }
 
@@ -189,8 +191,9 @@ impl BuildQueue {
         for krate in &changes {
             match krate.kind {
                 ChangeKind::Yanked => {
-                    let res = conn.execute(
-                        "
+                    let res = conn
+                        .execute(
+                            "
                         UPDATE releases
                             SET yanked = TRUE
                         FROM crates
@@ -198,34 +201,41 @@ impl BuildQueue {
                             AND name = $1
                             AND version = $2
                         ",
-                        &[&krate.name, &krate.version],
-                    );
+                            &[&krate.name, &krate.version],
+                        )
+                        .with_context(|| {
+                            format!(
+                                "error while setting {}-{} to yanked",
+                                krate.name, krate.version
+                            )
+                        });
                     match res {
                         Ok(_) => debug!("{}-{} yanked", krate.name, krate.version),
-                        Err(err) => report_error(&anyhow!(err).context(format!(
-                            "error while setting {}-{} to yanked",
-                            krate.name, krate.version
-                        ))),
+                        Err(err) => report_error(&err),
                     }
                 }
 
                 ChangeKind::Added => {
                     let priority = get_crate_priority(&mut conn, &krate.name)?;
 
-                    match self.add_crate(
-                        &krate.name,
-                        &krate.version,
-                        priority,
-                        index.repository_url(),
-                    ) {
+                    match self
+                        .add_crate(
+                            &krate.name,
+                            &krate.version,
+                            priority,
+                            index.repository_url(),
+                        )
+                        .with_context(|| {
+                            format!(
+                                "failed adding {}-{} into build queue",
+                                krate.name, krate.version
+                            )
+                        }) {
                         Ok(()) => {
                             debug!("{}-{} added into build queue", krate.name, krate.version);
                             crates_added += 1;
                         }
-                        Err(err) => report_error(&anyhow!(err).context(format!(
-                            "failed adding {}-{} into build queue",
-                            krate.name, krate.version
-                        ))),
+                        Err(err) => report_error(&err),
                     }
                 }
             }

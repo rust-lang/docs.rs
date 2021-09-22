@@ -1,6 +1,6 @@
 use super::{error::Nope, redirect, redirect_base, STATIC_FILE_CACHE_DURATION};
 use crate::utils::report_error;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use chrono::Utc;
 use iron::{
     headers::CacheDirective,
@@ -51,10 +51,13 @@ fn serve_file(file: &str) -> IronResult<Response> {
             }
         })
         .ok_or(Nope::ResourceNotFound)?;
-    let contents = fs::read(&path).map_err(|e| {
-        report_error(&anyhow!(e).context(format!("failed to read static file {}", path.display())));
-        Nope::InternalServerError
-    })?;
+
+    let contents = fs::read(&path)
+        .with_context(|| format!("failed to read static file {}", path.display()))
+        .map_err(|e| {
+            report_error(&e);
+            Nope::InternalServerError
+        })?;
 
     // If we can detect the file's mime type, set it
     // MimeGuess misses a lot of the file types we need, so there's a small wrapper
