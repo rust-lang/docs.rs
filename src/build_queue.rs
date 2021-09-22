@@ -6,7 +6,7 @@ use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::anyhow;
 
 use crates_index_diff::ChangeKind;
-use log::{debug, warn};
+use log::debug;
 
 use std::fs;
 use std::path::PathBuf;
@@ -129,13 +129,10 @@ impl BuildQueue {
                     self.metrics.failed_builds.inc();
                 }
 
-                warn!(
-                    "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
-                    to_process.name,
-                    to_process.version,
-                    e,
-                    e.backtrace()
-                );
+                report_error(&anyhow!(e).context(format!(
+                    "Failed to build package {}-{} from queue",
+                    to_process.name, to_process.version
+                )));
             }
         }
 
