@@ -3,7 +3,7 @@
 pub(crate) mod page;
 
 use crate::utils::report_error;
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context as _};
 use log::info;
 use serde_json::Value;
 

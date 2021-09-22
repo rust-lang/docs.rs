@@ -3,7 +3,7 @@ use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::utils::{get_crate_priority, report_error};
 use crate::{Config, Index, Metrics, RustwideBuilder};
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use crates_index_diff::ChangeKind;
 use log::debug;
