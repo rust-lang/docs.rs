@@ -1,6 +1,6 @@
 use super::{error::Nope, redirect, redirect_base, STATIC_FILE_CACHE_DURATION};
 use crate::utils::report_error;
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use chrono::Utc;
 use iron::{
     headers::CacheDirective,

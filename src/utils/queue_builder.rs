@@ -3,7 +3,7 @@ use crate::{
     utils::{pubsubhubbub, report_error},
     BuildQueue,
 };
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error};
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;

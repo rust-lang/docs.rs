@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process::Command};
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use url::Url;
 
 use self::api::Api;
