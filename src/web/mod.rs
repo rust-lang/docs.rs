@@ -196,13 +196,14 @@ impl Handler for MainHandler {
                 {
                     error::Nope::ResourceNotFound
                 } else if e.response.status == Some(status::InternalServerError) {
-                    report_error(&anyhow!(format!("internal server error: {}", e.error)));
+                    report_error(&anyhow!("internal server error: {}", e.error));
                     error::Nope::InternalServerError
                 } else {
-                    report_error(&anyhow!(format!(
+                    report_error(&anyhow!(
                         "No error page for status {:?}; {}",
-                        e.response.status, e.error
-                    )));
+                        e.response.status,
+                        e.error
+                    ));
                     // TODO: add in support for other errors that are actually used
                     error::Nope::InternalServerError
                 };

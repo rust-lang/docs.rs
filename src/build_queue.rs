@@ -194,13 +194,13 @@ impl BuildQueue {
                     let res = conn
                         .execute(
                             "
-                        UPDATE releases
-                            SET yanked = TRUE
-                        FROM crates
-                        WHERE crates.id = releases.crate_id
-                            AND name = $1
-                            AND version = $2
-                        ",
+                            UPDATE releases
+                                SET yanked = TRUE
+                            FROM crates
+                            WHERE crates.id = releases.crate_id
+                                AND name = $1
+                                AND version = $2
+                            ",
                             &[&krate.name, &krate.version],
                         )
                         .with_context(|| {
@@ -260,8 +260,10 @@ impl BuildQueue {
                 .map(|r| PackageKind::Registry(r.as_str()))
                 .unwrap_or(PackageKind::CratesIo);
 
-            if let Err(err) = builder.update_toolchain() {
-                let err = anyhow!(err).context("Updating toolchain failed, locking queue");
+            if let Err(err) = builder
+                .update_toolchain()
+                .context("Updating toolchain failed, locking queue")
+            {
                 report_error(&err);
                 self.lock()?;
                 return Err(err);

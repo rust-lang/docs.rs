@@ -102,7 +102,6 @@ pub fn queue_builder(
         }));
 
         if let Err(e) = res {
-            // TODO: how to report this?
             error!("GRAVE ERROR Building new crates panicked: {:?}", e);
             // If we panic here something is really truly wrong and trying to handle the error won't help.
             build_queue.lock().expect("failed to lock queue");
