@@ -7,7 +7,7 @@ use crate::{
     Context, RustwideBuilder,
 };
 use anyhow::{anyhow, Error};
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -30,7 +30,7 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
                     debug!("Checking new crates");
                     match build_queue.get_new_crates(&index) {
                         Ok(n) => debug!("{} crates added to queue", n),
-                        Err(e) => warn!("Failed to get new crates: {}", e),
+                        Err(e) => report_error(&anyhow!(e).context("Failed to get new crates")),
                     }
                 }
 
