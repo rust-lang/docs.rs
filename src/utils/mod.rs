@@ -27,6 +27,7 @@ pub(crate) fn report_error(err: &anyhow::Error) {
     if std::env::var("SENTRY_DSN").is_ok() {
         sentry_anyhow::capture_anyhow(err);
     } else {
-        log::error!("{}", err);
+        // Debug-format for anyhow errors includes context & backtrace
+        log::error!("{:?}", err);
     }
 }
