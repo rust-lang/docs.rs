@@ -21,7 +21,7 @@
         {%- block css -%}{%- endblock css -%}
     </head>
 
-    <body>
+    <body class="{% block body_classes %}{% endblock body_classes %}">
         {%- block topbar -%}
           {%- include "header/topbar.html" -%}
         {%- endblock topbar -%}

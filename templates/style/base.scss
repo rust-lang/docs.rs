@@ -293,11 +293,11 @@ div.recent-releases-container {
     }
 
     .release:hover,
-    a.release:focus {
+    li.selected > .release {
         background-color: var(--color-background-code);
     }
 
-    li:last-of-type .release {
+    li:last-child .release {
         border-bottom: none;
     }
 
@@ -437,6 +437,7 @@ $sidebar-side-padding: 10px;
 
 div.package-page-container {
     padding-bottom: 50px;
+    width: 100%;
 
     &.small-bottom-pad {
         padding-bottom: 30px;
@@ -796,6 +797,24 @@ ul.pure-menu-list {
 }
 
 @media screen and (min-width: 35.5em) {
+    body.flex {
+        display: flex;
+        flex-direction: column;
+
+        .package-page-container {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+
+            .pure-g {
+                width: 100%;
+                -webkit-flex-flow: unset;
+                -webkit-align-content: unset;
+                align-content: unset;
+            }
+        }
+    }
+
     ul.pure-menu-list {
         li.toggle-source {
             display: list-item;
@@ -827,7 +846,7 @@ ul.pure-menu-list {
             top: $top-navbar-height;
             overflow: auto;
             max-height: calc(100vh - #{$top-navbar-height});
-            height: calc(100% - #{$top-navbar-height});
+            height: 100%;
 
             .pure-menu-list {
                 position: absolute;

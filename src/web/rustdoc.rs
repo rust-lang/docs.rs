@@ -28,11 +28,10 @@ pub struct RustLangRedirector {
 }
 
 impl RustLangRedirector {
-    pub fn new(target: &'static str) -> Self {
-        let url = iron::url::Url::parse("https://doc.rust-lang.org/stable/")
-            .expect("failed to parse rust-lang.org base URL")
-            .join(target)
-            .expect("failed to append crate name to rust-lang.org base URL");
+    pub fn new(version: &str, target: &str) -> Self {
+        let url =
+            iron::url::Url::parse(&format!("https://doc.rust-lang.org/{}/{}", version, target))
+                .expect("failed to parse rust-lang.org doc URL");
         let url = Url::from_generic_url(url).expect("failed to convert url::Url to iron::Url");
 
         Self { url }

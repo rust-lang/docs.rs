@@ -157,13 +157,23 @@ pub(super) fn build_routes() -> Routes {
     for redirect in DOC_RUST_LANG_ORG_REDIRECTS {
         routes.internal_page(
             &format!("/{}", redirect),
-            super::rustdoc::RustLangRedirector::new(redirect),
+            super::rustdoc::RustLangRedirector::new("stable", redirect),
         );
     }
     // redirect proc-macro to proc_macro
     routes.internal_page(
         "/proc-macro",
-        super::rustdoc::RustLangRedirector::new("proc_macro"),
+        super::rustdoc::RustLangRedirector::new("stable", "proc_macro"),
+    );
+    // redirect rustc to nightly rustc docs
+    routes.internal_page(
+        "/rustc",
+        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc"),
+    );
+    // redirect rustdoc to nightly rustdoc docs
+    routes.internal_page(
+        "/rustdoc",
+        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc/rustdoc"),
     );
 
     routes
