@@ -106,13 +106,11 @@ impl Index {
             .arg("-C")
             .arg(&self.path)
             .args(&["gc", "--auto"])
-            .output();
+            .output()
+            .with_context(|| format!("failed to run `git gc --auto`\npath: {:#?}", &self.path));
 
         if let Err(err) = gc {
-            report_error(&anyhow!(err).context(format!(
-                "failed to run `git gc --auto`\npath: {:#?}",
-                &self.path
-            )));
+            report_error(&err);
         }
     }
 

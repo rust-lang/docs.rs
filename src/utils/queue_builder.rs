@@ -3,7 +3,7 @@ use crate::{
     utils::{pubsubhubbub, report_error},
     BuildQueue,
 };
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Context, Error};
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -47,27 +47,28 @@ pub fn queue_builder(
             debug!("10 builds in a row; pinging pubsubhubhub");
             status = BuilderState::QueueInProgress(0);
 
-            match pubsubhubbub::ping_hubs() {
-                Err(e) => report_error(&anyhow!(e).context("Failed to ping hub")),
+            match pubsubhubbub::ping_hubs().context("Failed to ping hub") {
+                Err(e) => report_error(&e),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
             }
         }
 
         // Only build crates if there are any to build
         debug!("Checking build queue");
-        match build_queue.pending_count() {
+        match build_queue
+            .pending_count()
+            .context("Failed to read the number of crates in the queue")
+        {
             Err(e) => {
-                report_error(
-                    &anyhow!(e).context("Failed to read the number of crates in the queue"),
-                );
+                report_error(&e);
                 continue;
             }
 
             Ok(0) => {
                 if status.count() > 0 {
                     // ping the hubs before continuing
-                    match pubsubhubbub::ping_hubs() {
-                        Err(e) => report_error(&anyhow!(e).context("Failed to ping hub")),
+                    match pubsubhubbub::ping_hubs().context("Failed to ping hub") {
+                        Err(e) => report_error(&e),
                         Ok(n) => debug!("Succesfully pinged {} hubs", n),
                     }
                 }
@@ -87,8 +88,11 @@ pub fn queue_builder(
 
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
         let res = catch_unwind(AssertUnwindSafe(|| {
-            match build_queue.build_next_queue_package(&mut builder) {
-                Err(e) => report_error(&anyhow!(e).context("Failed to build crate from queue")),
+            match build_queue
+                .build_next_queue_package(&mut builder)
+                .context("Failed to build crate from queue")
+            {
+                Err(e) => report_error(&e),
                 Ok(crate_built) => {
                     if crate_built {
                         status.increment();
