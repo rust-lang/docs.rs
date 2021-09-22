@@ -3,7 +3,7 @@
 pub(crate) mod page;
 
 use crate::utils::report_error;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use log::info;
 use serde_json::Value;
 
@@ -326,13 +326,17 @@ fn match_version(
         for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
             // in theory a crate must always have a semver compatible version,
             // but check result just in case
-            let version_sem = Version::parse(&version.0).map_err(|err| {
-                report_error(&anyhow!(err).context(format!(
-                    "invalid semver in database for crate {}: {}",
-                    name, version.0
-                )));
-                Nope::InternalServerError
-            })?;
+            let version_sem = Version::parse(&version.0)
+                .with_context(|| {
+                    format!(
+                        "invalid semver in database for crate {}: {}",
+                        name, version.0
+                    )
+                })
+                .map_err(|err| {
+                    report_error(&err);
+                    Nope::InternalServerError
+                })?;
             versions_sem.push((version_sem, version.1));
         }
 
