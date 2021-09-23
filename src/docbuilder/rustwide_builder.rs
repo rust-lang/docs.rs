@@ -553,7 +553,7 @@ impl RustwideBuilder {
         let mut rustdoc_flags = vec![if create_essential_files {
             "--emit=unversioned-shared-resources,toolchain-shared-resources"
         } else {
-            "--emit=invocation-specific"
+            "--emit=invocation-specific,unversioned-shared-resources,toolchain-shared-resources"
         }
         .to_string()];
         rustdoc_flags.extend(vec![
@@ -775,6 +775,7 @@ mod tests {
                         r.default_target,
                         r.doc_targets,
                         r.archive_storage,
+                        r.doc_rustc_version,
                         cov.total_items
                     FROM 
                         crates as c 
@@ -792,6 +793,9 @@ mod tests {
             assert_eq!(row.get::<_, String>("default_target"), default_target);
             assert!(row.get::<_, Option<i32>>("total_items").is_some());
             assert!(row.get::<_, bool>("archive_storage"));
+
+            let used_rustc_version = row.get::<_, String>("doc_rustc_version");
+            assert!(!used_rustc_version.is_empty());
 
             let mut targets: Vec<String> = row
                 .get::<_, Value>("doc_targets")
@@ -826,6 +830,22 @@ mod tests {
             // default target was built and is accessible
             assert!(storage.exists_in_archive(&doc_archive, &format!("{}/index.html", crate_path))?);
             assert_success(&format!("/{}/{}/{}", crate_, version, crate_path), web)?;
+
+            // unversioned shared resources exist in the doc archive
+            assert!(storage.exists_in_archive(&doc_archive, "SourceCodePro-Regular.ttf.woff")?);
+
+            // toolchain shared resources exist in doc archive
+            for (name, ext) in &[("rustdoc", "css"), ("main", "js")] {
+                assert!(storage.exists_in_archive(
+                    &doc_archive,
+                    &format!(
+                        "{}-{}.{}",
+                        name,
+                        parse_rustc_version(&used_rustc_version)?,
+                        ext
+                    )
+                )?);
+            }
 
             // source is also packaged
             assert!(storage.exists_in_archive(&source_archive, "src/lib.rs")?);
