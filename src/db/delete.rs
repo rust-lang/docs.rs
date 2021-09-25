@@ -1,6 +1,10 @@
+use crate::config::Config;
 use crate::error::Result;
+use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::Storage;
+use anyhow::Context;
 use postgres::Client;
+use std::fs;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -12,12 +16,31 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
-pub fn delete_crate(conn: &mut Client, storage: &Storage, name: &str) -> Result<()> {
+pub fn delete_crate(
+    conn: &mut Client,
+    storage: &Storage,
+    config: &Config,
+    name: &str,
+) -> Result<()> {
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
     for prefix in STORAGE_PATHS_TO_DELETE {
-        storage.delete_prefix(&format!("{}/{}/", prefix, name))?;
+        // delete the whole rustdoc/source folder for this crate.
+        // it will include existing archives.
+        let remote_folder = format!("{}/{}/", prefix, name);
+        storage.delete_prefix(&remote_folder)?;
+
+        // remove existing local archive index files.
+        let local_index_folder = config.local_archive_cache_path.join(&remote_folder);
+        if local_index_folder.exists() {
+            fs::remove_dir_all(&local_index_folder).with_context(|| {
+                format!(
+                    "error when trying to remove local index: {:?}",
+                    &local_index_folder
+                )
+            })?;
+        }
     }
 
     Ok(())
@@ -26,6 +49,7 @@ pub fn delete_crate(conn: &mut Client, storage: &Storage, name: &str) -> Result<
 pub fn delete_version(
     conn: &mut Client,
     storage: &Storage,
+    config: &Config,
     name: &str,
     version: &str,
 ) -> Result<()> {
@@ -33,6 +57,26 @@ pub fn delete_version(
 
     for prefix in STORAGE_PATHS_TO_DELETE {
         storage.delete_prefix(&format!("{}/{}/{}/", prefix, name, version))?;
+    }
+
+    let local_archive_cache = &config.local_archive_cache_path;
+    for archive_filename in &[
+        rustdoc_archive_path(name, version),
+        source_archive_path(name, version),
+    ] {
+        // delete remove archive and remote index
+        storage.delete_prefix(archive_filename)?;
+
+        // delete eventually existing local indexes
+        let local_index_file = local_archive_cache.join(&format!("{}.index", archive_filename));
+        if local_index_file.exists() {
+            fs::remove_file(&local_index_file).with_context(|| {
+                format!(
+                    "error when trying to remove local index: {:?}",
+                    local_index_file
+                )
+            })?;
+        }
     }
 
     Ok(())
@@ -121,6 +165,7 @@ mod tests {
     use crate::index::api::CrateOwner;
     use crate::test::{assert_success, wrapper};
     use postgres::Client;
+    use test_case::test_case;
 
     fn crate_exists(conn: &mut Client, name: &str) -> Result<bool> {
         Ok(!conn
@@ -134,8 +179,9 @@ mod tests {
             .is_empty())
     }
 
-    #[test]
-    fn test_delete_from_database() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_delete_crate(archive_storage: bool) {
         wrapper(|env| {
             let db = env.db();
 
@@ -144,26 +190,39 @@ mod tests {
                 .fake_release()
                 .name("package-1")
                 .version("1.0.0")
+                .archive_storage(archive_storage)
                 .create()?;
             let pkg1_v2_id = env
                 .fake_release()
                 .name("package-1")
                 .version("2.0.0")
+                .archive_storage(archive_storage)
                 .create()?;
-            let pkg2_id = env.fake_release().name("package-2").create()?;
+            let pkg2_id = env
+                .fake_release()
+                .name("package-2")
+                .archive_storage(archive_storage)
+                .create()?;
 
             assert!(crate_exists(&mut db.conn(), "package-1")?);
             assert!(crate_exists(&mut db.conn(), "package-2")?);
             assert!(release_exists(&mut db.conn(), pkg1_v1_id)?);
             assert!(release_exists(&mut db.conn(), pkg1_v2_id)?);
             assert!(release_exists(&mut db.conn(), pkg2_id)?);
+            for (pkg, version) in &[
+                ("package-1", "1.0.0"),
+                ("package-1", "2.0.0"),
+                ("package-2", "1.0.0"),
+            ] {
+                assert!(env.storage().rustdoc_file_exists(
+                    pkg,
+                    version,
+                    &format!("{}/index.html", pkg),
+                    archive_storage
+                )?);
+            }
 
-            let pkg1_id = &db
-                .conn()
-                .query("SELECT id FROM crates WHERE name = 'package-1';", &[])?[0]
-                .get("id");
-
-            delete_crate_from_database(&mut db.conn(), "package-1", *pkg1_id)?;
+            delete_crate(&mut db.conn(), &*env.storage(), &*env.config(), "package-1")?;
 
             assert!(!crate_exists(&mut db.conn(), "package-1")?);
             assert!(crate_exists(&mut db.conn(), "package-2")?);
@@ -171,12 +230,44 @@ mod tests {
             assert!(!release_exists(&mut db.conn(), pkg1_v2_id)?);
             assert!(release_exists(&mut db.conn(), pkg2_id)?);
 
+            // files for package 2 still exists
+            assert!(env.storage().rustdoc_file_exists(
+                "package-2",
+                "1.0.0",
+                "package-2/index.html",
+                archive_storage
+            )?);
+
+            // files for package 1 are gone
+            if archive_storage {
+                assert!(!env
+                    .storage()
+                    .exists(&rustdoc_archive_path("package-1", "1.0.0"))?);
+                assert!(!env
+                    .storage()
+                    .exists(&rustdoc_archive_path("package-1", "2.0.0"))?);
+            } else {
+                assert!(!env.storage().rustdoc_file_exists(
+                    "package-1",
+                    "1.0.0",
+                    "package-1/index.html",
+                    archive_storage
+                )?);
+                assert!(!env.storage().rustdoc_file_exists(
+                    "package-1",
+                    "2.0.0",
+                    "package-1/index.html",
+                    archive_storage
+                )?);
+            }
+
             Ok(())
         });
     }
 
-    #[test]
-    fn test_delete_version() {
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_delete_version(archive_storage: bool) {
         wrapper(|env| {
             fn owners(conn: &mut Client, crate_id: i32) -> Result<Vec<String>> {
                 Ok(conn
@@ -196,6 +287,7 @@ mod tests {
                 .fake_release()
                 .name("a")
                 .version("1.0.0")
+                .archive_storage(archive_storage)
                 .add_owner(CrateOwner {
                     login: "malicious actor".into(),
                     avatar: "https://example.org/malicious".into(),
@@ -204,6 +296,12 @@ mod tests {
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
+            assert!(env.storage().rustdoc_file_exists(
+                "a",
+                "1.0.0",
+                "a/index.html",
+                archive_storage
+            )?);
             let crate_id = db
                 .conn()
                 .query("SELECT crate_id FROM releases WHERE id = $1", &[&v1])?
@@ -220,6 +318,7 @@ mod tests {
                 .fake_release()
                 .name("a")
                 .version("2.0.0")
+                .archive_storage(archive_storage)
                 .add_owner(CrateOwner {
                     login: "Peter Rabbit".into(),
                     avatar: "https://example.org/peter".into(),
@@ -228,14 +327,54 @@ mod tests {
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v2)?);
+            assert!(env.storage().rustdoc_file_exists(
+                "a",
+                "2.0.0",
+                "a/index.html",
+                archive_storage
+            )?);
             assert_eq!(
                 owners(&mut db.conn(), crate_id)?,
                 vec!["Peter Rabbit".to_string()]
             );
 
-            delete_version(&mut db.conn(), &*env.storage(), "a", "1.0.0")?;
+            delete_version(
+                &mut db.conn(),
+                &*env.storage(),
+                &*env.config(),
+                "a",
+                "1.0.0",
+            )?;
             assert!(!release_exists(&mut db.conn(), v1)?);
+            if archive_storage {
+                // for archive storage the archive and index files
+                // need to be cleaned up.
+                let rustdoc_archive = rustdoc_archive_path("a", "1.0.0");
+                assert!(!env.storage().exists(&rustdoc_archive)?);
+
+                // local and remote index are gone too
+                let archive_index = format!("{}.index", rustdoc_archive);
+                assert!(!env.storage().exists(&archive_index)?);
+                assert!(!env
+                    .config()
+                    .local_archive_cache_path
+                    .join(&archive_index)
+                    .exists());
+            } else {
+                assert!(!env.storage().rustdoc_file_exists(
+                    "a",
+                    "1.0.0",
+                    "a/index.html",
+                    archive_storage
+                )?);
+            }
             assert!(release_exists(&mut db.conn(), v2)?);
+            assert!(env.storage().rustdoc_file_exists(
+                "a",
+                "2.0.0",
+                "a/index.html",
+                archive_storage
+            )?);
             assert_eq!(
                 owners(&mut db.conn(), crate_id)?,
                 vec!["Peter Rabbit".to_string()]
