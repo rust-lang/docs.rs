@@ -446,11 +446,17 @@ impl DatabaseSubcommand {
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&mut *ctx.conn()?, &*ctx.storage()?, &name, &version)
-                .context("failed to delete the crate")?,
+            } => db::delete_version(
+                &mut *ctx.conn()?,
+                &*ctx.storage()?,
+                &*ctx.config()?,
+                &name,
+                &version,
+            )
+            .context("failed to delete the crate")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&mut *ctx.conn()?, &*ctx.storage()?, &name)
+            } => db::delete_crate(&mut *ctx.conn()?, &*ctx.storage()?, &*ctx.config()?, &name)
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
