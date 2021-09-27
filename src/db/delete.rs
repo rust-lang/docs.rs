@@ -1,8 +1,7 @@
-use crate::config::Config;
 use crate::error::Result;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
-use crate::Storage;
-use anyhow::Context;
+use crate::Context;
+use anyhow::Context as _;
 use postgres::Client;
 use std::fs;
 
@@ -16,12 +15,8 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
-pub fn delete_crate(
-    conn: &mut Client,
-    storage: &Storage,
-    config: &Config,
-    name: &str,
-) -> Result<()> {
+pub fn delete_crate(ctx: &dyn Context, name: &str) -> Result<()> {
+    let conn = &mut ctx.pool()?.get()?;
     let crate_id = get_id(conn, name)?;
     delete_crate_from_database(conn, name, crate_id)?;
 
@@ -29,10 +24,10 @@ pub fn delete_crate(
         // delete the whole rustdoc/source folder for this crate.
         // it will include existing archives.
         let remote_folder = format!("{}/{}/", prefix, name);
-        storage.delete_prefix(&remote_folder)?;
+        ctx.storage()?.delete_prefix(&remote_folder)?;
 
         // remove existing local archive index files.
-        let local_index_folder = config.local_archive_cache_path.join(&remote_folder);
+        let local_index_folder = ctx.config()?.local_archive_cache_path.join(&remote_folder);
         if local_index_folder.exists() {
             fs::remove_dir_all(&local_index_folder).with_context(|| {
                 format!(
@@ -46,20 +41,17 @@ pub fn delete_crate(
     Ok(())
 }
 
-pub fn delete_version(
-    conn: &mut Client,
-    storage: &Storage,
-    config: &Config,
-    name: &str,
-    version: &str,
-) -> Result<()> {
+pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()> {
+    let conn = &mut ctx.pool()?.get()?;
+    let storage = ctx.storage()?;
+
     delete_version_from_database(conn, name, version)?;
 
     for prefix in STORAGE_PATHS_TO_DELETE {
         storage.delete_prefix(&format!("{}/{}/{}/", prefix, name, version))?;
     }
 
-    let local_archive_cache = &config.local_archive_cache_path;
+    let local_archive_cache = &ctx.config()?.local_archive_cache_path;
     for archive_filename in &[
         rustdoc_archive_path(name, version),
         source_archive_path(name, version),
@@ -222,7 +214,7 @@ mod tests {
                 )?);
             }
 
-            delete_crate(&mut db.conn(), &*env.storage(), &*env.config(), "package-1")?;
+            delete_crate(env, "package-1")?;
 
             assert!(!crate_exists(&mut db.conn(), "package-1")?);
             assert!(crate_exists(&mut db.conn(), "package-2")?);
@@ -338,13 +330,7 @@ mod tests {
                 vec!["Peter Rabbit".to_string()]
             );
 
-            delete_version(
-                &mut db.conn(),
-                &*env.storage(),
-                &*env.config(),
-                "a",
-                "1.0.0",
-            )?;
+            delete_version(env, "a", "1.0.0")?;
             assert!(!release_exists(&mut db.conn(), v1)?);
             if archive_storage {
                 // for archive storage the archive and index files
