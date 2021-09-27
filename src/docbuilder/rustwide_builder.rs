@@ -446,6 +446,15 @@ impl RustwideBuilder {
                         Err(err) => warn!("{:#?}", err),
                     }
 
+                    // delete eventually existing files from pre-archive storage.
+                    // we're doing this in the end so eventual problems in the build
+                    // won't lead to non-existing docs.
+                    for prefix in &["rustdoc", "sources"] {
+                        let prefix = format!("{}/{}/{}/", prefix, name, version);
+                        log::debug!("cleaning old storage folder {}", prefix);
+                        self.storage.delete_prefix(&prefix)?;
+                    }
+
                     Ok(res.result.successful)
                 })()
                 .map_err(|e| failure::Error::from_boxed_compat(e.into()))
@@ -761,10 +770,14 @@ mod tests {
             let version = DUMMY_CRATE_VERSION;
             let default_target = "x86_64-unknown-linux-gnu";
 
+            let storage = env.storage();
+            let old_rustdoc_file = format!("rustdoc/{}/{}/some_doc_file", crate_, version);
+            let old_source_file = format!("sources/{}/{}/some_source_file", crate_, version);
+            storage.store_one(&old_rustdoc_file, Vec::new())?;
+            storage.store_one(&old_source_file, Vec::new())?;
+
             let mut builder = RustwideBuilder::init(env).unwrap();
-            builder
-                .build_package(crate_, version, PackageKind::CratesIo)
-                .map(|_| ())?;
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             // check release record in the db (default and other targets)
             let mut conn = env.db().conn();
@@ -812,8 +825,11 @@ mod tests {
                 ]
             );
 
-            let storage = env.storage();
             let web = env.frontend();
+
+            // old rustdoc & source files are gone
+            assert!(!storage.exists(&old_rustdoc_file)?);
+            assert!(!storage.exists(&old_source_file)?);
 
             // doc archive exists
             let doc_archive = rustdoc_archive_path(crate_, version);
