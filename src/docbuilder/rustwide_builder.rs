@@ -446,13 +446,15 @@ impl RustwideBuilder {
                         Err(err) => warn!("{:#?}", err),
                     }
 
-                    // delete eventually existing files from pre-archive storage.
-                    // we're doing this in the end so eventual problems in the build
-                    // won't lead to non-existing docs.
-                    for prefix in &["rustdoc", "sources"] {
-                        let prefix = format!("{}/{}/{}/", prefix, name, version);
-                        log::debug!("cleaning old storage folder {}", prefix);
-                        self.storage.delete_prefix(&prefix)?;
+                    if res.result.successful {
+                        // delete eventually existing files from pre-archive storage.
+                        // we're doing this in the end so eventual problems in the build
+                        // won't lead to non-existing docs.
+                        for prefix in &["rustdoc", "sources"] {
+                            let prefix = format!("{}/{}/{}/", prefix, name, version);
+                            log::debug!("cleaning old storage folder {}", prefix);
+                            self.storage.delete_prefix(&prefix)?;
+                        }
                     }
 
                     Ok(res.result.successful)
@@ -874,6 +876,61 @@ mod tests {
                     assert_success(&target_url, web)?;
                 }
             }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_binary_crate() {
+        wrapper(|env| {
+            // some binary crate
+            let crate_ = "heater";
+            let version = "0.2.3";
+
+            let storage = env.storage();
+            let old_rustdoc_file = format!("rustdoc/{}/{}/some_doc_file", crate_, version);
+            let old_source_file = format!("sources/{}/{}/some_source_file", crate_, version);
+            storage.store_one(&old_rustdoc_file, Vec::new())?;
+            storage.store_one(&old_source_file, Vec::new())?;
+
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(!builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            // check release record in the db (default and other targets)
+            let mut conn = env.db().conn();
+            let rows = conn
+                .query(
+                    "SELECT 
+                        r.rustdoc_status,
+                        r.is_library
+                    FROM 
+                        crates as c 
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                    WHERE 
+                        c.name = $1 AND 
+                        r.version = $2",
+                    &[&crate_, &version],
+                )
+                .unwrap();
+            let row = rows.get(0).unwrap();
+
+            assert!(!row.get::<_, bool>("rustdoc_status"));
+            assert!(!row.get::<_, bool>("is_library"));
+
+            // doc archive exists
+            let doc_archive = rustdoc_archive_path(crate_, version);
+            assert!(!storage.exists(&doc_archive)?);
+
+            // source archive exists
+            let source_archive = source_archive_path(crate_, version);
+            assert!(storage.exists(&source_archive)?);
+
+            // old rustdoc & source files still exist
+            assert!(storage.exists(&old_rustdoc_file)?);
+            assert!(storage.exists(&old_source_file)?);
 
             Ok(())
         })
