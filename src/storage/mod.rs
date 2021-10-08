@@ -195,8 +195,16 @@ impl Storage {
     }
 
     pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
-        let index = self.get_index_for(archive_path)?;
-        Ok(index.find_file(path).is_ok())
+        match self.get_index_for(archive_path) {
+            Ok(index) => Ok(index.find_file(path).is_ok()),
+            Err(err) => {
+                if err.downcast_ref::<PathNotFoundError>().is_some() {
+                    Ok(false)
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
@@ -724,6 +732,13 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_exists_without_remote_archive(storage: &Storage) -> Result<()> {
+        // when remote and local index don't exist, any `exists_in_archive`  should
+        // return `false`
+        assert!(!storage.exists_in_archive("some_archive_name", "some_file_name")?);
+        Ok(())
+    }
+
     fn test_store_all_in_archive(storage: &Storage, metrics: &Metrics) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-archive-test")
@@ -989,6 +1004,7 @@ mod backend_tests {
             test_get_too_big,
             test_delete_prefix,
             test_delete_percent,
+            test_exists_without_remote_archive,
         }
 
         tests_with_metrics {
