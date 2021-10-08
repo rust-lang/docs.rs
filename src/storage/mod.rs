@@ -878,6 +878,10 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_delete_prefix_without_matches(storage: &Storage) -> Result<()> {
+        storage.delete_prefix("prefix_without_objects")
+    }
+
     fn test_delete_prefix(storage: &Storage) -> Result<()> {
         test_deletion(
             storage,
@@ -1003,6 +1007,7 @@ mod backend_tests {
             test_get_range,
             test_get_too_big,
             test_delete_prefix,
+            test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
         }

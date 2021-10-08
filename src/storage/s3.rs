@@ -250,25 +250,27 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     })
                     .collect::<Vec<_>>();
 
-                let resp = self
-                    .s3
-                    .client
-                    .delete_objects(DeleteObjectsRequest {
-                        bucket: self.s3.bucket.clone(),
-                        delete: rusoto_s3::Delete {
-                            objects: to_delete,
-                            quiet: None,
-                        },
-                        ..DeleteObjectsRequest::default()
-                    })
-                    .await?;
+                if !to_delete.is_empty() {
+                    let resp = self
+                        .s3
+                        .client
+                        .delete_objects(DeleteObjectsRequest {
+                            bucket: self.s3.bucket.clone(),
+                            delete: rusoto_s3::Delete {
+                                objects: to_delete,
+                                quiet: None,
+                            },
+                            ..DeleteObjectsRequest::default()
+                        })
+                        .await?;
 
-                if let Some(errs) = resp.errors {
-                    for err in &errs {
-                        log::error!("error deleting file from s3: {:?}", err);
+                    if let Some(errs) = resp.errors {
+                        for err in &errs {
+                            log::error!("error deleting file from s3: {:?}", err);
+                        }
+
+                        anyhow::bail!("deleting from s3 failed");
                     }
-
-                    anyhow::bail!("deleting from s3 failed");
                 }
 
                 continuation_token = list.next_continuation_token;
