@@ -5,7 +5,7 @@ use crate::{
     Config, Storage,
 };
 use chrono::{DateTime, Utc};
-use iron::{IronResult, Request, Response};
+use iron::{IronError, IronResult, Request, Response};
 use router::Router;
 use serde::Serialize;
 
@@ -35,7 +35,9 @@ pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
     let name = cexpect!(req, router.find("name"));
     let version = cexpect!(req, router.find("version"));
-    let id: i32 = ctry!(req, cexpect!(req, router.find("id")).parse());
+    let id: i32 = cexpect!(req, router.find("id"))
+        .parse()
+        .map_err(|_| -> IronError { Nope::BuildNotFound.into() })?;
 
     let mut conn = extension!(req, Pool).get()?;
 
@@ -89,6 +91,7 @@ pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use crate::test::{wrapper, FakeBuild};
     use kuchiki::traits::TendrilSink;
+    use test_case::test_case;
 
     #[test]
     fn db_build_logs() {
@@ -185,15 +188,18 @@ mod tests {
         });
     }
 
-    #[test]
-    fn non_existing_build() {
+    #[test_case("42")]
+    #[test_case("nan")]
+    fn non_existing_build(build_id: &str) {
         wrapper(|env| {
             env.fake_release().name("foo").version("0.1.0").create()?;
 
-            let res = env.frontend().get("/crate/foo/0.1.0/builds/42").send()?;
+            let res = env
+                .frontend()
+                .get(&format!("/crate/foo/0.1.0/builds/{}", build_id))
+                .send()?;
             assert_eq!(res.status(), 404);
-            // TODO: blocked on https://github.com/rust-lang/docs.rs/issues/55
-            // assert!(res.text()?.contains("no such build"));
+            assert!(res.text()?.contains("no such build"));
 
             Ok(())
         });
