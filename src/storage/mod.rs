@@ -249,8 +249,7 @@ impl Storage {
             .join(&remote_index_path);
 
         if local_index_path.exists() {
-            let mut file = fs::File::open(local_index_path)?;
-            archive_index::Index::load(&mut file)
+            archive_index::Index::load(io::BufReader::new(fs::File::open(local_index_path)?))
         } else {
             let index_content = self.get(&remote_index_path, std::usize::MAX)?.content;
 
