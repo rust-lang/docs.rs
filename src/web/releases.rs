@@ -8,17 +8,21 @@ use crate::{
     web::{error::Nope, match_version, page::WebPage, redirect_base},
     BuildQueue, Config,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, NaiveDate, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
     modifiers::Redirect,
-    status, IronResult, Request, Response, Url,
+    status, IronError, IronResult, Request, Response, Url,
 };
+use log::{debug, warn};
 use postgres::Client;
 use router::Router;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::str;
+use url::form_urlencoded;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -153,87 +157,137 @@ fn get_releases_by_owner(
     (owner_name.unwrap_or_default(), packages)
 }
 
+struct SearchResult {
+    pub results: Vec<Release>,
+    pub executed_query: Option<String>,
+}
+
 /// Get the search results for a crate search query
 ///
-/// Retrieves crates which names have a levenshtein distance of less than or equal to 3,
-/// crates who fit into or otherwise are made up of the query or crates whose descriptions
-/// match the search query.
-///
-/// * `query`: The query string, unfiltered
-/// * `page`: The page of results to show (1-indexed)
-/// * `limit`: The number of results to return
-///
-/// Returns 0 and an empty Vec when no results are found or if a database error occurs
-///
+/// This delegates to the crates.io search API.
 fn get_search_results(
     conn: &mut Client,
-    mut query: &str,
-    page: i64,
-    limit: i64,
-) -> Result<(i64, Vec<Release>), anyhow::Error> {
-    query = query.trim();
-    if query.is_empty() {
-        return Ok((0, Vec::new()));
+    query_params: &str,
+) -> Result<SearchResult, anyhow::Error> {
+    #[derive(Deserialize)]
+    struct CratesIoSearchResult {
+        crates: Vec<CratesIoCrate>,
     }
-    let offset = (page - 1) * limit;
+    #[derive(Deserialize, Debug)]
+    struct CratesIoCrate {
+        name: String,
+    }
 
-    let statement = "
-        SELECT
-            crates.name,
-            releases.version,
-            releases.description,
-            releases.target_name,
-            releases.release_time,
-            releases.rustdoc_status,
-            repositories.stars,
-            COUNT(*) OVER() as total
-        FROM crates
-        INNER JOIN (
-            SELECT releases.id, releases.crate_id
-            FROM (
-                SELECT
-                    releases.id,
-                    releases.crate_id,
-                    RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
-                FROM releases
-                WHERE releases.rustdoc_status AND NOT releases.yanked
-            ) AS releases
-            WHERE releases.rank = 1
-        ) AS latest_release ON latest_release.crate_id = crates.id
-        INNER JOIN releases ON latest_release.id = releases.id
-        LEFT JOIN repositories ON releases.repository_id = repositories.id
-        WHERE
-            ((char_length($1)::float - levenshtein(crates.name, $1)::float) / char_length($1)::float) >= 0.65
-            OR crates.name ILIKE CONCAT('%', $1, '%')
-        GROUP BY crates.id, releases.id, repositories.stars
-        ORDER BY
-            levenshtein(crates.name, $1) ASC,
-            crates.name ILIKE CONCAT('%', $1, '%'),
-            releases.downloads DESC
-        LIMIT $2 OFFSET $3";
+    use crate::utils::APP_USER_AGENT;
+    use once_cell::sync::Lazy;
+    use reqwest::blocking::Client as HttpClient;
+    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
 
-    let rows = conn.query(statement, &[&query, &limit, &offset])?;
+    static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| {
+        let mut headers = HeaderMap::new();
+        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        HttpClient::builder()
+            .default_headers(headers)
+            .build()
+            .unwrap()
+    });
 
-    // Each row contains the total number of possible/valid results, just get it once
-    let total_results = rows
-        .get(0)
-        .map(|row| row.get::<_, i64>("total"))
-        .unwrap_or_default();
-    let packages: Vec<Release> = rows
+    #[cfg(not(test))]
+    let host = "https://crates.io";
+    #[cfg(test)]
+    let host = mockito::server_url();
+
+    let url = url::Url::parse(&format!("{}/api/v1/crates{}", host, query_params))?;
+    debug!("fetching search results from {}", url);
+
+    // extract the query from the query args.
+    // This is easier because the query might have been encoded in the bash64-encoded
+    // paginate parameter.
+    let executed_query = url.query_pairs().find_map(|(key, value)| {
+        if key == "q" {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    });
+
+    let releases: CratesIoSearchResult = HTTP_CLIENT.get(url).send()?.json()?;
+
+    let names: Vec<_> = releases
+        .crates
         .into_iter()
-        .map(|row| Release {
-            name: row.get("name"),
-            version: row.get("version"),
-            description: row.get("description"),
-            target_name: row.get("target_name"),
-            // FIXME: this is not great, but also doesn't seem the end of the world to show release time instead
-            build_time: row.get("release_time"),
-            rustdoc_status: row.get("rustdoc_status"),
-            stars: row.get::<_, Option<i32>>("stars").unwrap_or(0),
+        .map(|krate| krate.name)
+        .collect();
+
+    // now we're trying to get the docs.rs data for the crates
+    // returned by the search.
+    // Docs.rs might not know about crates or `max_version` shortly after
+    // they were published on crates.io, or while the build is running.
+    // So for now we are using the version with the youngest release_time.
+    // This is different from all other release-list views where we show
+    // our latest build.
+    let crates: HashMap<String, Release> = conn
+        .query(
+            "SELECT
+                crates.name,
+                releases.version,
+                releases.description,
+                releases.release_time,
+                releases.target_name,
+                releases.rustdoc_status,
+                repositories.stars
+
+            FROM crates 
+            INNER JOIN (
+                --FIXME: this logic will probably move to using crates.latest_version_id when it is fixed. 
+                SELECT releases.id, releases.crate_id
+                FROM (
+                    SELECT
+                        releases.id,
+                        releases.crate_id,
+                        RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
+                    FROM releases
+                    WHERE releases.rustdoc_status AND NOT releases.yanked
+                ) AS releases
+                WHERE releases.rank = 1
+            ) AS latest_release ON latest_release.crate_id = crates.id
+            INNER JOIN releases ON latest_release.id = releases.id
+            LEFT JOIN repositories ON releases.repository_id = repositories.id
+
+            WHERE crates.name = ANY($1)",
+            &[&names],
+        )?
+        .into_iter()
+        .map(|row| {
+            let stars: Option<_> = row.get("stars");
+            let name: String = row.get("name");
+            (
+                name.clone(),
+                Release {
+                    name,
+                    version: row.get("version"),
+                    description: row.get("description"),
+                    build_time: row.get("release_time"),
+                    target_name: row.get("target_name"),
+                    rustdoc_status: row.get("rustdoc_status"),
+                    stars: stars.unwrap_or(0),
+                },
+            )
         })
         .collect();
 
-    Ok((total_results, packages))
+    Ok(SearchResult {
+        // start with the original names from crates.io to keep the original ranking,
+        // extend with the release/build information from docs.rs, if we already
+        // know about the crate.
+        results: names
+            .iter()
+            .filter_map(|name| crates.get(name))
+            .cloned()
+            .collect(),
+        executed_query,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -495,95 +549,97 @@ impl_webpage! {
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let url = req.url.as_ref();
-    let mut params = url.query_pairs();
-    let query = params.find(|(key, _)| key == "query");
+    let params: HashMap<_, _> = url.query_pairs().collect();
+    let query = params
+        .get("query")
+        .map(|q| q.to_string())
+        .unwrap_or_else(|| "".to_string());
+
     let mut conn = extension!(req, Pool).get()?;
 
-    if let Some((_, query)) = query {
-        // check if I am feeling lucky button pressed and redirect user to crate page
-        // if there is a match
-        // NOTE: calls `query_pairs()` again because iterators are lazy and only yield items once
-        if url
-            .query_pairs()
-            .any(|(key, _)| key == "i-am-feeling-lucky")
-        {
-            // redirect to a random crate if query is empty
-            if query.is_empty() {
-                return redirect_to_random_crate(req, &mut conn);
-            }
-
-            // since we never pass a version into `match_version` here, we'll never get
-            // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
-            // matter
-            if let Ok(matchver) = match_version(&mut conn, &query, None) {
-                let (version, id) = matchver.version.into_parts();
-                let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
-
-                // FIXME: This is a super dirty way to check if crate have rustdocs generated.
-                //        match_version should handle this instead of this code block.
-                //        This block is introduced to fix #163
-                let rustdoc_status = {
-                    let rows = ctry!(
-                        req,
-                        conn.query(
-                            "SELECT rustdoc_status
-                         FROM releases
-                         WHERE releases.id = $1",
-                            &[&id]
-                        ),
-                    );
-
-                    rows.into_iter()
-                        .next()
-                        .map(|r| r.get("rustdoc_status"))
-                        .unwrap_or_default()
-                };
-
-                let url = if rustdoc_status {
-                    ctry!(
-                        req,
-                        Url::parse(&format!("{}/{}/{}/", redirect_base(req), query, version)),
-                    )
-                } else {
-                    ctry!(
-                        req,
-                        Url::parse(&format!(
-                            "{}/crate/{}/{}",
-                            redirect_base(req),
-                            query,
-                            version,
-                        )),
-                    )
-                };
-
-                let mut resp = Response::with((status::Found, Redirect(url)));
-                resp.headers.set(Expires(HttpDate(time::now())));
-
-                return Ok(resp);
-            }
+    // check if I am feeling lucky button pressed and redirect user to crate page
+    // if there is a match
+    if params.contains_key("i-am-feeling-lucky") {
+        // redirect to a random crate if query is empty
+        if query.is_empty() {
+            return redirect_to_random_crate(req, &mut conn);
         }
+        // since we never pass a version into `match_version` here, we'll never get
+        // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
+        // matter
+        if let Ok(matchver) = match_version(&mut conn, &query, None) {
+            let (version, _) = matchver.version.into_parts();
+            let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
 
-        let (_, results) = ctry!(
-            req,
-            get_search_results(&mut conn, &query, 1, RELEASES_IN_RELEASES)
-        );
-        let title = if results.is_empty() {
-            format!("No results found for '{}'", query)
-        } else {
-            format!("Search results for '{}'", query)
-        };
+            let url = if matchver.rustdoc_status {
+                ctry!(
+                    req,
+                    Url::parse(&format!("{}/{}/{}/", redirect_base(req), query, version)),
+                )
+            } else {
+                ctry!(
+                    req,
+                    Url::parse(&format!(
+                        "{}/crate/{}/{}",
+                        redirect_base(req),
+                        query,
+                        version,
+                    )),
+                )
+            };
 
-        // FIXME: There is no pagination
-        Search {
-            title,
-            results,
-            search_query: Some(query.into_owned()),
-            ..Default::default()
+            let mut resp = Response::with((status::Found, Redirect(url)));
+            resp.headers.set(Expires(HttpDate(time::now())));
+
+            return Ok(resp);
         }
-        .into_response(req)
-    } else {
-        Err(Nope::NoResults.into())
     }
+
+    let search_result = ctry!(
+        req,
+        if let Some(paginate) = params.get("paginate") {
+            get_search_results(
+                &mut conn,
+                &String::from_utf8_lossy(&base64::decode(&paginate.as_bytes()).map_err(
+                    |e| -> IronError {
+                        warn!(
+                            "error when decoding pagination base64 string \"{}\": {:?}",
+                            paginate, e
+                        );
+                        Nope::NoResults.into()
+                    },
+                )?),
+            )
+        } else if !query.is_empty() {
+            let query_params: String = form_urlencoded::Serializer::new(String::new())
+                .append_pair("q", &query)
+                .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
+                .finish();
+
+            get_search_results(&mut conn, &format!("?{}", &query_params))
+        } else {
+            return Err(Nope::NoResults.into());
+        }
+    );
+
+    let executed_query = search_result
+        .executed_query
+        .unwrap_or_else(|| "".to_string());
+
+    let title = if search_result.results.is_empty() {
+        format!("No results found for '{}'", executed_query)
+    } else {
+        format!("Search results for '{}'", executed_query)
+    };
+
+    // FIXME: There is no pagination
+    Search {
+        title,
+        results: search_result.results,
+        search_query: Some(executed_query),
+        ..Default::default()
+    }
+    .into_response(req)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -690,6 +746,8 @@ mod tests {
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
     use kuchiki::traits::TendrilSink;
+    use mockito::{mock, Matcher};
+    use serde_json::json;
     use std::collections::HashSet;
 
     #[test]
@@ -727,332 +785,36 @@ mod tests {
     }
 
     #[test]
-    fn database_search() {
+    fn search_im_feeling_lucky_with_query_redirect_to_crate_page() {
         wrapper(|env| {
-            let db = env.db();
-
-            env.fake_release().name("foo").version("0.0.0").create()?;
+            let web = env.frontend();
             env.fake_release()
-                .name("bar-foo")
-                .version("0.0.0")
-                .create()?;
-            env.fake_release()
-                .name("foo-bar")
-                .version("0.0.1")
-                .create()?;
-            env.fake_release().name("fo0").version("0.0.0").create()?;
-            env.fake_release()
-                .name("fool")
-                .version("0.0.0")
+                .name("some_random_crate")
                 .build_result_failed()
                 .create()?;
-            env.fake_release()
-                .name("freakin")
-                .version("0.0.0")
-                .create()?;
-            env.fake_release()
-                .name("something unreleated")
-                .version("0.0.0")
-                .create()?;
+            env.fake_release().name("some_other_crate").create()?;
 
-            let (num_results, results) = get_search_results(&mut db.conn(), "foo", 1, 100)?;
-            assert_eq!(num_results, 4);
-
-            let mut results = results.into_iter();
-
-            let expected = ["foo", "fo0", "bar-foo", "foo-bar"];
-            for expected in expected.iter() {
-                assert_eq!(expected, &results.next().unwrap().name);
-            }
-            assert_eq!(results.count(), 0);
-
+            assert_redirect(
+                "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
+                "/crate/some_random_crate/1.0.0",
+                web,
+            )?;
             Ok(())
         })
     }
 
     #[test]
-    fn exacts_dont_care() {
+    fn search_im_feeling_lucky_with_query_redirect_to_docs() {
         wrapper(|env| {
-            let db = env.db();
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release().name("some_other_crate").create()?;
 
-            let releases = ["regex", "regex-", "regex-syntax"];
-            for release in releases.iter() {
-                env.fake_release().name(release).version("0.0.0").create()?;
-            }
-
-            let near_matches = ["Regex", "rEgex", "reGex", "regEx", "regeX"];
-
-            for name in near_matches.iter() {
-                let (num_results, mut results) =
-                    dbg!(get_search_results(&mut db.conn(), *name, 1, 100))?;
-                assert_eq!(num_results, 3);
-
-                for name in releases.iter() {
-                    assert_eq!(results.remove(0).name, *name);
-                }
-                assert!(results.is_empty());
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn unsuccessful_not_shown() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release()
-                .name("regex")
-                .version("0.0.0")
-                .build_result_failed()
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "regex", 1, 100)?;
-            assert_eq!(num_results, 0);
-
-            let results = results.into_iter();
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn yanked_not_shown() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release()
-                .name("regex")
-                .version("0.0.0")
-                .yanked(true)
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "regex", 1, 100)?;
-            assert_eq!(num_results, 0);
-
-            let results = results.into_iter();
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn fuzzily_match() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release().name("regex").version("0.0.0").create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "redex", 1, 100)?;
-            assert_eq!(num_results, 1);
-
-            let mut results = results.into_iter();
-            assert_eq!(results.next().unwrap().name, "regex");
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    // Description searching more than doubles search time
-    // #[test]
-    // fn search_descriptions() {
-    //     wrapper(|env| {
-    //         let db = env.db();
-    //         env.fake_release()
-    //             .name("something_completely_unrelated")
-    //             .description("Supercalifragilisticexpialidocious")
-    //             .create()?;
-    //
-    //         let (num_results, results) =
-    //             get_search_results(&mut db.conn(), "supercalifragilisticexpialidocious", 1, 100)?;
-    //         assert_eq!(num_results, 1);
-    //
-    //         let mut results = results.into_iter();
-    //         assert_eq!(
-    //             results.next().unwrap().name,
-    //             "something_completely_unrelated"
-    //         );
-    //         assert_eq!(results.count(), 0);
-    //
-    //         Ok(())
-    //     })
-    // }
-
-    #[test]
-    fn search_limits() {
-        wrapper(|env| {
-            let db = env.db();
-
-            env.fake_release().name("something_magical").create()?;
-            env.fake_release().name("something_sinister").create()?;
-            env.fake_release().name("something_fantastical").create()?;
-            env.fake_release()
-                .name("something_completely_unrelated")
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "something", 1, 2)?;
-            assert_eq!(num_results, 4);
-
-            let mut results = results.into_iter();
-            assert_eq!(results.next().unwrap().name, "something_magical");
-            assert_eq!(results.next().unwrap().name, "something_sinister");
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn search_offsets() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release().name("something_magical").create()?;
-            env.fake_release().name("something_sinister").create()?;
-            env.fake_release().name("something_fantastical").create()?;
-            env.fake_release()
-                .name("something_completely_unrelated")
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "something", 2, 2)?;
-            assert_eq!(num_results, 4);
-
-            let mut results = results.into_iter();
-            assert_eq!(results.next().unwrap().name, "something_fantastical");
-            assert_eq!(
-                results.next().unwrap().name,
-                "something_completely_unrelated",
-            );
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn release_dates() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release()
-                .name("somethang")
-                .release_time(Utc.ymd(2021, 4, 16).and_hms(4, 33, 50))
-                .version("0.3.0")
-                .description("this is the correct choice")
-                .create()?;
-            env.fake_release()
-                .name("somethang")
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
-                .description("second")
-                .version("0.2.0")
-                .create()?;
-            env.fake_release()
-                .name("somethang")
-                .release_time(Utc.ymd(2019, 4, 16).and_hms(4, 33, 50))
-                .description("third")
-                .version("0.1.0")
-                .create()?;
-            env.fake_release()
-                .name("somethang")
-                .release_time(Utc.ymd(2018, 4, 16).and_hms(4, 33, 50))
-                .description("fourth")
-                .version("0.0.0")
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "somethang", 1, 100)?;
-            assert_eq!(num_results, 1);
-
-            let mut results = results.into_iter();
-            assert_eq!(
-                results.next().unwrap().description,
-                Some("this is the correct choice".into()),
-            );
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    // Description searching more than doubles search time
-    // #[test]
-    // fn fuzzy_over_description() {
-    //     wrapper(|env| {
-    //         let db = env.db();
-    //         env.fake_release()
-    //             .name("name_better_than_description")
-    //             .description("this is the correct choice")
-    //             .create()?;
-    //         env.fake_release()
-    //             .name("im_completely_unrelated")
-    //             .description("name_better_than_description")
-    //             .create()?;
-    //         env.fake_release()
-    //             .name("i_have_zero_relation_whatsoever")
-    //             .create()?;
-    //
-    //         let (num_results, results) =
-    //             get_search_results(&mut db.conn(), "name_better_than_description", 1, 100)?;
-    //         assert_eq!(num_results, 2);
-    //
-    //         let mut results = results.into_iter();
-    //
-    //         let next = results.next().unwrap();
-    //         assert_eq!(next.name, "name_better_than_description");
-    //         assert_eq!(next.description, Some("this is the correct choice".into()));
-    //
-    //         let next = results.next().unwrap();
-    //         assert_eq!(next.name, "im_completely_unrelated");
-    //         assert_eq!(
-    //             next.description,
-    //             Some("name_better_than_description".into())
-    //         );
-    //
-    //         assert_eq!(results.count(), 0);
-    //
-    //         Ok(())
-    //     })
-    // }
-
-    #[test]
-    fn dont_return_unrelated() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release().name("match").create()?;
-            env.fake_release().name("matcher").create()?;
-            env.fake_release().name("matchest").create()?;
-            env.fake_release()
-                .name("i_am_useless_and_mean_nothing")
-                .create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "match", 1, 100)?;
-            assert_eq!(num_results, 3);
-
-            let mut results = results.into_iter();
-            assert_eq!(results.next().unwrap().name, "match");
-            assert_eq!(results.next().unwrap().name, "matcher");
-            assert_eq!(results.next().unwrap().name, "matchest");
-            assert_eq!(results.count(), 0);
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn order_by_downloads() {
-        wrapper(|env| {
-            let db = env.db();
-            env.fake_release().name("matca").downloads(100).create()?;
-            env.fake_release().name("matcb").downloads(10).create()?;
-            env.fake_release().name("matcc").downloads(1).create()?;
-
-            let (num_results, results) = get_search_results(&mut db.conn(), "match", 1, 100)?;
-            assert_eq!(num_results, 3);
-
-            let mut results = results.into_iter();
-            assert_eq!(results.next().unwrap().name, "matca");
-            assert_eq!(results.next().unwrap().name, "matcb");
-            assert_eq!(results.next().unwrap().name, "matcc");
-            assert_eq!(results.count(), 0);
-
+            assert_redirect(
+                "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
+                "/some_random_crate/1.0.0/some_random_crate/",
+                web,
+            )?;
             Ok(())
         })
     }
@@ -1087,15 +849,97 @@ mod tests {
     }
 
     #[test]
-    fn search() {
+    fn search_lucky_with_unknown_crate() {
         wrapper(|env| {
             let web = env.frontend();
             env.fake_release().name("some_random_crate").create()?;
 
-            let links = get_release_links("/releases/search?query=some_random_crate", web)?;
+            let _m = mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "some_random_".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                            { "name": "some_other_crate" },
+                        ],
+                        "meta": {
+                            "next_page": null,
+                            "prev_page": null,
+                        }
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            // when clicking "I'm feeling lucky" and the query doesn't match any crate,
+            // just fallback to the normal search results.
+            let links = get_release_links(
+                "/releases/search?query=some_random_&i-am-feeling-lucky=1",
+                web,
+            )?;
 
             assert_eq!(links.len(), 1);
-            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/",);
+            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release()
+                .name("some_random_crate")
+                .version("2.0.0")
+                .create()?;
+            env.fake_release()
+                .name("some_random_crate")
+                .version("1.0.0")
+                .create()?;
+
+            env.fake_release()
+                .name("and_another_one")
+                .version("0.0.1")
+                .create()?;
+
+            let _m = mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                            { "name": "some_other_crate" },
+                            { "name": "and_another_one" },
+                        ],
+                        "meta": {
+                            "next_page": null,
+                            "prev_page": null,
+                        }
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            let links = get_release_links("/releases/search?query=some_random_crate", web)?;
+
+            // `some_other_crate` won't be shown since we don't have it yet
+            assert_eq!(links.len(), 2);
+            // * `max_version` from the crates.io search result will be ignored since we
+            //   might not have it yet, or the doc-build might be in progress.
+            // * ranking/order from crates.io result is preserved
+            // * version used is the version with the youngest release date
+            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/");
+            assert_eq!(links[1], "/and_another_one/0.0.1/and_another_one/");
             Ok(())
         })
     }
@@ -1554,16 +1398,5 @@ mod tests {
 
             Ok(())
         });
-    }
-
-    #[test]
-    fn test_empty_query() {
-        wrapper(|env| {
-            let mut conn = env.db().conn();
-            let (num_results, results) = get_search_results(&mut conn, "", 0, 0).unwrap();
-            assert_eq!(num_results, 0);
-            assert!(results.is_empty());
-            Ok(())
-        })
     }
 }
