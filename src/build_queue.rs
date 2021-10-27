@@ -51,6 +51,7 @@ impl BuildQueue {
             "INSERT INTO queue (name, version, priority, registry) VALUES ($1, $2, $3, $4);",
             &[&name, &version, &priority, &registry],
         )?;
+        self.metrics.enqueued_builds.inc();
         Ok(())
     }
 
@@ -441,7 +442,9 @@ mod tests {
     fn test_queued_crates() {
         crate::test::wrapper(|env| {
             let queue = env.build_queue();
+            let metrics = env.metrics();
 
+            assert_eq!(metrics.enqueued_builds.get(), 0);
             let test_crates = [
                 ("bar", "1.0.0", 0),
                 ("foo", "1.0.0", -10),
@@ -450,6 +453,8 @@ mod tests {
             for krate in &test_crates {
                 queue.add_crate(krate.0, krate.1, krate.2, None)?;
             }
+
+            assert_eq!(metrics.enqueued_builds.get(), 3);
 
             assert_eq!(
                 vec![
