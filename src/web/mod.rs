@@ -220,6 +220,7 @@ struct MatchVersion {
     /// dashes (`-`) replaced with underscores (`_`) and vice versa.
     pub corrected_name: Option<String>,
     pub version: MatchSemver,
+    pub rustdoc_status: bool,
 }
 
 impl MatchVersion {
@@ -284,9 +285,12 @@ fn match_version(
         .unwrap_or_else(|| "*".into());
 
     let mut corrected_name = None;
-    let versions: Vec<(String, i32, bool)> = {
-        let query = "SELECT name, version, releases.id, releases.yanked
-            FROM releases INNER JOIN crates ON releases.crate_id = crates.id
+    let versions: Vec<(String, i32, bool, bool)> = {
+        let query = "
+            SELECT 
+            name, version, releases.id, releases.yanked, releases.rustdoc_status
+            FROM releases 
+            INNER JOIN crates ON releases.crate_id = crates.id
             WHERE normalize_crate_name(name) = normalize_crate_name($1)";
 
         let rows = conn.query(query, &[&name]).unwrap();
@@ -300,7 +304,7 @@ fn match_version(
             }
         };
 
-        rows.map(|row| (row.get(1), row.get(2), row.get(3)))
+        rows.map(|row| (row.get(1), row.get(2), row.get(3), row.get(4)))
             .collect()
     };
 
@@ -309,10 +313,13 @@ fn match_version(
     }
 
     // first check for exact match, we can't expect users to use semver in query
-    if let Some((version, id, _)) = versions.iter().find(|(vers, _, _)| vers == &req_version) {
+    if let Some((version, id, _yanked, rustdoc_status)) =
+        versions.iter().find(|(vers, _, _, _)| vers == &req_version)
+    {
         return Ok(MatchVersion {
             corrected_name,
             version: MatchSemver::Exact((version.to_owned(), *id)),
+            rustdoc_status: *rustdoc_status,
         });
     }
 
@@ -321,9 +328,9 @@ fn match_version(
 
     // we need to sort versions first
     let versions_sem = {
-        let mut versions_sem: Vec<(Version, i32)> = Vec::with_capacity(versions.len());
+        let mut versions_sem: Vec<(Version, i32, bool)> = Vec::with_capacity(versions.len());
 
-        for version in versions.iter().filter(|(_, _, yanked)| !yanked) {
+        for version in versions.iter().filter(|(_, _, yanked, _)| !yanked) {
             // in theory a crate must always have a semver compatible version,
             // but check result just in case
             let version_sem = Version::parse(&version.0)
@@ -337,7 +344,7 @@ fn match_version(
                     report_error(&err);
                     Nope::InternalServerError
                 })?;
-            versions_sem.push((version_sem, version.1));
+            versions_sem.push((version_sem, version.1, version.3));
         }
 
         versions_sem.sort();
@@ -345,13 +352,14 @@ fn match_version(
         versions_sem
     };
 
-    if let Some((version, id)) = versions_sem
+    if let Some((version, id, rustdoc_status)) = versions_sem
         .iter()
-        .find(|(vers, _)| req_sem_ver.matches(vers))
+        .find(|(vers, _, _)| req_sem_ver.matches(vers))
     {
         return Ok(MatchVersion {
             corrected_name,
             version: MatchSemver::Semver((version.to_string(), *id)),
+            rustdoc_status: *rustdoc_status,
         });
     }
 
@@ -363,6 +371,7 @@ fn match_version(
             .map(|v| MatchVersion {
                 corrected_name,
                 version: MatchSemver::Semver((v.0.to_string(), v.1)),
+                rustdoc_status: v.2,
             })
             .ok_or(Nope::VersionNotFound);
     }
