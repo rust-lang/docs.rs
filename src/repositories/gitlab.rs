@@ -205,18 +205,21 @@ struct GraphResponse<T> {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // used by anyhow for error reporting; apparently the compiler isn't smart enough to tell
 struct GraphError {
     message: String,
     locations: Vec<GraphErrorLocation>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct GraphErrorLocation {
     line: u32,
     column: u32,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct GraphRateLimit {
     remaining: u32,
 }
