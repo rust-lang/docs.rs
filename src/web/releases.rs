@@ -160,6 +160,8 @@ fn get_releases_by_owner(
 struct SearchResult {
     pub results: Vec<Release>,
     pub executed_query: Option<String>,
+    pub prev_page: Option<String>,
+    pub next_page: Option<String>,
 }
 
 /// Get the search results for a crate search query
@@ -172,10 +174,16 @@ fn get_search_results(
     #[derive(Deserialize)]
     struct CratesIoSearchResult {
         crates: Vec<CratesIoCrate>,
+        meta: CratesIoMeta,
     }
     #[derive(Deserialize, Debug)]
     struct CratesIoCrate {
         name: String,
+    }
+    #[derive(Deserialize, Debug)]
+    struct CratesIoMeta {
+        next_page: Option<String>,
+        prev_page: Option<String>,
     }
 
     use crate::utils::APP_USER_AGENT;
@@ -287,6 +295,8 @@ fn get_search_results(
             .cloned()
             .collect(),
         executed_query,
+        prev_page: releases.meta.prev_page,
+        next_page: releases.meta.next_page,
     })
 }
 
@@ -457,9 +467,8 @@ pub(super) struct Search {
     #[serde(rename = "releases")]
     pub(super) results: Vec<Release>,
     pub(super) search_query: Option<String>,
-    pub(super) previous_page_button: bool,
-    pub(super) next_page_button: bool,
-    pub(super) current_page: i64,
+    pub(super) previous_page_link: Option<String>,
+    pub(super) next_page_link: Option<String>,
     /// This should always be `ReleaseType::Search`
     pub(super) release_type: ReleaseType,
     #[serde(skip)]
@@ -472,9 +481,8 @@ impl Default for Search {
             title: String::default(),
             results: Vec::default(),
             search_query: None,
-            previous_page_button: false,
-            next_page_button: false,
-            current_page: 0,
+            previous_page_link: None,
+            next_page_link: None,
             release_type: ReleaseType::Search,
             status: iron::status::Ok,
         }
@@ -543,7 +551,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
 }
 
 impl_webpage! {
-    Search = "releases/releases.html",
+    Search = "releases/search_results.html",
     status = |search| search.status,
 }
 
@@ -632,11 +640,16 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         format!("Search results for '{}'", executed_query)
     };
 
-    // FIXME: There is no pagination
     Search {
         title,
         results: search_result.results,
         search_query: Some(executed_query),
+        next_page_link: search_result
+            .next_page
+            .map(|params| format!("/releases/search?paginate={}", base64::encode(params))),
+        previous_page_link: search_result
+            .prev_page
+            .map(|params| format!("/releases/search?paginate={}", base64::encode(params))),
         ..Default::default()
     }
     .into_response(req)
@@ -844,6 +857,109 @@ mod tests {
                 "/some_random_crate/1.0.0/some_random_crate/",
                 web,
             )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_result_passes_cratesio_pagination_links() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+
+            let _m = mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                        ],
+                        "meta": {
+                            "next_page": "?some=parameters&that=cratesio&might=return",
+                            "prev_page": "?and=the&parameters=for&the=previouspage",
+                        }
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            let response = web.get("/releases/search?query=some_random_crate").send()?;
+            assert!(response.status().is_success());
+
+            let page = kuchiki::parse_html().one(response.text()?);
+
+            let other_search_links: Vec<_> = page
+                .select("a")
+                .expect("missing link")
+                .map(|el| {
+                    let attributes = el.attributes.borrow();
+                    attributes.get("href").unwrap().to_string()
+                })
+                .filter(|url| url.starts_with("/releases/search?"))
+                .collect();
+
+            assert_eq!(other_search_links.len(), 2);
+            assert_eq!(
+                other_search_links[0],
+                format!(
+                    "/releases/search?paginate={}",
+                    base64::encode("?and=the&parameters=for&the=previouspage"),
+                )
+            );
+            assert_eq!(
+                other_search_links[1],
+                format!(
+                    "/releases/search?paginate={}",
+                    base64::encode("?some=parameters&that=cratesio&might=return")
+                )
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_encoded_pagination_passed_to_cratesio() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+
+            let _m = mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("some".into(), "dummy".into()),
+                    Matcher::UrlEncoded("pagination".into(), "parameters".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                        ],
+                        "meta": {
+                            "next_page": null,
+                            "prev_page": null,
+                        }
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            let links = get_release_links(
+                &format!(
+                    "/releases/search?paginate={}",
+                    base64::encode("?some=dummy&pagination=parameters")
+                ),
+                web,
+            )?;
+
+            assert_eq!(links.len(), 1);
+            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/",);
             Ok(())
         })
     }
