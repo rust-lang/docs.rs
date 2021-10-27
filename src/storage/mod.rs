@@ -7,6 +7,7 @@ pub use self::compression::{compress, decompress, CompressionAlgorithm, Compress
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
 use crate::error::Result;
+use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, Metrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
@@ -145,14 +146,17 @@ impl Storage {
         version: &str,
         path: &str,
         archive_storage: bool,
+        fetch_time: &mut RenderingTimesRecorder,
     ) -> Result<Blob> {
         Ok(if archive_storage {
             self.get_from_archive(
                 &rustdoc_archive_path(name, version),
                 path,
                 self.max_file_size_for(path),
+                Some(fetch_time),
             )?
         } else {
+            fetch_time.step("fetch from storage");
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
             let remote_path = format!("rustdoc/{}/{}/{}", name, version, path);
             self.get(&remote_path, self.max_file_size_for(path))?
@@ -171,6 +175,7 @@ impl Storage {
                 &source_archive_path(name, version),
                 path,
                 self.max_file_size_for(path),
+                None,
             )?
         } else {
             let remote_path = format!("sources/{}/{}/{}", name, version, path);
@@ -270,10 +275,17 @@ impl Storage {
         archive_path: &str,
         path: &str,
         max_size: usize,
+        mut fetch_time: Option<&mut RenderingTimesRecorder>,
     ) -> Result<Blob> {
+        if let Some(ref mut t) = fetch_time {
+            t.step("find path in index");
+        }
         let index = self.get_index_for(archive_path)?;
         let info = index.find_file(path)?;
 
+        if let Some(t) = fetch_time {
+            t.step("range request");
+        }
         let blob = self.get_range(
             archive_path,
             max_size,
@@ -790,12 +802,14 @@ mod backend_tests {
         assert!(local_index_location.exists());
         assert!(storage.exists_in_archive("folder/test.zip", "src/main.rs")?);
 
-        let file = storage.get_from_archive("folder/test.zip", "Cargo.toml", std::usize::MAX)?;
+        let file =
+            storage.get_from_archive("folder/test.zip", "Cargo.toml", std::usize::MAX, None)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
-        let file = storage.get_from_archive("folder/test.zip", "src/main.rs", std::usize::MAX)?;
+        let file =
+            storage.get_from_archive("folder/test.zip", "src/main.rs", std::usize::MAX, None)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
