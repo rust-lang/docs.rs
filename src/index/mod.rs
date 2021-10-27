@@ -20,11 +20,8 @@ pub struct Index {
 #[derive(Debug, serde::Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 struct IndexConfig {
-    dl: String,
     #[serde(default)]
     api: Option<Url>,
-    #[serde(default)]
-    allowed_registries: Vec<String>,
 }
 
 /// Inspects the given repository to find the config as specified in [RFC 2141][], assumes that the
