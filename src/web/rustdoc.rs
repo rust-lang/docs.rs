@@ -336,8 +336,6 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         return redirect(&name, &version, &req_path[1..]);
     }
 
-    rendering_time.step("fetch from storage");
-
     // Create the path to access the file from
     let mut path = req_path.join("/");
     if path.ends_with('/') {
@@ -348,7 +346,13 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let mut path = ctry!(req, percent_decode(path.as_bytes()).decode_utf8());
 
     // Attempt to load the file from the database
-    let blob = match storage.fetch_rustdoc_file(&name, &version, &path, krate.archive_storage) {
+    let blob = match storage.fetch_rustdoc_file(
+        &name,
+        &version,
+        &path,
+        krate.archive_storage,
+        &mut rendering_time,
+    ) {
         Ok(file) => file,
         Err(err) => {
             if !matches!(err.downcast_ref(), Some(Nope::ResourceNotFound))
