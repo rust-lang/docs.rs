@@ -754,6 +754,11 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TABLE releases ADD COLUMN archive_storage BOOL NOT NULL DEFAULT FALSE;",
             "ALTER TABLE releases DROP COLUMN archive_storage;",
         ),
+        migration!(
+            context, 31, "add index on builds.build_time", 
+            "CREATE INDEX builds_build_time_idx ON builds (build_time DESC);",
+            "DROP INDEX builds_build_time_idx;",
+        ),
     ];
 
     for migration in migrations {
