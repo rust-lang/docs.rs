@@ -287,8 +287,8 @@ fn get_search_results(
 
     Ok(SearchResult {
         // start with the original names from crates.io to keep the original ranking,
-        // extend with the release/build information from docs.rs, if we already
-        // know about the crate.
+        // extend with the release/build information from docs.rs
+        // Crates that are not on docs.rs yet will not be returned.
         results: names
             .iter()
             .filter_map(|name| crates.get(name))
