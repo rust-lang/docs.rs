@@ -241,7 +241,7 @@ fn get_search_results(
                 crates.name,
                 releases.version,
                 releases.description,
-                releases.release_time,
+                builds.build_time,
                 releases.target_name,
                 releases.rustdoc_status,
                 repositories.stars
@@ -261,6 +261,7 @@ fn get_search_results(
                 WHERE releases.rank = 1
             ) AS latest_release ON latest_release.crate_id = crates.id
             INNER JOIN releases ON latest_release.id = releases.id
+            INNER JOIN builds ON releases.id = builds.rid
             LEFT JOIN repositories ON releases.repository_id = repositories.id
 
             WHERE crates.name = ANY($1)",
@@ -276,7 +277,7 @@ fn get_search_results(
                     name,
                     version: row.get("version"),
                     description: row.get("description"),
-                    build_time: row.get("release_time"),
+                    build_time: row.get("build_time"),
                     target_name: row.get("target_name"),
                     rustdoc_status: row.get("rustdoc_status"),
                     stars: stars.unwrap_or(0),
