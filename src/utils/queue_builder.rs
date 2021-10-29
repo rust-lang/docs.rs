@@ -47,8 +47,8 @@ pub fn queue_builder(
             debug!("10 builds in a row; pinging pubsubhubhub");
             status = BuilderState::QueueInProgress(0);
 
-            match pubsubhubbub::ping_hubs().context("Failed to ping hub") {
-                Err(e) => report_error(&e),
+            match pubsubhubbub::ping_hubs() {
+                Err(e) => warn!("Failed to ping hub: {}", &e),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
             }
         }
