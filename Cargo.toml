@@ -77,6 +77,7 @@ rusoto_credential = "0.46.0"
 # Data serialization and deserialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+memmap = "0.7.0"
 
 # iron dependencies
 iron = "0.6"
