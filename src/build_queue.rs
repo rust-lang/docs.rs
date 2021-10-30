@@ -153,7 +153,7 @@ impl BuildQueue {
         self.lock_path().exists()
     }
 
-    /// Creates a lock file. Daemon will check this lock file and stop operating if its exists.
+    /// Creates a lock file. Daemon will check this lock file and stop operating if it exists.
     pub fn lock(&self) -> Result<()> {
         let path = self.lock_path();
         if !path.exists() {
