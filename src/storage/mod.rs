@@ -200,8 +200,8 @@ impl Storage {
     }
 
     pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
-        match self.get_index_for(archive_path) {
-            Ok(index) => Ok(index.find_file(path).is_ok()),
+        match self.get_index_filename(archive_path) {
+            Ok(index_filename) => Ok(archive_index::find_in_file(index_filename, path)?.is_some()),
             Err(err) => {
                 if err.downcast_ref::<PathNotFoundError>().is_some() {
                     Ok(false)
@@ -245,7 +245,7 @@ impl Storage {
         Ok(blob)
     }
 
-    fn get_index_for(&self, archive_path: &str) -> Result<archive_index::Index> {
+    fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
         let remote_index_path = format!("{}.index", archive_path);
         let local_index_path = self
@@ -253,9 +253,7 @@ impl Storage {
             .local_archive_cache_path
             .join(&remote_index_path);
 
-        if local_index_path.exists() {
-            archive_index::Index::load(io::BufReader::new(fs::File::open(local_index_path)?))
-        } else {
+        if !local_index_path.exists() {
             let index_content = self.get(&remote_index_path, std::usize::MAX)?.content;
 
             fs::create_dir_all(
@@ -265,9 +263,9 @@ impl Storage {
             )?;
             let mut file = fs::File::create(&local_index_path)?;
             file.write_all(&index_content)?;
-
-            archive_index::Index::load(&mut &index_content[..])
         }
+
+        Ok(local_index_path)
     }
 
     pub(crate) fn get_from_archive(
@@ -280,8 +278,8 @@ impl Storage {
         if let Some(ref mut t) = fetch_time {
             t.step("find path in index");
         }
-        let index = self.get_index_for(archive_path)?;
-        let info = index.find_file(path)?;
+        let info = archive_index::find_in_file(self.get_index_filename(archive_path)?, path)?
+            .ok_or(PathNotFoundError)?;
 
         if let Some(t) = fetch_time {
             t.step("range request");
@@ -336,9 +334,8 @@ impl Storage {
         }
 
         let mut zip_content = zip.finish()?.into_inner();
-        let index = archive_index::Index::new_from_zip(&mut io::Cursor::new(&mut zip_content))?;
         let mut index_content = vec![];
-        index.save(&mut index_content)?;
+        archive_index::create(&mut io::Cursor::new(&mut zip_content), &mut index_content)?;
         let alg = CompressionAlgorithm::default();
         let compressed_index_content = compress(&index_content[..], alg)?;
 
