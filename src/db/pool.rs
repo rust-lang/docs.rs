@@ -132,8 +132,8 @@ pub enum PoolError {
     InvalidDatabaseUrl(#[from] postgres::Error),
 
     #[error("failed to create the database connection pool")]
-    PoolCreationFailed(r2d2::Error),
+    PoolCreationFailed(#[source] r2d2::Error),
 
     #[error("failed to get a database connection")]
-    ClientError(r2d2::Error),
+    ClientError(#[source] r2d2::Error),
 }
