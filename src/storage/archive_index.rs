@@ -66,12 +66,6 @@ pub(crate) fn find_in_slice(bytes: &[u8], search_for: &str) -> Result<Option<Fil
         search_for: String,
     }
 
-    impl FindFileListVisitor {
-        pub fn new(path: String) -> Self {
-            FindFileListVisitor { search_for: path }
-        }
-    }
-
     impl<'de> Visitor<'de> for FindFileListVisitor {
         type Value = Option<FileInfo>;
 
@@ -89,12 +83,6 @@ pub(crate) fn find_in_slice(bytes: &[u8], search_for: &str) -> Result<Option<Fil
             /// `None`.
             struct FindFileVisitor {
                 search_for: String,
-            }
-
-            impl FindFileVisitor {
-                pub fn new(search_for: String) -> Self {
-                    FindFileVisitor { search_for }
-                }
             }
 
             impl<'de> DeserializeSeed<'de> for FindFileVisitor {
@@ -140,7 +128,9 @@ pub(crate) fn find_in_slice(bytes: &[u8], search_for: &str) -> Result<Option<Fil
 
             while let Some(key) = map.next_key::<&str>()? {
                 if key == "files" {
-                    return map.next_value_seed(FindFileVisitor::new(self.search_for));
+                    return map.next_value_seed(FindFileVisitor {
+                        search_for: self.search_for,
+                    });
                 }
             }
 
@@ -159,7 +149,10 @@ pub(crate) fn find_in_slice(bytes: &[u8], search_for: &str) -> Result<Option<Fil
         }
     }
 
-    Ok(FindFileListVisitor::new(search_for.to_string()).deserialize(&mut deserializer)?)
+    Ok(FindFileListVisitor {
+        search_for: search_for.to_string(),
+    }
+    .deserialize(&mut deserializer)?)
 }
 
 pub(crate) fn find_in_file<P: AsRef<Path>>(
