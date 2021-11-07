@@ -73,7 +73,7 @@ macro_rules! extension {
 
 mod build_details;
 mod builds;
-mod crate_details;
+pub(crate) mod crate_details;
 mod csp;
 mod error;
 mod extensions;

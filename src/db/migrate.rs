@@ -5,19 +5,8 @@ use postgres::{Client, Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 
-/// Creates a new PostgresMigration from upgrade and downgrade queries.
-/// Downgrade query should return database to previous state.
-///
-/// Example:
-///
-/// ```
-/// let my_migration = migration!(100,
-///                               "Create test table",
-///                               "CREATE TABLE test ( id SERIAL);",
-///                               "DROP TABLE test;");
-/// ```
 macro_rules! migration {
-    ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
+    ($context:expr, $version:expr, $description:expr, $up_func:expr, $down_func:expr $(,)?) => {{
         struct Amigration;
         impl Migration for Amigration {
             fn version(&self) -> Version {
@@ -41,7 +30,8 @@ macro_rules! migration {
                     self.version(),
                     self.description()
                 );
-                transaction.batch_execute($up).map(|_| ())
+
+                $up_func(transaction)
             }
             fn down(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
                 let level = if cfg!(test) {
@@ -55,10 +45,26 @@ macro_rules! migration {
                     self.version(),
                     self.description()
                 );
-                transaction.batch_execute($down).map(|_| ())
+                $down_func(transaction)
             }
         }
         Box::new(Amigration)
+    }};
+}
+
+macro_rules! sql_migration {
+    ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
+        migration!(
+            $context,
+            $version,
+            $description,
+            |transaction: &mut Transaction| -> Result<(), PostgresError> {
+                transaction.batch_execute($up).map(|_| ())
+            },
+            |transaction: &mut Transaction| -> Result<(), PostgresError> {
+                transaction.batch_execute($down).map(|_| ())
+            }
+        )
     }};
 }
 
@@ -73,7 +79,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
     let mut migrator = Migrator::new(adapter);
 
     let migrations: Vec<Box<dyn PostgresMigration>> = vec![
-        migration!(
+        sql_migration!(
             context,
             // version
             1,
@@ -190,7 +196,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "DROP TABLE authors, author_rels, keyword_rels, keywords, owner_rels,
                         owners, releases, crates, builds, queue, files, config;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             2,
@@ -201,7 +207,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "ALTER TABLE queue DROP COLUMN priority;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             3,
@@ -216,7 +222,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "DROP TABLE sandbox_overrides;"
         ),
-        migration!(
+        sql_migration!(
             context,
             4,
             "Make more fields not null",
@@ -227,7 +233,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                                   ALTER COLUMN yanked DROP NOT NULL,
                                   ALTER COLUMN downloads DROP NOT NULL"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             5,
@@ -238,7 +244,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "ALTER TABLE releases ALTER COLUMN target_name DROP NOT NULL",
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             6,
@@ -251,7 +257,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "DROP TABLE blacklisted_crates;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             7,
@@ -262,7 +268,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE INTEGER;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             8,
@@ -275,7 +281,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TABLE releases ALTER COLUMN default_target DROP NOT NULL;
              ALTER TABLE releases ALTER COLUMN default_target DROP DEFAULT",
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             9,
@@ -286,7 +292,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "ALTER TABLE sandbox_overrides DROP COLUMN max_targets;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             10,
@@ -309,7 +315,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 DROP FUNCTION normalize_crate_name;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             11,
@@ -323,7 +329,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "DROP TABLE crate_priorities;",
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             12,
@@ -338,7 +344,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 ALTER TABLE releases ALTER COLUMN doc_targets DROP NOT NULL;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             13,
@@ -353,7 +359,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
              ADD COLUMN content tsvector,
              ADD COLUMN versions JSON DEFAULT '[]';"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             14,
@@ -377,7 +383,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "DROP TABLE compression_rels;
              ALTER TABLE files DROP COLUMN compression;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             15,
@@ -393,7 +399,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             -- Nope, this is a pure database fix, no going back.
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             16,
@@ -410,7 +416,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // downgrade query
             "DROP TABLE doc_coverage;"
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             17,
@@ -451,7 +457,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             ALTER TABLE crates ALTER COLUMN github_stars DROP NOT NULL;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             18,
@@ -470,7 +476,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 DROP COLUMN items_with_examples;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             // version
             19,
@@ -487,7 +493,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 DROP TYPE feature;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             20,
             // description
@@ -501,7 +507,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 ALTER TABLE queue DROP COLUMN registry;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             21,
             // description
@@ -515,7 +521,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                  ALTER TYPE feature DROP ATTRIBUTE optional_dependency;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             22,
             // description
@@ -542,7 +548,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 DROP TABLE github_repos;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             23,
             // description
@@ -568,7 +574,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                     ADD COLUMN github_last_update TIMESTAMP;
             "
         ),
-        migration!(
+        sql_migration!(
             context,
             24,
             "drop unused `date_added` columns",
@@ -579,7 +585,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
              "ALTER TABLE queue ADD COLUMN date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
               ALTER TABLE files ADD COLUMN date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;",
         ),
-        migration!(
+        sql_migration!(
             context,
             25,
             "migrate timestamp to be timezone aware",
@@ -614,7 +620,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                     ALTER release_time TYPE timestamp USING release_time AT TIME ZONE 'UTC';
             ",
         ),
-        migration!(
+        sql_migration!(
             context,
             26,
             "create indexes for crates, github_repos and releases", 
@@ -631,7 +637,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             DROP INDEX github_repos_stars_idx;
             ",
         ),
-        migration!(
+        sql_migration!(
             context,
             27,
             "delete the authors and author_rels",
@@ -656,7 +662,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             ALTER TABLE releases ADD COLUMN authors JSON;
             ",
         ),
-        migration!(
+        sql_migration!(
             context,
             28,
             // description
@@ -744,21 +750,66 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 DROP TABLE repositories;
             ",
         ),
-        migration!(
+        sql_migration!(
             context, 29, "Rename cratesfyi_version to docsrs_version",
             "ALTER TABLE builds RENAME COLUMN cratesfyi_version TO docsrs_version",
             "ALTER TABLE builds RENAME COLUMN docsrs_version TO cratesfyi_version",
         ),
-        migration!(
+        sql_migration!(
             context, 30, "add archive-storage marker for releases",
             "ALTER TABLE releases ADD COLUMN archive_storage BOOL NOT NULL DEFAULT FALSE;",
             "ALTER TABLE releases DROP COLUMN archive_storage;",
         ),
-        migration!(
+        sql_migration!(
             context, 31, "add index on builds.build_time", 
             "CREATE INDEX builds_build_time_idx ON builds (build_time DESC);",
             "DROP INDEX builds_build_time_idx;",
         ),
+        migration!(
+            context,
+            32,
+            "update latest_version_id on all crates",
+            |transaction: &mut Transaction| -> Result<(), PostgresError> {
+                use crate::web::crate_details::CrateDetails;
+                let rows = transaction.query(
+                    "SELECT crates.name, max(releases.version) as max_version_id
+                     FROM crates 
+                     INNER JOIN releases ON crates.id = releases.crate_id 
+                     GROUP BY crates.name",
+                    &[],
+                )?;
+
+                let update_version_query = transaction.prepare(
+                    "UPDATE crates 
+                     SET latest_version_id = $2
+                     WHERE id = $1",
+                )?;
+
+                for row in rows.into_iter() {
+                    if let Some(details) = CrateDetails::new(transaction, row.get(0), row.get(1), None)? {
+                        transaction.execute(
+                            &update_version_query,
+                            &[&details.crate_id, &details.latest_release().id],
+                        )?;
+                    }
+                }
+
+                Ok(())
+            },
+            |transaction: &mut Transaction| -> Result<(), PostgresError> {
+                transaction
+                    .execute(
+                        "UPDATE crates 
+                         SET latest_version_id = (
+                             SELECT max(id) 
+                             FROM releases 
+                             WHERE releases.crate_id = crates.id
+                         )",
+                        &[],
+                    )
+                    .map(|_| ())
+            }
+        )
     ];
 
     for migration in migrations {
