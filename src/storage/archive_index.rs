@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::storage::{compression::CompressionAlgorithm, FileRange};
 use anyhow::{bail, Context as _};
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use serde::de::DeserializeSeed;
 use serde::de::{IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
