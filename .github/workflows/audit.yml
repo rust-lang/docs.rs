@@ -6,6 +6,7 @@ on:
     paths:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+      - ".cargo/audit.toml"
   schedule:
     - cron: "0 0 * * *"
 
