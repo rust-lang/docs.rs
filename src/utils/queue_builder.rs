@@ -3,8 +3,10 @@ use anyhow::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use std::{fs, io, thread};
+
+pub(crate) const TEMPDIR_PREFIX: &str = "docsrs-docs";
 
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
 pub fn queue_builder(
@@ -26,6 +28,10 @@ pub fn queue_builder(
     let mut status = BuilderState::Fresh;
 
     loop {
+        if let Err(e) = remove_tempdirs() {
+            report_error(&anyhow::anyhow!(e).context("failed to remove temporary directories"));
+        }
+
         if !matches!(status, BuilderState::QueueInProgress) {
             thread::sleep(Duration::from_secs(60));
         }
@@ -69,4 +75,22 @@ pub fn queue_builder(
             build_queue.lock().expect("failed to lock queue");
         }
     }
+}
+
+/// Sometimes, when the server hits a hard crash or a build thread panics,
+/// rustwide_builder won't actually remove the temporary directories it creates.
+/// Remove them now to avoid running out of disk space.
+fn remove_tempdirs() -> Result<(), io::Error> {
+    // NOTE: hardcodes that `tempfile::tempdir()` uses `std::env::temp_dir`.
+    for entry in std::fs::read_dir(std::env::temp_dir())? {
+        let entry = entry?;
+        if !entry.path().starts_with(TEMPDIR_PREFIX) {
+            continue;
+        }
+        if entry.metadata()?.is_dir() {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+
+    Ok(())
 }
