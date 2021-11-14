@@ -18,7 +18,7 @@ mod copy;
 pub(crate) mod daemon;
 mod html;
 mod queue;
-mod queue_builder;
+pub(crate) mod queue_builder;
 mod rustc_version;
 pub(crate) mod sized_buffer;
 

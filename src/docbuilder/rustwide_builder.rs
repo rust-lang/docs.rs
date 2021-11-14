@@ -8,7 +8,7 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
-use crate::utils::{copy_dir_all, parse_rustc_version, CargoMetadata};
+use crate::utils::{copy_dir_all, parse_rustc_version, queue_builder, CargoMetadata};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Error};
@@ -314,7 +314,9 @@ impl RustwideBuilder {
         };
         krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 
-        let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
+        let local_storage = tempfile::Builder::new()
+            .prefix(queue_builder::TEMPDIR_PREFIX)
+            .tempdir()?;
 
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))

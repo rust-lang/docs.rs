@@ -82,6 +82,8 @@ memmap2 = "0.5.0"
 # iron dependencies
 iron = "0.6"
 router = "0.6"
+
+# NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
 tempfile = "3.1.0"
 
 # Templating
