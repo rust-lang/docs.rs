@@ -17,11 +17,16 @@ pub mod consistency;
 mod copy;
 pub(crate) mod daemon;
 mod html;
-mod pubsubhubbub;
 mod queue;
 mod queue_builder;
 mod rustc_version;
 pub(crate) mod sized_buffer;
+
+pub(crate) const APP_USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    " ",
+    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+);
 
 pub(crate) fn report_error(err: &anyhow::Error) {
     if std::env::var("SENTRY_DSN").is_ok() {

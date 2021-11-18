@@ -502,19 +502,19 @@ enum BlacklistSubcommand {
 
 impl BlacklistSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
-        let mut conn = &mut *ctx.conn()?;
+        let conn = &mut *ctx.conn()?;
         match self {
             Self::List => {
-                let crates = db::blacklist::list_crates(&mut conn)
+                let crates = db::blacklist::list_crates(conn)
                     .context("failed to list crates on blacklist")?;
 
                 println!("{}", crates.join("\n"));
             }
 
-            Self::Add { crate_name } => db::blacklist::add_crate(&mut conn, &crate_name)
+            Self::Add { crate_name } => db::blacklist::add_crate(conn, &crate_name)
                 .context("failed to add crate to blacklist")?,
 
-            Self::Remove { crate_name } => db::blacklist::remove_crate(&mut conn, &crate_name)
+            Self::Remove { crate_name } => db::blacklist::remove_crate(conn, &crate_name)
                 .context("failed to remove crate from blacklist")?,
         }
         Ok(())

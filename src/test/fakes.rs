@@ -97,11 +97,6 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
-    pub(crate) fn downloads(mut self, downloads: i32) -> Self {
-        self.registry_release_data.downloads = downloads;
-        self
-    }
-
     pub(crate) fn description(mut self, new: impl Into<String>) -> Self {
         self.package.description = Some(new.into());
         self

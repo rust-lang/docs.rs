@@ -1,0 +1,32 @@
+[advisories]
+ignore = [
+    "RUSTSEC-2020-0016", # net2 crate has been deprecated; use socket2 instead
+    # https://github.com/rust-lang/docs.rs/issues/760
+
+    "RUSTSEC-2020-0036", # failure is officially deprecated/unmaintained
+    # https://github.com/rust-lang/docs.rs/issues/1014
+
+    "RUSTSEC-2020-0056", # stdweb is unmaintained
+    # https://github.com/rust-lang/docs.rs/issues/1122
+
+    "RUSTSEC-2020-0071", # `time` localtime_r segfault
+    # https://github.com/rust-lang/docs.rs/issues/1523
+
+    "RUSTSEC-2020-0095", # difference is unmaintained
+    # https://github.com/rust-lang/docs.rs/issues/1357
+
+    "RUSTSEC-2020-0159", # `chrono` localtime_r segfault
+    # https://github.com/rust-lang/docs.rs/issues/1525
+
+    "RUSTSEC-2021-0078", # Lenient hyper header parsing of Content-Length could allow request smuggling
+    # https://github.com/rust-lang/docs.rs/issues/1460
+
+    "RUSTSEC-2021-0079", # Integer overflow in hyper's parsing of the Transfer-Encoding header leads to data loss
+    # https://github.com/rust-lang/docs.rs/issues/1459
+]
+informational_warnings = ["unmaintained"] # warn for categories of informational advisories
+severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
+
+[output]
+quiet = false
+deny = ["unmaintained"] # yanked is allowed for now
