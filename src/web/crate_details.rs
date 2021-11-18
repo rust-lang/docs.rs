@@ -81,7 +81,7 @@ impl CrateDetails {
         name: &str,
         version: &str,
         up: Option<&RepositoryStatsUpdater>,
-    ) -> Result<Option<CrateDetails>, postgres::Error> {
+    ) -> Result<Option<CrateDetails>, anyhow::Error> {
         // get all stuff, I love you rustfmt
         let query = "
             SELECT
@@ -235,7 +235,7 @@ impl CrateDetails {
 fn releases_for_crate(
     conn: &mut impl GenericClient,
     crate_id: i32,
-) -> Result<Vec<Release>, postgres::Error> {
+) -> Result<Vec<Release>, anyhow::Error> {
     let mut releases: Vec<Release> = conn
         .query(
             "SELECT 
