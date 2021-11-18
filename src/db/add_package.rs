@@ -129,7 +129,7 @@ pub(crate) fn add_package_into_database(
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
 
     let crate_details = CrateDetails::new(conn, &metadata_pkg.name, &metadata_pkg.version, None)
-        .with_context(|| anyhow!("error when fetching crate-details"))?
+        .context("error when fetching crate-details")?
         .ok_or_else(|| anyhow!("crate details not found directly after creating them"))?;
 
     conn.execute(
