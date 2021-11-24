@@ -197,7 +197,18 @@ impl Metadata {
     /// If `include_default_targets` is `true` and `targets` is unset, this also includes
     /// [`DEFAULT_TARGETS`]. Otherwise, if `include_default_targets` is `false` and `targets`
     /// is unset, `other_targets` will be empty.
+    ///
+    /// All of the above is ignored for proc-macros, which are always only compiled for the host.
     pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
+        // Proc macros can only be compiled for the host, so just completely ignore any configured targets.
+        // It would be nice to warn about this somehow ...
+        if self.proc_macro {
+            return BuildTargets {
+                default_target: HOST_TARGET,
+                other_targets: HashSet::default(),
+            };
+        }
+
         let default_target = self
             .default_target
             .as_deref()
@@ -205,7 +216,7 @@ impl Metadata {
             .or_else(|| {
                 self.targets
                     .as_ref()
-                    .and_then(|targets| targets.iter().next().map(String::as_str))
+                    .and_then(|targets| targets.first().map(String::as_str))
             })
             .unwrap_or(HOST_TARGET);
 
