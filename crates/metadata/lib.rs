@@ -101,6 +101,10 @@ pub enum MetadataError {
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
+    /// Whether the current crate is a proc-macro (used by docs.rs to hack around cargo bugs).
+    #[serde(default)]
+    pub proc_macro: bool,
+
     /// List of features to pass on to `cargo`.
     ///
     /// By default, docs.rs will only build default features.
@@ -328,6 +332,15 @@ impl std::str::FromStr for Metadata {
             Metadata::default()
         };
 
+        let proc_macro = manifest
+            .as_ref()
+            .and_then(|t| table(t, "lib"))
+            .and_then(|table| table.get("proc-macro"))
+            .and_then(|val| val.as_bool());
+        if let Some(proc_macro) = proc_macro {
+            metadata.proc_macro = proc_macro;
+        }
+
         metadata.rustdoc_args.push("-Z".into());
         metadata.rustdoc_args.push("unstable-options".into());
 
@@ -363,6 +376,7 @@ mod test_parsing {
         assert!(metadata.all_features);
         assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
+        assert!(!metadata.proc_macro);
 
         let features = metadata.features.unwrap();
         assert_eq!(features.len(), 2);
@@ -445,6 +459,18 @@ mod test_parsing {
         assert!(metadata.all_features);
         assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
+    }
+
+    #[test]
+    fn test_proc_macro() {
+        let manifest = r#"
+            [package]
+            name = "x"
+            [lib]
+            proc-macro = true
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.proc_macro);
     }
 }
 
