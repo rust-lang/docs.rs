@@ -15,7 +15,7 @@ use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
 
-pub fn main() {
+fn main() {
     let _ = dotenv::dotenv();
 
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
@@ -128,7 +128,7 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    pub fn handle_args(self) -> Result<()> {
+    fn handle_args(self) -> Result<()> {
         let ctx = BinContext::new();
 
         match self {
@@ -186,7 +186,7 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Add {
                 crate_name,
@@ -225,7 +225,7 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Set { pattern, priority } => {
                 set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
@@ -259,7 +259,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         self.subcommand.handle_args(ctx, self.skip_if_exists)
     }
 }
@@ -306,7 +306,7 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
+    fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
         let build_queue = ctx.build_queue()?;
 
         let rustwide_builder = || -> Result<RustwideBuilder> {
@@ -433,7 +433,7 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Migrate { version } => {
                 db::migrate(version, &mut *ctx.conn()?)
