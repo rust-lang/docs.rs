@@ -1,5 +1,4 @@
 #![warn(missing_docs)]
-// N.B. requires nightly rustdoc to document until intra-doc links are stabilized.
 //! Collect information that allows you to build a crate the same way that docs.rs would.
 //!
 //! This library is intended for use in docs.rs and crater, but might be helpful to others.
@@ -303,27 +302,28 @@ impl std::str::FromStr for Metadata {
             _ => None,
         };
 
-        fn table(mut manifest: Table, table_name: &str) -> Option<Table> {
-            match manifest.remove(table_name) {
+        fn table<'a>(manifest: &'a Table, table_name: &str) -> Option<&'a Table> {
+            match manifest.get(table_name) {
                 Some(Value::Table(table)) => Some(table),
                 _ => None,
             }
         }
 
         let plain_table = manifest
-            .clone()
+            .as_ref()
             .and_then(|t| table(t, "package"))
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs"))
             .and_then(|t| table(t, "rs"));
         let quoted_table = manifest
+            .as_ref()
             .and_then(|t| table(t, "package"))
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs.rs"));
         let mut metadata = if let Some(table) = plain_table {
-            Value::Table(table).try_into()?
+            Value::Table(table.clone()).try_into()?
         } else if let Some(table) = quoted_table {
-            Value::Table(table).try_into()?
+            Value::Table(table.clone()).try_into()?
         } else {
             Metadata::default()
         };
