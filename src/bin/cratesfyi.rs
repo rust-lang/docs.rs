@@ -101,10 +101,6 @@ enum CommandLine {
 
     /// Starts the daemon
     Daemon {
-        /// Deprecated. Run the server in the foreground instead of detaching a child
-        #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
-        foreground: bool,
-
         /// Enable or disable the registry watcher to automatically enqueue newly published crates
         #[structopt(
             long = "registry-watcher",
@@ -140,14 +136,7 @@ impl CommandLine {
                 // Blocks indefinitely
                 let _ = Server::start(Some(&socket_addr), reload_templates, &ctx)?;
             }
-            Self::Daemon {
-                foreground,
-                registry_watcher,
-            } => {
-                if foreground {
-                    log::warn!("--foreground was passed, but there is no need for it anymore");
-                }
-
+            Self::Daemon { registry_watcher } => {
                 docs_rs::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
