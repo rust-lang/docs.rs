@@ -807,18 +807,18 @@ mod tests {
             let mut conn = env.db().conn();
             let rows = conn
                 .query(
-                    "SELECT 
+                    "SELECT
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
                         r.archive_storage,
                         cov.total_items
-                    FROM 
-                        crates as c 
+                    FROM
+                        crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
                         LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
-                    WHERE 
-                        c.name = $1 AND 
+                    WHERE
+                        c.name = $1 AND
                         r.version = $2",
                     &[&crate_, &version],
                 )
@@ -924,15 +924,15 @@ mod tests {
             let mut conn = env.db().conn();
             let rows = conn
                 .query(
-                    "SELECT 
+                    "SELECT
                         r.rustdoc_status,
                         r.is_library
-                    FROM 
-                        crates as c 
+                    FROM
+                        crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
                         LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
-                    WHERE 
-                        c.name = $1 AND 
+                    WHERE
+                        c.name = $1 AND
                         r.version = $2",
                     &[&crate_, &version],
                 )
