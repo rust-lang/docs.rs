@@ -81,7 +81,7 @@ pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     BuildDetailsPage {
-        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, version)),
+        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, version, version)),
         build_details,
     }
     .into_response(req)

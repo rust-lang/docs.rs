@@ -79,6 +79,7 @@ impl CrateDetails {
         conn: &mut Client,
         name: &str,
         version: &str,
+        version_or_latest: &str,
         up: &RepositoryStatsUpdater,
     ) -> Option<CrateDetails> {
         // get all stuff, I love you rustfmt
@@ -150,6 +151,7 @@ impl CrateDetails {
         let metadata = MetaData {
             name: krate.get("name"),
             version: krate.get("version"),
+            version_or_latest: version_or_latest.to_string(),
             description: krate.get("description"),
             rustdoc_status: krate.get("rustdoc_status"),
             target_name: krate.get("target_name"),
@@ -281,16 +283,21 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(req, router.find("name"));
     let req_version = router.find("version");
 
+    if req_version == None {
+        let url = ctry!(
+            req,
+            Url::parse(&format!("{}/crate/{}/latest", redirect_base(req), name,)),
+        );
+        return Ok(super::redirect(url));
+    }
+
     let mut conn = extension!(req, Pool).get()?;
 
-    match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
-        MatchSemver::Exact((version, _)) => {
-            let updater = extension!(req, RepositoryStatsUpdater);
-            let details = cexpect!(req, CrateDetails::new(&mut conn, name, &version, updater));
-
-            CrateDetailsPage { details }.into_response(req)
-        }
-
+    let found_version =
+        match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())?;
+    let (version, version_or_latest) = match found_version {
+        MatchSemver::Exact((version, _)) => (version.clone(), version),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
         MatchSemver::Semver((version, _)) => {
             let url = ctry!(
                 req,
@@ -302,16 +309,24 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 )),
             );
 
-            Ok(super::redirect(url))
+            return Ok(super::redirect(url));
         }
-    }
+    };
+
+    let updater = extension!(req, RepositoryStatsUpdater);
+    let details = cexpect!(
+        req,
+        CrateDetails::new(&mut conn, name, &version, &version_or_latest, updater)
+    );
+
+    CrateDetailsPage { details }.into_response(req)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
-    use crate::test::{wrapper, TestDatabase};
+    use crate::test::{assert_redirect, wrapper, TestDatabase};
     use anyhow::{Context, Error};
     use kuchiki::traits::TendrilSink;
     use std::collections::HashMap;
@@ -325,6 +340,7 @@ mod tests {
         let details = CrateDetails::new(
             &mut db.conn(),
             package,
+            version,
             version,
             db.repository_stats_updater(),
         )
@@ -459,6 +475,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.2.0",
+                "0.2.0",
                 db.repository_stats_updater(),
             )
             .unwrap();
@@ -534,6 +551,7 @@ mod tests {
                     &mut db.conn(),
                     "foo",
                     version,
+                    version,
                     db.repository_stats_updater(),
                 )
                 .unwrap();
@@ -563,6 +581,7 @@ mod tests {
                 let details = CrateDetails::new(
                     &mut db.conn(),
                     "foo",
+                    version,
                     version,
                     db.repository_stats_updater(),
                 )
@@ -594,6 +613,7 @@ mod tests {
                 let details = CrateDetails::new(
                     &mut db.conn(),
                     "foo",
+                    version,
                     version,
                     db.repository_stats_updater(),
                 )
@@ -633,6 +653,7 @@ mod tests {
                 let details = CrateDetails::new(
                     &mut db.conn(),
                     "foo",
+                    version,
                     version,
                     db.repository_stats_updater(),
                 )
@@ -696,6 +717,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
+                "0.0.1",
                 db.repository_stats_updater(),
             )
             .unwrap();
@@ -726,6 +748,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
+                "0.0.1",
                 db.repository_stats_updater(),
             )
             .unwrap();
@@ -755,6 +778,7 @@ mod tests {
                 &mut db.conn(),
                 "foo",
                 "0.0.1",
+                "0.0.1",
                 db.repository_stats_updater(),
             )
             .unwrap();
@@ -778,6 +802,7 @@ mod tests {
             let details = CrateDetails::new(
                 &mut db.conn(),
                 "foo",
+                "0.0.1",
                 "0.0.1",
                 db.repository_stats_updater(),
             )
@@ -952,6 +977,44 @@ mod tests {
                 assert!(!url.contains("/target-redirect/"));
                 assert_eq!(rel, "");
             }
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn latest_url() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("x86_64-pc-windows-msvc")
+                .create()?;
+            let web = env.frontend();
+
+            let resp = env.frontend().get("/crate/dummy/latest").send()?;
+            assert!(resp.status().is_success());
+            assert!(resp.url().as_str().ends_with("/crate/dummy/latest"));
+            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+            assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
+            assert!(body.contains("<a href=\"/crate/dummy/latest/builds\""));
+            assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
+            assert!(body.contains("<a href=\"/crate/dummy/latest\""));
+
+            assert_redirect("/crate/dummy/latest/", "/crate/dummy/latest", web)?;
+            assert_redirect("/crate/dummy", "/crate/dummy/latest", web)?;
+
+            let resp_json = env
+                .frontend()
+                .get("/crate/aquarelle/latest/builds.json")
+                .send()?;
+            assert!(resp_json
+                .url()
+                .as_str()
+                .ends_with("/crate/aquarelle/latest/builds.json"));
 
             Ok(())
         });
