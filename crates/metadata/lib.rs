@@ -1,5 +1,4 @@
 #![warn(missing_docs)]
-// N.B. requires nightly rustdoc to document until intra-doc links are stabilized.
 //! Collect information that allows you to build a crate the same way that docs.rs would.
 //!
 //! This library is intended for use in docs.rs and crater, but might be helpful to others.
@@ -102,6 +101,10 @@ pub enum MetadataError {
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
+    /// Whether the current crate is a proc-macro (used by docs.rs to hack around cargo bugs).
+    #[serde(default)]
+    pub proc_macro: bool,
+
     /// List of features to pass on to `cargo`.
     ///
     /// By default, docs.rs will only build default features.
@@ -194,7 +197,18 @@ impl Metadata {
     /// If `include_default_targets` is `true` and `targets` is unset, this also includes
     /// [`DEFAULT_TARGETS`]. Otherwise, if `include_default_targets` is `false` and `targets`
     /// is unset, `other_targets` will be empty.
+    ///
+    /// All of the above is ignored for proc-macros, which are always only compiled for the host.
     pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
+        // Proc macros can only be compiled for the host, so just completely ignore any configured targets.
+        // It would be nice to warn about this somehow ...
+        if self.proc_macro {
+            return BuildTargets {
+                default_target: HOST_TARGET,
+                other_targets: HashSet::default(),
+            };
+        }
+
         let default_target = self
             .default_target
             .as_deref()
@@ -202,7 +216,7 @@ impl Metadata {
             .or_else(|| {
                 self.targets
                     .as_ref()
-                    .and_then(|targets| targets.iter().next().map(String::as_str))
+                    .and_then(|targets| targets.first().map(String::as_str))
             })
             .unwrap_or(HOST_TARGET);
 
@@ -303,30 +317,40 @@ impl std::str::FromStr for Metadata {
             _ => None,
         };
 
-        fn table(mut manifest: Table, table_name: &str) -> Option<Table> {
-            match manifest.remove(table_name) {
+        fn table<'a>(manifest: &'a Table, table_name: &str) -> Option<&'a Table> {
+            match manifest.get(table_name) {
                 Some(Value::Table(table)) => Some(table),
                 _ => None,
             }
         }
 
         let plain_table = manifest
-            .clone()
+            .as_ref()
             .and_then(|t| table(t, "package"))
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs"))
             .and_then(|t| table(t, "rs"));
         let quoted_table = manifest
+            .as_ref()
             .and_then(|t| table(t, "package"))
             .and_then(|t| table(t, "metadata"))
             .and_then(|t| table(t, "docs.rs"));
         let mut metadata = if let Some(table) = plain_table {
-            Value::Table(table).try_into()?
+            Value::Table(table.clone()).try_into()?
         } else if let Some(table) = quoted_table {
-            Value::Table(table).try_into()?
+            Value::Table(table.clone()).try_into()?
         } else {
             Metadata::default()
         };
+
+        let proc_macro = manifest
+            .as_ref()
+            .and_then(|t| table(t, "lib"))
+            .and_then(|table| table.get("proc-macro"))
+            .and_then(|val| val.as_bool());
+        if let Some(proc_macro) = proc_macro {
+            metadata.proc_macro = proc_macro;
+        }
 
         metadata.rustdoc_args.push("-Z".into());
         metadata.rustdoc_args.push("unstable-options".into());
@@ -363,6 +387,7 @@ mod test_parsing {
         assert!(metadata.all_features);
         assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
+        assert!(!metadata.proc_macro);
 
         let features = metadata.features.unwrap();
         assert_eq!(features.len(), 2);
@@ -445,6 +470,18 @@ mod test_parsing {
         assert!(metadata.all_features);
         assert!(metadata.no_default_features);
         assert!(metadata.default_target.is_some());
+    }
+
+    #[test]
+    fn test_proc_macro() {
+        let manifest = r#"
+            [package]
+            name = "x"
+            [lib]
+            proc-macro = true
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.proc_macro);
     }
 }
 

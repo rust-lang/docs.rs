@@ -786,7 +786,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 )?;
 
                 for row in rows.into_iter() {
-                    if let Some(details) = CrateDetails::new(transaction, row.get(0), row.get(1), None)
+                    if let Some(details) = CrateDetails::new(transaction, row.get(0), row.get(1), row.get(1), None)
                             .expect("error when fetching crate details") {
                         transaction.execute(
                             &update_version_query,

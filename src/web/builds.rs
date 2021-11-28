@@ -49,9 +49,10 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         .last()
         .map_or(false, |segment| segment.ends_with(".json"));
 
-    let version =
+    let (version, version_or_latest) =
         match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
-            MatchSemver::Exact((version, _)) => version,
+            MatchSemver::Exact((version, _)) => (version.clone(), version),
+            MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
 
             MatchSemver::Semver((version, _)) => {
                 let ext = if is_json { ".json" } else { "" };
@@ -117,7 +118,10 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
         Ok(resp)
     } else {
         BuildsPage {
-            metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, &version)),
+            metadata: cexpect!(
+                req,
+                MetaData::from_crate(&mut conn, name, &version, &version_or_latest)
+            ),
             builds,
             limits,
         }
@@ -307,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn latest_redirect() {
+    fn latest_200() {
         wrapper(|env| {
             env.fake_release()
                 .name("aquarelle")
@@ -332,7 +336,12 @@ mod tests {
             assert!(resp
                 .url()
                 .as_str()
-                .ends_with("/crate/aquarelle/0.2.0/builds"));
+                .ends_with("/crate/aquarelle/latest/builds"));
+            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+            assert!(body.contains("<a href=\"/crate/aquarelle/latest/features\""));
+            assert!(body.contains("<a href=\"/crate/aquarelle/latest/builds\""));
+            assert!(body.contains("<a href=\"/crate/aquarelle/latest/source/\""));
+            assert!(body.contains("<a href=\"/crate/aquarelle/latest\""));
 
             let resp_json = env
                 .frontend()
@@ -341,7 +350,7 @@ mod tests {
             assert!(resp_json
                 .url()
                 .as_str()
-                .ends_with("/crate/aquarelle/0.2.0/builds.json"));
+                .ends_with("/crate/aquarelle/latest/builds.json"));
 
             Ok(())
         });

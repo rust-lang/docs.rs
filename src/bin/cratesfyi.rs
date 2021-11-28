@@ -15,7 +15,7 @@ use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
 
-pub fn main() {
+fn main() {
     let _ = dotenv::dotenv();
 
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
@@ -101,10 +101,6 @@ enum CommandLine {
 
     /// Starts the daemon
     Daemon {
-        /// Deprecated. Run the server in the foreground instead of detaching a child
-        #[structopt(name = "FOREGROUND", short = "f", long = "foreground")]
-        foreground: bool,
-
         /// Enable or disable the registry watcher to automatically enqueue newly published crates
         #[structopt(
             long = "registry-watcher",
@@ -128,7 +124,7 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    pub fn handle_args(self) -> Result<()> {
+    fn handle_args(self) -> Result<()> {
         let ctx = BinContext::new();
 
         match self {
@@ -140,14 +136,7 @@ impl CommandLine {
                 // Blocks indefinitely
                 let _ = Server::start(Some(&socket_addr), reload_templates, &ctx)?;
             }
-            Self::Daemon {
-                foreground,
-                registry_watcher,
-            } => {
-                if foreground {
-                    log::warn!("--foreground was passed, but there is no need for it anymore");
-                }
-
+            Self::Daemon { registry_watcher } => {
                 docs_rs::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
@@ -186,7 +175,7 @@ enum QueueSubcommand {
 }
 
 impl QueueSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Add {
                 crate_name,
@@ -225,7 +214,7 @@ enum PrioritySubcommand {
 }
 
 impl PrioritySubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Set { pattern, priority } => {
                 set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
@@ -259,7 +248,7 @@ struct Build {
 }
 
 impl Build {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         self.subcommand.handle_args(ctx, self.skip_if_exists)
     }
 }
@@ -306,7 +295,7 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    pub fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
+    fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
         let build_queue = ctx.build_queue()?;
 
         let rustwide_builder = || -> Result<RustwideBuilder> {
@@ -433,7 +422,7 @@ enum DatabaseSubcommand {
 }
 
 impl DatabaseSubcommand {
-    pub fn handle_args(self, ctx: BinContext) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Migrate { version } => {
                 db::migrate(version, &mut *ctx.conn()?)

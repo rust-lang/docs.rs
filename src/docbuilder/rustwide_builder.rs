@@ -210,7 +210,8 @@ impl RustwideBuilder {
                     }
 
                     info!("copying essential files for {}", self.rustc_version);
-                    let source = build.host_target_dir().join("doc");
+                    assert!(!metadata.proc_macro);
+                    let source = build.host_target_dir().join(HOST_TARGET).join("doc");
                     let dest = tempfile::Builder::new()
                         .prefix("essential-files")
                         .tempdir()?;
@@ -350,14 +351,23 @@ impl RustwideBuilder {
                     if res.result.successful {
                         if let Some(name) = res.cargo_metadata.root().library_name() {
                             let host_target = build.host_target_dir();
-                            has_docs = host_target.join("doc").join(name).is_dir();
+                            has_docs = host_target
+                                .join(default_target)
+                                .join("doc")
+                                .join(name)
+                                .is_dir();
                         }
                     }
 
                     let mut algs = HashSet::new();
                     if has_docs {
                         debug!("adding documentation for the default target to the database");
-                        self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
+                        self.copy_docs(
+                            &build.host_target_dir(),
+                            local_storage.path(),
+                            default_target,
+                            true,
+                        )?;
 
                         successful_targets.push(res.target.clone());
 
@@ -593,17 +603,20 @@ impl RustwideBuilder {
                 .is_ok()
         });
 
-        // If we're passed a default_target which requires a cross-compile,
-        // cargo will put the output in `target/<target>/doc`.
-        // However, if this is the default build, we don't want it there,
-        // we want it in `target/doc`.
-        // NOTE: don't rename this if the build failed, because `target/<target>/doc` won't exist.
-        if successful && target != HOST_TARGET && is_default_target {
-            // mv target/$target/doc target/doc
+        // For proc-macros, cargo will put the output in `target/doc`.
+        // Move it to the target-specific directory for consistency with other builds.
+        // NOTE: don't rename this if the build failed, because `target/doc` won't exist.
+        if successful && metadata.proc_macro {
+            assert!(
+                is_default_target && target == HOST_TARGET,
+                "can't handle cross-compiling macros"
+            );
+            // mv target/doc target/$target/doc
             let target_dir = build.host_target_dir();
-            let old_dir = target_dir.join(target).join("doc");
-            let new_dir = target_dir.join("doc");
+            let old_dir = target_dir.join("doc");
+            let new_dir = target_dir.join(target).join("doc");
             debug!("rename {} to {}", old_dir.display(), new_dir.display());
+            std::fs::create_dir(target_dir.join(target))?;
             std::fs::rename(old_dir, new_dir)?;
         }
 
@@ -656,7 +669,16 @@ impl RustwideBuilder {
         if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
         }
-        if target != HOST_TARGET {
+        // Cargo has a series of frightening bugs around cross-compiling proc-macros:
+        // - Passing `--target` causes RUSTDOCFLAGS to fail to be passed 🤦
+        // - Passing `--target` will *create* `target/{target-name}/doc` but will put the docs in `target/doc` anyway
+        // As a result, it's not possible for us to support cross-compiling proc-macros.
+        // However, all these caveats unfortunately still apply when `{target-name}` is the host.
+        // So, only pass `--target` for crates that aren't proc-macros.
+        //
+        // Originally, this had a simpler check `target != HOST_TARGET`, but *that* was buggy when `HOST_TARGET` wasn't the same as the default target.
+        // Rather than trying to keep track of it all, only special case proc-macros, which are what we actually care about.
+        if !metadata.proc_macro {
             cargo_args.push("--target".into());
             cargo_args.push(target.into());
         };
@@ -702,7 +724,7 @@ impl RustwideBuilder {
             dest = dest.join(target);
         }
 
-        info!("{} {}", source.display(), dest.display());
+        info!("copy {} to {}", source.display(), dest.display());
         copy_dir_all(source, dest).map_err(Into::into)
     }
 
@@ -835,11 +857,11 @@ mod tests {
 
             // doc archive exists
             let doc_archive = rustdoc_archive_path(crate_, version);
-            assert!(storage.exists(&doc_archive)?);
+            assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
 
             // source archive exists
             let source_archive = source_archive_path(crate_, version);
-            assert!(storage.exists(&source_archive)?);
+            assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
             // default target was built and is accessible
             assert!(storage.exists_in_archive(&doc_archive, &format!("{}/index.html", crate_path))?);
@@ -934,5 +956,67 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_proc_macro() {
+        wrapper(|env| {
+            let crate_ = "thiserror-impl";
+            let version = "1.0.26";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            let storage = env.storage();
+
+            // doc archive exists
+            let doc_archive = rustdoc_archive_path(crate_, version);
+            assert!(storage.exists(&doc_archive)?);
+
+            // source archive exists
+            let source_archive = source_archive_path(crate_, version);
+            assert!(storage.exists(&source_archive)?);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_cross_compile_non_host_default() {
+        wrapper(|env| {
+            let crate_ = "xingapi";
+            let version = "0.3.3";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            let storage = env.storage();
+
+            // doc archive exists
+            let doc_archive = rustdoc_archive_path(crate_, version);
+            assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
+
+            // source archive exists
+            let source_archive = source_archive_path(crate_, version);
+            assert!(storage.exists(&source_archive)?, "{}", source_archive);
+
+            let target = "x86_64-unknown-linux-gnu";
+            let crate_path = crate_.replace("-", "_");
+            let target_docs_present = storage.exists_in_archive(
+                &doc_archive,
+                &format!("{}/{}/index.html", target, crate_path),
+            )?;
+
+            let web = env.frontend();
+            let target_url = format!(
+                "/{}/{}/{}/{}/index.html",
+                crate_, version, target, crate_path
+            );
+
+            assert!(target_docs_present);
+            assert_success(&target_url, web)?;
+
+            Ok(())
+        });
     }
 }

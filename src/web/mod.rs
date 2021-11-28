@@ -245,6 +245,8 @@ enum MatchSemver {
     /// `match_version` was given a semver version requirement, which matched the given saved crate
     /// version.
     Semver((String, i32)),
+    // `match_version` was given the string "latest", which matches the given saved crate version.
+    Latest((String, i32)),
 }
 
 impl MatchSemver {
@@ -252,7 +254,9 @@ impl MatchSemver {
     /// matched version string and id.
     pub fn into_parts(self) -> (String, i32) {
         match self {
-            MatchSemver::Exact((v, i)) | MatchSemver::Semver((v, i)) => (v, i),
+            MatchSemver::Exact((v, i))
+            | MatchSemver::Semver((v, i))
+            | MatchSemver::Latest((v, i)) => (v, i),
         }
     }
 }
@@ -268,12 +272,12 @@ impl MatchSemver {
 fn match_version(
     conn: &mut Client,
     name: &str,
-    version: Option<&str>,
+    input_version: Option<&str>,
 ) -> Result<MatchVersion, Nope> {
     // version is an Option<&str> from router::Router::get, need to decode first
     use iron::url::percent_encoding::percent_decode;
 
-    let req_version = version
+    let req_version = input_version
         .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
         .map(|v| {
             if v == "newest" || v == "latest" {
@@ -358,7 +362,11 @@ fn match_version(
     {
         return Ok(MatchVersion {
             corrected_name,
-            version: MatchSemver::Semver((version.to_string(), *id)),
+            version: if input_version == Some("latest") {
+                MatchSemver::Latest((version.to_string(), *id))
+            } else {
+                MatchSemver::Semver((version.to_string(), *id))
+            },
             rustdoc_status: *rustdoc_status,
         });
     }
@@ -515,6 +523,10 @@ fn redirect_base(req: &Request) -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct MetaData {
     pub(crate) name: String,
+    // If we're on a page with /latest/ in the URL, the string "latest".
+    // Otherwise, the version as a string.
+    pub(crate) version_or_latest: String,
+    // The exact version of the crate being shown. Never contains "latest".
     pub(crate) version: String,
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
@@ -525,7 +537,12 @@ pub(crate) struct MetaData {
 }
 
 impl MetaData {
-    fn from_crate(conn: &mut Client, name: &str, version: &str) -> Option<MetaData> {
+    fn from_crate(
+        conn: &mut Client,
+        name: &str,
+        version: &str,
+        version_or_latest: &str,
+    ) -> Option<MetaData> {
         let rows = conn
             .query(
                 "SELECT crates.name,
@@ -548,6 +565,7 @@ impl MetaData {
         Some(MetaData {
             name: row.get(0),
             version: row.get(1),
+            version_or_latest: version_or_latest.to_string(),
             description: row.get(2),
             target_name: row.get(3),
             rustdoc_status: row.get(4),
@@ -752,7 +770,7 @@ mod test {
                 .create()
                 .unwrap();
             let web = env.frontend();
-            assert_redirect("/bat//", "/bat/0.2.0/bat/", web)?;
+            assert_redirect("/bat//", "/bat/latest/bat/", web)?;
             Ok(())
         })
     }
@@ -899,6 +917,7 @@ mod test {
         let mut metadata = MetaData {
             name: "serde".to_string(),
             version: "1.0.0".to_string(),
+            version_or_latest: "1.0.0".to_string(),
             description: Some("serde does stuff".to_string()),
             target_name: None,
             rustdoc_status: true,
@@ -913,6 +932,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
+            "version_or_latest": "1.0.0",
             "description": "serde does stuff",
             "target_name": null,
             "rustdoc_status": true,
@@ -930,6 +950,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
+            "version_or_latest": "1.0.0",
             "description": "serde does stuff",
             "target_name": "serde_lib_name",
             "rustdoc_status": true,
@@ -947,6 +968,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
+            "version_or_latest": "1.0.0",
             "description": null,
             "target_name": "serde_lib_name",
             "rustdoc_status": true,
@@ -959,6 +981,30 @@ mod test {
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
+    }
+
+    #[test]
+    fn metadata_from_crate() {
+        wrapper(|env| {
+            release("0.1.0", env);
+            let mut conn = env.db().conn();
+            let metadata = MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest");
+            assert_eq!(
+                metadata.unwrap(),
+                MetaData {
+                    name: "foo".to_string(),
+                    version_or_latest: "latest".to_string(),
+                    version: "0.1.0".to_string(),
+                    description: Some("Fake package".to_string()),
+                    target_name: Some("foo".to_string()),
+                    rustdoc_status: true,
+                    default_target: "x86_64-unknown-linux-gnu".to_string(),
+                    doc_targets: vec![],
+                    yanked: false,
+                },
+            );
+            Ok(())
+        })
     }
 
     #[test]

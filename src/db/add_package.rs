@@ -128,9 +128,15 @@ pub(crate) fn add_package_into_database(
     add_keywords_into_database(conn, metadata_pkg, release_id)?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
 
-    let crate_details = CrateDetails::new(conn, &metadata_pkg.name, &metadata_pkg.version, None)
-        .context("error when fetching crate-details")?
-        .ok_or_else(|| anyhow!("crate details not found directly after creating them"))?;
+    let crate_details = CrateDetails::new(
+        conn,
+        &metadata_pkg.name,
+        &metadata_pkg.version,
+        &metadata_pkg.version,
+        None,
+    )
+    .context("error when fetching crate-details")?
+    .ok_or_else(|| anyhow!("crate details not found directly after creating them"))?;
 
     conn.execute(
         "UPDATE crates

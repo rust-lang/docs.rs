@@ -1,7 +1,7 @@
 {%- import "macros.html" as macros -%}
 
 {# The url of the current release, `/crate/:name/:version` #}
-{%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version -%}
+{%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest -%}
 
 {%- include "header/topbar_begin.html" -%}{#
 extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
@@ -21,6 +21,14 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                         {{ krate.name }} {{ krate.version }}
                         <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span>
                     </li>
+
+                    {%- if metadata.version_or_latest == "latest" -%}
+                    <li class="pure-menu-item">
+                        <a href="{{latest_path | safe}}" class="pure-menu-link description" title="Get a link to this specific version">
+                            {{ "link" | fas }} Permalink
+                        </a>
+                    </li>
+                    {%- endif -%}
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url | safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
@@ -211,10 +219,10 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                     because the documentation root page is guaranteed to exist for all targets.
                 #}
                 {%- if use_direct_platform_links -%}
-                    {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.version ~ "/" ~ target ~ "/" ~ inner_path -%}
+                    {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/" ~ target ~ "/" ~ inner_path -%}
                     {%- set target_no_follow = "" -%}
                 {%- else -%}
-                    {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+                    {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
                     {%- set target_no_follow = "nofollow" -%}
                 {%- endif -%}
 
