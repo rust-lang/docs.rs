@@ -5,6 +5,22 @@ use postgres::{Client, Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 
+/// Creates a new PostgresMigration from upgrade and downgrade closures.
+/// Directly using `migration` is only needed for data-migrations or more
+/// complex schema-migrations.
+///
+/// Example:
+///
+/// ```
+/// let my_migration = migration!(100,
+///                               "migrate data",
+///                               |transaction: &mut Transaction| -> Result<(), PostgresError> {
+///                                   // upgrade logic here
+///                               },
+///                               |transaction: &mut Transaction| -> Result<(), PostgresError> {
+///                                   // downgrade logic here
+///                               } );
+/// ```
 macro_rules! migration {
     ($context:expr, $version:expr, $description:expr, $up_func:expr, $down_func:expr $(,)?) => {{
         struct Amigration;
@@ -52,6 +68,17 @@ macro_rules! migration {
     }};
 }
 
+/// Creates a new PostgresMigration from upgrade and downgrade queries.
+/// Downgrade query should return database to previous state.
+///
+/// Example:
+///
+/// ```
+/// let my_migration = sql_migration!(100,
+///                               "Create test table",
+///                               "CREATE TABLE test ( id SERIAL);",
+///                               "DROP TABLE test;");
+/// ```
 macro_rules! sql_migration {
     ($context:expr, $version:expr, $description:expr, $up:expr, $down:expr $(,)?) => {{
         migration!(
