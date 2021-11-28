@@ -156,7 +156,11 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         // use that instead
         crate_name = new_name;
     }
-    let (version, id) = v.version.into_parts();
+    let (mut version, id) = v.version.into_parts();
+
+    if req_version == None || req_version == Some("latest") {
+        version = "latest".to_string()
+    }
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
@@ -303,14 +307,23 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // * If there is a semver (but not exact) match, redirect to the exact version.
     let release_found = match_version(&mut conn, &name, url_version)?;
 
-    let version = match release_found.version {
+    let (version, version_or_latest) = match release_found.version {
         MatchSemver::Exact((version, _)) => {
             // Redirect when the requested crate name isn't correct
             if let Some(name) = release_found.corrected_name {
                 return redirect(&name, &version, &req_path);
             }
 
-            version
+            (version.clone(), version)
+        }
+
+        MatchSemver::Latest((version, _)) => {
+            // Redirect when the requested crate name isn't correct
+            if let Some(name) = release_found.corrected_name {
+                return redirect(&name, "latest", &req_path);
+            }
+
+            (version, "latest".to_string())
         }
 
         // Redirect when the requested version isn't correct
@@ -328,12 +341,15 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = cexpect!(req, CrateDetails::new(&mut conn, &name, &version, updater));
+    let krate = cexpect!(
+        req,
+        CrateDetails::new(&mut conn, &name, &version, &version_or_latest, updater)
+    );
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
     if req_path.get(0).copied() == Some(&krate.metadata.default_target) {
-        return redirect(&name, &version, &req_path[1..]);
+        return redirect(&name, &version_or_latest, &req_path[1..]);
     }
 
     // Create the path to access the file from
@@ -368,7 +384,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 req,
                 storage.rustdoc_file_exists(&name, &version, &path, krate.archive_storage)
             ) {
-                redirect(&name, &version, &req_path)
+                redirect(&name, &version_or_latest, &req_path)
             } else if req_path.get(0).map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
@@ -431,11 +447,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         (target, inner_path.join("/"))
     };
 
-    // If the requested crate version is the most recent, use it to build the url
-    let mut latest_path = if is_latest_version {
-        format!("/{}/{}", name, latest_version)
-    // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
-    } else if latest_release.build_status {
+    // Find the path of the latest version for the `Go to latest` and `Permalink` links
+    let mut latest_path = if latest_release.build_status {
         let target = if target.is_empty() {
             &krate.metadata.default_target
         } else {
@@ -543,10 +556,20 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let base = redirect_base(req);
     let updater = extension!(req, RepositoryStatsUpdater);
 
-    let crate_details = match CrateDetails::new(&mut conn, name, version, updater) {
-        Some(krate) => krate,
-        None => return Err(Nope::VersionNotFound.into()),
+    let release_found = match_version(&mut conn, name, Some(version))?;
+
+    let (version, version_or_latest) = match release_found.version {
+        MatchSemver::Exact((version, _)) => (version.clone(), version),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+        // semver matching not supported here
+        MatchSemver::Semver(_) => return Err(Nope::VersionNotFound.into()),
     };
+
+    let crate_details =
+        match CrateDetails::new(&mut conn, name, &version, &version_or_latest, updater) {
+            Some(krate) => krate,
+            None => return Err(Nope::VersionNotFound.into()),
+        };
 
     //   [crate, :name, :version, target-redirect, :target, *path]
     // is transformed to
@@ -570,7 +593,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         req,
         storage.rustdoc_file_exists(
             name,
-            version,
+            &version,
             &file_path.join("/"),
             crate_details.archive_storage
         )
@@ -582,10 +605,10 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let url = format!(
-        "{base}/{name}/{version}/{path}",
+        "{base}/{name}/{version_or_latest}/{path}",
         base = base,
         name = name,
-        version = version,
+        version_or_latest = version_or_latest,
         path = path
     );
 
@@ -731,6 +754,8 @@ mod test {
             assert_success(base, web)?;
             assert_redirect("/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
 
+            assert_success("/dummy/latest/dummy/", web)?;
+
             // set an explicit target that requires cross-compile
             let target = "x86_64-pc-windows-msvc";
             env.fake_release()
@@ -767,6 +792,26 @@ mod test {
             assert_redirect("/dummy/0.3.0/index.html", base, web)?;
             Ok(())
         });
+    }
+
+    #[test]
+    fn latest_url() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
+            assert!(resp.url().as_str().ends_with("/dummy/latest/dummy/"));
+            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+            assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
+            assert!(body.contains("<a href=\"/crate/dummy/latest\""));
+            assert!(body.contains("<a href=\"/crate/dummy/0.1.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html\""));
+            Ok(())
+        })
     }
 
     #[test_case(true)]
@@ -1071,7 +1116,7 @@ mod test {
                 .create()?;
 
             let web = env.frontend();
-            assert_redirect("/fake%2Dcrate", "/fake-crate/0.0.1/fake_crate/", web)?;
+            assert_redirect("/fake%2Dcrate", "/fake-crate/latest/fake_crate/", web)?;
 
             Ok(())
         });
@@ -1101,12 +1146,12 @@ mod test {
 
             let web = env.frontend();
 
-            assert_redirect("/dummy_dash", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash", "/dummy-dash/latest/dummy_dash/", web)?;
             assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
             assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
             assert_redirect(
                 "/dummy-underscore",
-                "/dummy_underscore/0.2.0/dummy_underscore/",
+                "/dummy_underscore/latest/dummy_underscore/",
                 web,
             )?;
             assert_redirect(
@@ -1121,7 +1166,7 @@ mod test {
             )?;
             assert_redirect(
                 "/dummy-mixed_separators",
-                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                "/dummy_mixed-separators/latest/dummy_mixed_separators/",
                 web,
             )?;
             assert_redirect(
@@ -1286,6 +1331,27 @@ mod test {
                 )],
             )?;
 
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/",
+                &[("x86_64-unknown-linux-gnu", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/index.html",
+                &[("x86_64-unknown-linux-gnu", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/struct.Dummy.html",
+                &[(
+                    "x86_64-unknown-linux-gnu",
+                    "/dummy/latest/dummy/struct.Dummy.html",
+                )],
+            )?;
+
             // set an explicit target that requires cross-compile
             env.fake_release()
                 .name("dummy")
@@ -1314,6 +1380,27 @@ mod test {
                 &[(
                     "x86_64-pc-windows-msvc",
                     "/dummy/0.2.0/dummy/struct.Dummy.html",
+                )],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/",
+                &[("x86_64-pc-windows-msvc", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/index.html",
+                &[("x86_64-pc-windows-msvc", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/struct.Dummy.html",
+                &[(
+                    "x86_64-pc-windows-msvc",
+                    "/dummy/latest/dummy/struct.Dummy.html",
                 )],
             )?;
 
@@ -1348,6 +1435,27 @@ mod test {
                 )],
             )?;
 
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/",
+                &[("x86_64-unknown-linux-gnu", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/index.html",
+                &[("x86_64-unknown-linux-gnu", "/dummy/latest/dummy/index.html")],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/dummy/struct.Dummy.html",
+                &[(
+                    "x86_64-unknown-linux-gnu",
+                    "/dummy/latest/dummy/struct.Dummy.html",
+                )],
+            )?;
+
             // multiple targets
             env.fake_release()
                 .name("dummy")
@@ -1374,6 +1482,18 @@ mod test {
                         "/dummy/0.4.0/x86_64-pc-windows-msvc/settings.html",
                     ),
                     ("x86_64-unknown-linux-gnu", "/dummy/0.4.0/settings.html"),
+                ],
+            )?;
+
+            assert_platform_links(
+                web,
+                "/dummy/latest/settings.html",
+                &[
+                    (
+                        "x86_64-pc-windows-msvc",
+                        "/dummy/latest/x86_64-pc-windows-msvc/settings.html",
+                    ),
+                    ("x86_64-unknown-linux-gnu", "/dummy/latest/settings.html"),
                 ],
             )?;
 

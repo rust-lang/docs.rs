@@ -29,9 +29,10 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     let req_version = router.find("version");
 
     let mut conn = extension!(req, Pool).get()?;
-    let version =
+    let (version, version_or_latest) =
         match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
-            MatchSemver::Exact((version, _)) => version,
+            MatchSemver::Exact((version, _)) => (version.clone(), version),
+            MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
 
             MatchSemver::Semver((version, _)) => {
                 let url = ctry!(
@@ -69,7 +70,10 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     FeaturesPage {
-        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, &version)),
+        metadata: cexpect!(
+            req,
+            MetaData::from_crate(&mut conn, name, &version, &version_or_latest)
+        ),
         features,
         default_len,
     }
@@ -244,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn latest_redirect() {
+    fn latest_200() {
         wrapper(|env| {
             env.fake_release()
                 .name("foo")
@@ -259,7 +263,11 @@ mod tests {
                 .create()?;
 
             let resp = env.frontend().get("/crate/foo/latest/features").send()?;
-            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/features"));
+            assert!(resp.url().as_str().ends_with("/crate/foo/latest/features"));
+            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+            assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
+            assert!(body.contains("<a href=\"/crate/foo/latest/source/\""));
+            assert!(body.contains("<a href=\"/crate/foo/latest\""));
             Ok(())
         });
     }
