@@ -337,7 +337,16 @@ impl RustwideBuilder {
                     // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                     let cargo_lock = build.host_source_dir().join("Cargo.lock");
                     if !res.result.successful && cargo_lock.exists() {
+                        info!("removing lockfile and reattempting build");
                         std::fs::remove_file(cargo_lock)?;
+                        Command::new(&self.workspace, self.toolchain.cargo())
+                            .cd(build.host_source_dir())
+                            .args(&["generate-lockfile", "-Zno-index-update"])
+                            .run()?;
+                        Command::new(&self.workspace, self.toolchain.cargo())
+                            .cd(build.host_source_dir())
+                            .args(&["fetch", "--locked"])
+                            .run()?;
                         res = self.execute_build(
                             default_target,
                             true,
@@ -1015,6 +1024,21 @@ mod tests {
 
             assert!(target_docs_present);
             assert_success(&target_url, web)?;
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_locked_fails_unlocked_needs_new_deps() {
+        wrapper(|env| {
+            env.override_config(|cfg| cfg.include_default_targets = false);
+
+            let crate_ = "stm32f7xx-hal";
+            let version = "0.6.0";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             Ok(())
         });
