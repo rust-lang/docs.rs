@@ -1,7 +1,12 @@
 use super::TemplateData;
 use crate::ctry;
 use crate::web::csp::Csp;
-use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
+use iron::{
+    headers::{CacheControl, ContentType},
+    response::Response,
+    status::Status,
+    IronResult, Request,
+};
 use serde::Serialize;
 use std::borrow::Cow;
 use tera::Context;
@@ -77,6 +82,7 @@ pub trait WebPage: Serialize + Sized {
 
         let mut response = Response::with((status, rendered));
         response.headers.set(Self::content_type());
+        response.headers.set(Self::cache_control());
 
         Ok(response)
     }
@@ -92,5 +98,10 @@ pub trait WebPage: Serialize + Sized {
     /// The content type that the template should be served with, defaults to html
     fn content_type() -> ContentType {
         ContentType::html()
+    }
+
+    /// The contents of the Cache-Control header. Defaults to no caching.
+    fn cache_control() -> CacheControl {
+        CacheControl(vec![])
     }
 }
