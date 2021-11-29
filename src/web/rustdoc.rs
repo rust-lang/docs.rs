@@ -195,6 +195,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RustdocPage {
     latest_path: String,
+    permalink_path: String,
     latest_version: String,
     target: String,
     inner_path: String,
@@ -474,10 +475,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         "".to_string()
     };
 
-    let latest_path = format!(
+    let permalink_path = format!(
         "/crate/{}/{}{}{}",
         name, latest_version, target_redirect, query_string
     );
+
+    let latest_path = format!("/crate/{}/latest{}{}", name, target_redirect, query_string);
 
     metrics
         .recently_accessed_releases
@@ -492,6 +495,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     rendering_time.step("rewrite html");
     RustdocPage {
         latest_path,
+        permalink_path,
         latest_version,
         target,
         inner_path,
@@ -861,25 +865,25 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             // check it keeps the subpage
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
             );
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/blah.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/blah.html"
             );
 
             // check it also works for deleted pages
             let redirect =
                 latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", web)?;
-            assert_eq!(redirect, "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
+            assert_eq!(redirect, "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
 
             Ok(())
         })
@@ -909,14 +913,14 @@ mod test {
                 latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
             let redirect =
                 latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
             let redirect = latest_version_redirect(
@@ -925,7 +929,7 @@ mod test {
             )?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-pc-windows-msvc/dummy/struct.Blah.html"
+                "/crate/dummy/latest/target-redirect/x86_64-pc-windows-msvc/dummy/struct.Blah.html"
             );
 
             Ok(())
@@ -951,7 +955,7 @@ mod test {
 
             let web = env.frontend();
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
-            assert_eq!(redirect, "/crate/dummy/0.2.0");
+            assert_eq!(redirect, "/crate/dummy/latest");
 
             Ok(())
         })
@@ -985,13 +989,13 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             let redirect = latest_version_redirect("/dummy/0.2.1/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             Ok(())
@@ -1028,13 +1032,13 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             Ok(())
@@ -1848,14 +1852,14 @@ mod test {
             let target_redirect = "/crate/pyo3/0.13.2/target-redirect/x86_64-unknown-linux-gnu/src/pyo3/objects/exc.rs.html";
             assert_eq!(
                 latest_version_redirect(
-                    "/pyo3/0.2.7/src/pyo3/objects/exc.rs.html",
+                    "/pyo3/latest/src/pyo3/objects/exc.rs.html",
                     env.frontend()
                 )?,
                 target_redirect
             );
             assert_redirect(
                 target_redirect,
-                "/pyo3/0.13.2/pyo3/?search=exc",
+                "/pyo3/latest/pyo3/?search=exc",
                 env.frontend(),
             )?;
             Ok(())
