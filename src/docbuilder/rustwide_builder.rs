@@ -1035,8 +1035,33 @@ mod tests {
         wrapper(|env| {
             env.override_config(|cfg| cfg.include_default_targets = false);
 
-            let crate_ = "stm32f7xx-hal";
-            let version = "0.6.0";
+            // if the corrected dependency of the crate was already downloaded we need to remove it
+            let crate_file = env.config().rustwide_workspace.join(
+                "cargo-home/registry/cache/github.com-1ecc6299db9ec823/rand_core-0.5.1.crate",
+            );
+            let src_dir = env
+                .config()
+                .rustwide_workspace
+                .join("cargo-home/registry/src/github.com-1ecc6299db9ec823/rand_core-0.5.1");
+
+            if crate_file.exists() {
+                info!("deleting {}", crate_file.display());
+                std::fs::remove_file(crate_file)?;
+            }
+            if src_dir.exists() {
+                info!("deleting {}", src_dir.display());
+                std::fs::remove_dir_all(src_dir)?;
+            }
+
+            // Specific setup required:
+            //  * crate has a binary so that it is published with a lockfile
+            //  * crate has a library so that it is documented by docs.rs
+            //  * crate has an optional dependency
+            //  * metadata enables the optional dependency for docs.rs
+            //  * `cargo doc` fails with the version of the dependency in the lockfile
+            //  * there is a newer version of the dependency available that correctly builds
+            let crate_ = "docs_rs_test_incorrect_lockfile";
+            let version = "0.1.2";
             let mut builder = RustwideBuilder::init(env).unwrap();
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
