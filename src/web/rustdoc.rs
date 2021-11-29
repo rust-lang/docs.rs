@@ -448,23 +448,27 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     // Find the path of the latest version for the `Go to latest` and `Permalink` links
-    let mut latest_path = if latest_release.build_status {
+    let target_redirect = if latest_release.build_status {
         let target = if target.is_empty() {
             &krate.metadata.default_target
         } else {
             target
         };
-        format!(
-            "/crate/{}/{}/target-redirect/{}/{}",
-            name, latest_version, target, inner_path
-        )
+        format!("/target-redirect/{}/{}", target, inner_path)
     } else {
-        format!("/crate/{}/{}", name, latest_version)
+        "".to_string()
     };
-    if let Some(query) = req.url.query() {
-        latest_path.push('?');
-        latest_path.push_str(query);
-    }
+
+    let query_string = if let Some(query) = req.url.query() {
+        format!("?{}", query)
+    } else {
+        "".to_string()
+    };
+
+    let latest_path = format!(
+        "/crate/{}/{}{}{}",
+        name, latest_version, target_redirect, query_string
+    );
 
     metrics
         .recently_accessed_releases
