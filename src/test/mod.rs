@@ -295,7 +295,6 @@ impl Context for TestEnvironment {
 pub(crate) struct TestDatabase {
     pool: Pool,
     schema: String,
-    repository_stats_updater: RepositoryStatsUpdater,
 }
 
 impl TestDatabase {
@@ -305,7 +304,6 @@ impl TestDatabase {
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
         let pool = Pool::new_with_schema(config, metrics, &schema)?;
-        let repository_stats_updater = RepositoryStatsUpdater::new(config, pool.clone());
 
         let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
         conn.batch_execute(&format!(
@@ -340,11 +338,7 @@ impl TestDatabase {
             .collect();
         conn.batch_execute(&query)?;
 
-        Ok(TestDatabase {
-            pool,
-            schema,
-            repository_stats_updater,
-        })
+        Ok(TestDatabase { pool, schema })
     }
 
     pub(crate) fn pool(&self) -> Pool {
@@ -355,10 +349,6 @@ impl TestDatabase {
         self.pool
             .get()
             .expect("failed to get a connection out of the pool")
-    }
-
-    pub(crate) fn repository_stats_updater(&self) -> &RepositoryStatsUpdater {
-        &self.repository_stats_updater
     }
 }
 

@@ -1,10 +1,3 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    io::{BufRead, BufReader},
-    path::Path,
-};
-
 use crate::{
     db::types::Feature,
     docbuilder::{BuildResult, DocCoverage},
@@ -12,11 +5,19 @@ use crate::{
     index::api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
+    web::crate_details::CrateDetails,
 };
+use anyhow::{anyhow, Context};
 use log::{debug, info};
 use postgres::Client;
 use serde_json::Value;
 use slug::slugify;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 /// Adds a package into database.
 ///
@@ -127,12 +128,21 @@ pub(crate) fn add_package_into_database(
     add_keywords_into_database(conn, metadata_pkg, release_id)?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id)?;
 
-    // Update the crates table with the new release
+    let crate_details = CrateDetails::new(
+        conn,
+        &metadata_pkg.name,
+        &metadata_pkg.version,
+        &metadata_pkg.version,
+        None,
+    )
+    .context("error when fetching crate-details")?
+    .ok_or_else(|| anyhow!("crate details not found directly after creating them"))?;
+
     conn.execute(
         "UPDATE crates
          SET latest_version_id = $2
          WHERE id = $1",
-        &[&crate_id, &release_id],
+        &[&crate_id, &crate_details.latest_release().id],
     )?;
 
     Ok(release_id)

@@ -343,7 +343,16 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
     let krate = cexpect!(
         req,
-        CrateDetails::new(&mut conn, &name, &version, &version_or_latest, updater)
+        ctry!(
+            req,
+            CrateDetails::new(
+                &mut *conn,
+                &name,
+                &version,
+                &version_or_latest,
+                Some(updater)
+            )
+        )
     );
 
     // if visiting the full path to the default target, remove the target from the path
@@ -565,11 +574,19 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         MatchSemver::Semver(_) => return Err(Nope::VersionNotFound.into()),
     };
 
-    let crate_details =
-        match CrateDetails::new(&mut conn, name, &version, &version_or_latest, updater) {
-            Some(krate) => krate,
-            None => return Err(Nope::VersionNotFound.into()),
-        };
+    let crate_details = match ctry!(
+        req,
+        CrateDetails::new(
+            &mut *conn,
+            name,
+            &version,
+            &version_or_latest,
+            Some(updater)
+        )
+    ) {
+        Some(krate) => krate,
+        None => return Err(Nope::VersionNotFound.into()),
+    };
 
     //   [crate, :name, :version, target-redirect, :target, *path]
     // is transformed to
