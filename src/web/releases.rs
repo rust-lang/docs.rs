@@ -247,20 +247,7 @@ fn get_search_results(
                 repositories.stars
 
             FROM crates 
-            INNER JOIN (
-                --FIXME: this logic will probably move to using crates.latest_version_id when it is fixed. 
-                SELECT releases.id, releases.crate_id
-                FROM (
-                    SELECT
-                        releases.id,
-                        releases.crate_id,
-                        RANK() OVER (PARTITION BY crate_id ORDER BY release_time DESC) as rank
-                    FROM releases
-                    WHERE releases.rustdoc_status AND NOT releases.yanked
-                ) AS releases
-                WHERE releases.rank = 1
-            ) AS latest_release ON latest_release.crate_id = crates.id
-            INNER JOIN releases ON latest_release.id = releases.id
+            INNER JOIN releases ON crates.latest_version_id = releases.id
             INNER JOIN builds ON releases.id = builds.rid
             LEFT JOIN repositories ON releases.repository_id = repositories.id
 
@@ -1054,8 +1041,8 @@ mod tests {
             // * `max_version` from the crates.io search result will be ignored since we
             //   might not have it yet, or the doc-build might be in progress.
             // * ranking/order from crates.io result is preserved
-            // * version used is the version with the youngest release date
-            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/");
+            // * version used is the highest semver following our own "latest version" logic
+            assert_eq!(links[0], "/some_random_crate/2.0.0/some_random_crate/");
             assert_eq!(links[1], "/and_another_one/0.0.1/and_another_one/");
             Ok(())
         })
