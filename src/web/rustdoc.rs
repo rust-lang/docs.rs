@@ -11,7 +11,10 @@ use crate::{
     Config, Metrics, Storage,
 };
 use anyhow::{anyhow, Context};
-use iron::url::percent_encoding::percent_decode;
+use iron::{
+    headers::{CacheControl, CacheDirective},
+    url::percent_encoding::percent_decode,
+};
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
@@ -218,7 +221,11 @@ struct RustdocPage {
     latest_version: String,
     target: String,
     inner_path: String,
+    // true if we are displaying the latest version of the crate, regardless
+    // of whether the URL specifies a version number or the string "latest."
     is_latest_version: bool,
+    // true if the URL specifies a version using the string "latest."
+    is_latest_url: bool,
     is_prerelease: bool,
     krate: CrateDetails,
     metadata: MetaData,
@@ -244,6 +251,7 @@ impl RustdocPage {
             .get::<crate::Metrics>()
             .expect("missing Metrics from the request extensions");
 
+        let is_latest_url = self.is_latest_url;
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self));
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
@@ -265,7 +273,19 @@ impl RustdocPage {
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
-
+        if is_latest_url {
+            response
+                .headers
+                .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
+        } else {
+            response.headers.set(CacheControl(vec![
+                CacheDirective::Extension(
+                    "stale-while-revalidate".to_string(),
+                    Some("2592000".to_string()), // sixty days
+                ),
+                CacheDirective::MaxAge(600u32), // ten minutes
+            ]));
+        }
         Ok(response)
     }
 }
@@ -533,6 +553,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         target,
         inner_path,
         is_latest_version,
+        is_latest_url: version_or_latest == "latest",
         is_prerelease,
         metadata: krate.metadata.clone(),
         krate,
@@ -867,6 +888,28 @@ mod test {
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
             assert!(body.contains("<a href=\"/dummy/0.1.0/dummy/index.html\""));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn cache_headers() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
+            assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
+
+            let resp = env.frontend().get("/dummy/0.1.0/dummy/").send()?;
+            assert_eq!(
+                resp.headers().get("Cache-Control").unwrap(),
+                &"stale-while-revalidate=2592000, max-age=600"
+            );
             Ok(())
         })
     }
