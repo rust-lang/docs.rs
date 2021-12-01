@@ -23,6 +23,9 @@ ignore = [
 
     "RUSTSEC-2021-0079", # Integer overflow in hyper's parsing of the Transfer-Encoding header leads to data loss
     # https://github.com/rust-lang/docs.rs/issues/1459
+
+    "RUSTSEC-2021-0127", # serde_cbor is unmaintained
+    # https://github.com/rust-lang/docs.rs/issues/1568
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
