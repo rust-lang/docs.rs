@@ -22,8 +22,8 @@ pub(super) fn build_routes() -> Routes {
     //   https://support.google.com/webmasters/answer/183668?hl=en
     routes.static_resource("/robots.txt", PermanentRedirect("/-/static/robots.txt"));
     routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
-    routes.static_resource("/sitemap.xml", super::sitemap::sitemapindex_handler);
-    routes.static_resource(
+    routes.internal_page("/sitemap.xml", super::sitemap::sitemapindex_handler);
+    routes.internal_page(
         "/-/sitemap/:letter/sitemap.xml",
         super::sitemap::sitemap_handler,
     );
