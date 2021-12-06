@@ -14,7 +14,7 @@ fn write_fontawesome_sprite() {
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("fontawesome.rs");
     let mut dest_file = File::create(&dest_path).unwrap();
     dest_file
-        .write_all(b"fn fontawesome_svg(dir:&str,file:&str)->&'static str{match(dir,file){")
+        .write_all(b"const fn fontawesome_svg(dir:&str,file:&str)->&'static str{match(dir.as_bytes(),file.as_bytes()){")
         .expect("fontawesome fn write");
     for dirname in &["brands", "regular", "solid"] {
         let dir = read_dir(Path::new("fontawesome-free-5.14.0-web/svgs").join(dirname)).unwrap();
@@ -34,7 +34,7 @@ fn write_fontawesome_sprite() {
             dest_file
                 .write_all(
                     format!(
-                        r####"("{dirname}","{filename}")=>r###"{data}"###,"####,
+                        r####"(b"{dirname}",b"{filename}")=>r###"{data}"###,"####,
                         data = data,
                         dirname = dirname,
                         filename = filename.replace(".svg", ""),
