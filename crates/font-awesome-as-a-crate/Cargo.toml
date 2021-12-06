@@ -1,6 +1,6 @@
 [package]
 name = "font-awesome-as-a-crate"
-version = "0.1.2"
+version = "0.2.0"
 # https://github.com/FortAwesome/Font-Awesome/blob/master/composer.json
 authors = ["Michael Howell <michael@notriddle.com>", "Travis Chase", "Dave Gandy", "Rob Madole", "Jory Raphael", "Geremia Taglialatela", "Brian Talbot", "Mike Wilkerson", "Fonticons Inc <hello@fontawesome.com>"]
 edition = "2018"

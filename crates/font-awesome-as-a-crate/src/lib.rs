@@ -49,7 +49,7 @@ impl Display for NameError {
 impl Error for NameError {}
 
 impl Type {
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Type::Brands => "brands",
             Type::Regular => "regular",
@@ -79,7 +79,7 @@ impl Display for Type {
 /**
 Get a fontawesome svg file by its name.
 */
-pub fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
+pub const fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
     let svg = fontawesome_svg(type_.as_str(), name);
     if svg.is_empty() {
         return Err(NameError);
@@ -89,6 +89,13 @@ pub fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
 
 #[cfg(test)]
 mod tests {
+    const fn usable_as_const_() {
+        assert!(crate::svg(crate::Type::Solid, "cog").is_ok());
+    }
+    #[test]
+    fn usable_as_const() {
+        usable_as_const_();
+    }
     #[test]
     fn it_works() {
         assert!(crate::svg(crate::Type::Solid, "cog").is_ok());
