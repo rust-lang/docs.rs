@@ -3,6 +3,7 @@
 use crate::{
     db::Pool,
     impl_webpage,
+    utils::get_correct_docsrs_style_file,
     web::{
         error::Nope, file::File as DbFile, match_version, page::WebPage, redirect_base,
         MatchSemver, MetaData, Url,
@@ -67,7 +68,8 @@ impl FileList {
                         releases.files,
                         releases.default_target,
                         releases.doc_targets,
-                        releases.yanked
+                        releases.yanked,
+                        releases.doc_rustc_version
                 FROM releases
                 LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -147,6 +149,7 @@ impl FileList {
                     default_target: rows[0].get(6),
                     doc_targets: MetaData::parse_doc_targets(rows[0].get(7)),
                     yanked: rows[0].get(8),
+                    rustdoc_css_file: get_correct_docsrs_style_file(rows[0].get(9)).unwrap(),
                 },
                 files: file_list,
             })

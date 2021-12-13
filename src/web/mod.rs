@@ -2,6 +2,7 @@
 
 pub(crate) mod page;
 
+use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use anyhow::{anyhow, Context as _};
 use log::info;
@@ -534,6 +535,9 @@ pub(crate) struct MetaData {
     pub(crate) default_target: String,
     pub(crate) doc_targets: Vec<String>,
     pub(crate) yanked: bool,
+    /// CSS file to use depending on the rustdoc version used to generate this version of this
+    /// crate.
+    pub(crate) rustdoc_css_file: String,
 }
 
 impl MetaData {
@@ -552,7 +556,8 @@ impl MetaData {
                        releases.rustdoc_status,
                        releases.default_target,
                        releases.doc_targets,
-                       releases.yanked
+                       releases.yanked,
+                       releases.doc_rustc_version
                 FROM releases
                 INNER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
@@ -572,6 +577,7 @@ impl MetaData {
             default_target: row.get(5),
             doc_targets: MetaData::parse_doc_targets(row.get(6)),
             yanked: row.get(7),
+            rustdoc_css_file: get_correct_docsrs_style_file(row.get(8)).unwrap(),
         })
     }
 
@@ -927,6 +933,7 @@ mod test {
                 "arm64-unknown-linux-gnu".to_string(),
             ],
             yanked: false,
+            rustdoc_css_file: "rustdoc.css".to_string(),
         };
 
         let correct_json = json!({
@@ -942,6 +949,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "rustdoc_css_file": "rustdoc.css",
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -960,6 +968,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "rustdoc_css_file": "rustdoc.css",
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -978,6 +987,7 @@ mod test {
                 "arm64-unknown-linux-gnu",
             ],
             "yanked": false,
+            "rustdoc_css_file": "rustdoc.css",
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -1001,6 +1011,7 @@ mod test {
                     default_target: "x86_64-unknown-linux-gnu".to_string(),
                     doc_targets: vec![],
                     yanked: false,
+                    rustdoc_css_file: "rustdoc.css".to_string(),
                 },
             );
             Ok(())

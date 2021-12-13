@@ -1,7 +1,7 @@
 use super::{error::Nope, redirect, redirect_base, STATIC_FILE_CACHE_DURATION};
 use crate::utils::report_error;
 use anyhow::Context;
-use chrono::Utc;
+use chrono::prelude::*;
 use iron::{
     headers::CacheDirective,
     headers::{CacheControl, ContentLength, ContentType, LastModified},
@@ -14,6 +14,8 @@ use std::{ffi::OsStr, fs, path::Path};
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"));
+const RUSTDOC_2021_12_06_CSS: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2021-12-06.css"));
 const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
 pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
@@ -25,6 +27,10 @@ pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
         "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap())),
         "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap())),
         "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap())),
+        "rustdoc-2021-12-06.css" => serve_resource(
+            RUSTDOC_2021_12_06_CSS,
+            ContentType("text/css".parse().unwrap()),
+        ),
         file => serve_file(file)?,
     })
 }

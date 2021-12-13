@@ -1,0 +1,41 @@
+// FIXME: Use modules
+@import "rustdoc-common";
+
+// This file is needed to overload the previous docs.rs style. It is added into crates generated
+// using rustdoc after https://github.com/rust-lang/rust/pull/91356 has been merged.
+
+#rustdoc_body_wrapper {
+    padding: 0;
+
+    .sidebar {
+        margin-top: 0;
+        top: $top-navbar-height;
+
+        .sidebar-menu {
+            top: $top-navbar-height;
+        }
+    }
+
+    main {
+        padding-bottom: 50px;
+    }
+}
+
+div.container-rustdoc {
+    > .docs-rs-footer {
+        bottom: 0;
+        right: 0;
+    }
+}
+
+div.container-rustdoc:not(.source) {
+    > .docs-rs-footer {
+        left: 200px;
+    }
+}
+
+div.rustdoc {
+    #sidebar-toggle {
+        top: 0;
+    }
+}
