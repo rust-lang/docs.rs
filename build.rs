@@ -77,6 +77,7 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
 
     // Compile rustdoc.scss -> rustdoc.css
     compile_sass_file("rustdoc", "rustdoc", &[])?;
+    compile_sass_file("rustdoc-2021-12-06", "rustdoc-2021-12-06", &[])?;
 
     // Compile vendored.scss -> vendored.css
     compile_sass_file(

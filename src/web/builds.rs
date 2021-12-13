@@ -144,14 +144,14 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .rustc_version("rustc 1.0.0")
+                        .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0"),
                     FakeBuild::default()
                         .successful(false)
-                        .rustc_version("rustc 2.0.0")
+                        .rustc_version("rustc (blabla 2020-01-01)")
                         .docsrs_version("docs.rs 2.0.0"),
                     FakeBuild::default()
-                        .rustc_version("rustc 3.0.0")
+                        .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0"),
                 ])
                 .create()?;
@@ -169,11 +169,11 @@ mod tests {
                 .map(|row| row.text_contents())
                 .collect();
 
-            assert!(rows[0].contains("rustc 3.0.0"));
+            assert!(rows[0].contains("rustc (blabla 2021-01-01)"));
             assert!(rows[0].contains("docs.rs 3.0.0"));
-            assert!(rows[1].contains("rustc 2.0.0"));
+            assert!(rows[1].contains("rustc (blabla 2020-01-01)"));
             assert!(rows[1].contains("docs.rs 2.0.0"));
-            assert!(rows[2].contains("rustc 1.0.0"));
+            assert!(rows[2].contains("rustc (blabla 2019-01-01)"));
             assert!(rows[2].contains("docs.rs 1.0.0"));
 
             Ok(())
@@ -188,14 +188,14 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .rustc_version("rustc 1.0.0")
+                        .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0"),
                     FakeBuild::default()
                         .successful(false)
-                        .rustc_version("rustc 2.0.0")
+                        .rustc_version("rustc (blabla 2020-01-01)")
                         .docsrs_version("docs.rs 2.0.0"),
                     FakeBuild::default()
-                        .rustc_version("rustc 3.0.0")
+                        .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0"),
                 ])
                 .create()?;
@@ -214,7 +214,7 @@ mod tests {
             );
             assert_eq!(
                 value.pointer("/0/rustc_version"),
-                Some(&"rustc 3.0.0".into())
+                Some(&"rustc (blabla 2021-01-01)".into())
             );
             assert!(value.pointer("/0/id").unwrap().is_i64());
             assert!(serde_json::from_value::<DateTime<Utc>>(
@@ -229,7 +229,7 @@ mod tests {
             );
             assert_eq!(
                 value.pointer("/1/rustc_version"),
-                Some(&"rustc 2.0.0".into())
+                Some(&"rustc (blabla 2020-01-01)".into())
             );
             assert!(value.pointer("/1/id").unwrap().is_i64());
             assert!(serde_json::from_value::<DateTime<Utc>>(
@@ -244,7 +244,7 @@ mod tests {
             );
             assert_eq!(
                 value.pointer("/2/rustc_version"),
-                Some(&"rustc 1.0.0".into())
+                Some(&"rustc (blabla 2019-01-01)".into())
             );
             assert!(value.pointer("/2/id").unwrap().is_i64());
             assert!(serde_json::from_value::<DateTime<Utc>>(
@@ -317,7 +317,7 @@ mod tests {
                 .name("aquarelle")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.0.0")
+                    .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
                 .create()?;
 
@@ -325,7 +325,7 @@ mod tests {
                 .name("aquarelle")
                 .version("0.2.0")
                 .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.0.0")
+                    .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
                 .create()?;
 
@@ -363,7 +363,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.0.0")
+                    .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
                 .create()?;
 
@@ -382,7 +382,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.0.0")
+                    .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
                 .create()?;
 
