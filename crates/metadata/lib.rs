@@ -281,6 +281,10 @@ impl Metadata {
             let rustflags =
                 toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
             cargo_args.push(format!("build.rustflags={}", rustflags));
+            cargo_args.push("-Zhost-config".into());
+            cargo_args.push("-Ztarget-applies-to-host".into());
+            cargo_args.push("--config".into());
+            cargo_args.push(format!("host.rustflags={}", rustflags));
         }
 
         if !all_rustdoc_args.is_empty() {
