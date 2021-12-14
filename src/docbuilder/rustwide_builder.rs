@@ -1081,4 +1081,16 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    #[ignore]
+    fn test_rustflags_are_passed_to_build_script() {
+        wrapper(|env| {
+            let crate_ = "proc-macro2";
+            let version = "1.0.33";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            Ok(())
+        });
+    }
 }
