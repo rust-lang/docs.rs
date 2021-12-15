@@ -1015,13 +1015,13 @@ mod test {
             let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
             assert_eq!(
                 redirect,
-                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
+                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             Ok(())
@@ -1815,7 +1815,7 @@ mod test {
                     "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
                     env.frontend()
                 )?,
-                "/crate/tungstenite/0.11.0/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
+                "/crate/tungstenite/latest/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
             );
             Ok(())
         });
@@ -1832,10 +1832,10 @@ mod test {
                 .source_file("src/objects/exc.rs", b"//! some docs")
                 .create()?;
             env.fake_release().name("pyo3").version("0.13.2").create()?;
-            let target_redirect = "/crate/pyo3/0.13.2/target-redirect/x86_64-unknown-linux-gnu/src/pyo3/objects/exc.rs.html";
+            let target_redirect = "/crate/pyo3/latest/target-redirect/x86_64-unknown-linux-gnu/src/pyo3/objects/exc.rs.html";
             assert_eq!(
                 latest_version_redirect(
-                    "/pyo3/latest/src/pyo3/objects/exc.rs.html",
+                    "/pyo3/0.2.7/src/pyo3/objects/exc.rs.html",
                     env.frontend()
                 )?,
                 target_redirect
