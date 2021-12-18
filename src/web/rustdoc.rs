@@ -1004,49 +1004,6 @@ mod test {
 
     #[test_case(true)]
     #[test_case(false)]
-    fn redirect_latest_with_all_yanked(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(archive_storage)
-                .rustdoc_file("dummy/index.html")
-                .yanked(true)
-                .create()?;
-            env.fake_release()
-                .name("dummy")
-                .version("0.2.0")
-                .archive_storage(archive_storage)
-                .rustdoc_file("dummy/index.html")
-                .yanked(true)
-                .create()?;
-            env.fake_release()
-                .name("dummy")
-                .version("0.2.1")
-                .archive_storage(archive_storage)
-                .rustdoc_file("dummy/index.html")
-                .yanked(true)
-                .create()?;
-
-            let web = env.frontend();
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
-            assert_eq!(
-                redirect,
-                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
-            );
-
-            let redirect = latest_version_redirect("/dummy/0.2.0/dummy/", web)?;
-            assert_eq!(
-                redirect,
-                "/crate/dummy/0.2.1/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
-            );
-
-            Ok(())
-        })
-    }
-
-    #[test_case(true)]
-    #[test_case(false)]
     fn yanked_release_shows_warning_in_nav(archive_storage: bool) {
         fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, anyhow::Error> {
             assert_success(path, web)?;
