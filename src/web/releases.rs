@@ -220,7 +220,7 @@ fn get_search_results(
         }
     });
 
-    let releases: CratesIoSearchResult = HTTP_CLIENT.get(url).send()?.json()?;
+    let releases: CratesIoSearchResult = HTTP_CLIENT.get(url).send()?.error_for_status()?.json()?;
 
     let names: Vec<_> = releases
         .crates
@@ -594,18 +594,30 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let search_result = ctry!(
         req,
         if let Some(paginate) = params.get("paginate") {
-            get_search_results(
-                &mut conn,
-                &String::from_utf8_lossy(&base64::decode(&paginate.as_bytes()).map_err(
-                    |e| -> IronError {
-                        warn!(
-                            "error when decoding pagination base64 string \"{}\": {:?}",
-                            paginate, e
-                        );
-                        Nope::NoResults.into()
-                    },
-                )?),
-            )
+            let decoded = base64::decode(&paginate.as_bytes()).map_err(|e| -> IronError {
+                warn!(
+                    "error when decoding pagination base64 string \"{}\": {:?}",
+                    paginate, e
+                );
+                Nope::NoResults.into()
+            })?;
+            let query_params = String::from_utf8_lossy(&decoded);
+
+            if !query_params.starts_with('?') {
+                // sometimes we see plain bytes being passed to `paginate`.
+                // In these cases we just return `NoResults` and don't call
+                // the crates.io API.
+                // The whole point of the `paginate` design is that we don't
+                // know anything about the pagination args and crates.io can
+                // change them as they whish, so we cannot do any more checks here.
+                warn!(
+                    "didn't get query args in `paginate` arguments for search: \"{}\"",
+                    query_params
+                );
+                return Err(Nope::NoResults.into());
+            }
+
+            get_search_results(&mut conn, &query_params)
         } else if !query.is_empty() {
             let query_params: String = form_urlencoded::Serializer::new(String::new())
                 .append_pair("q", &query)
@@ -748,8 +760,10 @@ mod tests {
     use chrono::{Duration, TimeZone};
     use kuchiki::traits::TendrilSink;
     use mockito::{mock, Matcher};
+    use reqwest::StatusCode;
     use serde_json::json;
     use std::collections::HashSet;
+    use test_case::test_case;
 
     #[test]
     fn get_releases_by_stars() {
@@ -907,6 +921,45 @@ mod tests {
                 )
             );
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_invalid_paginate_doesnt_request_cratesio() {
+        wrapper(|env| {
+            let response = env
+                .frontend()
+                .get(&format!(
+                    "/releases/search?paginate={}",
+                    base64::encode("something_that_doesnt_start_with_?")
+                ))
+                .send()?;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        })
+    }
+
+    #[test_case(StatusCode::NOT_FOUND)]
+    #[test_case(StatusCode::INTERNAL_SERVER_ERROR)]
+    #[test_case(StatusCode::BAD_GATEWAY)]
+    fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(status: StatusCode) {
+        wrapper(|env| {
+            let _m = mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(status.as_u16() as usize)
+                .create();
+
+            let response = env
+                .frontend()
+                .get("/releases/search?query=doesnt_matter_here")
+                .send()?;
+            assert_eq!(response.status(), 500);
+
+            assert!(response.text()?.contains(&format!("{}", status)));
             Ok(())
         })
     }
