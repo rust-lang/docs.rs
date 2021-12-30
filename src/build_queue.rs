@@ -48,7 +48,13 @@ impl BuildQueue {
         registry: Option<&str>,
     ) -> Result<()> {
         self.db.get()?.execute(
-            "INSERT INTO queue (name, version, priority, registry) VALUES ($1, $2, $3, $4);",
+            "INSERT INTO queue (name, version, priority, registry) 
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (name, version) DO UPDATE
+                SET priority = EXCLUDED.priority,
+                    registry = EXCLUDED.registry,
+                    attempt = 0
+            ;",
             &[&name, &version, &priority, &registry],
         )?;
         Ok(())
@@ -280,6 +286,59 @@ impl BuildQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_add_duplicate_doesnt_fail_last_priority_wins() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            queue.add_crate("some_crate", "0.1.1", 0, None)?;
+            queue.add_crate("some_crate", "0.1.1", 9, None)?;
+
+            let queued_crates = queue.queued_crates()?;
+            assert_eq!(queued_crates.len(), 1);
+            assert_eq!(queued_crates[0].priority, 9);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_add_duplicate_resets_attempts_and_priority() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.build_attempts = 5;
+            });
+
+            let queue = env.build_queue();
+
+            let mut conn = env.db().conn();
+            conn.execute(
+                "
+                INSERT INTO queue (name, version, priority, attempt ) 
+                VALUES ('failed_crate', '0.1.1', 0, 99)",
+                &[],
+            )?;
+
+            assert_eq!(queue.pending_count()?, 0);
+
+            queue.add_crate("failed_crate", "0.1.1", 9, None)?;
+
+            assert_eq!(queue.pending_count()?, 1);
+
+            let row = conn
+                .query_opt(
+                    "SELECT priority, attempt
+                     FROM queue 
+                     WHERE name = $1 AND version = $2",
+                    &[&"failed_crate", &"0.1.1"],
+                )?
+                .unwrap();
+            assert_eq!(row.get::<_, i32>(0), 9);
+            assert_eq!(row.get::<_, i32>(1), 0);
+            Ok(())
+        })
+    }
 
     #[test]
     fn test_add_and_process_crates() {
