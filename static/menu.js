@@ -241,11 +241,7 @@
             if (document.location.hash != "") {
               permalink.href += "#" + document.location.hash;
             }
-            // Note: It would be nicer to do history.replaceState here and avoid a page load
-            // (that's what GitHub does), but the permalink goes through a redirect, so you wind up
-            // with a weird URL like:
-            // http://localhost:3000/crate/regex/1.3.1/target-redirect/x86_64-unknown-linux-gnu/regex/index.html
-            permalink.click();
+            history.replaceState({}, null, permalink.href);
         }
     });
 })();

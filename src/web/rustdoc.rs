@@ -476,8 +476,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let permalink_path = format!(
-        "/crate/{}/{}{}{}",
-        name, latest_version, target_redirect, query_string
+        "/{}/{}/{}{}",
+        name, latest_version, inner_path, query_string
     );
 
     let latest_path = format!("/crate/{}/latest{}{}", name, target_redirect, query_string);
@@ -834,7 +834,7 @@ mod test {
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
-            assert!(body.contains("<a href=\"/crate/dummy/0.1.0/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html\""));
+            assert!(body.contains("<a href=\"/dummy/0.1.0/dummy/index.html\""));
             Ok(())
         })
     }
