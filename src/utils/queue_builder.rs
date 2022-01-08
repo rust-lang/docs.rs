@@ -84,13 +84,53 @@ fn remove_tempdirs() -> Result<(), io::Error> {
     // NOTE: hardcodes that `tempfile::tempdir()` uses `std::env::temp_dir`.
     for entry in std::fs::read_dir(std::env::temp_dir())? {
         let entry = entry?;
-        if !entry.path().starts_with(TEMPDIR_PREFIX) {
+        if !entry.metadata()?.is_dir() {
             continue;
         }
-        if entry.metadata()?.is_dir() {
-            fs::remove_dir_all(entry.path())?;
+
+        if let Some(dir_name) = entry.path().file_name() {
+            if dir_name.to_string_lossy().starts_with(TEMPDIR_PREFIX) {
+                fs::remove_dir_all(entry.path())?;
+            }
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_existing_tempdirs() {
+        let file_with_prefix = tempfile::Builder::new()
+            .prefix(TEMPDIR_PREFIX)
+            .tempfile()
+            .unwrap();
+
+        let dir_with_prefix = tempfile::Builder::new()
+            .prefix(TEMPDIR_PREFIX)
+            .tempdir()
+            .unwrap();
+
+        let file_inside = dir_with_prefix.path().join("some_file_name");
+        fs::File::create(&file_inside).unwrap();
+
+        let other_file = tempfile::Builder::new().tempfile().unwrap();
+
+        let other_dir = tempfile::Builder::new().tempdir().unwrap();
+
+        assert!(dir_with_prefix.path().exists());
+
+        remove_tempdirs().unwrap();
+
+        assert!(!dir_with_prefix.path().exists());
+        assert!(!file_inside.exists());
+
+        // all these still exist
+        assert!(file_with_prefix.path().exists());
+        assert!(other_file.path().exists());
+        assert!(other_dir.path().exists());
+    }
 }
