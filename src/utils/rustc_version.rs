@@ -44,9 +44,9 @@ fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<Date<Utc>> {
 pub fn get_correct_docsrs_style_file(version: &str) -> Result<String> {
     let date = parse_rustc_date(version)?;
     // This is the date where https://github.com/rust-lang/rust/pull/91356 was merged.
-    if Utc.ymd(2021, 12, 6) < date {
+    if Utc.ymd(2021, 12, 5) < date {
         // If this is the new rustdoc layout, we need the newer docs.rs CSS file.
-        Ok("rustdoc-2021-12-06.css".to_owned())
+        Ok("rustdoc-2021-12-05.css".to_owned())
     } else {
         // By default, we return the old docs.rs CSS file.
         Ok("rustdoc.css".to_owned())
@@ -73,7 +73,7 @@ fn test_get_correct_docsrs_style_file() {
     );
     assert_eq!(
         get_correct_docsrs_style_file("docsrs 0.2.0 (ba9ae23 2022-05-26)").unwrap(),
-        "rustdoc-2021-12-06.css"
+        "rustdoc-2021-12-05.css"
     );
     assert!(get_correct_docsrs_style_file("docsrs 0.2.0").is_err(),);
 }
