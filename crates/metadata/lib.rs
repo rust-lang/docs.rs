@@ -346,7 +346,7 @@ impl std::str::FromStr for Metadata {
         let proc_macro = manifest
             .as_ref()
             .and_then(|t| table(t, "lib"))
-            .and_then(|table| table.get("proc-macro"))
+            .and_then(|table| table.get("proc-macro").or_else(|| table.get("proc_macro")))
             .and_then(|val| val.as_bool());
         if let Some(proc_macro) = proc_macro {
             metadata.proc_macro = proc_macro;
@@ -482,6 +482,36 @@ mod test_parsing {
         "#;
         let metadata = Metadata::from_str(manifest).unwrap();
         assert!(metadata.proc_macro);
+
+        let manifest = r#"
+            [package]
+            name = "x"
+            [lib]
+            proc_macro = true
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.proc_macro);
+
+        // Cargo prioritizes `proc-macro` over `proc_macro` in local testing
+        let manifest = r#"
+            [package]
+            name = "x"
+            [lib]
+            proc_macro = false
+            proc-macro = true
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.proc_macro);
+
+        let manifest = r#"
+            [package]
+            name = "x"
+            [lib]
+            proc-macro = false
+            proc_macro = true
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(!metadata.proc_macro);
     }
 }
 
