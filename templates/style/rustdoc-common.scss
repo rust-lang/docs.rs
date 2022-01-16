@@ -36,7 +36,7 @@ div.container-rustdoc:not(.source) {
     }
 }
 
-div.container-rustdoc.source {
+div.container-rustdoc {
     > .docs-rs-footer {
         left: -15px;
         // This is needed because even though the sidebar only contains the header, it still takes
