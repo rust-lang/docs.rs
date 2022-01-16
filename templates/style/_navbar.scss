@@ -15,7 +15,7 @@ div.nav-container {
     left: 0;
     right: 0;
     top: 0;
-    position: fixed;
+    position: sticky;
     color: var(--color-navbar-standard);
     font-family: $font-family-sans;
 
@@ -286,17 +286,6 @@ div.nav-container {
 
 #nav-search {
     color: var(--color-navbar-standard);
-}
-
-body {
-    // Since top navbar is fixed, we need to add padding to the body content.
-    padding-top: $top-navbar-height !important;
-
-    // The scroll padding on the <body> is necessary for Chrome
-    // browsers for now (see
-    // https://css-tricks.com/fixed-headers-on-page-links-and-overlapping-content-oh-my/
-    // for an explanation)
-    scroll-padding-top: $top-navbar-height;
 }
 
 html {
