@@ -3,7 +3,7 @@
 
 // This rule is needed to be sure that the footer will always be at the bottom of the page.
 #rustdoc_body_wrapper {
-    min-height: calc(100vh - #{$top-navbar-height + $footer-height + 2});
+    min-height: calc(100vh - #{$footer-height + 2});
 }
 
 #clipboard {
