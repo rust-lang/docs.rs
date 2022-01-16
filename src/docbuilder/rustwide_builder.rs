@@ -98,7 +98,14 @@ impl RustwideBuilder {
             .enable_networking(limits.networking())
     }
 
-    pub fn update_toolchain(&mut self) -> Result<()> {
+    pub fn purge_caches(&self) -> Result<()> {
+        self.workspace
+            .purge_all_caches()
+            .map_err(FailureError::compat)?;
+        Ok(())
+    }
+
+    pub fn update_toolchain(&mut self) -> Result<bool> {
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 
@@ -157,11 +164,12 @@ impl RustwideBuilder {
         }
 
         self.rustc_version = self.detect_rustc_version()?;
-        if old_version.as_deref() != Some(&self.rustc_version) {
+
+        let has_changed = old_version.as_deref() != Some(&self.rustc_version);
+        if has_changed {
             self.add_essential_files()?;
         }
-
-        Ok(())
+        Ok(has_changed)
     }
 
     fn detect_rustc_version(&self) -> Result<String> {
