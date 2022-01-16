@@ -266,13 +266,27 @@ impl BuildQueue {
                 .map(|r| PackageKind::Registry(r.as_str()))
                 .unwrap_or(PackageKind::CratesIo);
 
-            if let Err(err) = builder
+            match builder
                 .update_toolchain()
                 .context("Updating toolchain failed, locking queue")
             {
-                report_error(&err);
-                self.lock()?;
-                return Err(err);
+                Err(err) => {
+                    report_error(&err);
+                    self.lock()?;
+                    return Err(err);
+                }
+                Ok(true) => {
+                    // toolchain has changed, purge caches
+                    if let Err(err) = builder
+                        .purge_caches()
+                        .context("purging rustwide caches failed, locking queue")
+                    {
+                        report_error(&err);
+                        self.lock()?;
+                        return Err(err);
+                    }
+                }
+                Ok(false) => {}
             }
 
             builder.build_package(&krate.name, &krate.version, kind)?;
