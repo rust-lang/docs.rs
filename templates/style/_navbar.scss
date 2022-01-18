@@ -6,6 +6,15 @@
     color: var(--color-standard);
 }
 
+/* Body must have no padding so the topbar sticks to the top of the viewport
+   and extends to both sides of the screen.
+   Some versions of rustdoc had this style, which we need to override:
+   body { padding: 10px 15px 20px 15px; }
+*/
+body {
+    padding: 0;
+}
+
 div.nav-container {
     // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
     z-index: 999;
