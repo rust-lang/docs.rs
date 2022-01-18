@@ -239,7 +239,7 @@
         if (ev.key == "y") {
             let permalink = document.getElementById("permalink");
             if (document.location.hash != "") {
-              permalink.href += "#" + document.location.hash;
+              permalink.href += document.location.hash;
             }
             history.replaceState({}, null, permalink.href);
         }
