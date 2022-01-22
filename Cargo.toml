@@ -117,7 +117,7 @@ mockito = "0.29"
 test-case = "1.2.0"
 
 [build-dependencies]
-time = "0.1"
+time = "0.3"
 git2 = { version = "0.13", default-features = false }
 sass-rs = "0.2.2"
 string_cache_codegen = "0.5.1"
