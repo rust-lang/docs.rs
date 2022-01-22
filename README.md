@@ -75,8 +75,9 @@ cargo run -- build add-essential-files
 # This starts the web server but does not build any crates.
 # It does not automatically run the migrations, so you need to do that manually (see above).
 cargo run -- start-web-server
-# If you want the server to automatically reload templates if they are modified:
-cargo run -- start-web-server --reload-templates
+# If you want the server to automatically restart when code or templates change
+# you can use `cargo-watch`: 
+cargo watch -x "run -- start-web-server"
 ```
 
 If you need to store big files in the repository's directory it's recommended to

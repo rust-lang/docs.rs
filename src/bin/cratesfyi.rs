@@ -93,10 +93,6 @@ enum CommandLine {
     StartWebServer {
         #[structopt(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
         socket_addr: String,
-
-        /// Reload templates when they're changed
-        #[structopt(long = "reload-templates")]
-        reload_templates: bool,
     },
 
     /// Starts the daemon
@@ -129,12 +125,9 @@ impl CommandLine {
 
         match self {
             Self::Build(build) => build.handle_args(ctx)?,
-            Self::StartWebServer {
-                socket_addr,
-                reload_templates,
-            } => {
+            Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
-                let _ = Server::start(Some(&socket_addr), reload_templates, &ctx)?;
+                let _ = Server::start(Some(&socket_addr), &ctx)?;
             }
             Self::Daemon { registry_watcher } => {
                 docs_rs::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;

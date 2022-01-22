@@ -70,7 +70,6 @@ pub trait WebPage: Serialize + Sized {
             .get::<TemplateData>()
             .expect("missing TemplateData from the request extensions")
             .templates
-            .load()
             .render(&self.template(), &ctx);
 
         let rendered = if status.is_server_error() {

@@ -415,17 +415,9 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(
-        addr: Option<&str>,
-        reload_templates: bool,
-        context: &dyn Context,
-    ) -> Result<Self, Error> {
+    pub fn start(addr: Option<&str>, context: &dyn Context) -> Result<Self, Error> {
         // Initialize templates
         let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
-        if reload_templates {
-            TemplateData::start_template_reloading(template_data.clone(), context.pool()?);
-        }
-
         let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), template_data, context)?;
         info!("Running docs.rs web server on http://{}", server.addr());
         Ok(server)
