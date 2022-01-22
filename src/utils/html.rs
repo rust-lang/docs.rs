@@ -18,7 +18,7 @@ pub(crate) fn rewrite_lol(
     use lol_html::html_content::{ContentType, Element};
     use lol_html::{HtmlRewriter, MemorySettings, Settings};
 
-    let templates = templates.templates.load();
+    let templates = &templates.templates;
     let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
     let tera_vendored_css = templates.render("rustdoc/vendored.html", &ctx).unwrap();
     let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();

@@ -1,19 +1,10 @@
-use crate::{db::Pool, error::Result};
+use crate::error::Result;
 use anyhow::Context;
-use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
-use notify::{watcher, RecursiveMode, Watcher};
 use path_slash::PathExt;
 use postgres::Client;
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    fmt,
-    path::PathBuf,
-    sync::{mpsc::channel, Arc},
-    thread,
-    time::Duration,
-};
+use std::{collections::HashMap, fmt, path::PathBuf};
 use tera::{Result as TeraResult, Tera};
 use walkdir::WalkDir;
 
@@ -22,9 +13,7 @@ const TEMPLATES_DIRECTORY: &str = "templates";
 /// Holds all data relevant to templating
 #[derive(Debug)]
 pub(crate) struct TemplateData {
-    /// The actual templates, stored in an `ArcSwap` so that they're hot-swappable
-    // TODO: Conditional compilation so it's not always wrapped, the `ArcSwap` is unneeded overhead for prod
-    pub templates: ArcSwap<Tera>,
+    pub templates: Tera,
 }
 
 impl TemplateData {
@@ -32,45 +21,12 @@ impl TemplateData {
         log::trace!("Loading templates");
 
         let data = Self {
-            templates: ArcSwap::from_pointee(load_templates(conn)?),
+            templates: load_templates(conn)?,
         };
 
         log::trace!("Finished loading templates");
 
         Ok(data)
-    }
-
-    pub(crate) fn start_template_reloading(template_data: Arc<TemplateData>, pool: Pool) {
-        let (tx, rx) = channel();
-        // Set a 2 second event debounce for the watcher
-        let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
-
-        watcher
-            .watch(TEMPLATES_DIRECTORY, RecursiveMode::Recursive)
-            .unwrap();
-
-        thread::spawn(move || {
-            fn reload(template_data: &TemplateData, pool: &Pool) -> Result<()> {
-                let mut conn = pool.get()?;
-                template_data
-                    .templates
-                    .swap(Arc::new(load_templates(&mut conn)?));
-
-                Ok(())
-            }
-
-            // The watcher needs to be moved into the thread so that it's not dropped (when dropped,
-            // all updates cease)
-            let _watcher = watcher;
-
-            while rx.recv().is_ok() {
-                if let Err(err) = reload(&template_data, &pool) {
-                    log::error!("failed to reload templates: {}", err);
-                } else {
-                    log::info!("reloaded templates");
-                }
-            }
-        });
     }
 }
 

@@ -52,7 +52,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
-    let server = crate::Server::start(None, false, context)?;
+    let server = crate::Server::start(None, context)?;
     let server_thread = thread::spawn(|| drop(server));
 
     if enable_registry_watcher {

@@ -375,7 +375,7 @@ pub(crate) struct TestFrontend {
 impl TestFrontend {
     fn new(context: &dyn Context) -> Self {
         Self {
-            server: Server::start(Some("127.0.0.1:0"), false, context)
+            server: Server::start(Some("127.0.0.1:0"), context)
                 .expect("failed to start the web server"),
             client: Client::new(),
         }
