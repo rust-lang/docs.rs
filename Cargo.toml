@@ -19,10 +19,10 @@ exclude = [
 consistency_check = ["crates-index"]
 
 [dependencies]
-sentry = "0.23.0"
-sentry-log = "0.23.0"
-sentry-panic = "0.23.0"
-sentry-anyhow = { version = "0.23.0", features = ["backtrace"] }
+sentry = "0.24.1"
+sentry-log = "0.24.1"
+sentry-panic = "0.24.1"
+sentry-anyhow = { version = "0.24.1", features = ["backtrace"] }
 log = "0.4"
 regex = "1"
 structopt = "0.3"
