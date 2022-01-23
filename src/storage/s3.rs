@@ -5,15 +5,43 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use futures_util::{
     future::TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
+    Future,
 };
-use rusoto_core::{region::Region, RusotoError};
+use rusoto_core::{region::Region, RusotoError, RusotoResult};
 use rusoto_credential::DefaultCredentialsProvider;
 use rusoto_s3::{
     DeleteObjectsRequest, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectRequest,
     ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
 };
-use std::{convert::TryInto, io::Write, sync::Arc};
-use tokio::runtime::Runtime;
+use std::{convert::TryInto, io::Write, sync::Arc, time::Duration};
+use tokio::{runtime::Runtime, time::sleep};
+
+const MAX_ATTEMPT_COUNT: u64 = 3;
+
+async fn retry_request<F, Fut, T, E>(mut f: F) -> RusotoResult<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = RusotoResult<T, E>>,
+{
+    let mut attempts: u64 = 0;
+    loop {
+        match f().await {
+            Err(RusotoError::HttpDispatch(err)) => {
+                attempts += 1;
+                if attempts >= MAX_ATTEMPT_COUNT {
+                    break Err(RusotoError::HttpDispatch(err));
+                }
+                log::info!(
+                    "got HttpDispatchError trying to call S3 (will retry {} more times): {:?}",
+                    MAX_ATTEMPT_COUNT - attempts,
+                    err
+                );
+                sleep(Duration::from_secs(attempts)).await;
+            }
+            result => break result,
+        }
+    }
+}
 
 pub(super) struct S3Backend {
     client: S3Client,
@@ -69,12 +97,14 @@ impl S3Backend {
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
         self.runtime.block_on(async {
-            let req = HeadObjectRequest {
-                bucket: self.bucket.clone(),
-                key: path.into(),
-                ..Default::default()
-            };
-            let resp = self.client.head_object(req).await;
+            let resp = retry_request(|| {
+                self.client.head_object(HeadObjectRequest {
+                    bucket: self.bucket.clone(),
+                    key: path.into(),
+                    ..Default::default()
+                })
+            })
+            .await;
             match resp {
                 Ok(_) => Ok(true),
                 Err(RusotoError::Service(HeadObjectError::NoSuchKey(_))) => Ok(false),
@@ -91,24 +121,24 @@ impl S3Backend {
         range: Option<FileRange>,
     ) -> Result<Blob, Error> {
         self.runtime.block_on(async {
-            let res = self
-                .client
-                .get_object(GetObjectRequest {
+            let res = retry_request(|| {
+                self.client.get_object(GetObjectRequest {
                     bucket: self.bucket.to_string(),
                     key: path.into(),
-                    range: range.map(|r| format!("bytes={}-{}", r.start(), r.end())),
+                    range: range
+                        .as_ref()
+                        .map(|r| format!("bytes={}-{}", r.start(), r.end())),
                     ..Default::default()
                 })
-                .await
-                .map_err(|err| match err {
-                    RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
-                        super::PathNotFoundError.into()
-                    }
-                    RusotoError::Unknown(http) if http.status == 404 => {
-                        super::PathNotFoundError.into()
-                    }
-                    err => Error::from(err),
-                })?;
+            })
+            .await
+            .map_err(|err| match err {
+                RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
+                    super::PathNotFoundError.into()
+                }
+                RusotoError::Unknown(http) if http.status == 404 => super::PathNotFoundError.into(),
+                err => Error::from(err),
+            })?;
 
             let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
             content.reserve(
