@@ -98,6 +98,16 @@ div.rustdoc {
                     top: $top-navbar-height;
                 }
             }
+
+            // A later version of rustdoc uses the .sidebar.shown instead of .sidebar.mobile, and
+            // also needs a height adjustment.
+            &.shown {
+                width: 250px;
+                margin-left: 0;
+                // 45px is the size of the rustdoc mobile-topbar
+                top: 45px + $top-navbar-height !important;
+                height: calc(100vh - 45px - #{$top-navbar-height}) !important;
+            }
         }
     }
 
