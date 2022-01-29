@@ -1,11 +1,11 @@
 on:
-  pull_request:
+  pull_request_target:
     branches: 
       - master
     types: [closed]
 
 jobs:
-  my-action:
+  update-labels:
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     steps:
