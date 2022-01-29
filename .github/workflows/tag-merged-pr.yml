@@ -12,3 +12,11 @@ jobs:
       - uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: S-waiting-on-deploy
+      - uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: |
+            S-waiting-on-async
+            S-waiting-on-author
+            S-waiting-on-crate-author
+            S-waiting-on-decision
+            S-waiting-on-review
