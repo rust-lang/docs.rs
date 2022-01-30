@@ -4,7 +4,7 @@ pub(crate) mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
-use anyhow::{anyhow, Context as _};
+use anyhow::anyhow;
 use log::info;
 use serde_json::Value;
 
@@ -214,6 +214,7 @@ impl Handler for MainHandler {
     }
 }
 
+#[derive(Debug)]
 struct MatchVersion {
     /// Represents the crate name that was found when attempting to load a crate release.
     ///
@@ -275,118 +276,100 @@ fn match_version(
     name: &str,
     input_version: Option<&str>,
 ) -> Result<MatchVersion, Nope> {
-    // version is an Option<&str> from router::Router::get, need to decode first
-    use iron::url::percent_encoding::percent_decode;
+    let (crate_id, corrected_name) = {
+        let rows = conn
+            .query(
+                "SELECT id, name
+                 FROM crates
+                 WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+                &[&name],
+            )
+            .unwrap();
 
-    let req_version = input_version
-        .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
-        .map(|v| {
-            if v == "newest" || v == "latest" {
-                "*".into()
-            } else {
-                v
-            }
-        })
-        .unwrap_or_else(|| "*".into());
+        let row = rows.get(0).ok_or(Nope::CrateNotFound)?;
 
-    let mut corrected_name = None;
-    let versions: Vec<(String, i32, bool, bool)> = {
-        let query = "
-            SELECT 
-            name, version, releases.id, releases.yanked, releases.rustdoc_status
-            FROM releases 
-            INNER JOIN crates ON releases.crate_id = crates.id
-            WHERE normalize_crate_name(name) = normalize_crate_name($1)";
-
-        let rows = conn.query(query, &[&name]).unwrap();
-        let mut rows = rows.iter().peekable();
-
-        if let Some(row) = rows.peek() {
-            let db_name = row.get(0);
-
-            if db_name != name {
-                corrected_name = Some(db_name);
-            }
-        };
-
-        rows.map(|row| (row.get(1), row.get(2), row.get(3), row.get(4)))
-            .collect()
+        let id: i32 = row.get(0);
+        let db_name = row.get(1);
+        if db_name != name {
+            (id, Some(db_name))
+        } else {
+            (id, None)
+        }
     };
 
-    if versions.is_empty() {
+    // first load and parse all versions of this crate,
+    // skipping and reporting versions that are not semver valid.
+    // `releases_for_crate` is already sorted, newest version first.
+    let releases = crate_details::releases_for_crate(conn, crate_id)
+        .expect("error fetching releases for crate");
+
+    if releases.is_empty() {
         return Err(Nope::CrateNotFound);
     }
 
+    // version is an Option<&str> from router::Router::get, need to decode first.
+    // Any encoding errors we treat as _any version_.
+    use iron::url::percent_encoding::percent_decode;
+    let req_version = input_version
+        .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
+        .unwrap_or_else(|| "*".into());
+
     // first check for exact match, we can't expect users to use semver in query
-    if let Some((version, id, _yanked, rustdoc_status)) =
-        versions.iter().find(|(vers, _, _, _)| vers == &req_version)
-    {
-        return Ok(MatchVersion {
-            corrected_name,
-            version: MatchSemver::Exact((version.to_owned(), *id)),
-            rustdoc_status: *rustdoc_status,
-        });
+    if let Ok(parsed_req_version) = Version::parse(&req_version) {
+        if let Some(release) = releases
+            .iter()
+            .find(|release| release.version == parsed_req_version)
+        {
+            return Ok(MatchVersion {
+                corrected_name,
+                version: MatchSemver::Exact((release.version.to_string(), release.id)),
+                rustdoc_status: release.rustdoc_status,
+            });
+        }
     }
 
-    // Now try to match with semver
-    let req_sem_ver = VersionReq::parse(&req_version).map_err(|_| Nope::VersionNotFound)?;
-
-    // we need to sort versions first
-    let versions_sem = {
-        let mut versions_sem: Vec<(Version, i32, bool)> = Vec::with_capacity(versions.len());
-
-        for version in versions.iter().filter(|(_, _, yanked, _)| !yanked) {
-            // in theory a crate must always have a semver compatible version,
-            // but check result just in case
-            let version_sem = Version::parse(&version.0)
-                .with_context(|| {
-                    format!(
-                        "invalid semver in database for crate {}: {}",
-                        name, version.0
-                    )
-                })
-                .map_err(|err| {
-                    report_error(&err);
-                    Nope::InternalServerError
-                })?;
-            versions_sem.push((version_sem, version.1, version.3));
-        }
-
-        versions_sem.sort();
-        versions_sem.reverse();
-        versions_sem
+    // Now try to match with semver, tread `newest` and `latest` as `*`
+    let req_semver = if req_version == "newest" || req_version == "latest" {
+        VersionReq::STAR
+    } else {
+        VersionReq::parse(&req_version).map_err(|err| {
+            report_error(&anyhow!(err).context("could not parse version requirement"));
+            Nope::VersionNotFound
+        })?
     };
 
-    if let Some((version, id, rustdoc_status)) = versions_sem
-        .iter()
-        .find(|(vers, _, _)| req_sem_ver.matches(vers))
-    {
+    // try to match the version in all un-yanked non-prerelease releases.
+    if let Some(release) = releases.iter().find(|release| {
+        !release.yanked && release.version.pre.is_empty() && req_semver.matches(&release.version)
+    }) {
         return Ok(MatchVersion {
             corrected_name,
             version: if input_version == Some("latest") {
-                MatchSemver::Latest((version.to_string(), *id))
+                MatchSemver::Latest((release.version.to_string(), release.id))
             } else {
-                MatchSemver::Semver((version.to_string(), *id))
+                MatchSemver::Semver((release.version.to_string(), release.id))
             },
-            rustdoc_status: *rustdoc_status,
+            rustdoc_status: release.rustdoc_status,
         });
     }
 
-    // semver is acting weird for '*' (any) range if a crate only has pre-release versions
-    // return first non-yanked version if requested version is '*'
-    if req_version == "*" {
-        return versions_sem
-            .first()
-            .map(|v| MatchVersion {
-                corrected_name,
-                version: MatchSemver::Semver((v.0.to_string(), v.1)),
-                rustdoc_status: v.2,
+    // If the latest version was requested and not found until here,
+    // Just return the newest un-yanked release, which includes pre-releases.
+    if req_semver == VersionReq::STAR {
+        return releases
+            .iter()
+            .find(|release| !release.yanked)
+            .map(|release| MatchVersion {
+                corrected_name: corrected_name.clone(),
+                version: MatchSemver::Semver((release.version.to_string(), release.id)),
+                rustdoc_status: release.rustdoc_status,
             })
             .ok_or(Nope::VersionNotFound);
     }
 
     // Since we return with a CrateNotFound earlier if the db reply is empty,
-    // we know that versions were returned but none satisfied the version requirement
+    // we know that versions were returned but none satisfied the version requirement.
+    // This can only happen when all versions are yanked.
     Err(Nope::VersionNotFound)
 }
 
@@ -821,7 +804,9 @@ mod test {
             let release = |v| release(v, env);
 
             release("0.3.1-pre");
-            assert_eq!(version(Some("*")), semver("0.3.1-pre"));
+            for search in &["*", "newest", "latest"] {
+                assert_eq!(version(Some(search)), semver("0.3.1-pre"));
+            }
 
             release("0.3.1-alpha");
             assert_eq!(version(Some("0.3.1-alpha")), exact("0.3.1-alpha"));
