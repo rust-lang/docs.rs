@@ -42,7 +42,7 @@ anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
-comrak = { version = "0.10.1", default-features = false }
+comrak = { version = "0.12.1", default-features = false }
 toml = "0.5"
 schemamama = "0.3"
 schemamama_postgres = "0.3"
