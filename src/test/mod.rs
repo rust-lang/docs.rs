@@ -111,7 +111,7 @@ pub(crate) struct TestEnvironment {
 pub(crate) fn init_logger() {
     // initializing rustwide logging also sets the global logger
     rustwide::logging::init_with(
-        env_logger::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
+        env_logger::Builder::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
             .is_test(true)
             .build(),
     );
