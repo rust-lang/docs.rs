@@ -30,7 +30,7 @@ crates-index = { version = "0.15.1", optional = true }
 crates-index-diff = "7.1.1"
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "0.9", features = ["serde"] }
-slug = "=0.1.1"
+slug = "0.1.1"
 env_logger = "0.7"
 r2d2 = "0.8"
 r2d2_postgres = "0.18"
