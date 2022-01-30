@@ -1,6 +1,7 @@
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
-use crate::utils::get_correct_docsrs_style_file;
+use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::{db::Pool, impl_webpage, repositories::RepositoryStatsUpdater, web::page::WebPage};
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use iron::prelude::*;
 use iron::Url;
@@ -74,6 +75,7 @@ pub struct Release {
     pub build_status: bool,
     pub yanked: bool,
     pub is_library: bool,
+    pub rustdoc_status: bool,
 }
 
 impl CrateDetails {
@@ -232,12 +234,13 @@ impl CrateDetails {
     pub fn latest_release(&self) -> &Release {
         self.releases
             .iter()
-            .find(|release| !release.version.is_prerelease() && !release.yanked)
+            .find(|release| release.version.pre.is_empty() && !release.yanked)
             .unwrap_or(&self.releases[0])
     }
 }
 
-fn releases_for_crate(
+/// Return all releases for a crate, sorted in descending order by semver
+pub(crate) fn releases_for_crate(
     conn: &mut impl GenericClient,
     crate_id: i32,
 ) -> Result<Vec<Release>, anyhow::Error> {
@@ -248,7 +251,8 @@ fn releases_for_crate(
                 version,
                 build_status,
                 yanked,
-                is_library
+                is_library,
+                rustdoc_status
              FROM releases
              WHERE 
                  releases.crate_id = $1",
@@ -257,15 +261,23 @@ fn releases_for_crate(
         .into_iter()
         .filter_map(|row| {
             let version: String = row.get("version");
-            semver::Version::parse(&version)
-                .map(|semversion| Release {
+            match semver::Version::parse(&version) {
+                Ok(semversion) => Some(Release {
                     id: row.get("id"),
                     version: semversion,
                     build_status: row.get("build_status"),
                     yanked: row.get("yanked"),
                     is_library: row.get("is_library"),
-                })
-                .ok()
+                    rustdoc_status: row.get("rustdoc_status"),
+                }),
+                Err(err) => {
+                    report_error(&anyhow!(err).context(format!(
+                        "invalid semver in database for crate {}: {}",
+                        crate_id, version
+                    )));
+                    None
+                }
+            }
         })
         .collect();
 
@@ -491,6 +503,7 @@ mod tests {
                         build_status: true,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[0].id,
                     },
                     Release {
@@ -498,6 +511,7 @@ mod tests {
                         build_status: true,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[1].id,
                     },
                     Release {
@@ -505,6 +519,7 @@ mod tests {
                         build_status: false,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: false,
                         id: details.releases[2].id,
                     },
                     Release {
@@ -512,6 +527,7 @@ mod tests {
                         build_status: true,
                         yanked: true,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[3].id,
                     },
                     Release {
@@ -519,6 +535,7 @@ mod tests {
                         build_status: true,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[4].id,
                     },
                     Release {
@@ -526,6 +543,7 @@ mod tests {
                         build_status: true,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[5].id,
                     },
                     Release {
@@ -533,6 +551,7 @@ mod tests {
                         build_status: true,
                         yanked: false,
                         is_library: true,
+                        rustdoc_status: true,
                         id: details.releases[6].id,
                     },
                     Release {
@@ -540,6 +559,7 @@ mod tests {
                         build_status: false,
                         yanked: false,
                         is_library: false,
+                        rustdoc_status: false,
                         id: details.releases[7].id,
                     },
                 ]
