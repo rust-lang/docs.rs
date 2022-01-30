@@ -455,9 +455,9 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "7.1.2"
+version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64af39a9a6805d715f8b72307d70815ed1ee38ef84e9de250fcdd56fe75a0e19"
+checksum = "9f04ef23e6e584a3f8f7860274e0daf1c46e859d387cebdad1de54091d7cea08"
 dependencies = [
  "git2",
  "serde",
