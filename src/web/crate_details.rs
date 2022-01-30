@@ -232,7 +232,7 @@ impl CrateDetails {
     pub fn latest_release(&self) -> &Release {
         self.releases
             .iter()
-            .find(|release| !release.version.is_prerelease() && !release.yanked)
+            .find(|release| release.version.pre.is_empty() && !release.yanked)
             .unwrap_or(&self.releases[0])
     }
 }

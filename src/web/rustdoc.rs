@@ -423,7 +423,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // Get the latest version of the crate
     let latest_version = latest_release.version.to_string();
     let is_latest_version = latest_version == version;
-    let is_prerelease = semver::Version::parse(&version)
+    let is_prerelease = !(semver::Version::parse(&version)
         .with_context(|| {
             format!(
                 "invalid semver in database for crate {}: {}",
@@ -436,7 +436,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             utils::report_error(&err);
             Nope::InternalServerError
         })?
-        .is_prerelease();
+        .pre
+        .is_empty());
 
     // The path within this crate version's rustdoc output
     let (target, inner_path) = {
