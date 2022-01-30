@@ -58,7 +58,7 @@ fn logger_init() -> env_logger::Logger {
     use std::io::Write;
 
     let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "docs_rs=info");
-    env_logger::from_env(env)
+    env_logger::Builder::from_env(env)
         .format(|buf, record| {
             writeln!(
                 buf,
