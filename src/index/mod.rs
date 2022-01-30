@@ -44,7 +44,10 @@ impl Index {
         let url = repository_url.clone();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
-            crates_index_diff::CloneOptions { repository_url },
+            crates_index_diff::CloneOptions {
+                repository_url,
+                ..Default::default()
+            },
         )
         .context("initialising registry index repository")?;
 
@@ -75,7 +78,10 @@ impl Index {
         let options = self
             .repository_url
             .clone()
-            .map(|repository_url| crates_index_diff::CloneOptions { repository_url })
+            .map(|repository_url| crates_index_diff::CloneOptions {
+                repository_url,
+                ..Default::default()
+            })
             .unwrap_or_default();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(&self.path, options)
             .context("re-opening registry index for diff")?;
