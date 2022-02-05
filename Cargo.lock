@@ -400,16 +400,18 @@ dependencies = [
 
 [[package]]
 name = "crates-index"
-version = "0.15.5"
+version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04f0e500a0b1583ebda2cc2231804ee0d2c1943ae3225fe92530f8419a2fd96b"
+checksum = "00c338c128681bf06772e2a188f7937293620478bb7781e453e996266686e806"
 dependencies = [
  "git2",
- "glob",
  "hex",
  "home",
  "memchr",
- "semver 0.10.0",
+ "num_cpus",
+ "rayon",
+ "rustc-hash",
+ "semver 1.0.4",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1161,12 +1163,6 @@ dependencies = [
  "openssl-sys",
  "url 2.2.2",
 ]
-
-[[package]]
-name = "glob"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "globset"
@@ -2906,6 +2902,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
 
 [[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
 name = "rustc_version"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3110,15 +3112,6 @@ checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser",
  "serde",
-]
-
-[[package]]
-name = "semver"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "394cec28fa623e00903caf7ba4fa6fb9a0e260280bb8cdbbba029611108a0190"
-dependencies = [
- "semver-parser",
 ]
 
 [[package]]
