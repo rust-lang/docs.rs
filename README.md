@@ -107,7 +107,7 @@ docker-compose run web build crate regex 1.3.1
 # or build essential files
 docker-compose run web build add-essential-files
 # rebuild the web container when you changed code.
-docker-comose build web
+docker-compose build web
 ```
 
 Note that running tests is not supported when using pure docker-compose.
