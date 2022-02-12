@@ -10,9 +10,13 @@
     .sidebar {
         margin-top: 0;
         top: $top-navbar-height;
+        height: calc(100vh - $top-navbar-height);
+        /* Since we use `overflow-wrap: anywhere;`, we never have the need for a X scrollbar... */
+        overflow-x: hidden;
 
         .sidebar-menu {
             top: $top-navbar-height;
+            margin-bottom: $footer-height;
         }
     }
 
@@ -25,12 +29,7 @@ div.container-rustdoc {
     > .docs-rs-footer {
         bottom: 0;
         right: 0;
-    }
-}
-
-div.container-rustdoc:not(.source) {
-    > .docs-rs-footer {
-        left: 200px;
+        left: 0;
     }
 }
 
