@@ -447,7 +447,9 @@ impl DatabaseSubcommand {
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(&ctx, &name, &version).context("failed to delete the crate")?,
+            } => {
+                db::delete_version(&ctx, &name, &version).context("failed to delete the version")?
+            }
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
             } => db::delete_crate(&ctx, &name).context("failed to delete the crate")?,
