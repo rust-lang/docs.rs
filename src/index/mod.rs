@@ -8,8 +8,6 @@ use crate::error::Result;
 use crate::utils::report_error;
 
 pub(crate) mod api;
-#[cfg(feature = "consistency_check")]
-mod crates;
 
 pub struct Index {
     path: PathBuf,
@@ -89,15 +87,18 @@ impl Index {
     }
 
     #[cfg(feature = "consistency_check")]
-    pub(crate) fn crates(&self) -> Result<crates::Crates> {
+    pub(crate) fn crates(&self) -> Result<crates_index::Index> {
         // First ensure the index is up to date, peeking will pull the latest changes without
         // affecting anything else.
         log::debug!("Updating index");
         self.diff()?.peek_changes()?;
-        // It'd be nice to use `crates_index` directly for interacting with the index, but it
-        // doesn't support bare repositories. So we use its `Crate` type but walk the index
-        // ourselves.
-        Ok(crates::Crates::new(git2::Repository::open(&self.path)?))
+        log::debug!("Opening with `crates_index`");
+        // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
+        let repo_url = self
+            .repository_url
+            .as_deref()
+            .unwrap_or("https://github.com/rust-lang/crates.io-index");
+        crates_index::Index::with_path(&self.path, repo_url).map_err(Into::into)
     }
 
     pub fn api(&self) -> &Api {

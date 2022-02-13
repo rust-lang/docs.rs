@@ -743,6 +743,7 @@ dependencies = [
  "r2d2",
  "r2d2_postgres",
  "rand 0.8.4",
+ "rayon",
  "regex",
  "reqwest",
  "router",
