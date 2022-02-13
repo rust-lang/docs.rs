@@ -59,7 +59,7 @@ base64 = "0.13"
 strum = { version = "0.23.0", features = ["derive"] }
 lol_html = "0.3"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
-dashmap = "4.0.2" # dashmap 5.0.0 has an open vulnerability: RUSTSEC-2022-0002
+dashmap = "5.1.0"
 string_cache = "0.8.0"
 postgres-types = { version = "0.2", features = ["derive"] }
 zip = "0.5.11"
