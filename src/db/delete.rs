@@ -7,7 +7,8 @@ use std::fs;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
-static STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
+static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
+static BINARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
 
 #[derive(Debug, thiserror::Error)]
 enum CrateDeletionError {
@@ -18,9 +19,15 @@ enum CrateDeletionError {
 pub fn delete_crate(ctx: &dyn Context, name: &str) -> Result<()> {
     let conn = &mut ctx.pool()?.get()?;
     let crate_id = get_id(conn, name)?;
-    delete_crate_from_database(conn, name, crate_id)?;
+    let is_library = delete_crate_from_database(conn, name, crate_id)?;
+    // #899
+    let paths = if is_library {
+        LIBRARY_STORAGE_PATHS_TO_DELETE
+    } else {
+        BINARY_STORAGE_PATHS_TO_DELETE
+    };
 
-    for prefix in STORAGE_PATHS_TO_DELETE {
+    for prefix in paths {
         // delete the whole rustdoc/source folder for this crate.
         // it will include existing archives.
         let remote_folder = format!("{}/{}/", prefix, name);
@@ -45,19 +52,26 @@ pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()
     let conn = &mut ctx.pool()?.get()?;
     let storage = ctx.storage()?;
 
-    delete_version_from_database(conn, name, version)?;
+    let is_library = delete_version_from_database(conn, name, version)?;
+    let paths = if is_library {
+        LIBRARY_STORAGE_PATHS_TO_DELETE
+    } else {
+        BINARY_STORAGE_PATHS_TO_DELETE
+    };
 
-    for prefix in STORAGE_PATHS_TO_DELETE {
+    for prefix in paths {
         storage.delete_prefix(&format!("{}/{}/{}/", prefix, name, version))?;
     }
 
     let local_archive_cache = &ctx.config()?.local_archive_cache_path;
-    for archive_filename in &[
-        rustdoc_archive_path(name, version),
-        source_archive_path(name, version),
-    ] {
+    let mut paths = vec![source_archive_path(name, version)];
+    if is_library {
+        paths.push(rustdoc_archive_path(name, version));
+    }
+
+    for archive_filename in paths {
         // delete remove archive and remote index
-        storage.delete_prefix(archive_filename)?;
+        storage.delete_prefix(&archive_filename)?;
 
         // delete eventually existing local indexes
         let local_index_file = local_archive_cache.join(&format!("{}.index", archive_filename));
@@ -92,7 +106,8 @@ const METADATA: &[(&str, &str)] = &[
     ("doc_coverage", "release_id"),
 ];
 
-fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<()> {
+/// Returns whether this release was a library
+fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) -> Result<bool> {
     let crate_id = get_id(conn, name)?;
     let mut transaction = conn.transaction()?;
     for &(table, column) in METADATA {
@@ -101,10 +116,12 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
             &[&crate_id, &version],
         )?;
     }
-    transaction.execute(
-        "DELETE FROM releases WHERE crate_id = $1 AND version = $2",
-        &[&crate_id, &version],
-    )?;
+    let is_library: bool = transaction
+        .query_one(
+            "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
+            &[&crate_id, &version],
+        )?
+        .get("is_library");
     transaction.execute(
         "UPDATE crates SET latest_version_id = (
             SELECT id FROM releases WHERE release_time = (
@@ -114,17 +131,24 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
         &[&crate_id],
     )?;
 
-    for prefix in STORAGE_PATHS_TO_DELETE {
+    let paths = if is_library {
+        LIBRARY_STORAGE_PATHS_TO_DELETE
+    } else {
+        BINARY_STORAGE_PATHS_TO_DELETE
+    };
+    for prefix in paths {
         transaction.execute(
             "DELETE FROM files WHERE path LIKE $1;",
             &[&format!("{}/{}/{}/%", prefix, name, version)],
         )?;
     }
 
-    transaction.commit().map_err(Into::into)
+    transaction.commit()?;
+    Ok(is_library)
 }
 
-fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> Result<()> {
+/// Returns whether any release in this crate was a library
+fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> Result<bool> {
     let mut transaction = conn.transaction()?;
 
     transaction.execute(
@@ -142,13 +166,19 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
         )?;
     }
     transaction.execute("DELETE FROM owner_rels WHERE cid = $1;", &[&crate_id])?;
+    let has_library = transaction
+        .query_one(
+            "SELECT BOOL_OR(releases.is_library) AS has_library FROM releases",
+            &[],
+        )?
+        .get("has_library");
     transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
     transaction.execute("DELETE FROM crates WHERE id = $1;", &[&crate_id])?;
 
     // Transactions automatically rollback when not committing, so if any of the previous queries
     // fail the whole transaction will be aborted.
     transaction.commit()?;
-    Ok(())
+    Ok(has_library)
 }
 
 #[cfg(test)]
