@@ -37,19 +37,19 @@ pub fn run_check(
                     match release {
                         Diff::Both(_, _) => {}
                         Diff::Left(version, _) => {
-                            log::info!("Release in db not in index: {} {}", name, version);
+                            println!("Release in db not in index: {} {}", name, version);
                         }
                         Diff::Right(version, _) => {
-                            log::info!("Release in index not in db: {} {}", name, version);
+                            println!("Release in index not in db: {} {}", name, version);
                         }
                     }
                 }
             }
             Diff::Left(name, _) => {
-                log::info!("Crate in db not in index: {}", name);
+                println!("Crate in db not in index: {}", name);
             }
             Diff::Right(name, _) => {
-                log::info!("Crate in index not in db: {}", name);
+                println!("Crate in index not in db: {}", name);
             }
         }
     }
