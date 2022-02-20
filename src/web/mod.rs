@@ -328,7 +328,7 @@ fn match_version(
         }
     }
 
-    // Now try to match with semver, tread `newest` and `latest` as `*`
+    // Now try to match with semver, treat `newest` and `latest` as `*`
     let req_semver = if req_version == "newest" || req_version == "latest" {
         VersionReq::STAR
     } else {
@@ -342,10 +342,14 @@ fn match_version(
         })?
     };
 
-    // try to match the version in all un-yanked non-prerelease releases.
-    if let Some(release) = releases.iter().find(|release| {
-        !release.yanked && release.version.pre.is_empty() && req_semver.matches(&release.version)
-    }) {
+    // starting here, we only look at non-yanked releases
+    let releases: Vec<_> = releases.iter().filter(|r| !r.yanked).collect();
+
+    // try to match the version in all un-yanked releases.
+    if let Some(release) = releases
+        .iter()
+        .find(|release| req_semver.matches(&release.version))
+    {
         return Ok(MatchVersion {
             corrected_name,
             version: if input_version == Some("latest") {
@@ -357,12 +361,12 @@ fn match_version(
         });
     }
 
-    // If the latest version was requested and not found until here,
-    // Just return the newest un-yanked release, which includes pre-releases.
+    // semver `*` does not match pre-releases.
+    // When someone wants the latest release and we have only pre-releases
+    // just return the latest prerelease.
     if req_semver == VersionReq::STAR {
         return releases
-            .iter()
-            .find(|release| !release.yanked)
+            .first()
             .map(|release| MatchVersion {
                 corrected_name: corrected_name.clone(),
                 version: MatchSemver::Semver((release.version.to_string(), release.id)),
@@ -876,6 +880,28 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    // https://github.com/rust-lang/docs.rs/issues/1682
+    fn prereleases_are_considered_when_others_dont_match() {
+        wrapper(|env| {
+            let db = env.db();
+
+            // normal release
+            release("1.0.0", env);
+            // prereleases
+            release("2.0.0-alpha.1", env);
+            release("2.0.0-alpha.2", env);
+
+            // STAR gives me the prod release
+            assert_eq!(version(Some("*"), db), exact("1.0.0"));
+
+            // prerelease query gives me the latest prerelease
+            assert_eq!(version(Some(">=2.0.0-alpha"), db), exact("2.0.0-alpha.2"));
+
+            Ok(())
+        })
     }
 
     #[test]
