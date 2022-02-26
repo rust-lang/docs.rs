@@ -111,7 +111,7 @@ criterion = "0.3"
 kuchiki = "0.8"
 rand = "0.8"
 mockito = "0.30.0"
-test-case = "1.2.0"
+test-case = "2.0.0"
 
 [build-dependencies]
 time = "0.3"
