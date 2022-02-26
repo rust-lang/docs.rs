@@ -271,7 +271,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
 
                 let to_delete = list
                     .contents
-                    .unwrap_or_else(Vec::new)
+                    .unwrap_or_default()
                     .into_iter()
                     .filter_map(|o| o.key)
                     .map(|key| ObjectIdentifier {

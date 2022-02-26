@@ -270,6 +270,7 @@ impl Routes {
                 pattern.to_string(),
                 Box::new(RequestRecorder::new(
                     SimpleRedirect::new(|url| {
+                        #[allow(clippy::unnecessary_to_owned)]
                         url.set_path(&url.path().trim_end_matches('/').to_string())
                     }),
                     pattern,

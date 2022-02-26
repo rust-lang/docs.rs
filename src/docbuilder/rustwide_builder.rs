@@ -809,7 +809,7 @@ mod tests {
     fn test_build_crate() {
         wrapper(|env| {
             let crate_ = DUMMY_CRATE_NAME;
-            let crate_path = crate_.replace("-", "_");
+            let crate_path = crate_.replace('-', "_");
             let version = DUMMY_CRATE_VERSION;
             let default_target = "x86_64-unknown-linux-gnu";
 
@@ -1020,7 +1020,7 @@ mod tests {
             assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
             let target = "x86_64-unknown-linux-gnu";
-            let crate_path = crate_.replace("-", "_");
+            let crate_path = crate_.replace('-', "_");
             let target_docs_present = storage.exists_in_archive(
                 &doc_archive,
                 &format!("{}/{}/index.html", target, crate_path),
