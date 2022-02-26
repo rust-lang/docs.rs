@@ -1123,7 +1123,7 @@ mod test {
                     .name(name)
                     .version(version)
                     .archive_storage(archive_storage)
-                    .rustdoc_file(&(name.replace("-", "_") + "/index.html"))
+                    .rustdoc_file(&(name.replace('-', "_") + "/index.html"))
                     .create()?;
             }
 
