@@ -236,7 +236,7 @@
     }
     document.documentElement.addEventListener("keydown", menuKeyDown);
     document.documentElement.addEventListener("keydown", function(ev) {
-        if (ev.key == "y") {
+        if (ev.key == "y" && ev.target.tagName != "INPUT") {
             let permalink = document.getElementById("permalink");
             if (document.location.hash != "") {
               permalink.href += document.location.hash;
