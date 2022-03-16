@@ -1,0 +1,12 @@
+// Checks that the "latest" URL leads us to the last version of the `sysinfo` crate.
+goto: |DOC_PATH|/sysinfo
+// We first check if the redirection worked as expected:
+assert-document-property: ({"URL": "/sysinfo/latest/sysinfo/"}, ENDS_WITH)
+assert: "//*[@class='title' and text()='sysinfo-0.23.5']"
+// And we also confirm we're on a rustdoc page.
+assert: "#rustdoc_body_wrapper"
+
+// Let's go to the docs.rs page of the crate.
+goto: |DOC_PATH|/crate/sysinfo/latest
+assert-false: "#rustdoc_body_wrapper"
+assert-text: ("#crate-title", "sysinfo 0.23.5", CONTAINS)
