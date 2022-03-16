@@ -90,6 +90,16 @@ services:
             timeout: 5s
             retries: 10
 
+    gui_tests:
+        build:
+            context: .
+            dockerfile: ./dockerfiles/Dockerfile-gui-tests
+        network_mode: "host"
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        volumes:
+            - "${PWD}:/build/out"
+
 volumes:
     postgres-data: {}
     minio-data: {}

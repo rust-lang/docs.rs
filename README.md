@@ -100,6 +100,15 @@ Note that you will need docker installed no matter what, since it's used for Rus
 cargo test
 ```
 
+To run GUI tests:
+
+```
+./dockerfiles/run-gui-tests.sh
+```
+
+They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
+can take a look at its documentation [here](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
+
 ### Pure docker-compose
 
 If you have trouble with the above commands, consider using `docker-compose up --build`,

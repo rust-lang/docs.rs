@@ -127,6 +127,9 @@ jobs:
             $f || exit 1
           done
 
+      - name: Run GUI tests
+        run: ./dockerfiles/run-gui-tests.sh
+
       - name: Clean up the database
         run: docker-compose down --volumes
 
