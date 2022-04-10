@@ -28,12 +28,6 @@ div.nav-container {
     color: var(--color-navbar-standard);
     /* The font size must be specified in pixels because the height is specified in pixels. */
     font: 16px $font-family-sans;
-    /* In some unusual situations, like a locally installed copy of "Fira Sans," elements
-       of the navbar might overflow vertically and start interfering with the main body
-       content. To ensure that doesn't happen, hide any vertical overflow.
-       See https://github.com/rust-lang/docs.rs/issues/1669.
-       */
-    overflow-y: hidden;
 
     li {
         border-left: 1px solid var(--color-border);
@@ -120,6 +114,17 @@ div.nav-container {
         input.search-input-nav:focus {
             outline: unset;
         }
+
+
+        /* In some unusual situations, like a locally installed copy of "Fira Sans," elements
+           of the navbar might overflow vertically and start interfering with the main body
+           content. To ensure that doesn't happen, hide any vertical overflow.
+           See https://github.com/rust-lang/docs.rs/issues/1669.
+           */
+       .pure-menu-item a {
+            /* 0.5 em is the padding */
+            max-height: calc(#{$top-navbar-height} - 0.5em * 2);
+       }
     }
 
     .pure-menu-children {
