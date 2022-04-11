@@ -28,6 +28,12 @@ div.nav-container {
     color: var(--color-navbar-standard);
     /* The font size must be specified in pixels because the height is specified in pixels. */
     font: 16px $font-family-sans;
+    position: relative;
+
+    .container, .pure-menu-horizontal {
+        position: relative;
+        height: 100%;
+    }
 
     li {
         border-left: 1px solid var(--color-border);
@@ -73,18 +79,18 @@ div.nav-container {
         }
     }
 
-    .pure-menu-right {
-        float: right;
-    }
-
     form.landing-search-form-nav {
         max-width: 1200px;
+        height: 100%;
+        display: flex;
+        flex-direction: row;
 
         #search-input-nav {
-            float: right;
             max-width: 150px;
             display: none;
             border-left: 1px solid var(--color-border);
+            height: 100%;
+            overflow-x: hidden;
 
             @media #{$media-sm} {
                 display: block;
@@ -107,7 +113,7 @@ div.nav-container {
                 font-size: 0.8em;
                 box-shadow: none;
                 background-color: var(--color-background);
-                height: 31px;
+                height: 100%;
             }
         }
 
@@ -122,8 +128,21 @@ div.nav-container {
            See https://github.com/rust-lang/docs.rs/issues/1669.
            */
        .pure-menu-item a {
-            /* 0.5 em is the padding */
-            max-height: calc(#{$top-navbar-height} - 0.5em * 2);
+            max-height: 100%;
+            overflow-x: hidden;
+            text-overflow: ellipsis;
+       }
+
+       .docsrs-logo, .pure-menu-item a {
+            padding: 8px 1em;
+       }
+
+       .pure-menu-item {
+            height: 100%;
+       }
+
+       .spacer {
+            flex-grow: 1;
        }
     }
 
