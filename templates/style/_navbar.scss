@@ -28,7 +28,6 @@ div.nav-container {
     color: var(--color-navbar-standard);
     /* The font size must be specified in pixels because the height is specified in pixels. */
     font: 16px $font-family-sans;
-    position: relative;
 
     .container, .pure-menu-horizontal {
         position: relative;
@@ -46,18 +45,18 @@ div.nav-container {
             background-color: var(--color-background);
         }
         &:after {
-            font-size: 0.8em;
+            font-size: 12.8px;
             content: "\25BC"
         }
     }
 
     .pure-menu-link {
-        font-size: 0.8em;
+        font-size: 12.8px;
         font-weight: 400;
         color: var(--color-navbar-standard);
 
         &.description {
-            font-size: 0.9em;
+            font-size: 14.4px;
         }
 
         // Improves menu link readability when inverting the colors on focus.
@@ -90,7 +89,6 @@ div.nav-container {
             display: none;
             border-left: 1px solid var(--color-border);
             height: 100%;
-            overflow-x: hidden;
 
             @media #{$media-sm} {
                 display: block;
@@ -104,13 +102,13 @@ div.nav-container {
                 color: var(--color-navbar-standard);
                 cursor: pointer;
                 padding-left: 0.5rem;
-                font-size: 0.8em;
+                font-size: 12.8px;
             }
 
             input {
                 border: none;
                 margin: 0 1em 0 0;
-                font-size: 0.8em;
+                font-size: 12.8px;
                 box-shadow: none;
                 background-color: var(--color-background);
                 height: 100%;
@@ -121,23 +119,11 @@ div.nav-container {
             outline: unset;
         }
 
-
-        /* In some unusual situations, like a locally installed copy of "Fira Sans," elements
-           of the navbar might overflow vertically and start interfering with the main body
-           content. To ensure that doesn't happen, hide any vertical overflow.
-           See https://github.com/rust-lang/docs.rs/issues/1669.
-           */
-       .pure-menu-item a {
-            max-height: 100%;
-            overflow-x: hidden;
-            text-overflow: ellipsis;
-       }
-
        .docsrs-logo, .pure-menu-item a {
-            padding: 8px 1em;
+            padding: 6.4px 16px 6.4px 16px;
        }
 
-       .pure-menu-item {
+       .docsrs-logo, .pure-menu-item, .pure-menu-item a {
             height: 100%;
        }
 
@@ -290,7 +276,7 @@ div.nav-container {
 
         p.description {
             font-family: $font-family-sans;
-            font-size: 0.8em;
+            font-size: 12.8px;
             color: var(--color-navbar-standard);
             padding: 0.5em 1em;
             margin: 0;
