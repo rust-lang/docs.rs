@@ -32,7 +32,7 @@
     <p>
         To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
         {% filter dedent(levels=3) -%}
-        <pre><code class="lang-rust">if let Ok(_) = std::env::var("DOCS_RS") {
+        <pre><code class="lang-rust">if std::env::var("DOCS_RS").is_ok() {
                 // ... your code here ...
             }</code></pre>
         {%- endfilter %}
