@@ -1489,12 +1489,13 @@ mod tests {
                     continue;
                 }
 
-                let resp = if url.starts_with("http://") || url.starts_with("https://") {
-                    // Skip external links
-                    continue;
-                } else {
-                    web.get(&url).send()?
-                };
+                let resp =
+                    if url.starts_with("http://") || url.starts_with("https://") || url == "#" {
+                        // Skip external links
+                        continue;
+                    } else {
+                        web.get(&url).send()?
+                    };
                 let status = resp.status();
                 assert!(status.is_success(), "failed to GET {}: {}", url, status);
             }
