@@ -1004,8 +1004,8 @@ mod tests {
     #[ignore]
     fn test_cross_compile_non_host_default() {
         wrapper(|env| {
-            let crate_ = "xingapi";
-            let version = "0.3.3";
+            let crate_ = "windows-win";
+            let version = "2.4.1";
             let mut builder = RustwideBuilder::init(env).unwrap();
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
