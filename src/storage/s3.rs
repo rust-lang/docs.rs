@@ -1,50 +1,23 @@
 use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
-use anyhow::{anyhow, Context, Error};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use anyhow::{Context, Error};
+use aws_sdk_s3::{
+    error,
+    model::{Delete, ObjectIdentifier},
+    types::SdkError,
+    Client, Endpoint, Region, RetryConfig,
+};
+use aws_smithy_types_convert::date_time::DateTimeExt;
+use chrono::Utc;
 use futures_util::{
     future::TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
-    Future,
 };
-use rusoto_core::{region::Region, RusotoError, RusotoResult};
-use rusoto_credential::DefaultCredentialsProvider;
-use rusoto_s3::{
-    DeleteObjectsRequest, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectRequest,
-    ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
-};
-use std::{convert::TryInto, io::Write, sync::Arc, time::Duration};
-use tokio::{runtime::Runtime, time::sleep};
-
-const MAX_ATTEMPT_COUNT: u64 = 3;
-
-async fn retry_request<F, Fut, T, E>(mut f: F) -> RusotoResult<T, E>
-where
-    F: FnMut() -> Fut,
-    Fut: Future<Output = RusotoResult<T, E>>,
-{
-    let mut attempts: u64 = 0;
-    loop {
-        match f().await {
-            Err(RusotoError::HttpDispatch(err)) => {
-                attempts += 1;
-                if attempts >= MAX_ATTEMPT_COUNT {
-                    break Err(RusotoError::HttpDispatch(err));
-                }
-                log::info!(
-                    "got HttpDispatchError trying to call S3 (will retry {} more times): {:?}",
-                    MAX_ATTEMPT_COUNT - attempts,
-                    err
-                );
-                sleep(Duration::from_secs(attempts)).await;
-            }
-            result => break result,
-        }
-    }
-}
+use std::{convert::TryInto, io::Write, sync::Arc};
+use tokio::runtime::Runtime;
 
 pub(super) struct S3Backend {
-    client: S3Client,
+    client: Client,
     runtime: Runtime,
     bucket: String,
     metrics: Arc<Metrics>,
@@ -56,19 +29,20 @@ impl S3Backend {
     pub(super) fn new(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
         let runtime = Runtime::new()?;
 
-        // Connect to S3
-        let client = S3Client::new_with(
-            rusoto_core::request::HttpClient::new()?,
-            DefaultCredentialsProvider::new()?,
-            config
-                .s3_endpoint
-                .as_deref()
-                .map(|endpoint| Region::Custom {
-                    name: config.s3_region.name().to_string(),
-                    endpoint: endpoint.to_string(),
-                })
-                .unwrap_or_else(|| config.s3_region.clone()),
-        );
+        let shared_config = runtime.block_on(aws_config::load_from_env());
+        let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
+            .retry_config(RetryConfig::new().with_max_attempts(5))
+            .region(Region::new(config.s3_region.clone()));
+
+        if let Some(ref endpoint) = config.s3_endpoint {
+            config_builder = config_builder.endpoint_resolver(Endpoint::immutable(
+                endpoint
+                    .parse::<http::Uri>()
+                    .context("got invalid URI as S3 endpoint")?,
+            ));
+        }
+
+        let client = Client::from_conf(config_builder.build());
 
         #[cfg(test)]
         {
@@ -78,10 +52,7 @@ impl S3Backend {
                     panic!("safeguard to prevent creating temporary buckets outside of tests");
                 }
 
-                runtime.block_on(client.create_bucket(rusoto_s3::CreateBucketRequest {
-                    bucket: config.s3_bucket.clone(),
-                    ..Default::default()
-                }))?;
+                runtime.block_on(client.create_bucket().bucket(&config.s3_bucket).send())?;
             }
         }
 
@@ -97,18 +68,21 @@ impl S3Backend {
 
     pub(super) fn exists(&self, path: &str) -> Result<bool, Error> {
         self.runtime.block_on(async {
-            let resp = retry_request(|| {
-                self.client.head_object(HeadObjectRequest {
-                    bucket: self.bucket.clone(),
-                    key: path.into(),
-                    ..Default::default()
-                })
-            })
-            .await;
-            match resp {
+            match self
+                .client
+                .head_object()
+                .bucket(&self.bucket)
+                .key(path)
+                .send()
+                .await
+            {
                 Ok(_) => Ok(true),
-                Err(RusotoError::Service(HeadObjectError::NoSuchKey(_))) => Ok(false),
-                Err(RusotoError::Unknown(resp)) if resp.status == 404 => Ok(false),
+                Err(SdkError::ServiceError { err, raw })
+                    if (matches!(err.kind, error::HeadObjectErrorKind::NotFound(_))
+                        || raw.http().status() == http::StatusCode::NOT_FOUND) =>
+                {
+                    Ok(false)
+                }
                 Err(other) => Err(other.into()),
             }
         })
@@ -121,35 +95,28 @@ impl S3Backend {
         range: Option<FileRange>,
     ) -> Result<Blob, Error> {
         self.runtime.block_on(async {
-            let res = retry_request(|| {
-                self.client.get_object(GetObjectRequest {
-                    bucket: self.bucket.to_string(),
-                    key: path.into(),
-                    range: range
-                        .as_ref()
-                        .map(|r| format!("bytes={}-{}", r.start(), r.end())),
-                    ..Default::default()
+            let res = self
+                .client
+                .get_object()
+                .bucket(&self.bucket)
+                .key(path)
+                .set_range(range.map(|r| format!("bytes={}-{}", r.start(), r.end())))
+                .send()
+                .map_err(|err| match err {
+                    SdkError::ServiceError { err, raw }
+                        if (matches!(err.kind, error::GetObjectErrorKind::NoSuchKey(_))
+                            || raw.http().status() == http::StatusCode::NOT_FOUND) =>
+                    {
+                        super::PathNotFoundError.into()
+                    }
+                    err => Error::from(err),
                 })
-            })
-            .await
-            .map_err(|err| match err {
-                RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
-                    super::PathNotFoundError.into()
-                }
-                RusotoError::Unknown(http) if http.status == 404 => super::PathNotFoundError.into(),
-                err => Error::from(err),
-            })?;
+                .await?;
 
             let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
-            content.reserve(
-                res.content_length
-                    .and_then(|l| l.try_into().ok())
-                    .unwrap_or(0),
-            );
+            content.reserve(res.content_length.try_into().ok().unwrap_or(0));
 
-            let mut body = res
-                .body
-                .with_context(|| anyhow!("Received a response from S3 with no body"))?;
+            let mut body = res.body;
 
             while let Some(data) = body.next().await.transpose()? {
                 content.write_all(data.as_ref())?;
@@ -159,7 +126,8 @@ impl S3Backend {
                 .last_modified
                 // This is a bug from AWS, it should always have a modified date of when it was created if nothing else.
                 // Workaround it by passing now as the modification time, since the exact time doesn't really matter.
-                .map_or(Ok(Utc::now()), |lm| parse_timespec(&lm))?;
+                .map(|dt| dt.to_chrono_utc())
+                .unwrap_or_else(Utc::now);
 
             let compression = res.content_encoding.and_then(|s| s.parse().ok());
 
@@ -192,10 +160,7 @@ impl S3Backend {
         transaction.complete()?;
 
         self.runtime
-            .block_on(self.client.delete_bucket(rusoto_s3::DeleteBucketRequest {
-                bucket: self.bucket.clone(),
-                ..Default::default()
-            }))?;
+            .block_on(self.client.delete_bucket().bucket(&self.bucket).send())?;
 
         Ok(())
     }
@@ -215,17 +180,13 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     futures.push(
                         self.s3
                             .client
-                            .put_object(PutObjectRequest {
-                                bucket: self.s3.bucket.to_string(),
-                                key: blob.path.clone(),
-                                body: Some(blob.content.clone().into()),
-                                content_type: Some(blob.mime.clone()),
-                                content_encoding: blob
-                                    .compression
-                                    .as_ref()
-                                    .map(|alg| alg.to_string()),
-                                ..Default::default()
-                            })
+                            .put_object()
+                            .bucket(&self.s3.bucket)
+                            .key(&blob.path)
+                            .body(blob.content.clone().into())
+                            .content_type(&blob.mime)
+                            .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
+                            .send()
                             .map_ok(|_| {
                                 self.s3.metrics.uploaded_files_total.inc();
                             })
@@ -261,37 +222,34 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                 let list = self
                     .s3
                     .client
-                    .list_objects_v2(ListObjectsV2Request {
-                        bucket: self.s3.bucket.clone(),
-                        prefix: Some(prefix.into()),
-                        continuation_token,
-                        ..ListObjectsV2Request::default()
-                    })
+                    .list_objects_v2()
+                    .bucket(&self.s3.bucket)
+                    .prefix(prefix)
+                    .set_continuation_token(continuation_token)
+                    .send()
                     .await?;
 
-                let to_delete = list
-                    .contents
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|o| o.key)
-                    .map(|key| ObjectIdentifier {
-                        key,
-                        version_id: None,
-                    })
-                    .collect::<Vec<_>>();
+                if list.key_count() > 0 {
+                    let to_delete = Delete::builder()
+                        .set_objects(Some(
+                            list.contents
+                                .expect("didn't get context even though but key_count was > 0")
+                                .into_iter()
+                                .filter_map(|obj| {
+                                    obj.key()
+                                        .map(|k| ObjectIdentifier::builder().key(k).build())
+                                })
+                                .collect(),
+                        ))
+                        .build();
 
-                if !to_delete.is_empty() {
                     let resp = self
                         .s3
                         .client
-                        .delete_objects(DeleteObjectsRequest {
-                            bucket: self.s3.bucket.clone(),
-                            delete: rusoto_s3::Delete {
-                                objects: to_delete,
-                                quiet: None,
-                            },
-                            ..DeleteObjectsRequest::default()
-                        })
+                        .delete_objects()
+                        .bucket(&self.s3.bucket)
+                        .delete(to_delete)
+                        .send()
                         .await?;
 
                     if let Some(errs) = resp.errors {
@@ -316,36 +274,8 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
     }
 }
 
-fn parse_timespec(mut raw: &str) -> Result<DateTime<Utc>, Error> {
-    raw = raw.trim_end_matches(" GMT");
-
-    Ok(DateTime::from_utc(
-        NaiveDateTime::parse_from_str(raw, "%a, %d %b %Y %H:%M:%S")?,
-        Utc,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::TimeZone;
-
-    #[test]
-    fn test_parse_timespec() {
-        // Test valid conversions
-        assert_eq!(
-            parse_timespec("Thu, 1 Jan 1970 00:00:00 GMT").unwrap(),
-            Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
-        );
-        assert_eq!(
-            parse_timespec("Mon, 16 Apr 2018 04:33:50 GMT").unwrap(),
-            Utc.ymd(2018, 4, 16).and_hms(4, 33, 50),
-        );
-
-        // Test invalid conversion
-        assert!(parse_timespec("foo").is_err());
-    }
-
     // The tests for this module are in src/storage/mod.rs, as part of the backend tests. Please
     // add any test checking the public interface there.
 
