@@ -31,7 +31,7 @@ impl S3Backend {
 
         let shared_config = runtime.block_on(aws_config::load_from_env());
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
-            .retry_config(RetryConfig::new().with_max_attempts(5))
+            .retry_config(RetryConfig::new().with_max_attempts(3))
             .region(Region::new(config.s3_region.clone()));
 
         if let Some(ref endpoint) = config.s3_endpoint {
@@ -233,7 +233,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                     let to_delete = Delete::builder()
                         .set_objects(Some(
                             list.contents
-                                .expect("didn't get context even though but key_count was > 0")
+                                .expect("didn't get content even though key_count was > 0")
                                 .into_iter()
                                 .filter_map(|obj| {
                                     obj.key()
