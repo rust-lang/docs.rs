@@ -188,6 +188,7 @@ impl TestEnvironment {
                     self.db().pool(),
                     self.metrics(),
                     self.config(),
+                    self.storage(),
                 ))
             })
             .clone()

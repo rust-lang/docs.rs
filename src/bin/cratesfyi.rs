@@ -452,7 +452,13 @@ impl DatabaseSubcommand {
             }
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(&ctx, &name).context("failed to delete the crate")?,
+            } => db::delete_crate(
+                &mut *ctx.pool()?.get()?,
+                &*ctx.storage()?,
+                &*ctx.config()?,
+                &name,
+            )
+            .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
             #[cfg(feature = "consistency_check")]
@@ -570,6 +576,7 @@ impl Context for BinContext {
             self.pool()?,
             self.metrics()?,
             self.config()?,
+            self.storage()?,
         );
         fn storage(self) -> Storage = Storage::new(
             self.pool()?,

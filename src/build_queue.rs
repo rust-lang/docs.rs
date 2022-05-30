@@ -1,11 +1,12 @@
-use crate::db::Pool;
+use crate::db::{delete_crate, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
+use crate::storage::Storage;
 use crate::utils::{get_crate_priority, report_error};
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
-use crates_index_diff::ChangeKind;
+use crates_index_diff::Change;
 use log::debug;
 
 use std::fs;
@@ -25,18 +26,25 @@ pub(crate) struct QueuedCrate {
 #[derive(Debug)]
 pub struct BuildQueue {
     config: Arc<Config>,
+    storage: Arc<Storage>,
     pub(crate) db: Pool,
     metrics: Arc<Metrics>,
     max_attempts: i32,
 }
 
 impl BuildQueue {
-    pub fn new(db: Pool, metrics: Arc<Metrics>, config: Arc<Config>) -> Self {
+    pub fn new(
+        db: Pool,
+        metrics: Arc<Metrics>,
+        config: Arc<Config>,
+        storage: Arc<Storage>,
+    ) -> Self {
         BuildQueue {
             max_attempts: config.build_attempts.into(),
             config,
             db,
             metrics,
+            storage,
         }
     }
 
@@ -194,9 +202,9 @@ impl BuildQueue {
         // I believe this will fix ordering of queue if we get more than one crate from changes
         changes.reverse();
 
-        for krate in &changes {
-            match krate.kind {
-                ChangeKind::Yanked => {
+        for change in &changes {
+            match change {
+                Change::Yanked(release) => {
                     let res = conn
                         .execute(
                             "
@@ -207,42 +215,50 @@ impl BuildQueue {
                                 AND name = $1
                                 AND version = $2
                             ",
-                            &[&krate.name, &krate.version],
+                            &[&release.name, &release.version],
                         )
                         .with_context(|| {
                             format!(
                                 "error while setting {}-{} to yanked",
-                                krate.name, krate.version
+                                release.name, release.version
                             )
                         });
                     match res {
-                        Ok(_) => debug!("{}-{} yanked", krate.name, krate.version),
+                        Ok(_) => debug!("{}-{} yanked", release.name, release.version),
                         Err(err) => report_error(&err),
                     }
                 }
 
-                ChangeKind::Added => {
-                    let priority = get_crate_priority(&mut conn, &krate.name)?;
+                Change::Added(release) => {
+                    let priority = get_crate_priority(&mut conn, &release.name)?;
 
                     match self
                         .add_crate(
-                            &krate.name,
-                            &krate.version,
+                            &release.name,
+                            &release.version,
                             priority,
                             index.repository_url(),
                         )
                         .with_context(|| {
                             format!(
                                 "failed adding {}-{} into build queue",
-                                krate.name, krate.version
+                                release.name, release.version
                             )
                         }) {
                         Ok(()) => {
-                            debug!("{}-{} added into build queue", krate.name, krate.version);
+                            debug!(
+                                "{}-{} added into build queue",
+                                release.name, release.version
+                            );
                             crates_added += 1;
                         }
                         Err(err) => report_error(&err),
                     }
+                }
+
+                Change::Deleted(krate) => {
+                    delete_crate(&mut conn, &self.storage, &self.config, krate)
+                        .with_context(|| format!("failed to delete crate {}", krate))?;
                 }
             }
         }

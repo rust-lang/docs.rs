@@ -19,7 +19,7 @@ use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
-use rustwide::{Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -318,7 +318,9 @@ impl RustwideBuilder {
         let krate = match kind {
             PackageKind::Local(path) => Crate::local(path),
             PackageKind::CratesIo => Crate::crates_io(name, version),
-            PackageKind::Registry(registry) => Crate::registry(registry, name, version),
+            PackageKind::Registry(registry) => {
+                Crate::registry(AlternativeRegistry::new(registry), name, version)
+            }
         };
         krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 

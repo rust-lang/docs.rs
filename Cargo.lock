@@ -733,13 +733,12 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "8.0.1"
+version = "10.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abfe3b360c1c0f5909be14ee2856dfad301a5c7652a4bd9d67f85449874b2ac5"
+checksum = "d091e55fb8e356c030d334b9f531bdc19d958dd33bc7e2112a74df8a6adf023e"
 dependencies = [
  "git2",
  "serde",
- "serde_derive",
  "serde_json",
 ]
 
@@ -1399,9 +1398,9 @@ checksum = "78cc372d058dcf6d5ecd98510e7fbc9e5aec4d21de70f65fea8fecebcd881bd4"
 
 [[package]]
 name = "git2"
-version = "0.13.25"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f29229cc1b24c0e6062f6e742aa3e256492a5323365e5ed3413599f8a5eff7d6"
+checksum = "d0155506aab710a86160ddb504a480d2964d7ab5b9e62419be69e0032bc5931c"
 dependencies = [
  "bitflags",
  "libc",
@@ -1829,9 +1828,9 @@ checksum = "5916d2ae698f6de9bfb891ad7a8d65c09d232dc58cc4ac433c7da3b2fd84bc2b"
 
 [[package]]
 name = "libgit2-sys"
-version = "0.12.26+1.3.0"
+version = "0.13.4+1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19e1c899248e606fbfe68dcb31d8b0176ebab833b103824af31bddf4b7457494"
+checksum = "d0fa6563431ede25f5cc7f6d803c6afbc1c5d3ad3d4925d12c882bf2b526f5d1"
 dependencies = [
  "cc",
  "libc",
@@ -3165,9 +3164,9 @@ checksum = "f2cc38e8fa666e2de3c4aba7edeb5ffc5246c1c2ed0e3d17e560aeeba736b23f"
 
 [[package]]
 name = "rustwide"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fad1c7516d4138e9f7bf4b0f56d41585f5aa1ba57dce6df34b4e90ba9db7d18b"
+checksum = "cc989edb16c722fe0664b02d6067b1236056e2b0e0f593cf423ea427a4e9a0f0"
 dependencies = [
  "attohttpc",
  "base64 0.13.0",

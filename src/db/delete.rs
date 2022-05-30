@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::storage::{rustdoc_archive_path, source_archive_path};
-use crate::Context;
+use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
+use crate::{Config, Context};
 use anyhow::Context as _;
 use postgres::Client;
 use std::fs;
@@ -16,8 +16,12 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
-pub fn delete_crate(ctx: &dyn Context, name: &str) -> Result<()> {
-    let conn = &mut ctx.pool()?.get()?;
+pub fn delete_crate(
+    conn: &mut Client,
+    storage: &Storage,
+    config: &Config,
+    name: &str,
+) -> Result<()> {
     let crate_id = get_id(conn, name)?;
     let is_library = delete_crate_from_database(conn, name, crate_id)?;
     // #899
@@ -31,10 +35,10 @@ pub fn delete_crate(ctx: &dyn Context, name: &str) -> Result<()> {
         // delete the whole rustdoc/source folder for this crate.
         // it will include existing archives.
         let remote_folder = format!("{}/{}/", prefix, name);
-        ctx.storage()?.delete_prefix(&remote_folder)?;
+        storage.delete_prefix(&remote_folder)?;
 
         // remove existing local archive index files.
-        let local_index_folder = ctx.config()?.local_archive_cache_path.join(&remote_folder);
+        let local_index_folder = config.local_archive_cache_path.join(&remote_folder);
         if local_index_folder.exists() {
             fs::remove_dir_all(&local_index_folder).with_context(|| {
                 format!(
@@ -244,7 +248,7 @@ mod tests {
                 )?);
             }
 
-            delete_crate(env, "package-1")?;
+            delete_crate(&mut db.conn(), &env.storage(), &env.config(), "package-1")?;
 
             assert!(!crate_exists(&mut db.conn(), "package-1")?);
             assert!(crate_exists(&mut db.conn(), "package-2")?);
