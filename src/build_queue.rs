@@ -7,7 +7,7 @@ use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
 use crates_index_diff::Change;
-use log::debug;
+use log::{debug, info};
 
 use std::fs;
 use std::path::PathBuf;
@@ -257,6 +257,10 @@ impl BuildQueue {
                 }
 
                 Change::Deleted(krate) => {
+                    info!(
+                        "crate {} was deleted from the index and will be deleted from the database",
+                        krate
+                    );
                     delete_crate(&mut conn, &self.storage, &self.config, krate)
                         .with_context(|| format!("failed to delete crate {}", krate))?;
                 }
