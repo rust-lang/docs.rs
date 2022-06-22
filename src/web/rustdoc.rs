@@ -254,13 +254,13 @@ impl RustdocPage {
         let is_latest_url = self.is_latest_url;
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self));
+        let config = extension!(req, Config);
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting
         let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
                 metrics.html_rewrite_ooms.inc();
 
-                let config = extension!(req, Config);
                 let err = anyhow!(
                     "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
                     file_path, config.max_parse_memory,
@@ -278,13 +278,21 @@ impl RustdocPage {
                 .headers
                 .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
         } else {
-            response.headers.set(CacheControl(vec![
-                CacheDirective::Extension(
+            let mut directives = vec![];
+            if let Some(seconds) = config.cache_control_stale_while_revalidate {
+                directives.push(CacheDirective::Extension(
                     "stale-while-revalidate".to_string(),
-                    Some("2592000".to_string()), // sixty days
-                ),
-                CacheDirective::MaxAge(600u32), // ten minutes
-            ]));
+                    Some(format!("{}", seconds)),
+                ));
+            }
+
+            if let Some(seconds) = config.cache_control_max_age {
+                directives.push(CacheDirective::MaxAge(seconds));
+            }
+
+            if !directives.is_empty() {
+                response.headers.set(CacheControl(directives));
+            }
         }
         Ok(response)
     }
@@ -895,13 +903,17 @@ mod test {
     #[test]
     fn cache_headers() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.cache_control_max_age = Some(600);
+                config.cache_control_stale_while_revalidate = Some(2592000);
+            });
+
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
                 .archive_storage(true)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
-
             let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
             assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
 
