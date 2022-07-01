@@ -1,5 +1,6 @@
 use crate::config::Config;
 use iron::{AfterMiddleware, BeforeMiddleware, IronResult, Request, Response};
+use std::fmt::Write;
 
 pub(super) struct Csp {
     nonce: String,
@@ -67,7 +68,9 @@ impl Csp {
         // We can't just allow 'self' here, as users can upload arbitrary .js files as part of
         // their documentation and 'self' would allow their execution. Instead, every allowed
         // script must include the random nonce in it, which an attacker is not able to guess.
-        result.push_str(&format!("; script-src 'nonce-{}'", self.nonce));
+        //
+        // This `.unwrap` is safe since the `Write` impl on str can never fail.
+        write!(result, "; script-src 'nonce-{}'", self.nonce).unwrap();
     }
 
     fn render_svg(&self, result: &mut String) {
