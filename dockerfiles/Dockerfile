@@ -9,7 +9,7 @@
 #  Build stage  #
 #################
 
-FROM ubuntu:bionic AS build
+FROM ubuntu:22.04 AS build
 
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -53,11 +53,33 @@ COPY vendor vendor/
 
 RUN cargo build --release
 
+######################
+#  Web server stage  #
+######################
+
+FROM ubuntu:22.04 AS web-server
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+COPY static /srv/docsrs/static
+COPY templates /srv/docsrs/templates
+COPY vendor /srv/docsrs/vendor
+
+WORKDIR /srv/docsrs
+# Tini is a small init binary to properly handle signals
+CMD ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "start-web-server", "0.0.0.0:80"]
+
 ##################
 #  Output stage  #
 ##################
 
-FROM ubuntu:bionic AS output
+FROM ubuntu:22.04 AS output
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
