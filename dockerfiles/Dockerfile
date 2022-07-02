@@ -73,7 +73,7 @@ COPY vendor /srv/docsrs/vendor
 
 WORKDIR /srv/docsrs
 # Tini is a small init binary to properly handle signals
-CMD ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "start-web-server"]
+CMD ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "start-web-server", "0.0.0.0:80"]
 
 ##################
 #  Output stage  #
