@@ -179,7 +179,7 @@ impl Metrics {
 
         let process = Process::myself().unwrap();
         self.open_file_descriptors
-            .set(process.fd().unwrap().len() as i64);
+            .set(process.fd_count().unwrap() as i64);
         self.running_threads
             .set(process.stat().unwrap().num_threads as i64);
     }
