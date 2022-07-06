@@ -257,12 +257,11 @@ impl BuildQueue {
                 }
 
                 Change::Deleted(krate) => {
-                    info!(
-                        "crate {} was deleted from the index and will be deleted from the database",
-                        krate
-                    );
-                    delete_crate(&mut conn, &self.storage, &self.config, krate)
-                        .with_context(|| format!("failed to delete crate {}", krate))?;
+                    match delete_crate(&mut conn, &self.storage, &self.config, krate)
+                        .with_context(|| format!("failed to delete crate {}", krate)) {
+                            Ok(_) => info!("crate {} was deleted from the index and will be deleted from the database", krate), 
+                            Err(err) => report_error(&err),
+                        }
                 }
             }
         }
