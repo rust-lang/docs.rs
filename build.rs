@@ -47,58 +47,49 @@ fn get_git_hash() -> Result<Option<String>> {
     }
 }
 
-fn compile_sass_file(
-    out_dir: &Path,
-    name: &str,
-    target: &str,
-    include_paths: &[String],
-) -> Result<()> {
-    use sass_rs::{Context, Options, OutputStyle};
+fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
+    let css = grass::from_path(
+        src.to_str()
+            .context("source file path must be a utf-8 string")?,
+        &grass::Options::default().style(grass::OutputStyle::Compressed),
+    )
+    .map_err(|e| Error::msg(e.to_string()))?;
 
-    const STYLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style");
-
-    let include_paths = {
-        let mut paths = vec![STYLE_DIR.to_owned()];
-        paths.extend_from_slice(include_paths);
-        paths
-    };
-
-    for path in &include_paths {
-        for entry in walkdir::WalkDir::new(path) {
-            println!("cargo:rerun-if-changed={}", entry?.path().display());
-        }
-    }
-
-    let mut context =
-        Context::new_file(format!("{}/{}.scss", STYLE_DIR, name)).map_err(Error::msg)?;
-    context.set_options(Options {
-        output_style: OutputStyle::Compressed,
-        include_paths,
-        ..Default::default()
-    });
-
-    let css = context.compile().map_err(Error::msg)?;
-    let dest_path = out_dir.join(format!("{}.css", target));
-    std::fs::write(dest_path, css)?;
+    std::fs::write(dest, css)?;
 
     Ok(())
 }
 
 fn compile_sass(out_dir: &Path) -> Result<()> {
-    // Compile base.scss -> style.css
-    compile_sass_file(out_dir, "base", "style", &[])?;
+    const STYLE_DIR: &str = "templates/style";
 
-    // Compile rustdoc.scss -> rustdoc.css
-    compile_sass_file(out_dir, "rustdoc", "rustdoc", &[])?;
-    compile_sass_file(out_dir, "rustdoc-2021-12-05", "rustdoc-2021-12-05", &[])?;
+    for entry in walkdir::WalkDir::new(STYLE_DIR) {
+        let entry = entry?;
+        println!(
+            "cargo:rerun-if-changed={}",
+            entry
+                .path()
+                .to_str()
+                .with_context(|| format!("{} is a non-utf-8 path", entry.path().display()))?
+        );
+        let file_name = entry.file_name().to_str().unwrap();
+        if entry.metadata()?.is_file() && !file_name.starts_with('_') {
+            let dest = out_dir
+                .join(entry.path().strip_prefix(STYLE_DIR)?)
+                .with_extension("css");
+            compile_sass_file(entry.path(), &dest).with_context(|| {
+                format!("compiling {} to {}", entry.path().display(), dest.display())
+            })?;
+        }
+    }
 
-    // Compile vendored.scss -> vendored.css
-    compile_sass_file(
-        out_dir,
-        "vendored",
-        "vendored",
-        &[concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned()],
-    )?;
+    // Compile vendored.css
+    println!("cargo:rerun-if-changed=vendor/pure-css/css/pure-min.css");
+    let pure = std::fs::read_to_string("vendor/pure-css/css/pure-min.css")?;
+    println!("cargo:rerun-if-changed=vendor/pure-css/css/grids-responsive-min.css");
+    let grids = std::fs::read_to_string("vendor/pure-css/css/grids-responsive-min.css")?;
+    let vendored = pure + &grids;
+    std::fs::write(out_dir.join("vendored").with_extension("css"), vendored)?;
 
     Ok(())
 }
