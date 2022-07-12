@@ -121,6 +121,7 @@ git2 = { version = "0.14", default-features = false }
 sass-rs = "0.2.2"
 string_cache_codegen = "0.5.1"
 walkdir = "2"
+anyhow = { version = "1.0.42", features = ["backtrace"] }
 
 [[bench]]
 name = "compression"

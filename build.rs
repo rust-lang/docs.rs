@@ -1,45 +1,57 @@
+use anyhow::{Context as _, Error, Result};
 use git2::Repository;
-use std::{env, error::Error, fs::File, io::Write, path::Path};
+use std::{env, fs::File, io::Write, path::Path};
 
-fn main() {
-    write_git_version();
-    if let Err(sass_err) = compile_sass() {
-        panic!("Error compiling sass: {}", sass_err);
-    }
-    write_known_targets().unwrap();
+fn main() -> Result<()> {
+    let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
+    let out_dir = Path::new(&out_dir);
+    write_git_version(out_dir)?;
+    compile_sass(out_dir)?;
+    write_known_targets(out_dir)?;
+    Ok(())
 }
 
-fn write_git_version() {
-    let maybe_hash = get_git_hash();
+fn write_git_version(out_dir: &Path) -> Result<()> {
+    let maybe_hash = get_git_hash()?;
     let git_hash = maybe_hash.as_deref().unwrap_or("???????");
 
     let build_date = time::OffsetDateTime::now_utc().date();
-    let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("git_version");
+    let dest_path = out_dir.join("git_version");
 
-    let mut file = File::create(&dest_path).unwrap();
-    write!(file, "({} {})", git_hash, build_date).unwrap();
+    let mut file = File::create(&dest_path)?;
+    write!(file, "({} {})", git_hash, build_date)?;
 
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
+
+    Ok(())
 }
 
-fn get_git_hash() -> Option<String> {
-    let repo = Repository::open(env::current_dir().unwrap()).ok()?;
-    let head = repo.head().unwrap();
+fn get_git_hash() -> Result<Option<String>> {
+    match Repository::open(env::current_dir()?) {
+        Ok(repo) => {
+            let head = repo.head()?;
 
-    head.target().map(|h| {
-        let mut h = format!("{}", h);
-        h.truncate(7);
-        h
-    })
+            Ok(head.target().map(|h| {
+                let mut h = format!("{}", h);
+                h.truncate(7);
+                h
+            }))
+        }
+        Err(err) => {
+            eprintln!("failed to get git repo: {err}");
+            Ok(None)
+        }
+    }
 }
 
 fn compile_sass_file(
+    out_dir: &Path,
     name: &str,
     target: &str,
     include_paths: &[String],
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     use sass_rs::{Context, Options, OutputStyle};
 
     const STYLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/style");
@@ -56,31 +68,33 @@ fn compile_sass_file(
         }
     }
 
-    let mut context = Context::new_file(format!("{}/{}.scss", STYLE_DIR, name))?;
+    let mut context =
+        Context::new_file(format!("{}/{}.scss", STYLE_DIR, name)).map_err(Error::msg)?;
     context.set_options(Options {
         output_style: OutputStyle::Compressed,
         include_paths,
         ..Default::default()
     });
 
-    let css = context.compile()?;
-    let dest_path = Path::new(&env::var("OUT_DIR")?).join(format!("{}.css", target));
+    let css = context.compile().map_err(Error::msg)?;
+    let dest_path = out_dir.join(format!("{}.css", target));
     let mut file = File::create(&dest_path)?;
     file.write_all(css.as_bytes())?;
 
     Ok(())
 }
 
-fn compile_sass() -> Result<(), Box<dyn Error>> {
+fn compile_sass(out_dir: &Path) -> Result<()> {
     // Compile base.scss -> style.css
-    compile_sass_file("base", "style", &[])?;
+    compile_sass_file(out_dir, "base", "style", &[])?;
 
     // Compile rustdoc.scss -> rustdoc.css
-    compile_sass_file("rustdoc", "rustdoc", &[])?;
-    compile_sass_file("rustdoc-2021-12-05", "rustdoc-2021-12-05", &[])?;
+    compile_sass_file(out_dir, "rustdoc", "rustdoc", &[])?;
+    compile_sass_file(out_dir, "rustdoc-2021-12-05", "rustdoc-2021-12-05", &[])?;
 
     // Compile vendored.scss -> vendored.css
     compile_sass_file(
+        out_dir,
         "vendored",
         "vendored",
         &[concat!(env!("CARGO_MANIFEST_DIR"), "/vendor/pure-css/css").to_owned()],
@@ -89,7 +103,7 @@ fn compile_sass() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn write_known_targets() -> std::io::Result<()> {
+fn write_known_targets(out_dir: &Path) -> Result<()> {
     use std::io::BufRead;
 
     let targets: Vec<String> = std::process::Command::new("rustc")
@@ -102,7 +116,7 @@ fn write_known_targets() -> std::io::Result<()> {
 
     string_cache_codegen::AtomType::new("target::TargetAtom", "target_atom!")
         .atoms(&targets)
-        .write_to_file(&Path::new(&env::var("OUT_DIR").unwrap()).join("target_atom.rs"))?;
+        .write_to_file(&out_dir.join("target_atom.rs"))?;
 
     Ok(())
 }
