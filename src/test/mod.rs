@@ -15,6 +15,7 @@ use reqwest::{
     Method,
 };
 use std::fs;
+use std::net::SocketAddr;
 use std::{panic, sync::Arc};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -387,6 +388,10 @@ impl TestFrontend {
             url = format!("http://{}{}", self.server.addr(), url);
         }
         self.client.request(method, url)
+    }
+
+    pub(crate) fn server_addr(&self) -> SocketAddr {
+        self.server.addr()
     }
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {

@@ -701,7 +701,7 @@ mod test {
     use crate::test::*;
     use anyhow::Context;
     use kuchiki::traits::TendrilSink;
-    use reqwest::StatusCode;
+    use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
     use std::collections::BTreeMap;
     use test_case::test_case;
 
@@ -1595,6 +1595,22 @@ mod test {
                     .status(),
                 StatusCode::NOT_FOUND,
             );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_redirect_to_latest_301() {
+        wrapper(|env| {
+            env.fake_release().name("dummy").version("1.0.0").create()?;
+            let web = env.frontend();
+            let client = ClientBuilder::new()
+                .redirect(redirect::Policy::none())
+                .build()
+                .unwrap();
+            let url = format!("http://{}/dummy", web.server_addr());
+            let status = client.get(url).send()?.status();
+            assert_eq!(status, StatusCode::MOVED_PERMANENTLY);
             Ok(())
         })
     }
