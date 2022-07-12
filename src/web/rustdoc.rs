@@ -71,7 +71,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push_str(query);
         }
         let url = ctry!(req, Url::parse(&url_str));
-        let mut resp = Response::with((status::Found, Redirect(url)));
+        let status_code = if vers == "latest" {
+            status::MovedPermanently
+        } else {
+            status::Found
+        };
+        let mut resp = Response::with((status_code, Redirect(url)));
         resp.headers.set(Expires(HttpDate(time::now())));
 
         Ok(resp)
