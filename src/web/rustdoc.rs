@@ -13,7 +13,7 @@ use crate::{
 use anyhow::{anyhow, Context};
 use iron::url::percent_encoding::percent_decode;
 use iron::{
-    headers::{Expires, HttpDate},
+    headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
     status, Handler, IronResult, Request, Response, Url,
 };
@@ -71,14 +71,14 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push_str(query);
         }
         let url = ctry!(req, Url::parse(&url_str));
-        let status_code = if vers == "latest" {
-            status::MovedPermanently
+        let (status_code, max_age) = if vers == "latest" {
+            (status::MovedPermanently, 86400)
         } else {
-            status::Found
+            (status::Found, 0)
         };
         let mut resp = Response::with((status_code, Redirect(url)));
-        resp.headers.set(Expires(HttpDate(time::now())));
-
+        resp.headers
+            .set(CacheControl(vec![CacheDirective::MaxAge(max_age)]));
         Ok(resp)
     }
 
@@ -1609,8 +1609,12 @@ mod test {
                 .build()
                 .unwrap();
             let url = format!("http://{}/dummy", web.server_addr());
-            let status = client.get(url).send()?.status();
-            assert_eq!(status, StatusCode::MOVED_PERMANENTLY);
+            let resp = client.get(url).send()?;
+            assert_eq!(resp.status(), StatusCode::MOVED_PERMANENTLY);
+            assert_eq!(
+                resp.headers().get("Cache-Control").unwrap(),
+                reqwest::header::HeaderValue::from_str("max-age=86400").unwrap()
+            );
             Ok(())
         })
     }
