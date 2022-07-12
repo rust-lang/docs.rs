@@ -11,7 +11,7 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 ///
 /// Example:
 ///
-/// ```
+/// ```no_compile
 /// let my_migration = migration!(100,
 ///                               "migrate data",
 ///                               |transaction: &mut Transaction| -> Result<(), PostgresError> {
@@ -73,7 +73,7 @@ macro_rules! migration {
 ///
 /// Example:
 ///
-/// ```
+/// ```no_compile
 /// let my_migration = sql_migration!(100,
 ///                               "Create test table",
 ///                               "CREATE TABLE test ( id SERIAL);",
@@ -650,7 +650,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
         sql_migration!(
             context,
             26,
-            "create indexes for crates, github_repos and releases", 
+            "create indexes for crates, github_repos and releases",
             // upgrade
             "
             CREATE INDEX crates_latest_version_idx ON crates (latest_version_id);
@@ -788,7 +788,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TABLE releases DROP COLUMN archive_storage;",
         ),
         sql_migration!(
-            context, 31, "add index on builds.build_time", 
+            context, 31, "add index on builds.build_time",
             "CREATE INDEX builds_build_time_idx ON builds (build_time DESC);",
             "DROP INDEX builds_build_time_idx;",
         ),
@@ -800,14 +800,14 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 use crate::web::crate_details::CrateDetails;
                 let rows = transaction.query(
                     "SELECT crates.name, max(releases.version) as max_version_id
-                     FROM crates 
-                     INNER JOIN releases ON crates.id = releases.crate_id 
+                     FROM crates
+                     INNER JOIN releases ON crates.id = releases.crate_id
                      GROUP BY crates.name",
                     &[],
                 )?;
 
                 let update_version_query = transaction.prepare(
-                    "UPDATE crates 
+                    "UPDATE crates
                      SET latest_version_id = $2
                      WHERE id = $1",
                 )?;
@@ -827,10 +827,10 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             |transaction: &mut Transaction| -> Result<(), PostgresError> {
                 transaction
                     .execute(
-                        "UPDATE crates 
+                        "UPDATE crates
                          SET latest_version_id = (
-                             SELECT max(id) 
-                             FROM releases 
+                             SELECT max(id)
+                             FROM releases
                              WHERE releases.crate_id = crates.id
                          )",
                         &[],
