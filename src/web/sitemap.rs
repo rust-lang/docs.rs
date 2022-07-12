@@ -26,11 +26,17 @@ pub fn sitemapindex_handler(req: &mut Request) -> IronResult<Response> {
     SitemapIndexXml { sitemaps }.into_response(req)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SitemapRow {
+    crate_name: String,
+    last_modified: String,
+    target_name: String,
+}
+
 /// The sitemap
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SitemapXml {
-    /// The release's names and RFC 3339 timestamp to be displayed on the sitemap
-    releases: Vec<(String, String)>,
+    releases: Vec<SitemapRow>,
 }
 
 impl_webpage! {
@@ -54,13 +60,14 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
     let query = conn
         .query(
             "SELECT crates.name,
+                    releases.target_name,
                     MAX(releases.release_time) as release_time
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
              WHERE 
                 rustdoc_status = true AND 
                 crates.name ILIKE $1 
-             GROUP BY crates.name
+             GROUP BY crates.name, releases.target_name
              ",
             &[&format!("{}%", letter)],
         )
@@ -68,12 +75,15 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
 
     let releases = query
         .into_iter()
-        .map(|row| {
-            let time = row.get::<_, DateTime<Utc>>(1).format("%+").to_string();
-
-            (row.get(0), time)
+        .map(|row| SitemapRow {
+            crate_name: row.get("name"),
+            target_name: row.get("target_name"),
+            last_modified: row
+                .get::<_, DateTime<Utc>>("release_time")
+                .format("%+")
+                .to_string(),
         })
-        .collect::<Vec<(String, String)>>();
+        .collect();
 
     SitemapXml { releases }.into_response(req)
 }
