@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Error, Result};
 use git2::Repository;
-use std::{env, fs::File, io::Write, path::Path};
+use std::{env, path::Path};
 
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
@@ -16,10 +16,11 @@ fn write_git_version(out_dir: &Path) -> Result<()> {
     let git_hash = maybe_hash.as_deref().unwrap_or("???????");
 
     let build_date = time::OffsetDateTime::now_utc().date();
-    let dest_path = out_dir.join("git_version");
 
-    let mut file = File::create(&dest_path)?;
-    write!(file, "({} {})", git_hash, build_date)?;
+    std::fs::write(
+        out_dir.join("git_version"),
+        format!("({} {})", git_hash, build_date),
+    )?;
 
     // TODO: are these right?
     println!("cargo:rerun-if-changed=.git/HEAD");
@@ -78,8 +79,7 @@ fn compile_sass_file(
 
     let css = context.compile().map_err(Error::msg)?;
     let dest_path = out_dir.join(format!("{}.css", target));
-    let mut file = File::create(&dest_path)?;
-    file.write_all(css.as_bytes())?;
+    std::fs::write(dest_path, css)?;
 
     Ok(())
 }
