@@ -1615,6 +1615,13 @@ mod test {
                 resp.headers().get("Cache-Control").unwrap(),
                 reqwest::header::HeaderValue::from_str("max-age=86400").unwrap()
             );
+            assert!(resp
+                .headers()
+                .get("Location")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("/dummy/latest/dummy/"));
             Ok(())
         })
     }
