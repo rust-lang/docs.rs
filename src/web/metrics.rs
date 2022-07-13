@@ -13,7 +13,7 @@ pub(super) fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     let queue = extension!(req, BuildQueue);
 
     let mut buffer = Vec::new();
-    let families = ctry!(req, metrics.gather(pool, &*queue));
+    let families = ctry!(req, metrics.gather(pool, queue));
     ctry!(req, TextEncoder::new().encode(&families, &mut buffer));
 
     let mut resp = Response::with(buffer);
