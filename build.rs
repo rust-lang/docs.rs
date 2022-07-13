@@ -2,6 +2,70 @@ use anyhow::{Context as _, Error, Result};
 use git2::Repository;
 use std::{env, path::Path};
 
+mod tracked {
+    use once_cell::sync::Lazy;
+    use std::{
+        collections::HashSet,
+        io::{Error, ErrorKind, Result},
+        path::{Path, PathBuf},
+        sync::Mutex,
+    };
+
+    static SEEN: Lazy<Mutex<HashSet<PathBuf>>> = Lazy::new(|| Mutex::new(HashSet::new()));
+
+    pub(crate) fn track(path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        if path.exists() {
+            let mut seen = SEEN.lock().unwrap();
+            // TODO: Needs something like `HashSet::insert_owned` to check before cloning
+            // https://github.com/rust-lang/rust/issues/60896
+            if !seen.contains(path) {
+                seen.insert(path.to_owned());
+                let path = path.to_str().ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::Other,
+                        format!("{} is a non-utf-8 path", path.display()),
+                    )
+                })?;
+                println!("cargo:rerun-if-changed={path}");
+            }
+        } else if let Some(parent) = path.parent() {
+            // if the file doesn't exist, we need to notice if it begins existing
+            track(parent)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn read(path: impl AsRef<Path>) -> Result<Vec<u8>> {
+        let path = path.as_ref();
+        track(path)?;
+        std::fs::read(path)
+    }
+
+    pub(crate) fn read_to_string(path: impl AsRef<Path>) -> Result<String> {
+        let path = path.as_ref();
+        track(path)?;
+        std::fs::read_to_string(path)
+    }
+
+    #[derive(Debug)]
+    pub(crate) struct Fs;
+
+    impl grass::Fs for Fs {
+        fn is_dir(&self, path: &Path) -> bool {
+            track(path).unwrap();
+            path.is_dir()
+        }
+        fn is_file(&self, path: &Path) -> bool {
+            track(path).unwrap();
+            path.is_file()
+        }
+        fn read(&self, path: &Path) -> Result<Vec<u8>> {
+            read(path)
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
@@ -22,10 +86,6 @@ fn write_git_version(out_dir: &Path) -> Result<()> {
         format!("({} {})", git_hash, build_date),
     )?;
 
-    // TODO: are these right?
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/index");
-
     Ok(())
 }
 
@@ -33,6 +93,10 @@ fn get_git_hash() -> Result<Option<String>> {
     match Repository::open(env::current_dir()?) {
         Ok(repo) => {
             let head = repo.head()?;
+
+            // TODO: are these right?
+            tracked::track(".git/HEAD")?;
+            tracked::track(".git/index")?;
 
             Ok(head.target().map(|h| {
                 let mut h = format!("{}", h);
@@ -51,7 +115,9 @@ fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
     let css = grass::from_path(
         src.to_str()
             .context("source file path must be a utf-8 string")?,
-        &grass::Options::default().style(grass::OutputStyle::Compressed),
+        &grass::Options::default()
+            .fs(&tracked::Fs)
+            .style(grass::OutputStyle::Compressed),
     )
     .map_err(|e| Error::msg(e.to_string()))?;
 
@@ -65,29 +131,27 @@ fn compile_sass(out_dir: &Path) -> Result<()> {
 
     for entry in walkdir::WalkDir::new(STYLE_DIR) {
         let entry = entry?;
-        println!(
-            "cargo:rerun-if-changed={}",
-            entry
-                .path()
+        if entry.metadata()?.is_dir() {
+            tracked::track(entry.path())?;
+        } else {
+            let file_name = entry
+                .file_name()
                 .to_str()
-                .with_context(|| format!("{} is a non-utf-8 path", entry.path().display()))?
-        );
-        let file_name = entry.file_name().to_str().unwrap();
-        if entry.metadata()?.is_file() && !file_name.starts_with('_') {
-            let dest = out_dir
-                .join(entry.path().strip_prefix(STYLE_DIR)?)
-                .with_extension("css");
-            compile_sass_file(entry.path(), &dest).with_context(|| {
-                format!("compiling {} to {}", entry.path().display(), dest.display())
-            })?;
+                .context("file name must be a utf-8 string")?;
+            if !file_name.starts_with('_') {
+                let dest = out_dir
+                    .join(entry.path().strip_prefix(STYLE_DIR)?)
+                    .with_extension("css");
+                compile_sass_file(entry.path(), &dest).with_context(|| {
+                    format!("compiling {} to {}", entry.path().display(), dest.display())
+                })?;
+            }
         }
     }
 
     // Compile vendored.css
-    println!("cargo:rerun-if-changed=vendor/pure-css/css/pure-min.css");
-    let pure = std::fs::read_to_string("vendor/pure-css/css/pure-min.css")?;
-    println!("cargo:rerun-if-changed=vendor/pure-css/css/grids-responsive-min.css");
-    let grids = std::fs::read_to_string("vendor/pure-css/css/grids-responsive-min.css")?;
+    let pure = tracked::read_to_string("vendor/pure-css/css/pure-min.css")?;
+    let grids = tracked::read_to_string("vendor/pure-css/css/grids-responsive-min.css")?;
     let vendored = pure + &grids;
     std::fs::write(out_dir.join("vendored").with_extension("css"), vendored)?;
 
