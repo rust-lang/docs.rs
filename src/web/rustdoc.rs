@@ -363,7 +363,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
-    if req_path.get(0).copied() == Some(&krate.metadata.default_target) {
+    if req_path.first().copied() == Some(&krate.metadata.default_target) {
         return redirect(&name, &version_or_latest, &req_path[1..]);
     }
 
@@ -400,7 +400,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 storage.rustdoc_file_exists(&name, &version, &path, krate.archive_storage)
             ) {
                 redirect(&name, &version_or_latest, &req_path)
-            } else if req_path.get(0).map_or(false, |p| p.contains('-')) {
+            } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
                 redirect(
@@ -539,7 +539,7 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
     };
     let is_source_view = if platform.is_empty() {
         // /{name}/{version}/src/{crate}/index.html
-        file_path.get(0).copied() == Some("src")
+        file_path.first().copied() == Some("src")
     } else {
         // /{name}/{version}/{platform}/src/{crate}/index.html
         file_path.get(1).copied() == Some("src")

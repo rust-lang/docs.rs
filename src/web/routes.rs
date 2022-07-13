@@ -354,7 +354,7 @@ impl BlockBlacklistedPrefixes {
 
 impl Handler for BlockBlacklistedPrefixes {
     fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-        if let Some(prefix) = req.url.path().get(0) {
+        if let Some(prefix) = req.url.path().first() {
             if self.blacklist.contains(*prefix) {
                 return Err(super::error::Nope::CrateNotFound.into());
             }
