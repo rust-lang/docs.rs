@@ -21,6 +21,10 @@ pub(super) fn build_routes() -> Routes {
     //   https://developers.google.com/search/reference/robots_txt#handling-http-result-codes
     //   https://support.google.com/webmasters/answer/183668?hl=en
     routes.static_resource("/robots.txt", PermanentRedirect("/-/static/robots.txt"));
+    routes.static_resource(
+        "/googleb54494ba4d52c200.html",
+        super::sitemap::google_search_console_handler,
+    );
     routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
     routes.internal_page("/sitemap.xml", super::sitemap::sitemapindex_handler);
     routes.internal_page(

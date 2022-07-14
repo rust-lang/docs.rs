@@ -148,6 +148,16 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
     .into_response(req)
 }
 
+// This authenticates @jsha (https://github.com/jsha) to use the Google Search Console
+// https://support.google.com/webmasters/answer/9128668?visit_id=637926083810327397-791277710&rd=2
+// for docs.rs. Removing this handler will de-authenticate. Additional handlers can be
+// added for additional users.
+pub fn google_search_console_handler(_req: &mut Request) -> IronResult<Response> {
+    Ok(Response::with(
+        "google-site-verification: googleb54494ba4d52c200.html".to_string(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::test::{assert_success, wrapper};
