@@ -38,7 +38,7 @@ pub struct CrateDetails {
     pub(crate) metadata: MetaData,
     is_library: bool,
     license: Option<String>,
-    documentation_url: Option<String>,
+    pub(crate) documentation_url: Option<String>,
     total_items: Option<f32>,
     documented_items: Option<f32>,
     total_items_needing_examples: Option<f32>,

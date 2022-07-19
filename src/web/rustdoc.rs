@@ -200,6 +200,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RustdocPage {
     latest_path: String,
+    canonical_url: String,
     permalink_path: String,
     latest_version: String,
     target: String,
@@ -488,6 +489,27 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let latest_path = format!("/crate/{}/latest{}{}", name, target_redirect, query_string);
 
+    // Set the canonical URL for search engines to the `/latest/` page on docs.rs.
+    // For crates with a documentation URL, where that URL doesn't point at docs.rs,
+    // omit the canonical link to avoid penalizing external documentation.
+    // Note: The URL this points to may not exist. For instance, if we're rendering
+    // `struct Foo` in version 0.1.0 of a crate, and version 0.2.0 of that crate removes
+    // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
+    // the target and will not canonicalize to a URL that doesn't exist.
+    let canonical_url = if krate.documentation_url.is_none()
+        || krate
+            .documentation_url
+            .as_ref()
+            .unwrap()
+            .starts_with("https://docs.rs/")
+    {
+        // Don't include index.html in the canonical URL.
+        let canonical_path = inner_path.replace("index.html", "");
+        format!("https://docs.rs/{}/latest/{}", name, canonical_path)
+    } else {
+        "".to_string()
+    };
+
     metrics
         .recently_accessed_releases
         .record(krate.crate_id, krate.release_id, target);
@@ -501,6 +523,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     rendering_time.step("rewrite html");
     RustdocPage {
         latest_path,
+        canonical_url,
         permalink_path,
         latest_version,
         target,
@@ -2009,6 +2032,66 @@ mod test {
                 "/winapi/0.3.9/winapi/",
                 env.frontend(),
             )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn canonical_url() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy-dash")
+                .version("0.1.0")
+                .documentation_url(Some("http://example.com".to_string()))
+                .rustdoc_file("dummy_dash/index.html")
+                .create()?;
+
+            env.fake_release()
+                .name("dummy-docs")
+                .version("0.1.0")
+                .documentation_url(Some("https://docs.rs/foo".to_string()))
+                .rustdoc_file("dummy_docs/index.html")
+                .create()?;
+
+            env.fake_release()
+                .name("dummy-nodocs")
+                .version("0.1.0")
+                .documentation_url(None)
+                .rustdoc_file("dummy_nodocs/index.html")
+                .rustdoc_file("dummy_nodocs/struct.Foo.html")
+                .create()?;
+
+            let web = env.frontend();
+
+            assert!(!web
+                .get("/dummy-dash/0.1.0/dummy_dash/")
+                .send()?
+                .text()?
+                .contains("rel=\"canonical\""),);
+
+            assert!(web
+                .get("/dummy-docs/0.1.0/dummy_docs/")
+                .send()?
+                .text()?
+                .contains(
+                "<link rel=\"canonical\" href=\"https://docs.rs/dummy-docs/latest/dummy_docs/\" />"
+            ),);
+
+            assert!(
+                web
+                    .get("/dummy-nodocs/0.1.0/dummy_nodocs/")
+                    .send()?
+                    .text()?
+                    .contains("<link rel=\"canonical\" href=\"https://docs.rs/dummy-nodocs/latest/dummy_nodocs/\" />"),
+            );
+
+            assert!(
+                web
+                    .get("/dummy-nodocs/0.1.0/dummy_nodocs/struct.Foo.html")
+                    .send()?
+                    .text()?
+                    .contains("<link rel=\"canonical\" href=\"https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html\" />"),
+            );
             Ok(())
         })
     }
