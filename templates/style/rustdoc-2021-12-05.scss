@@ -33,8 +33,14 @@ div.container-rustdoc {
     }
 }
 
-div.rustdoc {
+@media (max-width: 700px) {
+    .source main {
+        height: auto;
+    }
+}
+
+@media (max-width: 464px) {
     #sidebar-toggle {
-        top: 0;
+        top: 32px;
     }
 }
