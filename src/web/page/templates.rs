@@ -129,7 +129,7 @@ fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<Strin
             .with_context(|| format!("{} is not a child of {}", path.display(), root.display()))?
             .to_slash()
             .with_context(|| anyhow::anyhow!("failed to normalize {}", path.display()))?;
-        files.push((path.to_path_buf(), Some(name)));
+        files.push((path.to_path_buf(), Some(name.to_string())));
     }
 
     Ok(files)

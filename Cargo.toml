@@ -43,7 +43,7 @@ anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
-comrak = { version = "0.13.1", default-features = false }
+comrak = { version = "0.14.0", default-features = false }
 toml = "0.5"
 schemamama = "0.3"
 schemamama_postgres = "0.3"
@@ -54,7 +54,7 @@ mime_guess = "2"
 dotenv = "0.15"
 zstd = "0.11.0"
 git2 = { version = "0.14.4", default-features = false }
-path-slash = "0.1.3"
+path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.13"
 strum = { version = "0.24.0", features = ["derive"] }
@@ -71,9 +71,9 @@ getrandom = "0.2.1"
 # Async
 tokio = { version = "1.0", features = ["rt-multi-thread"] }
 futures-util = "0.3.5"
-aws-config = "0.15.0"
-aws-sdk-s3 = "0.15.0"
-aws-smithy-types-convert = { version = "0.45.0", features = ["convert-chrono"] }
+aws-config = "0.46.0"
+aws-sdk-s3 = "0.16.0"
+aws-smithy-types-convert = { version = "0.46.0", features = ["convert-chrono"] }
 http = "0.2.6"
 
 # Data serialization and deserialization
