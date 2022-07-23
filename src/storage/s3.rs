@@ -13,7 +13,7 @@ use futures_util::{
     future::TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
 };
-use std::{convert::TryInto, io::Write, sync::Arc};
+use std::{io::Write, sync::Arc};
 use tokio::runtime::Runtime;
 
 pub(super) struct S3Backend {
