@@ -1,20 +1,23 @@
 ---
+name: Build & Deploy
 
-name: Deploy
-on:
-  workflow_dispatch: {}
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  prod:
-    name: Production
+  docker:
+    name: Build and upload docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@master
 
-      - name: Build the Docker image
+      - name: test building the dev image
+        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
+
+      - name: Building the webserver image
         run: docker build -t docs-rs-web -f dockerfiles/Dockerfile --target web-server .
 
       - name: Upload the Docker image to ECR
+        if: github.event_name == 'workflow_dispatch'
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
         with:
           image: docs-rs-web
