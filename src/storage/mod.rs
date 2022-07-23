@@ -420,7 +420,7 @@ impl Storage {
             .map(|(file_path, file)| -> Result<_> {
                 let alg = CompressionAlgorithm::default();
                 let content = compress(file, alg)?;
-                let bucket_path = prefix.join(&file_path).to_slash().unwrap();
+                let bucket_path = prefix.join(&file_path).to_slash().unwrap().to_string();
 
                 let mime = detect_mime(&file_path);
                 file_paths_and_mimes.insert(file_path, mime.to_string());
