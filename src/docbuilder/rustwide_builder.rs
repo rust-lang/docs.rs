@@ -8,7 +8,9 @@ use crate::error::Result;
 use crate::index::api::ReleaseData;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
-use crate::utils::{copy_dir_all, parse_rustc_version, queue_builder, CargoMetadata};
+use crate::utils::{
+    copy_dir_all, parse_rustc_version, queue_builder, set_config, CargoMetadata, ConfigName,
+};
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Error};
@@ -20,7 +22,6 @@ use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -225,12 +226,12 @@ impl RustwideBuilder {
                         .tempdir()?;
                     copy_dir_all(source, &dest)?;
                     add_path_into_database(&self.storage, "", &dest)?;
-                    conn.query(
-                        "INSERT INTO config (name, value) VALUES ('rustc_version', $1) \
-                     ON CONFLICT (name) DO UPDATE SET value = $1;",
-                        &[&Value::String(self.rustc_version.clone())],
-                    )?;
 
+                    set_config(
+                        &mut conn,
+                        ConfigName::RustcVersion,
+                        self.rustc_version.clone(),
+                    )?;
                     Ok(())
                 })()
                 .map_err(|e| failure::Error::from_boxed_compat(e.into()))
@@ -806,6 +807,7 @@ pub(crate) struct BuildResult {
 mod tests {
     use super::*;
     use crate::test::{assert_redirect, assert_success, wrapper};
+    use serde_json::Value;
 
     #[test]
     #[ignore]

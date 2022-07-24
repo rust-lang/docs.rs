@@ -6,7 +6,9 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context as _, Error, Result};
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
-use docs_rs::utils::{remove_crate_priority, set_crate_priority};
+use docs_rs::utils::{
+    get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
+};
 use docs_rs::{
     BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
@@ -93,6 +95,18 @@ enum CommandLine {
         socket_addr: String,
     },
 
+    StartRegistryWatcher {
+        /// Enable or disable the repository stats updater
+        #[structopt(
+            long = "repository-stats-updater",
+            default_value = "disabled",
+            possible_values(Toggle::VARIANTS)
+        )]
+        repository_stats_updater: Toggle,
+    },
+
+    StartBuildServer,
+
     /// Starts the daemon
     Daemon {
         /// Enable or disable the registry watcher to automatically enqueue newly published crates
@@ -123,6 +137,20 @@ impl CommandLine {
 
         match self {
             Self::Build(build) => build.handle_args(ctx)?,
+            Self::StartRegistryWatcher {
+                repository_stats_updater,
+            } => {
+                if repository_stats_updater == Toggle::Enabled {
+                    docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
+                }
+
+                docs_rs::utils::watch_registry(ctx.build_queue()?, ctx.config()?, ctx.index()?)?;
+            }
+            Self::StartBuildServer => {
+                let build_queue = ctx.build_queue()?;
+                let rustwide_builder = RustwideBuilder::init(&ctx)?;
+                queue_builder(rustwide_builder, build_queue)?;
+            }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
                 let _ = Server::start(Some(&socket_addr), &ctx)?;
@@ -336,10 +364,8 @@ impl BuildSubcommand {
                         .pool()?
                         .get()
                         .context("failed to get a database connection")?;
-                    let res =
-                        conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[])?;
 
-                    if !res.is_empty() {
+                    if get_config(&mut conn, ConfigName::RustcVersion)?.is_string() {
                         println!("update-toolchain was already called in the past, exiting");
                         return Ok(());
                     }

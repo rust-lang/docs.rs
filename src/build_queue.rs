@@ -2,15 +2,14 @@ use crate::db::{delete_crate, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
-use crate::utils::{get_crate_priority, report_error};
+use crate::utils::{get_config, get_crate_priority, report_error, set_config, ConfigName};
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
 use crates_index_diff::Change;
 use log::{debug, info};
 
-use std::fs;
-use std::path::PathBuf;
+use git2::Oid;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
@@ -46,6 +45,31 @@ impl BuildQueue {
             metrics,
             storage,
         }
+    }
+
+    pub fn last_seen_reference(&self) -> Result<Option<Oid>> {
+        let mut conn = self.db.get()?;
+        if let Some(value) = get_config(&mut conn, ConfigName::LastSeenIndexReference)?.as_str() {
+            match Oid::from_str(value) {
+                Ok(oid) => return Ok(Some(oid)),
+                Err(err) => {
+                    log::error!("queue locked because of invalid last_seen_index_reference \"{}\" in database: {}", value, err);
+                    self.lock()?;
+                    return Ok(None);
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn set_last_seen_reference(&self, oid: Oid) -> Result<()> {
+        let mut conn = self.db.get()?;
+        set_config(
+            &mut conn,
+            ConfigName::LastSeenIndexReference,
+            oid.to_string(),
+        )?;
+        Ok(())
     }
 
     pub fn add_crate(
@@ -118,14 +142,36 @@ impl BuildQueue {
         f: impl FnOnce(&QueuedCrate) -> Result<()>,
     ) -> Result<()> {
         let mut conn = self.db.get()?;
+        let mut transaction = conn.transaction()?;
 
-        let queued = self.queued_crates()?;
-        let to_process = match queued.get(0) {
+        // fetch the next available crate from the queue table.
+        // We are using `SELECT FOR UPDATE` inside a transaction so
+        // the QueuedCrate is locked until we are finished with it.
+        // `SKIP LOCKED` here will enable another build-server to just
+        // skip over taken (=locked) rows and start building the first
+        // available one.
+        let to_process = match transaction
+            .query_opt(
+                "SELECT id, name, version, priority, registry
+                 FROM queue
+                 WHERE attempt < $1
+                 ORDER BY priority ASC, attempt ASC, id ASC
+                 LIMIT 1 
+                 FOR UPDATE SKIP LOCKED",
+                &[&self.max_attempts],
+            )?
+            .map(|row| QueuedCrate {
+                id: row.get("id"),
+                name: row.get("name"),
+                version: row.get("version"),
+                priority: row.get("priority"),
+                registry: row.get("registry"),
+            }) {
             Some(krate) => krate,
             None => return Ok(()),
         };
 
-        let res = f(to_process).with_context(|| {
+        let res = f(&to_process).with_context(|| {
             format!(
                 "Failed to build package {}-{} from queue",
                 to_process.name, to_process.version
@@ -134,15 +180,16 @@ impl BuildQueue {
         self.metrics.total_builds.inc();
         match res {
             Ok(()) => {
-                conn.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
+                transaction.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
             }
             Err(e) => {
                 // Increase attempt count
-                let rows = conn.query(
-                    "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
-                    &[&to_process.id],
-                )?;
-                let attempt: i32 = rows[0].get(0);
+                let attempt: i32 = transaction
+                    .query_one(
+                        "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
+                        &[&to_process.id],
+                    )?
+                    .get(0);
 
                 if attempt >= self.max_attempts {
                     self.metrics.failed_builds.inc();
@@ -152,39 +199,33 @@ impl BuildQueue {
             }
         }
 
+        transaction.commit()?;
+
         Ok(())
     }
 }
 
 /// Locking functions.
 impl BuildQueue {
-    pub(crate) fn lock_path(&self) -> PathBuf {
-        self.config.prefix.join("docsrs.lock")
+    /// Checks for the lock and returns whether it currently exists.
+    pub fn is_locked(&self) -> Result<bool> {
+        let mut conn = self.db.get()?;
+
+        Ok(get_config(&mut conn, ConfigName::QueueLocked)?
+            .as_bool()
+            .unwrap_or(false))
     }
 
-    /// Checks for the lock file and returns whether it currently exists.
-    pub fn is_locked(&self) -> bool {
-        self.lock_path().exists()
-    }
-
-    /// Creates a lock file. Daemon will check this lock file and stop operating if it exists.
+    /// lock the queue. Daemon will check this lock and stop operating if it exists.
     pub fn lock(&self) -> Result<()> {
-        let path = self.lock_path();
-        if !path.exists() {
-            fs::OpenOptions::new().write(true).create(true).open(path)?;
-        }
-
-        Ok(())
+        let mut conn = self.db.get()?;
+        set_config(&mut conn, ConfigName::QueueLocked, true)
     }
 
-    /// Removes lock file.
+    /// unlock the queue.
     pub fn unlock(&self) -> Result<()> {
-        let path = self.lock_path();
-        if path.exists() {
-            fs::remove_file(path)?;
-        }
-
-        Ok(())
+        let mut conn = self.db.get()?;
+        set_config(&mut conn, ConfigName::QueueLocked, false)
     }
 }
 
@@ -266,7 +307,14 @@ impl BuildQueue {
             }
         }
 
+        // store the last seen reference as git reference in
+        // the local crates.io index repo.
         diff.set_last_seen_reference(oid)?;
+
+        // additionally set the reference in the database
+        // so this survives recreating the registry watcher
+        // server.
+        self.set_last_seen_reference(oid)?;
 
         Ok(crates_added)
     }
@@ -555,6 +603,59 @@ mod tests {
                     .map(|c| (c.name.as_str(), c.version.as_str(), c.priority))
                     .collect::<Vec<_>>()
             );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_last_seen_reference_in_db() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+            queue.unlock()?;
+            assert!(!queue.is_locked()?);
+            // initial db ref is empty
+            assert_eq!(queue.last_seen_reference()?, None);
+            assert!(!queue.is_locked()?);
+
+            let oid = git2::Oid::from_str("ffffffff")?;
+            queue.set_last_seen_reference(oid)?;
+
+            assert_eq!(queue.last_seen_reference()?, Some(oid));
+            assert!(!queue.is_locked()?);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_broken_db_reference_locks_queue() {
+        crate::test::wrapper(|env| {
+            let mut conn = env.db().conn();
+            set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")?;
+
+            let queue = env.build_queue();
+            queue.unlock()?;
+            assert!(!queue.is_locked()?);
+            assert_eq!(queue.last_seen_reference()?, None);
+            assert!(queue.is_locked()?);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_queue_lock() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+            // unlocked without config
+            assert!(!queue.is_locked()?);
+
+            queue.lock()?;
+            assert!(queue.is_locked()?);
+
+            queue.unlock()?;
+            assert!(!queue.is_locked()?);
 
             Ok(())
         });
