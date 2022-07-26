@@ -50,6 +50,12 @@ div.nav-container {
         }
     }
 
+    .pure-menu-has-children.pure-menu-active > .pure-menu-link {
+        &:after {
+            content:"\25B2";
+        }
+    }
+
     .pure-menu-link {
         font-size: 12.8px;
         font-weight: 400;
