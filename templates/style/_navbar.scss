@@ -139,10 +139,19 @@ div.nav-container {
     }
 
     .pure-menu-children {
+        --menu-x: 0;
+
+        // #{} interpolates a SassScript expression. Using this prevents
+        // SASS from using its built-in min/max over the CSS min/max functions
+        --clamped-offset: m#{i}n(var(--menu-x), calc(100vw - 100%));
+
         border: 1px solid var(--color-border);
         border-radius: 0 0 2px 2px;
-        margin-left: -1px;
         background-color: var(--color-background);
+
+        left: 0;
+        position: fixed;
+        transform: translateX(m#{a}x(0%, var(--clamped-offset)));
 
         li {
             border-left: none;
