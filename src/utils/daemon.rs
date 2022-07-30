@@ -21,8 +21,18 @@ pub fn watch_registry(
 
     // On startup we fetch the last seen index reference from
     // the database and set it in the local index repository.
-    if let Some(oid) = build_queue.last_seen_reference()? {
-        index.diff()?.set_last_seen_reference(oid)?;
+    match build_queue.last_seen_reference() {
+        Ok(Some(oid)) => {
+            index.diff()?.set_last_seen_reference(oid)?;
+        }
+        Ok(None) => {}
+        Err(err) => {
+            log::error!(
+                "queue locked because of invalid last_seen_index_reference in database: {}",
+                err
+            );
+            build_queue.lock()?;
+        }
     }
 
     loop {
