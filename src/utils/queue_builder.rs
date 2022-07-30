@@ -1,5 +1,5 @@
 use crate::{docbuilder::RustwideBuilder, utils::report_error, BuildQueue};
-use anyhow::Error;
+use anyhow::{Context, Error};
 use log::{debug, error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -18,10 +18,18 @@ pub fn queue_builder(
         }
 
         // check lock file
-        if build_queue.is_locked()? {
-            warn!("Build queue is locked, skipping building new crates");
-            thread::sleep(Duration::from_secs(60));
-            continue;
+        match build_queue.is_locked().context("could not get queue lock") {
+            Ok(true) => {
+                warn!("Build queue is locked, skipping building new crates");
+                thread::sleep(Duration::from_secs(60));
+                continue;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                report_error(&err);
+                thread::sleep(Duration::from_secs(60));
+                continue;
+            }
         }
 
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
@@ -41,8 +49,8 @@ pub fn queue_builder(
 
         if let Err(e) = res {
             error!("GRAVE ERROR Building new crates panicked: {:?}", e);
-            // If we panic here something is really truly wrong and trying to handle the error won't help.
-            build_queue.lock().expect("failed to lock queue");
+            thread::sleep(Duration::from_secs(60));
+            continue;
         }
     }
 }
