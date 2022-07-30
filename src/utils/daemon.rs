@@ -12,6 +12,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Run the registry watcher
+/// NOTE: this should only be run once, otherwise crates would be added
+/// to the queue multiple times.
 pub fn watch_registry(
     build_queue: Arc<BuildQueue>,
     config: Arc<Config>,
