@@ -50,14 +50,7 @@ impl BuildQueue {
     pub fn last_seen_reference(&self) -> Result<Option<Oid>> {
         let mut conn = self.db.get()?;
         if let Some(value) = get_config(&mut conn, ConfigName::LastSeenIndexReference)?.as_str() {
-            match Oid::from_str(value) {
-                Ok(oid) => return Ok(Some(oid)),
-                Err(err) => {
-                    log::error!("queue locked because of invalid last_seen_index_reference \"{}\" in database: {}", value, err);
-                    self.lock()?;
-                    return Ok(None);
-                }
-            }
+            return Ok(Some(Oid::from_str(value)?));
         }
         Ok(None)
     }
@@ -629,16 +622,13 @@ mod tests {
     }
 
     #[test]
-    fn test_broken_db_reference_locks_queue() {
+    fn test_broken_db_reference_breaks() {
         crate::test::wrapper(|env| {
             let mut conn = env.db().conn();
             set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")?;
 
             let queue = env.build_queue();
-            queue.unlock()?;
-            assert!(!queue.is_locked()?);
-            assert_eq!(queue.last_seen_reference()?, None);
-            assert!(queue.is_locked()?);
+            assert!(queue.last_seen_reference().is_err());
 
             Ok(())
         });
