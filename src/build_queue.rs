@@ -300,14 +300,14 @@ impl BuildQueue {
             }
         }
 
-        // store the last seen reference as git reference in
-        // the local crates.io index repo.
-        diff.set_last_seen_reference(oid)?;
-
         // additionally set the reference in the database
         // so this survives recreating the registry watcher
         // server.
         self.set_last_seen_reference(oid)?;
+
+        // store the last seen reference as git reference in
+        // the local crates.io index repo.
+        diff.set_last_seen_reference(oid)?;
 
         Ok(crates_added)
     }
