@@ -19,7 +19,7 @@ pub fn queue_builder(
 
         // check lock file
         if build_queue.is_locked()? {
-            warn!("Lock file exists, skipping building new crates");
+            warn!("Build queue is locked, skipping building new crates");
             thread::sleep(Duration::from_secs(60));
             continue;
         }
