@@ -34,7 +34,7 @@ impl TemplateData {
 }
 
 fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
-    if let Some(vers_str) = get_config(conn, ConfigName::RustcVersion)?.as_str() {
+    if let Some(vers_str) = get_config::<String>(conn, ConfigName::RustcVersion)? {
         return crate::utils::parse_rustc_version(vers_str);
     }
 
