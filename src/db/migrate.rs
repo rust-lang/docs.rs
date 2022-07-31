@@ -837,7 +837,13 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                     )
                     .map(|_| ())
             }
-        )
+        ),
+        sql_migration!(
+            context, 33, "add hostname to build-table",
+            "ALTER TABLE builds ADD COLUMN build_server TEXT NOT NULL DEFAULT '';",
+            "ALTER TABLE builds DROP COLUMN build_server;",
+        ),
+
     ];
 
     for migration in migrations {
