@@ -1012,6 +1012,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.7",
  "git2",
+ "hostname",
  "http",
  "iron",
  "kuchiki",
