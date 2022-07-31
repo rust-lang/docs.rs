@@ -31,7 +31,7 @@ pub fn watch_registry(
         Ok(None) => {}
         Err(err) => {
             log::error!(
-                "queue locked because of invalid last_seen_index_reference in database: {}",
+                "queue locked because of invalid last_seen_index_reference in database: {:?}",
                 err
             );
             build_queue.lock()?;
