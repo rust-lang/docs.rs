@@ -22,6 +22,8 @@ pub(crate) mod queue_builder;
 mod rustc_version;
 use anyhow::Result;
 use postgres::Client;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 pub(crate) mod sized_buffer;
 
 pub(crate) const APP_USER_AGENT: &str = concat!(
@@ -50,25 +52,29 @@ pub enum ConfigName {
 pub fn set_config(
     conn: &mut Client,
     name: ConfigName,
-    value: impl Into<serde_json::Value>,
+    value: impl Serialize,
 ) -> anyhow::Result<()> {
     let name: &'static str = name.into();
     conn.execute(
         "INSERT INTO config (name, value) 
         VALUES ($1, $2)
         ON CONFLICT (name) DO UPDATE SET value = $2;",
-        &[&name, &value.into()],
+        &[&name, &serde_json::to_value(value)?],
     )?;
     Ok(())
 }
 
-pub fn get_config(conn: &mut Client, name: ConfigName) -> Result<serde_json::Value> {
+pub fn get_config<T>(conn: &mut Client, name: ConfigName) -> Result<Option<T>>
+where
+    T: DeserializeOwned,
+{
     let name: &'static str = name.into();
-    Ok(conn
-        .query_opt("SELECT value FROM config WHERE name = $1;", &[&name])?
-        .map_or(serde_json::Value::Null, |row| {
-            row.get::<_, serde_json::Value>("value")
-        }))
+    Ok(
+        match conn.query_opt("SELECT value FROM config WHERE name = $1;", &[&name])? {
+            Some(row) => serde_json::from_value(row.get("value"))?,
+            None => None,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -92,10 +98,7 @@ mod tests {
             let mut conn = env.db().conn();
             conn.execute("DELETE FROM config", &[])?;
 
-            assert_eq!(
-                get_config(&mut conn, ConfigName::RustcVersion)?,
-                Value::Null
-            );
+            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_none());
             Ok(())
         });
     }
@@ -106,10 +109,7 @@ mod tests {
             let mut conn = env.db().conn();
             conn.execute("DELETE FROM config", &[])?;
 
-            assert_eq!(
-                get_config(&mut conn, ConfigName::RustcVersion)?,
-                Value::Null
-            );
+            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_none());
 
             set_config(
                 &mut conn,
@@ -118,7 +118,7 @@ mod tests {
             )?;
             assert_eq!(
                 get_config(&mut conn, ConfigName::RustcVersion)?,
-                Value::String("some value".into())
+                Some("some value".to_string())
             );
             Ok(())
         });

@@ -365,7 +365,7 @@ impl BuildSubcommand {
                         .get()
                         .context("failed to get a database connection")?;
 
-                    if get_config(&mut conn, ConfigName::RustcVersion)?.is_string() {
+                    if get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_some() {
                         println!("update-toolchain was already called in the past, exiting");
                         return Ok(());
                     }

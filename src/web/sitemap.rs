@@ -109,9 +109,10 @@ impl_webpage!(AboutBuilds = "core/about/builds.html");
 pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
 
-    let rustc_version = ctry!(req, get_config(&mut conn, ConfigName::RustcVersion))
-        .as_str()
-        .map(str::to_owned);
+    let rustc_version = ctry!(
+        req,
+        get_config::<String>(&mut conn, ConfigName::RustcVersion)
+    );
 
     AboutBuilds {
         rustc_version,

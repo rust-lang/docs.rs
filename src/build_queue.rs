@@ -49,8 +49,8 @@ impl BuildQueue {
 
     pub fn last_seen_reference(&self) -> Result<Option<Oid>> {
         let mut conn = self.db.get()?;
-        if let Some(value) = get_config(&mut conn, ConfigName::LastSeenIndexReference)?.as_str() {
-            return Ok(Some(Oid::from_str(value)?));
+        if let Some(value) = get_config::<String>(&mut conn, ConfigName::LastSeenIndexReference)? {
+            return Ok(Some(Oid::from_str(&value)?));
         }
         Ok(None)
     }
@@ -204,9 +204,7 @@ impl BuildQueue {
     pub fn is_locked(&self) -> Result<bool> {
         let mut conn = self.db.get()?;
 
-        Ok(get_config(&mut conn, ConfigName::QueueLocked)?
-            .as_bool()
-            .unwrap_or(false))
+        Ok(get_config::<bool>(&mut conn, ConfigName::QueueLocked)?.unwrap_or(false))
     }
 
     /// lock the queue. Daemon will check this lock and stop operating if it exists.
