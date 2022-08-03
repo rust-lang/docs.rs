@@ -220,6 +220,23 @@ impl BuildQueue {
     }
 }
 
+fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
+    const MAX_ATTEMPTS: u8 = 3;
+    for attempt in 1.. {
+        match f() {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                if attempt > MAX_ATTEMPTS {
+                    return Err(err);
+                } else {
+                    log::warn!("got error {:?} on attempt {}, will try again", err, attempt);
+                }
+            }
+        }
+    }
+    unreachable!()
+}
+
 /// Index methods.
 impl BuildQueue {
     /// Updates registry index repository and adds new crates into build queue.
@@ -324,10 +341,11 @@ impl BuildQueue {
                 .map(|r| PackageKind::Registry(r.as_str()))
                 .unwrap_or(PackageKind::CratesIo);
 
-            match builder
-                .update_toolchain()
-                .context("Updating toolchain failed, locking queue")
-            {
+            match retry(|| {
+                builder
+                    .update_toolchain()
+                    .context("Updating toolchain failed, locking queue")
+            }) {
                 Err(err) => {
                     report_error(&err);
                     self.lock()?;
@@ -335,10 +353,11 @@ impl BuildQueue {
                 }
                 Ok(true) => {
                     // toolchain has changed, purge caches
-                    if let Err(err) = builder
-                        .purge_caches()
-                        .context("purging rustwide caches failed, locking queue")
-                    {
+                    if let Err(err) = retry(|| {
+                        builder
+                            .purge_caches()
+                            .context("purging rustwide caches failed, locking queue")
+                    }) {
                         report_error(&err);
                         self.lock()?;
                         return Err(err);
