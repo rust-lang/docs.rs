@@ -229,7 +229,11 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
                 if attempt > MAX_ATTEMPTS {
                     return Err(err);
                 } else {
-                    log::warn!("got error {:?} on attempt {}, will try again", err, attempt);
+                    log::warn!(
+                        "got error on attempt {}, will try again:\n{:?}",
+                        attempt,
+                        err
+                    );
                 }
             }
         }
