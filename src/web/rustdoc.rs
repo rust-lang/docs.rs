@@ -490,25 +490,16 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let latest_path = format!("/crate/{}/latest{}{}", name, target_redirect, query_string);
 
     // Set the canonical URL for search engines to the `/latest/` page on docs.rs.
-    // For crates with a documentation URL, where that URL doesn't point at docs.rs,
-    // omit the canonical link to avoid penalizing external documentation.
     // Note: The URL this points to may not exist. For instance, if we're rendering
     // `struct Foo` in version 0.1.0 of a crate, and version 0.2.0 of that crate removes
     // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
     // the target and will not canonicalize to a URL that doesn't exist.
-    let canonical_url = if krate.documentation_url.is_none()
-        || krate
-            .documentation_url
-            .as_ref()
-            .unwrap()
-            .starts_with("https://docs.rs/")
-    {
-        // Don't include index.html in the canonical URL.
-        let canonical_path = inner_path.replace("index.html", "");
-        format!("https://docs.rs/{}/latest/{}", name, canonical_path)
-    } else {
-        "".to_string()
-    };
+    // Don't include index.html in the canonical URL.
+    let canonical_url = format!(
+        "https://docs.rs/{}/latest/{}",
+        name,
+        inner_path.replace("index.html", "")
+    );
 
     metrics
         .recently_accessed_releases
@@ -2063,7 +2054,7 @@ mod test {
 
             let web = env.frontend();
 
-            assert!(!web
+            assert!(web
                 .get("/dummy-dash/0.1.0/dummy_dash/")
                 .send()?
                 .text()?
