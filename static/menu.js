@@ -1,9 +1,19 @@
+const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
+    const currentMenu = currentMenuSupplier();
+    const subMenu = currentMenu?.getElementsByClassName('pure-menu-children')?.[0];
+
+    subMenu?.style.setProperty('--menu-x', `${currentMenu.getBoundingClientRect().x}px`);
+}
+
 // Allow menus to be open and used by keyboard.
 (function() {
     var currentMenu;
     var backdrop = document.createElement("div");
     backdrop.style = "display:none;position:fixed;width:100%;height:100%;z-index:1";
     document.documentElement.insertBefore(backdrop, document.querySelector("body"));
+
+    addEventListener('resize', () => updateMenuPositionForSubMenu(() => currentMenu));
+
     function previous(allItems, item) {
         var i = 1;
         var l = allItems.length;
@@ -52,6 +62,9 @@
             this.blur();
         } else {
             if (currentMenu) closeMenu();
+
+            updateMenuPositionForSubMenu(() => this.parentNode);
+
             openMenu(this.parentNode);
         }
         e.preventDefault();
