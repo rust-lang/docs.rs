@@ -11,6 +11,8 @@ use log::{debug, info};
 
 use git2::Oid;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -220,20 +222,22 @@ impl BuildQueue {
     }
 }
 
-fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
-    const MAX_ATTEMPTS: u8 = 3;
+fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
     for attempt in 1.. {
         match f() {
             Ok(result) => return Ok(result),
             Err(err) => {
-                if attempt > MAX_ATTEMPTS {
+                if attempt > max_attempts {
                     return Err(err);
                 } else {
+                    let sleep_for = 2u32.pow(attempt);
                     log::warn!(
-                        "got error on attempt {}, will try again:\n{:?}",
+                        "got error on attempt {}, will try again after {}s:\n{:?}",
                         attempt,
+                        sleep_for,
                         err
                     );
+                    thread::sleep(Duration::from_secs(sleep_for as u64));
                 }
             }
         }
@@ -345,11 +349,14 @@ impl BuildQueue {
                 .map(|r| PackageKind::Registry(r.as_str()))
                 .unwrap_or(PackageKind::CratesIo);
 
-            match retry(|| {
-                builder
-                    .update_toolchain()
-                    .context("Updating toolchain failed, locking queue")
-            }) {
+            match retry(
+                || {
+                    builder
+                        .update_toolchain()
+                        .context("Updating toolchain failed, locking queue")
+                },
+                3,
+            ) {
                 Err(err) => {
                     report_error(&err);
                     self.lock()?;
@@ -357,11 +364,14 @@ impl BuildQueue {
                 }
                 Ok(true) => {
                     // toolchain has changed, purge caches
-                    if let Err(err) = retry(|| {
-                        builder
-                            .purge_caches()
-                            .context("purging rustwide caches failed, locking queue")
-                    }) {
+                    if let Err(err) = retry(
+                        || {
+                            builder
+                                .purge_caches()
+                                .context("purging rustwide caches failed, locking queue")
+                        },
+                        3,
+                    ) {
                         report_error(&err);
                         self.lock()?;
                         return Err(err);
