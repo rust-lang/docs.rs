@@ -247,7 +247,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn override_frontend(&self, init: impl FnOnce(&mut TestFrontend)) -> &TestFrontend {
-        let mut frontend = TestFrontend::new(&*self);
+        let mut frontend = TestFrontend::new(self);
         init(&mut frontend);
         if self.frontend.set(frontend).is_err() {
             panic!("cannot call override_frontend after frontend is initialized");
@@ -256,7 +256,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend.get_or_init(|| TestFrontend::new(&*self))
+        self.frontend.get_or_init(|| TestFrontend::new(self))
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
