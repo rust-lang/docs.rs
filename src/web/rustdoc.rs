@@ -53,6 +53,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         vers: &str,
         target: Option<&str>,
         target_name: &str,
+        path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
         let mut url_str = if let Some(target) = target {
             format!(
@@ -69,6 +70,9 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         if let Some(query) = req.url.query() {
             url_str.push('?');
             url_str.push_str(query);
+        } else if let Some(path) = path_in_crate {
+            url_str.push_str("?query=");
+            url_str.push_str(path);
         }
         let url = ctry!(req, Url::parse(&url_str));
         let (status_code, max_age) = if vers == "latest" {
@@ -145,10 +149,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     // this handler should never called without crate pattern
     let crate_name = cexpect!(req, router.find("crate"));
-    let mut crate_name = percent_decode(crate_name.as_bytes())
+    let crate_name = percent_decode(crate_name.as_bytes())
         .decode_utf8()
-        .unwrap_or_else(|_| crate_name.into())
-        .into_owned();
+        .unwrap_or_else(|_| crate_name.into());
+    let (mut crate_name, path_in_crate) = match crate_name.split_once("::") {
+        Some((krate, path)) => (krate.to_string(), Some(path.to_string())),
+        None => (crate_name.to_string(), None),
+    };
     let req_version = router.find("version");
     let mut target = router.find("target");
 
@@ -190,7 +197,14 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     if has_docs {
         rendering_time.step("redirect to doc");
-        redirect_to_doc(req, &crate_name, &version, target, &target_name)
+        redirect_to_doc(
+            req,
+            &crate_name,
+            &version,
+            target,
+            &target_name,
+            path_in_crate.as_deref(),
+        )
     } else {
         rendering_time.step("redirect to crate");
         redirect_to_crate(req, &crate_name, &version)
@@ -1704,6 +1718,27 @@ mod test {
             assert_redirect(
                 "/crate/dummy/0.2.0/target-redirect/platform-that-does-not-exist",
                 "/dummy/0.2.0/dummy/",
+                web,
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_redirect_crate_coloncolon_path() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release().name("some_other_crate").create()?;
+
+            assert_redirect(
+                "/some_random_crate::somepath",
+                "/some_random_crate/latest/some_random_crate/?query=somepath",
+                web,
+            )?;
+            assert_redirect(
+                "/some_random_crate::some::path",
+                "/some_random_crate/latest/some_random_crate/?query=some::path",
                 web,
             )?;
             Ok(())
