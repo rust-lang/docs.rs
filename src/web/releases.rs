@@ -554,23 +554,35 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
 
     // check if I am feeling lucky button pressed and redirect user to crate page
-    // if there is a match
-    if params.contains_key("i-am-feeling-lucky") {
+    // if there is a match. Also check for paths to items within crates.
+    if params.contains_key("i-am-feeling-lucky") || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
             return redirect_to_random_crate(req, &mut conn);
         }
+
+        let (krate, query) = match query.split_once("::") {
+            Some((krate, query)) => (krate.to_string(), format!("?query={query}")),
+            None => (query.clone(), "".to_string()),
+        };
+
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
-        if let Ok(matchver) = match_version(&mut conn, &query, None) {
+        if let Ok(matchver) = match_version(&mut conn, &krate, None) {
             let (version, _) = matchver.version.into_parts();
-            let query = matchver.corrected_name.unwrap_or_else(|| query.to_string());
+            let krate = matchver.corrected_name.unwrap_or(krate);
 
             let url = if matchver.rustdoc_status {
                 ctry!(
                     req,
-                    Url::parse(&format!("{}/{}/{}/", redirect_base(req), query, version)),
+                    Url::parse(&format!(
+                        "{}/{}/{}/{}",
+                        redirect_base(req),
+                        krate,
+                        version,
+                        query
+                    )),
                 )
             } else {
                 ctry!(
@@ -578,7 +590,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                     Url::parse(&format!(
                         "{}/crate/{}/{}",
                         redirect_base(req),
-                        query,
+                        krate,
                         version,
                     )),
                 )
