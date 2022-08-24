@@ -876,6 +876,27 @@ mod tests {
     }
 
     #[test]
+    fn search_coloncolon_path_redirects_to_crate_docs() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+            env.fake_release().name("some_other_crate").create()?;
+
+            assert_redirect(
+                "/releases/search?query=some_random_crate::somepath",
+                "/some_random_crate/1.0.0/some_random_crate/?query=somepath",
+                web,
+            )?;
+            assert_redirect(
+                "/releases/search?query=some_random_crate::some::path",
+                "/some_random_crate/1.0.0/some_random_crate/?query=some::path",
+                web,
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test]
     fn search_result_passes_cratesio_pagination_links() {
         wrapper(|env| {
             let web = env.frontend();
