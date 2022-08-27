@@ -71,7 +71,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push('?');
             url_str.push_str(query);
         } else if let Some(path) = path_in_crate {
-            url_str.push_str("?query=");
+            url_str.push_str("?search=");
             url_str.push_str(path);
         }
         let url = ctry!(req, Url::parse(&url_str));
@@ -1724,12 +1724,12 @@ mod test {
 
             assert_redirect(
                 "/some_random_crate::somepath",
-                "/some_random_crate/latest/some_random_crate/?query=somepath",
+                "/some_random_crate/latest/some_random_crate/?search=somepath",
                 web,
             )?;
             assert_redirect(
                 "/some_random_crate::some::path",
-                "/some_random_crate/latest/some_random_crate/?query=some::path",
+                "/some_random_crate/latest/some_random_crate/?search=some::path",
                 web,
             )?;
             Ok(())

@@ -562,7 +562,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         }
 
         let (krate, query) = match query.split_once("::") {
-            Some((krate, query)) => (krate.to_string(), format!("?query={query}")),
+            Some((krate, query)) => (krate.to_string(), format!("?search={query}")),
             None => (query.clone(), "".to_string()),
         };
 
@@ -884,12 +884,12 @@ mod tests {
 
             assert_redirect(
                 "/releases/search?query=some_random_crate::somepath",
-                "/some_random_crate/1.0.0/some_random_crate/?query=somepath",
+                "/some_random_crate/1.0.0/some_random_crate/?search=somepath",
                 web,
             )?;
             assert_redirect(
                 "/releases/search?query=some_random_crate::some::path",
-                "/some_random_crate/1.0.0/some_random_crate/?query=some::path",
+                "/some_random_crate/1.0.0/some_random_crate/?search=some::path",
                 web,
             )?;
             Ok(())
