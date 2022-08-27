@@ -69,7 +69,7 @@ pub(crate) fn rewrite_lol(
             // Append `vendored.css` before `rustdoc.css`, so that the duplicate copy of
             // `normalize.css` will be overridden by the later version.
             element!(
-                "link[type='text/css'][href*='rustdoc']",
+                "link[rel='stylesheet'][href*='rustdoc']",
                 |rustdoc_css: &mut Element| {
                     rustdoc_css.before(&tera_vendored_css, ContentType::Html);
                     Ok(())
