@@ -313,7 +313,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // version
             9,
             // description
-            "Allow max number of targets to be overriden",
+            "Allow max number of targets to be overridden",
             // upgrade query
             "ALTER TABLE sandbox_overrides ADD COLUMN max_targets INT;",
             // downgrade query

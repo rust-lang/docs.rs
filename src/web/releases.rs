@@ -621,7 +621,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 // the crates.io API.
                 // The whole point of the `paginate` design is that we don't
                 // know anything about the pagination args and crates.io can
-                // change them as they whish, so we cannot do any more checks here.
+                // change them as they wish, so we cannot do any more checks here.
                 warn!(
                     "didn't get query args in `paginate` arguments for search: \"{}\"",
                     query_params

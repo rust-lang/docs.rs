@@ -48,7 +48,7 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.set_tag_name("div")?;
         // Prepend the tera content
         rustdoc_body_class.prepend(&tera_body, ContentType::Html);
-        // Wrap the tranformed body and topbar into a <body> element
+        // Wrap the transformed body and topbar into a <body> element
         rustdoc_body_class.before(r#"<body class="rustdoc-page">"#, ContentType::Html);
         // Insert the topbar outside of the rustdoc div
         rustdoc_body_class.before(&tera_rustdoc_topbar, ContentType::Html);
