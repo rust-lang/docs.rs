@@ -256,7 +256,7 @@ impl BuildQueue {
                     }
                 }
 
-                Change::Deleted(krate) => {
+                Change::Deleted { name: krate } => {
                     match delete_crate(&mut conn, &self.storage, &self.config, krate)
                         .with_context(|| format!("failed to delete crate {}", krate)) {
                             Ok(_) => info!("crate {} was deleted from the index and will be deleted from the database", krate), 

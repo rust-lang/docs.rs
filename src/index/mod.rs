@@ -42,14 +42,15 @@ impl Index {
         let url = repository_url.clone();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
-            crates_index_diff::CloneOptions {
+            crates_index_diff::index::CloneOptions {
                 repository_url,
                 ..Default::default()
             },
         )
         .context("initialising registry index repository")?;
 
-        let config = load_config(diff.repository()).context("loading registry config")?;
+        let config = load_config(&git2::Repository::open(diff.repository().git_dir())?)
+            .context("loading registry config")?;
         let api = Api::new(config.api).context("initialising registry api client")?;
         Ok(Self {
             path,
@@ -63,7 +64,8 @@ impl Index {
         // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
             .context("initialising registry index repository")?;
-        let config = load_config(diff.repository()).context("loading registry config")?;
+        let config = load_config(&git2::Repository::open(diff.repository().git_dir())?)
+            .context("loading registry config")?;
         let api = Api::new(config.api).context("initialising registry api client")?;
         Ok(Self {
             path,
@@ -76,7 +78,7 @@ impl Index {
         let options = self
             .repository_url
             .clone()
-            .map(|repository_url| crates_index_diff::CloneOptions {
+            .map(|repository_url| crates_index_diff::index::CloneOptions {
                 repository_url,
                 ..Default::default()
             })
