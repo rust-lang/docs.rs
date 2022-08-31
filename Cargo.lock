@@ -1008,6 +1008,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "failure",
+ "fn-error-context",
  "font-awesome-as-a-crate",
  "futures-util",
  "getrandom 0.2.7",
@@ -1208,6 +1209,17 @@ checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "fn-error-context"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "236b4e4ae2b8be5f7a5652f6108c4a0f2627c569db4e7923333d31c7dbfed0fb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

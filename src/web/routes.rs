@@ -173,10 +173,18 @@ pub(super) fn build_routes() -> Routes {
             &format!("/{}", redirect),
             super::rustdoc::RustLangRedirector::new("stable", redirect),
         );
+        routes.internal_page(
+            &format!("/{}/", redirect),
+            super::rustdoc::RustLangRedirector::new("stable", redirect),
+        );
     }
     // redirect proc-macro to proc_macro
     routes.internal_page(
         "/proc-macro",
+        super::rustdoc::RustLangRedirector::new("stable", "proc_macro"),
+    );
+    routes.internal_page(
+        "/proc-macro/",
         super::rustdoc::RustLangRedirector::new("stable", "proc_macro"),
     );
     // redirect rustc to nightly rustc docs
@@ -184,9 +192,17 @@ pub(super) fn build_routes() -> Routes {
         "/rustc",
         super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc"),
     );
+    routes.internal_page(
+        "/rustc/",
+        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc"),
+    );
     // redirect rustdoc to nightly rustdoc docs
     routes.internal_page(
         "/rustdoc",
+        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc/rustdoc"),
+    );
+    routes.internal_page(
+        "/rustdoc/",
         super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc/rustdoc"),
     );
 

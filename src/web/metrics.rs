@@ -92,6 +92,12 @@ impl<'a> RenderingTimesRecorder<'a> {
 
     fn record_current(&mut self) {
         if let Some(current) = self.current.take() {
+            #[cfg(test)]
+            log::debug!(
+                "rendering time - {}: {:?}",
+                current.step,
+                current.start.elapsed()
+            );
             self.metric
                 .with_label_values(&[current.step])
                 .observe(duration_to_seconds(current.start.elapsed()));

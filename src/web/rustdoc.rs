@@ -20,7 +20,7 @@ use iron::{
 use lol_html::errors::RewritingError;
 use router::Router;
 use serde::Serialize;
-use std::path::Path;
+use std::{fmt::Write, path::Path};
 
 #[derive(Clone)]
 pub struct RustLangRedirector {
@@ -29,9 +29,8 @@ pub struct RustLangRedirector {
 
 impl RustLangRedirector {
     pub fn new(version: &str, target: &str) -> Self {
-        let url =
-            iron::url::Url::parse(&format!("https://doc.rust-lang.org/{}/{}", version, target))
-                .expect("failed to parse rust-lang.org doc URL");
+        let url = iron::url::Url::parse(&format!("https://doc.rust-lang.org/{version}/{target}/"))
+            .expect("failed to parse rust-lang.org doc URL");
         let url = Url::from_generic_url(url).expect("failed to convert url::Url to iron::Url");
 
         Self { url }
@@ -547,8 +546,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// Note that path is overloaded in this context to mean both the path of a URL
 /// and the file path of a static file in the DB.
 ///
-/// `req_path` is assumed to have the following format:
-/// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
+/// `file_path` is assumed to have the following format:
+/// `[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
 fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String {
@@ -589,11 +588,16 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
         // else, don't try searching at all, we don't know how to find it
         last_component.strip_suffix(".rs.html")
     };
-    if let Some(search) = search_item {
-        format!("{}?search={}", platform, search)
+    let target_name = &crate_details.target_name;
+    let mut result = if platform.is_empty() {
+        format!("{target_name}/")
     } else {
-        platform.to_owned()
+        format!("{platform}/{target_name}/")
+    };
+    if let Some(search) = search_item {
+        write!(result, "?search={search}").unwrap();
     }
+    result
 }
 
 pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
@@ -663,13 +667,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         path_for_version(&file_path, &crate_details)
     };
 
-    let url = format!(
-        "{base}/{name}/{version_or_latest}/{path}",
-        base = base,
-        name = name,
-        version_or_latest = version_or_latest,
-        path = path
-    );
+    let url = format!("{base}/{name}/{version_or_latest}/{path}");
 
     let url = ctry!(req, Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
