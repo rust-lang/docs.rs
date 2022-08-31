@@ -16,8 +16,6 @@ use structopt::StructOpt;
 use strum::VariantNames;
 
 fn main() {
-    let _ = dotenv::dotenv();
-
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
         rustwide::logging::init_with(SentryLogger::with_dest(logger_init()));
         Some(sentry::init((
