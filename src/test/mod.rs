@@ -19,8 +19,6 @@ use std::net::SocketAddr;
 use std::{panic, sync::Arc};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
-    let _ = dotenv::dotenv();
-
     let env = TestEnvironment::new();
     // if we didn't catch the panic, the server would hang forever
     let maybe_panic = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&env)));

@@ -64,6 +64,10 @@ mkdir -p ignored/cratesfyi-prefix/crates.io-index
 cargo build
 # Start the external services
 docker-compose up -d db s3
+# anything that doesn't run via docker-compose needs the settings defined in 
+# .env. Either via `. .env` as below, or via any dotenv shell integration
+(dotenv, direnv, ...).
+. .env
 # Setup the database you just created
 cargo run -- database migrate
 # Build a sample crate to make sure it works
