@@ -18,54 +18,33 @@ use iron::{
     status, Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
+use once_cell::sync::Lazy;
 use router::Router;
 use serde::Serialize;
-use std::{fmt::Write, path::Path};
+use std::{collections::HashMap, fmt::Write, path::Path};
 
-#[derive(Clone)]
-pub struct RustLangRedirector {
-    url: Url,
-}
-
-impl RustLangRedirector {
-    pub fn new(version: &str, target: &str) -> Self {
-        let url = iron::url::Url::parse(&format!("https://doc.rust-lang.org/{version}/{target}/"))
-            .expect("failed to parse rust-lang.org doc URL");
-        let url = Url::from_generic_url(url).expect("failed to convert url::Url to iron::Url");
-
-        Self { url }
-    }
-}
-
-impl iron::Handler for RustLangRedirector {
-    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-        Ok(Response::with((status::Found, Redirect(self.url.clone()))))
-    }
-}
+static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
+    HashMap::from([
+        ("alloc", "stable/alloc"),
+        ("core", "stable/core"),
+        ("proc_macro", "stable/proc_macro"),
+        ("proc-macro", "stable/proc_macro"),
+        ("std", "stable/std"),
+        ("test", "stable/test"),
+        ("rustc", "nightly/nightly-rustc"),
+        ("rustdoc", "nightly/nightly-rustc/rustdoc"),
+    ])
+});
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     fn redirect_to_doc(
         req: &Request,
-        name: &str,
-        vers: &str,
-        target: Option<&str>,
-        target_name: &str,
+        mut url_str: String,
+        permanent: bool,
         path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
-        let mut url_str = if let Some(target) = target {
-            format!(
-                "{}/{}/{}/{}/{}/",
-                redirect_base(req),
-                name,
-                vers,
-                target,
-                target_name
-            )
-        } else {
-            format!("{}/{}/{}/{}/", redirect_base(req), name, vers, target_name)
-        };
         if let Some(query) = req.url.query() {
             url_str.push('?');
             url_str.push_str(query);
@@ -74,7 +53,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             url_str.push_str(path);
         }
         let url = ctry!(req, Url::parse(&url_str));
-        let (status_code, max_age) = if vers == "latest" {
+        let (status_code, max_age) = if permanent {
             (status::MovedPermanently, 86400)
         } else {
             (status::Found, 0)
@@ -155,6 +134,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Some((krate, path)) => (krate.to_string(), Some(path.to_string())),
         None => (crate_name.to_string(), None),
     };
+
+    if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
+        let url = format!("https://doc.rust-lang.org/{inner_path}/");
+        return redirect_to_doc(req, url, false, path_in_crate.as_deref());
+    }
+
     let req_version = router.find("version");
     let mut target = router.find("target");
 
@@ -196,14 +181,15 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     if has_docs {
         rendering_time.step("redirect to doc");
-        redirect_to_doc(
-            req,
-            &crate_name,
-            &version,
-            target,
-            &target_name,
-            path_in_crate.as_deref(),
-        )
+
+        let base = redirect_base(req);
+        let url_str = if let Some(target) = target {
+            format!("{base}/{crate_name}/{version}/{target}/{target_name}/")
+        } else {
+            format!("{base}/{crate_name}/{version}/{target_name}/")
+        };
+
+        redirect_to_doc(req, url_str, version == "latest", path_in_crate.as_deref())
     } else {
         rendering_time.step("redirect to crate");
         redirect_to_crate(req, &crate_name, &version)
@@ -1730,6 +1716,13 @@ mod test {
                 "/some_random_crate/latest/some_random_crate/?search=some::path",
                 web,
             )?;
+
+            assert_redirect(
+                "/std::some::path",
+                "https://doc.rust-lang.org/stable/std/?search=some::path",
+                web,
+            )?;
+
             Ok(())
         })
     }

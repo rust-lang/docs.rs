@@ -750,6 +750,13 @@ mod test {
             assert_redirect("/rustdoc", target, web)?;
             assert_redirect("/rustdoc/", target, web)?;
 
+            // queries are supported
+            assert_redirect(
+                "/std?search=foobar",
+                "https://doc.rust-lang.org/stable/std/?search=foobar",
+                web,
+            )?;
+
             Ok(())
         })
     }
