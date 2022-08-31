@@ -149,6 +149,7 @@ div.nav-container {
         border-radius: 0 0 2px 2px;
         background-color: var(--color-background);
 
+        top: calc(#{$top-navbar-height} - 1px);
         left: 0;
         position: fixed;
         transform: translateX(m#{a}x(0%, var(--clamped-offset)));
