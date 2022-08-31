@@ -223,6 +223,7 @@ struct MatchVersion {
     pub corrected_name: Option<String>,
     pub version: MatchSemver,
     pub rustdoc_status: bool,
+    pub target_name: String,
 }
 
 impl MatchVersion {
@@ -324,6 +325,7 @@ fn match_version(
                 corrected_name,
                 version: MatchSemver::Exact((release.version.to_string(), release.id)),
                 rustdoc_status: release.rustdoc_status,
+                target_name: release.target_name.clone(),
             });
         }
     }
@@ -358,6 +360,7 @@ fn match_version(
                 MatchSemver::Semver((release.version.to_string(), release.id))
             },
             rustdoc_status: release.rustdoc_status,
+            target_name: release.target_name.clone(),
         });
     }
 
@@ -371,6 +374,7 @@ fn match_version(
                 corrected_name: corrected_name.clone(),
                 version: MatchSemver::Semver((release.version.to_string(), release.id)),
                 rustdoc_status: release.rustdoc_status,
+                target_name: release.target_name.clone(),
             })
             .ok_or(Nope::VersionNotFound);
     }
@@ -759,7 +763,7 @@ mod test {
                 .create()
                 .unwrap();
             let web = env.frontend();
-            assert_redirect("/bat//", "/bat/latest/bat/", web)?;
+            assert_redirect_unchecked("/bat//", "/bat/", web)?;
             Ok(())
         })
     }

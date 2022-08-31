@@ -7,16 +7,16 @@ use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
 use crate::{BuildQueue, Config, Context, Index, Metrics};
+use anyhow::Context as _;
+use fn_error_context::context;
 use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
-    blocking::{Client, RequestBuilder},
+    blocking::{Client, ClientBuilder, RequestBuilder},
     Method,
 };
-use std::fs;
-use std::net::SocketAddr;
-use std::{panic, sync::Arc};
+use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     let _ = dotenv::dotenv();
@@ -56,45 +56,57 @@ pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
     Ok(())
 }
 
-/// Make sure that a URL redirects to a specific page
-pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
-    // Reqwest follows redirects automatically
-    let response = web.get(path).send()?;
+fn assert_redirect_common(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
+    let response = web.get_no_redirect(path).send()?;
     let status = response.status();
-
-    let mut tmp;
-    let redirect_target = if expected_target.starts_with("https://") {
-        response.url().as_str()
-    } else {
-        tmp = String::from(response.url().path());
-        if let Some(query) = response.url().query() {
-            tmp.push('?');
-            tmp.push_str(query);
-        }
-        &tmp
-    };
-    // Either we followed a redirect to the wrong place, or there was no redirect
-    if redirect_target != expected_target {
-        // wrong place
-        if redirect_target != path {
-            panic!(
-                "{}: expected redirect to {}, got redirect to {}",
-                path, expected_target, redirect_target
-            );
-        } else {
-            // no redirect
-            panic!(
-                "{}: expected redirect to {}, got {}",
-                path, expected_target, status
-            );
-        }
+    if !status.is_redirection() {
+        anyhow::bail!("non-redirect from GET {path}: {status}");
     }
-    assert!(
-        status.is_success(),
-        "failed to GET {}: {}",
-        expected_target,
-        status
-    );
+
+    let mut redirect_target = response
+        .headers()
+        .get("Location")
+        .context("missing 'Location' header")?
+        .to_str()
+        .context("non-ASCII redirect")?;
+
+    if !expected_target.starts_with("http") {
+        // TODO: Should be able to use Url::make_relative,
+        // but https://github.com/servo/rust-url/issues/766
+        let base = format!("http://{}", web.server_addr());
+        redirect_target = redirect_target
+            .strip_prefix(&base)
+            .unwrap_or(redirect_target);
+    }
+
+    if redirect_target != expected_target {
+        anyhow::bail!("got redirect to {redirect_target}");
+    }
+
+    Ok(())
+}
+
+/// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect_unchecked(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<()> {
+    assert_redirect_common(path, expected_target, web)
+}
+
+/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
+    assert_redirect_common(path, expected_target, web)?;
+
+    let response = web.get_no_redirect(expected_target).send()?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to GET {expected_target}: {status}");
+    }
+
     Ok(())
 }
 
@@ -113,6 +125,7 @@ pub(crate) fn init_logger() {
     // initializing rustwide logging also sets the global logger
     rustwide::logging::init_with(
         env_logger::Builder::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
+            .format_timestamp_millis()
             .is_test(true)
             .build(),
     );
@@ -372,22 +385,35 @@ impl Drop for TestDatabase {
 pub(crate) struct TestFrontend {
     server: Server,
     pub(crate) client: Client,
+    pub(crate) client_no_redirect: Client,
 }
 
 impl TestFrontend {
     fn new(context: &dyn Context) -> Self {
+        fn build(f: impl FnOnce(ClientBuilder) -> ClientBuilder) -> Client {
+            let base = Client::builder()
+                .connect_timeout(Duration::from_millis(2000))
+                .timeout(Duration::from_millis(2000))
+                // The test server only supports a single connection, so having two clients with
+                // idle connections deadlocks the tests
+                .pool_max_idle_per_host(0);
+            f(base).build().unwrap()
+        }
+
         Self {
             server: Server::start(Some("127.0.0.1:0"), context)
                 .expect("failed to start the web server"),
-            client: Client::new(),
+            client: build(|b| b),
+            client_no_redirect: build(|b| b.redirect(reqwest::redirect::Policy::none())),
         }
     }
 
-    fn build_request(&self, method: Method, mut url: String) -> RequestBuilder {
+    fn build_url(&self, url: &str) -> String {
         if url.is_empty() || url.starts_with('/') {
-            url = format!("http://{}{}", self.server.addr(), url);
+            format!("http://{}{}", self.server.addr(), url)
+        } else {
+            url.to_owned()
         }
-        self.client.request(method, url)
     }
 
     pub(crate) fn server_addr(&self) -> SocketAddr {
@@ -395,6 +421,14 @@ impl TestFrontend {
     }
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
-        self.build_request(Method::GET, url.to_string())
+        let url = self.build_url(url);
+        log::debug!("getting {url}");
+        self.client.request(Method::GET, url)
+    }
+
+    pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
+        let url = self.build_url(url);
+        log::debug!("getting {url} (no redirects)");
+        self.client_no_redirect.request(Method::GET, url)
     }
 }

@@ -79,7 +79,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)) 
+            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
@@ -246,7 +246,7 @@ fn get_search_results(
                 releases.rustdoc_status,
                 repositories.stars
 
-            FROM crates 
+            FROM crates
             INNER JOIN releases ON crates.latest_version_id = releases.id
             INNER JOIN builds ON releases.id = builds.rid
             LEFT JOIN repositories ON releases.repository_id = repositories.id
@@ -498,7 +498,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                     releases.version,
                     releases.target_name
                 FROM (
-                    -- generate random numbers in the ID-range. 
+                    -- generate random numbers in the ID-range.
                     SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
                     FROM params, generate_series(1, $1)
                 ) AS r
@@ -573,27 +573,15 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             let (version, _) = matchver.version.into_parts();
             let krate = matchver.corrected_name.unwrap_or(krate);
 
+            let base = redirect_base(req);
             let url = if matchver.rustdoc_status {
+                let target_name = matchver.target_name;
                 ctry!(
                     req,
-                    Url::parse(&format!(
-                        "{}/{}/{}/{}",
-                        redirect_base(req),
-                        krate,
-                        version,
-                        query
-                    )),
+                    Url::parse(&format!("{base}/{krate}/{version}/{target_name}/{query}"))
                 )
             } else {
-                ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/crate/{}/{}",
-                        redirect_base(req),
-                        krate,
-                        version,
-                    )),
-                )
+                ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
 
             let mut resp = Response::with((status::Found, Redirect(url)));
@@ -688,12 +676,12 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
             "
             WITH dates AS (
                 -- we need this series so that days in the statistic that don't have any releases are included
-                SELECT generate_series( 
+                SELECT generate_series(
                         CURRENT_DATE - INTERVAL '30 days',
                         CURRENT_DATE - INTERVAL '1 day',
                         '1 day'::interval
                     )::date AS date_
-            ), 
+            ),
             release_stats AS (
                 SELECT
                     release_time::date AS date_,
@@ -706,16 +694,16 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
                     release_time < CURRENT_DATE
                 GROUP BY
                     release_time::date
-            ) 
-            SELECT 
+            )
+            SELECT
                 dates.date_ AS date,
                 COALESCE(rs.counts, 0) AS counts,
-                COALESCE(rs.failures, 0) AS failures 
+                COALESCE(rs.failures, 0) AS failures
             FROM
-                dates 
+                dates
                 LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
 
-            ORDER BY 
+            ORDER BY
                 dates.date_
             ",
             &[],
