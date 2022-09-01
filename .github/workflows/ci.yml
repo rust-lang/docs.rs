@@ -17,7 +17,6 @@ env:
   DOCSRS_INCLUDE_DEFAULT_TARGETS: false
   DOCSRS_DOCKER_IMAGE: ghcr.io/rust-lang/crates-build-env/linux-micro
   SENTRY_ENVIRONMENT: dev
-  DOCSRS_METADATA_HOST_TARGET: aarch64-unknown-linux-gnu
 
 jobs:
   build:
