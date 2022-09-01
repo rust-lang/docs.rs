@@ -39,10 +39,10 @@ pub struct CrateDetails {
     is_library: bool,
     license: Option<String>,
     pub(crate) documentation_url: Option<String>,
-    total_items: Option<f32>,
-    documented_items: Option<f32>,
-    total_items_needing_examples: Option<f32>,
-    items_with_examples: Option<f32>,
+    total_items: Option<i32>,
+    documented_items: Option<i32>,
+    total_items_needing_examples: Option<i32>,
+    items_with_examples: Option<i32>,
     /// Database id for this crate
     pub(crate) crate_id: i32,
     /// Database id for this release
@@ -166,11 +166,6 @@ impl CrateDetails {
             rustdoc_css_file: get_correct_docsrs_style_file(krate.get("doc_rustc_version"))?,
         };
 
-        let documented_items: Option<i32> = krate.get("documented_items");
-        let total_items: Option<i32> = krate.get("total_items");
-        let total_items_needing_examples: Option<i32> = krate.get("total_items_needing_examples");
-        let items_with_examples: Option<i32> = krate.get("items_with_examples");
-
         let mut crate_details = CrateDetails {
             name: krate.get("name"),
             version: krate.get("version"),
@@ -195,10 +190,10 @@ impl CrateDetails {
             is_library: krate.get("is_library"),
             license: krate.get("license"),
             documentation_url: krate.get("documentation_url"),
-            documented_items: documented_items.map(|v| v as f32),
-            total_items: total_items.map(|v| v as f32),
-            total_items_needing_examples: total_items_needing_examples.map(|v| v as f32),
-            items_with_examples: items_with_examples.map(|v| v as f32),
+            documented_items: krate.get("documented_items"),
+            total_items: krate.get("total_items"),
+            total_items_needing_examples: krate.get("total_items_needing_examples"),
+            items_with_examples: krate.get("items_with_examples"),
             crate_id,
             release_id,
         };

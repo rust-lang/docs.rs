@@ -659,7 +659,7 @@ mod test {
             let web = env.frontend();
 
             let foo_crate = kuchiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
-            for value in &["60%", "6", "10", "2", "1"] {
+            for value in &["60.0%", "6", "10", "2", "1"] {
                 assert!(foo_crate
                     .select(".pure-menu-item b")
                     .unwrap()
@@ -670,7 +670,7 @@ mod test {
             assert!(foo_doc
                 .select(".pure-menu-link b")
                 .unwrap()
-                .any(|e| e.text_contents().contains("60%")));
+                .any(|e| e.text_contents().contains("60.0%")));
 
             Ok(())
         });
