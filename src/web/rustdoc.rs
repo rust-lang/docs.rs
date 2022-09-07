@@ -912,14 +912,21 @@ mod test {
                 .archive_storage(true)
                 .rustdoc_file("dummy/index.html")
                 .create()?;
-            let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
-            assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
 
-            let resp = env.frontend().get("/dummy/0.1.0/dummy/").send()?;
-            assert_eq!(
-                resp.headers().get("Cache-Control").unwrap(),
-                &"stale-while-revalidate=2592000, max-age=600"
-            );
+            let web = env.frontend();
+
+            {
+                let resp = web.get("/dummy/latest/dummy/").send()?;
+                assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
+            }
+
+            {
+                let resp = web.get("/dummy/0.1.0/dummy/").send()?;
+                assert_eq!(
+                    resp.headers().get("Cache-Control").unwrap(),
+                    &"stale-while-revalidate=2592000, max-age=600"
+                );
+            }
             Ok(())
         })
     }
