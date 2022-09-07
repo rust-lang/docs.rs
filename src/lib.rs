@@ -13,6 +13,7 @@ pub use self::storage::Storage;
 pub use self::web::Server;
 
 mod build_queue;
+pub mod cache;
 mod config;
 mod context;
 pub mod db;

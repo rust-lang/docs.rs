@@ -187,6 +187,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-cloudfront"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d99b3b9423539dd0479f7a107c9411b865f1f5143f49f54165db424071e41cfe"
+dependencies = [
+ "aws-endpoint",
+ "aws-http",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-http-tower",
+ "aws-smithy-types",
+ "aws-smithy-xml",
+ "aws-types",
+ "bytes",
+ "http",
+ "tokio-stream",
+ "tower",
+]
+
+[[package]]
 name = "aws-sdk-s3"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1007,6 +1029,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "aws-config",
+ "aws-sdk-cloudfront",
  "aws-sdk-s3",
  "aws-smithy-types-convert",
  "backtrace",
@@ -1076,6 +1099,7 @@ dependencies = [
  "tokio",
  "toml",
  "url 2.3.1",
+ "uuid",
  "walkdir",
  "zip",
  "zstd",

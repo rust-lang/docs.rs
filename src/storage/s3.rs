@@ -18,7 +18,7 @@ use tokio::runtime::Runtime;
 
 pub(super) struct S3Backend {
     client: Client,
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     bucket: String,
     metrics: Arc<Metrics>,
     #[cfg(test)]
@@ -26,9 +26,11 @@ pub(super) struct S3Backend {
 }
 
 impl S3Backend {
-    pub(super) fn new(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
-        let runtime = Runtime::new()?;
-
+    pub(super) fn new(
+        metrics: Arc<Metrics>,
+        config: &Config,
+        runtime: Arc<Runtime>,
+    ) -> Result<Self, Error> {
         let shared_config = runtime.block_on(aws_config::load_from_env());
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
             .retry_config(RetryConfig::new().with_max_attempts(3))

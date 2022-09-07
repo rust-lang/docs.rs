@@ -16,6 +16,7 @@ use once_cell::sync::OnceCell;
 use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
+use tokio::runtime::Runtime;
 
 fn main() {
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
@@ -563,6 +564,7 @@ struct BinContext {
     metrics: OnceCell<Arc<Metrics>>,
     index: OnceCell<Arc<Index>>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
+    runtime: OnceCell<Arc<Runtime>>,
 }
 
 impl BinContext {
@@ -575,6 +577,7 @@ impl BinContext {
             metrics: OnceCell::new(),
             index: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
+            runtime: OnceCell::new(),
         }
     }
 
@@ -606,9 +609,11 @@ impl Context for BinContext {
             self.pool()?,
             self.metrics()?,
             self.config()?,
+            self.runtime()?,
         )?;
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;
+        fn runtime(self) -> Runtime = Runtime::new()?;
         fn index(self) -> Index = {
             let config = self.config()?;
             let path = config.registry_index_path.clone();

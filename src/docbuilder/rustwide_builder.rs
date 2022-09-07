@@ -1,3 +1,4 @@
+use crate::cache;
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
@@ -25,6 +26,7 @@ use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, Workspac
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DUMMY_CRATE_NAME: &str = "empty-library";
@@ -43,6 +45,7 @@ pub struct RustwideBuilder {
     db: Pool,
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
+    runtime: Arc<Runtime>,
     index: Arc<Index>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
@@ -80,6 +83,7 @@ impl RustwideBuilder {
             config,
             db: context.pool()?,
             storage: context.storage()?,
+            runtime: context.runtime()?,
             metrics: context.metrics()?,
             index: context.index()?,
             rustc_version: String::new(),
@@ -500,6 +504,20 @@ impl RustwideBuilder {
             .purge_from_cache(&self.workspace)
             .map_err(FailureError::compat)?;
         local_storage.close()?;
+        if let Some(distribution_id) = self.config.cloudfront_distribution_id_web.as_ref() {
+            if successful {
+                let invalidate_path = if self.config.cloudfront_only_invalidate_latest {
+                    format!("/{}/latest*", name)
+                } else {
+                    format!("/{}*", name)
+                };
+                cache::create_cloudfront_invalidation(
+                    &self.runtime,
+                    distribution_id,
+                    &[&invalidate_path],
+                )?;
+            }
+        }
         Ok(successful)
     }
 
