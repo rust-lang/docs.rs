@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::{BuildQueue, Config, Index, Metrics, Storage};
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 pub trait Context {
     fn config(&self) -> Result<Arc<Config>>;
@@ -12,4 +13,5 @@ pub trait Context {
     fn metrics(&self) -> Result<Arc<Metrics>>;
     fn index(&self) -> Result<Arc<Index>>;
     fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>>;
+    fn runtime(&self) -> Result<Arc<Runtime>>;
 }

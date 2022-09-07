@@ -57,11 +57,25 @@ pub struct Config {
     // Content Security Policy
     pub(crate) csp_report_only: bool,
 
-    // Cache-Control header
+    // Cache-Control header, for versioned URLs.
     // If both are absent, don't generate the header. If only one is present,
     // generate just that directive. Values are in seconds.
     pub(crate) cache_control_stale_while_revalidate: Option<u32>,
     pub(crate) cache_control_max_age: Option<u32>,
+
+    // Cache-Control header, for /latest/ URLs.
+    // Same conditions as above apply.
+    pub(crate) cache_control_stale_while_revalidate_latest: Option<u32>,
+    pub(crate) cache_control_max_age_latest: Option<u32>,
+
+    // CloudFront distribution ID for the web server.
+    // Will be used for invalidation-requests.
+    pub(crate) cloudfront_distribution_id_web: Option<String>,
+
+    // when invalidating, either
+    // * invalidate the whole crate path (`/krate/*`)
+    // * invalidate only the `/latest/` url
+    pub(crate) cloudfront_only_invalidate_latest: bool,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -140,6 +154,15 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?,
             cache_control_max_age: maybe_env("CACHE_CONTROL_MAX_AGE")?,
+
+            cache_control_stale_while_revalidate_latest: maybe_env(
+                "CACHE_CONTROL_STALE_WHILE_REVALIDATE_LATEST",
+            )?,
+            cache_control_max_age_latest: maybe_env("CACHE_CONTROL_MAX_AGE_LATEST")?,
+
+            cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
+
+            cloudfront_only_invalidate_latest: env("CLOUDFRONT_ONLY_INVALIDATE_LATEST", false)?,
 
             local_archive_cache_path: env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",

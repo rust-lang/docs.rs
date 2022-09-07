@@ -42,6 +42,30 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     ])
 });
 
+fn generate_cache_directives_for(
+    max_age: Option<u32>,
+    stale_while_revalidate: Option<u32>,
+) -> Option<CacheControl> {
+    let mut directives = vec![];
+
+    if let Some(seconds) = stale_while_revalidate {
+        directives.push(CacheDirective::Extension(
+            "stale-while-revalidate".to_string(),
+            Some(format!("{}", seconds)),
+        ));
+    }
+
+    if let Some(seconds) = max_age {
+        directives.push(CacheDirective::MaxAge(seconds));
+    }
+
+    if !directives.is_empty() {
+        Some(CacheControl(directives))
+    } else {
+        None
+    }
+}
+
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
@@ -260,26 +284,18 @@ impl RustdocPage {
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
-        if is_latest_url {
-            response
-                .headers
-                .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
+        if let Some(cache_control) = if is_latest_url {
+            generate_cache_directives_for(
+                Some(config.cache_control_max_age_latest.unwrap_or(0)),
+                config.cache_control_stale_while_revalidate_latest,
+            )
         } else {
-            let mut directives = vec![];
-            if let Some(seconds) = config.cache_control_stale_while_revalidate {
-                directives.push(CacheDirective::Extension(
-                    "stale-while-revalidate".to_string(),
-                    Some(format!("{}", seconds)),
-                ));
-            }
-
-            if let Some(seconds) = config.cache_control_max_age {
-                directives.push(CacheDirective::MaxAge(seconds));
-            }
-
-            if !directives.is_empty() {
-                response.headers.set(CacheControl(directives));
-            }
+            generate_cache_directives_for(
+                config.cache_control_max_age,
+                config.cache_control_stale_while_revalidate,
+            )
+        } {
+            response.headers.set(cache_control);
         }
         Ok(response)
     }
@@ -888,7 +904,40 @@ mod test {
     }
 
     #[test]
-    fn cache_headers() {
+    fn cache_headers_only_latest() {
+        wrapper(|env| {
+            env.override_config(|config| {
+                config.cache_control_max_age_latest = Some(600);
+                config.cache_control_stale_while_revalidate_latest = Some(2592000);
+            });
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let web = env.frontend();
+
+            {
+                let resp = web.get("/dummy/latest/dummy/").send()?;
+                assert_eq!(
+                    resp.headers().get("Cache-Control").unwrap(),
+                    &"stale-while-revalidate=2592000, max-age=600"
+                );
+            }
+
+            {
+                let resp = web.get("/dummy/0.1.0/dummy/").send()?;
+                assert!(resp.headers().get("Cache-Control").is_none());
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn cache_headers_on_version() {
         wrapper(|env| {
             env.override_config(|config| {
                 config.cache_control_max_age = Some(600);
@@ -914,6 +963,44 @@ mod test {
                 assert_eq!(
                     resp.headers().get("Cache-Control").unwrap(),
                     &"stale-while-revalidate=2592000, max-age=600"
+                );
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn cache_headers_latest_and_version() {
+        wrapper(|env| {
+            env.override_config(|config| {
+                config.cache_control_max_age = Some(666);
+                config.cache_control_max_age_latest = Some(999);
+                config.cache_control_stale_while_revalidate = Some(2222222);
+                config.cache_control_stale_while_revalidate_latest = Some(3333333);
+            });
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let web = env.frontend();
+
+            {
+                let resp = web.get("/dummy/latest/dummy/").send()?;
+                assert_eq!(
+                    resp.headers().get("Cache-Control").unwrap(),
+                    &"stale-while-revalidate=3333333, max-age=999"
+                );
+            }
+
+            {
+                let resp = web.get("/dummy/0.1.0/dummy/").send()?;
+                assert_eq!(
+                    resp.headers().get("Cache-Control").unwrap(),
+                    &"stale-while-revalidate=2222222, max-age=666"
                 );
             }
             Ok(())

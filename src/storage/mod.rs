@@ -21,6 +21,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use tokio::runtime::Runtime;
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -113,14 +114,21 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(pool: Pool, metrics: Arc<Metrics>, config: Arc<Config>) -> Result<Self> {
+    pub fn new(
+        pool: Pool,
+        metrics: Arc<Metrics>,
+        config: Arc<Config>,
+        runtime: Arc<Runtime>,
+    ) -> Result<Self> {
         Ok(Storage {
             config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
                 }
-                StorageKind::S3 => StorageBackend::S3(Box::new(S3Backend::new(metrics, &config)?)),
+                StorageKind::S3 => {
+                    StorageBackend::S3(Box::new(S3Backend::new(metrics, &config, runtime)?))
+                }
             },
         })
     }

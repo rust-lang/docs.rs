@@ -17,6 +17,7 @@ use reqwest::{
     Method,
 };
 use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
+use tokio::runtime::Runtime;
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     let env = TestEnvironment::new();
@@ -114,6 +115,7 @@ pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     index: OnceCell<Arc<Index>>,
+    runtime: OnceCell<Arc<Runtime>>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
@@ -140,6 +142,7 @@ impl TestEnvironment {
             index: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
+            runtime: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
         }
     }
@@ -216,8 +219,13 @@ impl TestEnvironment {
         self.storage
             .get_or_init(|| {
                 Arc::new(
-                    Storage::new(self.db().pool(), self.metrics(), self.config())
-                        .expect("failed to initialize the storage"),
+                    Storage::new(
+                        self.db().pool(),
+                        self.metrics(),
+                        self.config(),
+                        self.runtime(),
+                    )
+                    .expect("failed to initialize the storage"),
                 )
             })
             .clone()
@@ -226,6 +234,11 @@ impl TestEnvironment {
     pub(crate) fn metrics(&self) -> Arc<Metrics> {
         self.metrics
             .get_or_init(|| Arc::new(Metrics::new().expect("failed to initialize the metrics")))
+            .clone()
+    }
+    pub(crate) fn runtime(&self) -> Arc<Runtime> {
+        self.runtime
+            .get_or_init(|| Arc::new(Runtime::new().expect("failed to initialize runtime")))
             .clone()
     }
 
@@ -302,6 +315,10 @@ impl Context for TestEnvironment {
 
     fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>> {
         Ok(self.repository_stats_updater())
+    }
+
+    fn runtime(&self) -> Result<Arc<Runtime>> {
+        Ok(self.runtime())
     }
 }
 
