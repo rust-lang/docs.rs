@@ -12,13 +12,11 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use iron::{
-    headers::{CacheControl, CacheDirective},
-    url::percent_encoding::percent_decode,
-};
-use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
-    status, Handler, IronResult, Request, Response, Url,
+    status,
+    url::percent_encoding::percent_decode,
+    Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
 use router::Router;
