@@ -23,6 +23,12 @@ ignore = [
 
     "RUSTSEC-2021-0127", # serde_cbor is unmaintained
     # https://github.com/rust-lang/docs.rs/issues/1568
+
+    "RUSTSEC-2021-0144", # traitobject is Unmaintained 
+    # https://github.com/rust-lang/docs.rs/issues/1826
+
+    "RUSTSEC-2019-0039", # typemap is Unmaintained 
+    # https://github.com/rust-lang/docs.rs/issues/1827
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
