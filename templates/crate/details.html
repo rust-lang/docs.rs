@@ -5,6 +5,10 @@
     {{ macros::doc_title(name=details.name, version=details.version) }}
 {%- endblock title -%}
 
+{%- block meta -%}
+    <link rel="canonical" href="https://docs.rs/crate/{{ details.name }}/latest" />
+{%- endblock meta -%}
+
 {%- block topbar -%}
   {%- set metadata = details.metadata -%}
   {%- set latest_version = "" -%}

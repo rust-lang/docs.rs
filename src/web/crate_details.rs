@@ -576,6 +576,24 @@ mod tests {
     }
 
     #[test]
+    fn test_canonical_url() {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
+
+            let web = env.frontend();
+
+            assert!(web
+                .get("/crate/foo/0.0.1")
+                .send()?
+                .text()?
+                .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest"));
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn test_latest_version() {
         wrapper(|env| {
             let db = env.db();
