@@ -46,12 +46,19 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         permanent: bool,
         path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
-        if let Some(query) = req.url.query() {
-            url_str.push('?');
-            url_str.push_str(query);
-        } else if let Some(path) = path_in_crate {
+        let mut question_mark = false;
+        if let Some(path) = path_in_crate {
             url_str.push_str("?search=");
             url_str.push_str(path);
+            question_mark = true;
+        }
+        if let Some(query) = req.url.query() {
+            if !question_mark {
+                url_str.push('?');
+            } else {
+                url_str.push('&');
+            }
+            url_str.push_str(query);
         }
         let url = ctry!(req, Url::parse(&url_str));
         let (status_code, max_age) = if permanent {
@@ -1774,6 +1781,11 @@ mod test {
             assert_redirect(
                 "/some_random_crate::some::path",
                 "/some_random_crate/latest/some_random_crate/?search=some::path",
+                web,
+            )?;
+            assert_redirect(
+                "/some_random_crate::some::path?go_to_first=true",
+                "/some_random_crate/latest/some_random_crate/?search=some::path&go_to_first=true",
                 web,
             )?;
 
