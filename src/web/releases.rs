@@ -584,10 +584,24 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             return redirect_to_random_crate(req, &mut conn);
         }
 
-        let (krate, query) = match query.split_once("::") {
+        let (krate, mut query) = match query.split_once("::") {
             Some((krate, query)) => (krate.to_string(), format!("?search={query}")),
             None => (query.clone(), "".to_string()),
         };
+
+        for (k, v) in params
+            .iter()
+            .filter(|(k, _)| !matches!(k.as_ref(), "i-am-feeling-lucky" | "query"))
+        {
+            if query.is_empty() {
+                query.push('?');
+            } else {
+                query.push('&')
+            }
+            query.push_str(k);
+            query.push('=');
+            query.push_str(v);
+        }
 
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
@@ -901,6 +915,21 @@ mod tests {
             assert_redirect(
                 "/releases/search?query=some_random_crate::some::path",
                 "/some_random_crate/1.0.0/some_random_crate/?search=some::path",
+                web,
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_coloncolon_path_redirects_to_crate_docs_and_keeps_query() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+
+            assert_redirect(
+                "/releases/search?query=some_random_crate::somepath&go_to_first=true",
+                "/some_random_crate/1.0.0/some_random_crate/?search=somepath&go_to_first=true",
                 web,
             )?;
             Ok(())
