@@ -113,21 +113,14 @@
             {# If the file has content, then display it in a codeblock #}
             {%- if file_content -%}
                 <div id="source-code" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
-                    <pre><code>{{ file_content }}</code></pre>
+                    {{- file_content | highlight(lang=file.extension) -}}
                 </div>
             {%- endif -%}
         </div>
     </div>
 {%- endblock body -%}
 
-{%- block css -%}
-    {# Highlight.js CSS #}
-    {{ macros::highlight_css() }}
-{%- endblock css -%}
-
 {%- block javascript -%}
-    {# Highlight.js JavaScript #}
-    {{ macros::highlight_js(languages=["rust", "ini", "markdown"]) }}
     {% if file_content %}
         <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ docsrs_version() | slugify }}"></script>
     {% endif %}

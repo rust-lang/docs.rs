@@ -36,6 +36,13 @@ mod tracked {
         Ok(())
     }
 
+    pub(crate) fn track_recursive(path: impl AsRef<Path>) -> Result<()> {
+        for entry in walkdir::WalkDir::new(path) {
+            track(entry?.path())?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn read(path: impl AsRef<Path>) -> Result<Vec<u8>> {
         let path = path.as_ref();
         track(path)?;
@@ -72,6 +79,7 @@ fn main() -> Result<()> {
     write_git_version(out_dir)?;
     compile_sass(out_dir)?;
     write_known_targets(out_dir)?;
+    compile_syntax(out_dir)?;
     Ok(())
 }
 
@@ -168,6 +176,35 @@ fn write_known_targets(out_dir: &Path) -> Result<()> {
     string_cache_codegen::AtomType::new("target::TargetAtom", "target_atom!")
         .atoms(&targets)
         .write_to_file(&out_dir.join("target_atom.rs"))?;
+
+    Ok(())
+}
+
+fn compile_syntax(out_dir: &Path) -> Result<()> {
+    use syntect::{dumps::dump_to_uncompressed_file, parsing::SyntaxSetBuilder};
+
+    fn tracked_add_from_folder(
+        builder: &mut SyntaxSetBuilder,
+        path: impl AsRef<Path>,
+    ) -> Result<()> {
+        // There's no easy way to know exactly which files matter, so just track everything in the
+        // folder
+        tracked::track_recursive(&path)?;
+        builder.add_from_folder(path, true)?;
+        Ok(())
+    }
+
+    let mut builder = SyntaxSetBuilder::new();
+    builder.add_plain_text_syntax();
+    tracked_add_from_folder(&mut builder, "assets/syntaxes/Packages/Rust/")?;
+    // Some of the extended syntaxes fail to compile, so only load the primary markdown syntax
+    tracked_add_from_folder(
+        &mut builder,
+        "assets/syntaxes/Packages/Markdown/Markdown.sublime-syntax",
+    )?;
+    tracked_add_from_folder(&mut builder, "assets/syntaxes/Extras/TOML/")?;
+
+    dump_to_uncompressed_file(&builder.build(), out_dir.join("syntect.packdump"))?;
 
     Ok(())
 }

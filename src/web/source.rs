@@ -24,6 +24,30 @@ struct File {
     name: String,
     /// The mime type of the file
     mime: String,
+    /// The extension of the file, if it has one
+    extension: Option<String>,
+}
+
+impl File {
+    fn from_path_and_mime(path: &str, mime: &str) -> File {
+        let (name, mime, extension) = if let Some((dir, _)) = path.split_once('/') {
+            (dir, "dir", None)
+        } else {
+            let extension = if path.starts_with('.') {
+                None
+            } else {
+                path.rsplit_once('.').map(|(_, ext)| ext)
+            };
+
+            (path, mime, extension)
+        };
+
+        Self {
+            name: name.to_owned(),
+            mime: mime.to_owned(),
+            extension: extension.map(|s| s.to_owned()),
+        }
+    }
 }
 
 /// A list of source files
@@ -98,22 +122,8 @@ impl FileList {
                     }
 
                     // look only files for req_path
-                    if path.starts_with(req_path) {
-                        // remove req_path from path to reach files in this directory
-                        let path = path.replace(req_path, "");
-                        let path_splited: Vec<&str> = path.split('/').collect();
-
-                        // if path have '/' it is a directory
-                        let mime = if path_splited.len() > 1 {
-                            "dir".to_owned()
-                        } else {
-                            mime.to_owned()
-                        };
-
-                        let file = File {
-                            name: path_splited[0].to_owned(),
-                            mime,
-                        };
+                    if let Some(path) = path.strip_prefix(req_path) {
+                        let file = File::from_path_and_mime(path, mime);
 
                         // avoid adding duplicates, a directory may occur more than once
                         if !file_list.contains(&file) {
@@ -163,8 +173,8 @@ impl FileList {
 struct SourcePage {
     file_list: FileList,
     show_parent_link: bool,
+    file: Option<File>,
     file_content: Option<String>,
-    is_rust_source: bool,
     canonical_url: String,
 }
 
@@ -271,20 +281,25 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         None
     };
 
-    let (file_content, is_rust_source) = if let Some(blob) = blob {
+    let (file, file_content) = if let Some(blob) = blob {
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !blob.mime.starts_with("text") && !blob.is_empty() {
             return Ok(DbFile(blob).serve());
         } else if blob.mime.starts_with("text") && !blob.is_empty() {
+            let path = blob
+                .path
+                .rsplit_once('/')
+                .map(|(_, path)| path)
+                .unwrap_or(&blob.path);
             (
+                Some(File::from_path_and_mime(path, &blob.mime)),
                 String::from_utf8(blob.content).ok(),
-                blob.path.ends_with(".rs"),
             )
         } else {
-            (None, false)
+            (None, None)
         }
     } else {
-        (None, false)
+        (None, None)
     };
 
     let file_list = FileList::from_path(
@@ -299,8 +314,8 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     SourcePage {
         file_list,
         show_parent_link: !req_path.is_empty(),
+        file,
         file_content,
-        is_rust_source,
         canonical_url,
     }
     .into_response(req)

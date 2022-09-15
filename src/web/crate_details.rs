@@ -1,4 +1,4 @@
-use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
+use super::{markdown, match_version, redirect_base, MatchSemver, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::{
     db::Pool,
@@ -69,7 +69,7 @@ where
 {
     markdown
         .as_ref()
-        .map(|markdown| render_markdown(markdown))
+        .map(|markdown| markdown::render(markdown))
         .serialize(serializer)
 }
 

@@ -194,12 +194,3 @@
         </div>
     </div>
 {%- endblock body -%}
-
-{%- block css -%}
-    {{ macros::highlight_css() }}
-{%- endblock css -%}
-
-{%- block javascript -%}
-    {# Enable and load Rust and TOML syntax highlighting #}
-    {{ macros::highlight_js(languages=["rust", "ini"]) }}
-{% endblock javascript -%}
