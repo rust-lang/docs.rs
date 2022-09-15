@@ -56,7 +56,13 @@ impl Default for Order {
     }
 }
 
-pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Order) -> Vec<Release> {
+pub(crate) fn get_releases(
+    conn: &mut Client,
+    page: i64,
+    limit: i64,
+    order: Order,
+    latest_only: bool,
+) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
@@ -66,6 +72,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         Order::RecentFailures => ("builds.build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
     };
+
     let query = format!(
         "SELECT crates.name,
             releases.version,
@@ -75,11 +82,12 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             builds.build_time,
             repositories.stars
         FROM crates
-        INNER JOIN releases ON crates.latest_version_id = releases.id
+        INNER JOIN releases ON crates.id = releases.crate_id
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
             ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
+            AND ((NOT $4) OR crates.latest_version_id = releases.id)
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
@@ -87,19 +95,22 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         ordering,
     );
 
-    conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
-        .unwrap()
-        .into_iter()
-        .map(|row| Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            rustdoc_status: row.get(4),
-            build_time: row.get(5),
-            stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
-        })
-        .collect()
+    conn.query(
+        query.as_str(),
+        &[&limit, &offset, &filter_failed, &latest_only],
+    )
+    .unwrap()
+    .into_iter()
+    .map(|row| Release {
+        name: row.get(0),
+        version: row.get(1),
+        description: row.get(2),
+        target_name: row.get(3),
+        rustdoc_status: row.get(4),
+        build_time: row.get(5),
+        stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
+    })
+    .collect()
 }
 
 fn get_releases_by_owner(
@@ -299,7 +310,7 @@ impl_webpage! {
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true);
 
     HomePage { recent_releases }.into_response(req)
 }
@@ -316,7 +327,7 @@ impl_webpage! {
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true);
 
     ReleaseFeed { recent_releases }.into_response(req)
 }
@@ -353,13 +364,18 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         .and_then(|page_num| page_num.parse().ok())
         .unwrap_or(1);
 
-    let (description, release_order) = match release_type {
-        ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime),
-        ReleaseType::Stars => ("Crates with most stars", Order::GithubStars),
-        ReleaseType::RecentFailures => ("Recent crates failed to build", Order::RecentFailures),
+    let (description, release_order, latest_only) = match release_type {
+        ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime, false),
+        ReleaseType::Stars => ("Crates with most stars", Order::GithubStars, true),
+        ReleaseType::RecentFailures => (
+            "Recent crates failed to build",
+            Order::RecentFailures,
+            false,
+        ),
         ReleaseType::Failures => (
             "Crates with most stars failed to build",
             Order::FailuresByGithubStars,
+            true,
         ),
 
         ReleaseType::Owner | ReleaseType::Search => panic!(
@@ -369,7 +385,13 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
 
     let releases = {
         let mut conn = extension!(req, Pool).get()?;
-        get_releases(&mut conn, page_number, RELEASES_IN_RELEASES, release_order)
+        get_releases(
+            &mut conn,
+            page_number,
+            RELEASES_IN_RELEASES,
+            release_order,
+            latest_only,
+        )
     };
 
     // Show next and previous page buttons
@@ -783,7 +805,7 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars);
+            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true);
             assert_eq!(
                 vec![
                     "bar", // 20 stars
@@ -1265,7 +1287,13 @@ mod tests {
                 .github_stats("some/repo", 33, 22, 11)
                 .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
                 .create()?;
-            // make sure that crates get at most one release shown, so they don't crowd the page
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.2.0-rc")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(8, 33, 50))
+                .build_result_failed()
+                .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .github_stats("some/repo", 33, 22, 11)
@@ -1279,16 +1307,25 @@ mod tests {
                 .build_result_failed()
                 .create()?;
 
-            for page in &["/", "/releases"] {
-                let links = get_release_links(page, env.frontend())?;
+            // make sure that crates get at most one release shown, so they don't crowd the homepage
+            assert_eq!(
+                get_release_links("/", env.frontend())?,
+                [
+                    "/crate/crate_that_failed/0.1.0",
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/",
+                ]
+            );
 
-                assert_eq!(links.len(), 2);
-                assert_eq!(links[0], "/crate/crate_that_failed/0.1.0");
-                assert_eq!(
-                    links[1],
-                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/"
-                );
-            }
+            // but on the main release list they all show, including prerelease
+            assert_eq!(
+                get_release_links("/releases", env.frontend())?,
+                [
+                    "/crate/crate_that_failed/0.1.0",
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/",
+                    "/crate/crate_that_succeeded_with_github/0.2.0-rc",
+                    "/crate_that_succeeded_with_github/0.1.0/crate_that_succeeded_with_github/",
+                ]
+            );
 
             Ok(())
         })
