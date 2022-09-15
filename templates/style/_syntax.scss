@@ -1,0 +1,28 @@
+@import "syntax-themes";
+
+pre > code {
+  color: var(--color-syntax-foreground);
+  background-color: var(--color-syntax-background);
+  padding: 0.5em;
+  display: block;
+  overflow-x: auto;
+}
+
+// Rust
+.syntax-keyword { color: var(--color-syntax-keyword1); }
+.syntax-annotation, .syntax-annotation .syntax-operator { color: var(--color-syntax-attribute); }
+.syntax-macro { color: var(--color-syntax-macro); }
+.syntax-type { color: var(--color-syntax-keyword1); }
+.syntax-comment { color: var(--color-syntax-comment); }
+.syntax-documentation, .syntax-documentation .syntax-comment { color: var(--color-syntax-doc-comment); }
+.syntax-operator, .syntax-modifier { color: var(--color-syntax-keyword2); }
+.syntax-lifetime { color: var(--color-syntax-lifetime); }
+.syntax-string { color: var(--color-syntax-string); }
+.syntax-numeric { color: var(--color-syntax-number); }
+
+// TOML
+.syntax-table { color: var(--color-syntax-attribute); font-weight: bold; }
+.syntax-constant { color: var(--color-syntax-bool); }
+
+// Markdown
+.syntax-heading { color: var(--color-syntax-attribute); font-weight: bold; }

@@ -14,15 +14,9 @@
 
 	<p>The available configuration flags you can customize are:</p>
 
-	<pre><code class="lang-toml">{%- include "core/Cargo.toml.example" -%}</code></pre>
+	{% filter highlight(lang="toml") %}
+		{%- include "core/Cargo.toml.example" -%}
+	{% endfilter %}
 	</div>
 	</div>
 {%- endblock body %}
-
-{% block css -%}
-    {{ macros::highlight_css() }}
-{%- endblock css %}
-
-{% block javascript -%}
-    {{ macros::highlight_js(languages=["ini"]) }}
-{%- endblock javascript %}

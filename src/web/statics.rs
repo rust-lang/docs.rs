@@ -258,7 +258,7 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
 
-            let files = &[("highlightjs/styles/dark.min.css", "text/css")];
+            let files = &[("vendored.css", "text/css")];
 
             for (file, mime) in files {
                 let url = format!("/-/static/{}", file);

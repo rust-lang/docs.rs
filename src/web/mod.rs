@@ -81,6 +81,7 @@ mod error;
 mod extensions;
 mod features;
 mod file;
+mod markdown;
 pub(crate) mod metrics;
 mod releases;
 mod routes;
@@ -412,25 +413,6 @@ fn match_version(
     // we know that versions were returned but none satisfied the version requirement.
     // This can only happen when all versions are yanked.
     Err(Nope::VersionNotFound)
-}
-
-/// Wrapper around the Markdown parser and renderer to render markdown
-fn render_markdown(text: &str) -> String {
-    use comrak::{markdown_to_html, ComrakExtensionOptions, ComrakOptions};
-
-    let options = ComrakOptions {
-        extension: ComrakExtensionOptions {
-            superscript: true,
-            table: true,
-            autolink: true,
-            tasklist: true,
-            strikethrough: true,
-            ..ComrakExtensionOptions::default()
-        },
-        ..ComrakOptions::default()
-    };
-
-    markdown_to_html(text, &options)
 }
 
 #[must_use = "`Server` blocks indefinitely when dropped"]

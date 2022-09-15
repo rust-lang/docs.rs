@@ -100,6 +100,7 @@ pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
     tera.register_filter("fas", IconType::Strong);
     tera.register_filter("far", IconType::Regular);
     tera.register_filter("fab", IconType::Brand);
+    tera.register_filter("highlight", Highlight);
 
     Ok(tera)
 }
@@ -296,6 +297,36 @@ impl tera::Filter for IconType {
         );
 
         Ok(Value::String(icon))
+    }
+
+    fn is_safe(&self) -> bool {
+        true
+    }
+}
+
+struct Highlight;
+
+impl tera::Filter for Highlight {
+    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
+        let code = value.as_str().ok_or_else(|| {
+            let msg = format!( "Filter `highlight` was called on an incorrect value: got `{value}` but expected a string");
+            tera::Error::msg(msg)
+        })?;
+        let lang = args
+            .get("lang")
+            .and_then(|lang| {
+                if lang.is_null() {
+                    None
+                } else {
+                    Some(lang.as_str().ok_or_else(|| {
+                        let msg = format!("Filter `highlight` received an incorrect type for arg `{lang}`: got `{lang}` but expected a string");
+                        tera::Error::msg(msg)
+                    }))
+                }
+            })
+            .transpose()?;
+        let highlighted = crate::web::markdown::highlight_code(lang, code);
+        Ok(format!("<pre><code>{highlighted}</code></pre>").into())
     }
 
     fn is_safe(&self) -> bool {
