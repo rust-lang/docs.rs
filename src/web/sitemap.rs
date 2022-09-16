@@ -6,7 +6,7 @@ use crate::{
     web::error::Nope,
     web::page::WebPage,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
@@ -86,6 +86,9 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
             target_name: row.get("target_name"),
             last_modified: row
                 .get::<_, DateTime<Utc>>("release_time")
+                // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+                // so they should all get recrawled if they haven't been since then.
+                .max(Utc.ymd(2022, 8, 28).and_hms(0, 0, 0))
                 .format("%+")
                 .to_string(),
         })
@@ -223,6 +226,26 @@ mod tests {
                 assert!(!(response.text()?.contains("some_random_crate")));
             }
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn sitemap_max_age() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            use chrono::{TimeZone, Utc};
+            env.fake_release()
+                .name("some_random_crate")
+                .release_time(Utc.ymd(2020, 1, 1).and_hms(0, 0, 0))
+                .create()?;
+
+            let response = web.get("/-/sitemap/s/sitemap.xml").send()?;
+            assert!(response.status().is_success());
+
+            let content = response.text()?;
+            assert!(content.contains(&"2022-08-28T00:00:00+00:00"));
             Ok(())
         })
     }
