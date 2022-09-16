@@ -49,6 +49,7 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
     }
     backdrop.onclick = closeMenu;
     function openMenu(newMenu) {
+        updateMenuPositionForSubMenu(() => newMenu);
         currentMenu = newMenu;
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
@@ -62,8 +63,6 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
             this.blur();
         } else {
             if (currentMenu) closeMenu();
-
-            updateMenuPositionForSubMenu(() => this.parentNode);
 
             openMenu(this.parentNode);
         }
