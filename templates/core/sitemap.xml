@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     {% for release in releases -%}
         <url>
-            <loc>https://docs.rs/{{ release.crate_name }}/latest/{{ release.target_name }}</loc>
+            <loc>https://docs.rs/{{ release.crate_name }}/latest/{{ release.target_name }}/</loc>
             <lastmod>{{ release.last_modified | escape_xml }}</lastmod>
             <priority>1.0</priority>
         </url>
