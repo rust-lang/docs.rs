@@ -584,24 +584,22 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             return redirect_to_random_crate(req, &mut conn);
         }
 
-        let (krate, mut query) = match query.split_once("::") {
-            Some((krate, query)) => (krate.to_string(), format!("?search={query}")),
-            None => (query.clone(), "".to_string()),
+        let mut queries = std::collections::BTreeMap::new();
+
+        let krate = match query.split_once("::") {
+            Some((krate, query)) => {
+                queries.insert("search", query);
+                krate.to_string()
+            }
+            None => query.clone(),
         };
 
-        for (k, v) in params
-            .iter()
-            .filter(|(k, _)| !matches!(k.as_ref(), "i-am-feeling-lucky" | "query"))
-        {
-            if query.is_empty() {
-                query.push('?');
-            } else {
-                query.push('&')
-            }
-            query.push_str(k);
-            query.push('=');
-            query.push_str(v);
-        }
+        queries.extend(
+            params
+                .iter()
+                .filter(|(k, _)| !matches!(k.as_ref(), "i-am-feeling-lucky" | "query"))
+                .map(|(k, v)| (k.as_ref(), v.as_ref())),
+        );
 
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
@@ -613,10 +611,18 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             let base = redirect_base(req);
             let url = if matchver.rustdoc_status {
                 let target_name = matchver.target_name;
-                ctry!(
-                    req,
-                    Url::parse(&format!("{base}/{krate}/{version}/{target_name}/{query}"))
-                )
+                let path = format!("{base}/{krate}/{version}/{target_name}/");
+                if queries.is_empty() {
+                    ctry!(req, Url::parse(&path))
+                } else {
+                    ctry!(
+                        req,
+                        Url::from_generic_url(ctry!(
+                            req,
+                            iron::url::Url::parse_with_params(&path, queries)
+                        ))
+                    )
+                }
             } else {
                 ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
@@ -914,7 +920,7 @@ mod tests {
             )?;
             assert_redirect(
                 "/releases/search?query=some_random_crate::some::path",
-                "/some_random_crate/1.0.0/some_random_crate/?search=some::path",
+                "/some_random_crate/1.0.0/some_random_crate/?search=some%3A%3Apath",
                 web,
             )?;
             Ok(())
@@ -929,7 +935,7 @@ mod tests {
 
             assert_redirect(
                 "/releases/search?query=some_random_crate::somepath&go_to_first=true",
-                "/some_random_crate/1.0.0/some_random_crate/?search=somepath&go_to_first=true",
+                "/some_random_crate/1.0.0/some_random_crate/?go_to_first=true&search=somepath",
                 web,
             )?;
             Ok(())

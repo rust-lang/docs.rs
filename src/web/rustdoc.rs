@@ -42,30 +42,31 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     fn redirect_to_doc(
         req: &Request,
-        mut url_str: String,
+        url_str: String,
         permanent: bool,
         path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
-        let mut question_mark = false;
+        let mut queries: std::collections::BTreeMap<
+            std::borrow::Cow<'_, str>,
+            std::borrow::Cow<'_, str>,
+        > = std::collections::BTreeMap::new();
         if let Some(path) = path_in_crate {
-            url_str.push_str("?search=");
-            url_str.push_str(path);
-            question_mark = true;
+            queries.insert("search".into(), path.into());
         }
-        if let Some(query) = req.url.query() {
-            if !question_mark {
-                url_str.push('?');
-            } else {
-                url_str.push('&');
-            }
-            url_str.push_str(query);
-        }
-        let url = ctry!(req, Url::parse(&url_str));
+        let url: iron::url::Url = req.url.clone().into();
+        let query_pairs = url.query_pairs();
+        queries.extend(query_pairs);
+        let url = if queries.is_empty() {
+            ctry!(req, iron::url::Url::parse(&url_str))
+        } else {
+            ctry!(req, iron::url::Url::parse_with_params(&url_str, queries))
+        };
         let (status_code, max_age) = if permanent {
             (status::MovedPermanently, 86400)
         } else {
             (status::Found, 0)
         };
+        let url = ctry!(req, Url::from_generic_url(url));
         let mut resp = Response::with((status_code, Redirect(url)));
         resp.headers
             .set(CacheControl(vec![CacheDirective::MaxAge(max_age)]));
@@ -1780,18 +1781,18 @@ mod test {
             )?;
             assert_redirect(
                 "/some_random_crate::some::path",
-                "/some_random_crate/latest/some_random_crate/?search=some::path",
+                "/some_random_crate/latest/some_random_crate/?search=some%3A%3Apath",
                 web,
             )?;
             assert_redirect(
                 "/some_random_crate::some::path?go_to_first=true",
-                "/some_random_crate/latest/some_random_crate/?search=some::path&go_to_first=true",
+                "/some_random_crate/latest/some_random_crate/?go_to_first=true&search=some%3A%3Apath",
                 web,
             )?;
 
             assert_redirect(
                 "/std::some::path",
-                "https://doc.rust-lang.org/stable/std/?search=some::path",
+                "https://doc.rust-lang.org/stable/std/?search=some%3A%3Apath",
                 web,
             )?;
 
