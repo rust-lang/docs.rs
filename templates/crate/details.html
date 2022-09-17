@@ -44,7 +44,7 @@
                         {%- if details.homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.homepage_url }}" class="pure-menu-link">
-                                    {{ "home" | fas(fw=true) }} Homepage
+                                    {{ "house" | fas(fw=true) }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -53,7 +53,7 @@
                         {%- if details.documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ "file-alt" | far(fw=true) }} Documentation
+                                    {{ "file-lines" | far(fw=true) }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -74,7 +74,7 @@
                                         <br>
                                         {{ "star" | fas(fw=true, extra="left-margin") }} {{ details.repository_metadata.stars }}
                                         {{ "code-branch" | fas(fw=true) }} {{ details.repository_metadata.forks }}
-                                        {{ "exclamation-circle" | fas(fw=true) }} {{ details.repository_metadata.issues }}
+                                        {{ "circle-exclamation" | fas(fw=true) }} {{ details.repository_metadata.issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
