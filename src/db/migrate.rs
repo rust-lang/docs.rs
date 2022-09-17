@@ -843,6 +843,11 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TABLE builds ADD COLUMN build_server TEXT NOT NULL DEFAULT '';",
             "ALTER TABLE builds DROP COLUMN build_server;",
         ),
+        sql_migration!(
+            context, 34, "add index on builds.rid",
+            "CREATE INDEX builds_release_id_idx ON builds (rid);",
+            "DROP INDEX builds_release_id_idx;",
+        ),
 
     ];
 
