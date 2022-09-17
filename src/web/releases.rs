@@ -82,35 +82,36 @@ pub(crate) fn get_releases(
             builds.build_time,
             repositories.stars
         FROM crates
-        INNER JOIN releases ON crates.id = releases.crate_id
+        {1}
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
             ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
-            AND ((NOT $4) OR crates.latest_version_id = releases.id)
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
         LIMIT $1 OFFSET $2",
         ordering,
+        if latest_only {
+            "INNER JOIN releases ON crates.latest_version_id = releases.id"
+        } else {
+            "INNER JOIN releases ON crates.id = releases.crate_id"
+        }
     );
 
-    conn.query(
-        query.as_str(),
-        &[&limit, &offset, &filter_failed, &latest_only],
-    )
-    .unwrap()
-    .into_iter()
-    .map(|row| Release {
-        name: row.get(0),
-        version: row.get(1),
-        description: row.get(2),
-        target_name: row.get(3),
-        rustdoc_status: row.get(4),
-        build_time: row.get(5),
-        stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
-    })
-    .collect()
+    conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
+        .unwrap()
+        .into_iter()
+        .map(|row| Release {
+            name: row.get(0),
+            version: row.get(1),
+            description: row.get(2),
+            target_name: row.get(3),
+            rustdoc_status: row.get(4),
+            build_time: row.get(5),
+            stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
+        })
+        .collect()
 }
 
 fn get_releases_by_owner(
