@@ -284,7 +284,8 @@ impl RustdocPage {
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
-        if let Some(cache_control) = if is_latest_url {
+
+        let cache_control = if is_latest_url {
             generate_cache_directives_for(
                 Some(config.cache_control_max_age_latest.unwrap_or(0)),
                 config.cache_control_stale_while_revalidate_latest,
@@ -294,7 +295,8 @@ impl RustdocPage {
                 config.cache_control_max_age,
                 config.cache_control_stale_while_revalidate,
             )
-        } {
+        };
+        if let Some(cache_control) = cache_control {
             response.headers.set(cache_control);
         }
         Ok(response)
