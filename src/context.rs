@@ -1,3 +1,4 @@
+use crate::cdn::CdnBackend;
 use crate::db::Pool;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
@@ -9,6 +10,7 @@ pub trait Context {
     fn config(&self) -> Result<Arc<Config>>;
     fn build_queue(&self) -> Result<Arc<BuildQueue>>;
     fn storage(&self) -> Result<Arc<Storage>>;
+    fn cdn(&self) -> Result<Arc<CdnBackend>>;
     fn pool(&self) -> Result<Pool>;
     fn metrics(&self) -> Result<Arc<Metrics>>;
     fn index(&self) -> Result<Arc<Index>>;
