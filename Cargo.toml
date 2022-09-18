@@ -135,4 +135,4 @@ harness = false
 [[bin]]
 name = "cratesfyi"
 test = false
-oc = false
+doc = false
