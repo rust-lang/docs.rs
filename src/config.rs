@@ -1,4 +1,4 @@
-use crate::storage::StorageKind;
+use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
 use std::env::VarError;
 use std::error::Error;
@@ -68,14 +68,11 @@ pub struct Config {
     pub(crate) cache_control_stale_while_revalidate_latest: Option<u32>,
     pub(crate) cache_control_max_age_latest: Option<u32>,
 
+    pub(crate) cdn_backend: CdnKind,
+
     // CloudFront distribution ID for the web server.
     // Will be used for invalidation-requests.
-    pub(crate) cloudfront_distribution_id_web: Option<String>,
-
-    // when invalidating, either
-    // * invalidate the whole crate path (`/krate/*`)
-    // * invalidate only the `/latest/` url
-    pub(crate) cloudfront_only_invalidate_latest: bool,
+    pub cloudfront_distribution_id_web: Option<String>,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -160,9 +157,9 @@ impl Config {
             )?,
             cache_control_max_age_latest: maybe_env("CACHE_CONTROL_MAX_AGE_LATEST")?,
 
-            cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
+            cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
 
-            cloudfront_only_invalidate_latest: env("CLOUDFRONT_ONLY_INVALIDATE_LATEST", false)?,
+            cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
 
             local_archive_cache_path: env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",

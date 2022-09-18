@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
+use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
@@ -559,6 +560,7 @@ enum DeleteSubcommand {
 struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
+    cdn: OnceCell<Arc<CdnBackend>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
     metrics: OnceCell<Arc<Metrics>>,
@@ -572,6 +574,7 @@ impl BinContext {
         Self {
             build_queue: OnceCell::new(),
             storage: OnceCell::new(),
+            cdn: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
             metrics: OnceCell::new(),
@@ -611,6 +614,7 @@ impl Context for BinContext {
             self.config()?,
             self.runtime()?,
         )?;
+        fn cdn(self) -> CdnBackend = CdnBackend::new(&self.config()?, &self.runtime()?);
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;
         fn runtime(self) -> Runtime = Runtime::new()?;

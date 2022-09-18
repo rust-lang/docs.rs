@@ -1,6 +1,7 @@
 mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
+use crate::cdn::CdnBackend;
 use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
@@ -114,6 +115,7 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
+    cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
     runtime: OnceCell<Arc<Runtime>>,
     metrics: OnceCell<Arc<Metrics>>,
@@ -139,6 +141,7 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: OnceCell::new(),
             storage: OnceCell::new(),
+            cdn: OnceCell::new(),
             index: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
@@ -206,6 +209,12 @@ impl TestEnvironment {
                     self.storage(),
                 ))
             })
+            .clone()
+    }
+
+    pub(crate) fn cdn(&self) -> Arc<CdnBackend> {
+        self.cdn
+            .get_or_init(|| Arc::new(CdnBackend::new(&self.config(), &self.runtime())))
             .clone()
     }
 
@@ -299,6 +308,10 @@ impl Context for TestEnvironment {
 
     fn storage(&self) -> Result<Arc<Storage>> {
         Ok(TestEnvironment::storage(self))
+    }
+
+    fn cdn(&self) -> Result<Arc<CdnBackend>> {
+        Ok(TestEnvironment::cdn(self))
     }
 
     fn pool(&self) -> Result<Pool> {
