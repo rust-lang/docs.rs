@@ -172,6 +172,8 @@
         <li class="pure-menu-item">
             <a
                 href="{{ release_url | safe }}"
+                {# We only want crawlers to crawl the /latest/ URLs, not /1.2.3/ URLs. #}
+                rel="nofollow"
                 class="pure-menu-link{% if warning %} warn{% endif %}"
                 {% if warning %} title="{{ warning }}"{% endif %}
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
