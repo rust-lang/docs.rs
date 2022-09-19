@@ -44,6 +44,7 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 
 fn generate_cache_directives_for(
     max_age: Option<u32>,
+    s_max_age: Option<u32>,
     stale_while_revalidate: Option<u32>,
 ) -> Option<CacheControl> {
     let mut directives = vec![];
@@ -57,6 +58,10 @@ fn generate_cache_directives_for(
 
     if let Some(seconds) = max_age {
         directives.push(CacheDirective::MaxAge(seconds));
+    }
+
+    if let Some(seconds) = s_max_age {
+        directives.push(CacheDirective::SMaxAge(seconds));
     }
 
     if !directives.is_empty() {
@@ -288,11 +293,13 @@ impl RustdocPage {
         let cache_control = if is_latest_url {
             generate_cache_directives_for(
                 Some(config.cache_control_max_age_latest.unwrap_or(0)),
+                config.cache_control_s_max_age_latest,
                 config.cache_control_stale_while_revalidate_latest,
             )
         } else {
             generate_cache_directives_for(
                 config.cache_control_max_age,
+                config.cache_control_s_max_age,
                 config.cache_control_stale_while_revalidate,
             )
         };
@@ -976,7 +983,9 @@ mod test {
         wrapper(|env| {
             env.override_config(|config| {
                 config.cache_control_max_age = Some(666);
+                config.cache_control_s_max_age = Some(777);
                 config.cache_control_max_age_latest = Some(999);
+                config.cache_control_s_max_age_latest = Some(888);
                 config.cache_control_stale_while_revalidate = Some(2222222);
                 config.cache_control_stale_while_revalidate_latest = Some(3333333);
             });
@@ -994,7 +1003,7 @@ mod test {
                 let resp = web.get("/dummy/latest/dummy/").send()?;
                 assert_eq!(
                     resp.headers().get("Cache-Control").unwrap(),
-                    &"stale-while-revalidate=3333333, max-age=999"
+                    &"stale-while-revalidate=3333333, max-age=999, s-maxage=888"
                 );
             }
 
@@ -1002,7 +1011,7 @@ mod test {
                 let resp = web.get("/dummy/0.1.0/dummy/").send()?;
                 assert_eq!(
                     resp.headers().get("Cache-Control").unwrap(),
-                    &"stale-while-revalidate=2222222, max-age=666"
+                    &"stale-while-revalidate=2222222, max-age=666, s-maxage=777"
                 );
             }
             Ok(())
