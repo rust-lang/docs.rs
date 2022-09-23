@@ -20,15 +20,25 @@ pub(crate) enum CdnKind {
 
 pub enum CdnBackend {
     Dummy(Arc<Mutex<Vec<(String, String)>>>),
-    CloudFront { runtime: Arc<Runtime> },
+    CloudFront {
+        runtime: Arc<Runtime>,
+        client: Client,
+    },
 }
 
 impl CdnBackend {
     pub fn new(config: &Arc<Config>, runtime: &Arc<Runtime>) -> CdnBackend {
         match config.cdn_backend {
-            CdnKind::CloudFront => Self::CloudFront {
-                runtime: runtime.clone(),
-            },
+            CdnKind::CloudFront => {
+                let shared_config = runtime.block_on(aws_config::load_from_env());
+                let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
+                    .retry_config(RetryConfig::new().with_max_attempts(3));
+
+                Self::CloudFront {
+                    runtime: runtime.clone(),
+                    client: Client::from_conf(config_builder.build()),
+                }
+            }
             CdnKind::Dummy => Self::Dummy(Arc::new(Mutex::new(Vec::new()))),
         }
     }
@@ -50,15 +60,14 @@ impl CdnBackend {
         let caller_reference = Uuid::new_v4();
 
         match *self {
-            CdnBackend::CloudFront { ref runtime } => {
-                let shared_config = runtime.block_on(aws_config::load_from_env());
-                let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
-                    .retry_config(RetryConfig::new().with_max_attempts(3));
-
+            CdnBackend::CloudFront {
+                ref runtime,
+                ref client,
+            } => {
                 runtime.block_on(CdnBackend::cloudfront_invalidation(
-                    &Client::from_conf(config_builder.build()),
+                    client,
                     distribution_id,
-                    &format!("{}", caller_reference),
+                    &caller_reference.to_string(),
                     path_patterns,
                 ))?;
             }
