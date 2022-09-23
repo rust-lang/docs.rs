@@ -505,17 +505,15 @@ impl RustwideBuilder {
             .map_err(FailureError::compat)?;
         local_storage.close()?;
         if let Some(distribution_id) = self.config.cloudfront_distribution_id_web.as_ref() {
-            if successful {
-                if let Err(err) = self
-                    .cdn
-                    .create_invalidation(
-                        distribution_id,
-                        &[&format!("/{}*", name), &format!("/crate/{}*", name)],
-                    )
-                    .context("error creating CDN invalidation")
-                {
-                    report_error(&err);
-                }
+            if let Err(err) = self
+                .cdn
+                .create_invalidation(
+                    distribution_id,
+                    &[&format!("/{}*", name), &format!("/crate/{}*", name)],
+                )
+                .context("error creating CDN invalidation")
+            {
+                report_error(&err);
             }
         }
         Ok(successful)
