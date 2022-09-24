@@ -584,17 +584,13 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             let url = if matchver.rustdoc_status {
                 let target_name = matchver.target_name;
                 let path = format!("{base}/{krate}/{version}/{target_name}/");
-                if queries.is_empty() {
-                    ctry!(req, Url::parse(&path))
-                } else {
-                    ctry!(
+                ctry!(
+                    req,
+                    Url::from_generic_url(ctry!(
                         req,
-                        Url::from_generic_url(ctry!(
-                            req,
-                            iron::url::Url::parse_with_params(&path, queries)
-                        ))
-                    )
-                }
+                        iron::url::Url::parse_with_params(&path, queries)
+                    ))
+                )
             } else {
                 ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
@@ -842,7 +838,7 @@ mod tests {
 
             assert_redirect(
                 "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
-                "/some_random_crate/1.0.0/some_random_crate/",
+                "/some_random_crate/1.0.0/some_random_crate/?",
                 web,
             )?;
             Ok(())

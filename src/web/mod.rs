@@ -728,24 +728,24 @@ mod test {
         wrapper(|env| {
             let web = env.frontend();
             for krate in &["std", "alloc", "core", "proc_macro", "test"] {
-                let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
+                let target = format!("https://doc.rust-lang.org/stable/{}/?", krate);
 
                 // with or without slash
                 assert_redirect(&format!("/{}", krate), &target, web)?;
                 assert_redirect(&format!("/{}/", krate), &target, web)?;
             }
 
-            let target = "https://doc.rust-lang.org/stable/proc_macro/";
+            let target = "https://doc.rust-lang.org/stable/proc_macro/?";
             // with or without slash
             assert_redirect("/proc-macro", target, web)?;
             assert_redirect("/proc-macro/", target, web)?;
 
-            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/";
+            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/?";
             // with or without slash
             assert_redirect("/rustc", target, web)?;
             assert_redirect("/rustc/", target, web)?;
 
-            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/";
+            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/?";
             // with or without slash
             assert_redirect("/rustdoc", target, web)?;
             assert_redirect("/rustdoc/", target, web)?;
