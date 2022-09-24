@@ -62,13 +62,6 @@ pub struct Config {
     // generate just that directive. Values are in seconds.
     pub(crate) cache_control_stale_while_revalidate: Option<u32>,
     pub(crate) cache_control_max_age: Option<u32>,
-    pub(crate) cache_control_s_max_age: Option<u32>,
-
-    // Cache-Control header, for /latest/ URLs.
-    // Same conditions as above apply.
-    pub(crate) cache_control_stale_while_revalidate_latest: Option<u32>,
-    pub(crate) cache_control_max_age_latest: Option<u32>,
-    pub(crate) cache_control_s_max_age_latest: Option<u32>,
 
     pub(crate) cdn_backend: CdnKind,
 
@@ -153,13 +146,6 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?,
             cache_control_max_age: maybe_env("CACHE_CONTROL_MAX_AGE")?,
-            cache_control_s_max_age: maybe_env("CACHE_CONTROL_S_MAX_AGE")?,
-
-            cache_control_stale_while_revalidate_latest: maybe_env(
-                "CACHE_CONTROL_STALE_WHILE_REVALIDATE_LATEST",
-            )?,
-            cache_control_max_age_latest: maybe_env("CACHE_CONTROL_MAX_AGE_LATEST")?,
-            cache_control_s_max_age_latest: maybe_env("CACHE_CONTROL_S_MAX_AGE_LATEST")?,
 
             cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
 
