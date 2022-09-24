@@ -74,6 +74,7 @@ macro_rules! extension {
 
 mod build_details;
 mod builds;
+pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 mod error;
@@ -128,6 +129,7 @@ impl MainHandler {
 
         chain.link_before(CspMiddleware);
         chain.link_after(CspMiddleware);
+        chain.link_after(cache::CacheMiddleware);
 
         chain
     }
@@ -485,7 +487,12 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
 fn redirect(url: Url) -> Response {
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.headers.set(Expires(HttpDate(time::now())));
+    resp
+}
 
+fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
+    let mut resp = Response::with((status::Found, Redirect(url)));
+    resp.extensions.insert::<cache::CachePolicy>(cache_policy);
     resp
 }
 
