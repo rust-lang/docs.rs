@@ -53,20 +53,19 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         if let Some(path) = path_in_crate {
             queries.insert("search".into(), path.into());
         }
-        let url: iron::url::Url = req.url.clone().into();
-        let query_pairs = url.query_pairs();
-        queries.extend(query_pairs);
-        let url = if queries.is_empty() {
-            ctry!(req, iron::url::Url::parse(&url_str))
-        } else {
-            ctry!(req, iron::url::Url::parse_with_params(&url_str, queries))
-        };
+        queries.extend(req.url.as_ref().query_pairs());
+        let url = ctry!(
+            req,
+            Url::from_generic_url(ctry!(
+                req,
+                iron::url::Url::parse_with_params(&url_str, queries)
+            ))
+        );
         let (status_code, max_age) = if permanent {
             (status::MovedPermanently, 86400)
         } else {
             (status::Found, 0)
         };
-        let url = ctry!(req, Url::from_generic_url(url));
         let mut resp = Response::with((status_code, Redirect(url)));
         resp.headers
             .set(CacheControl(vec![CacheDirective::MaxAge(max_age)]));
@@ -866,8 +865,8 @@ mod test {
                 "/dummy/0.3.0/all.html",
                 web,
             )?;
-            assert_redirect("/dummy/0.3.0/", base, web)?;
-            assert_redirect("/dummy/0.3.0/index.html", base, web)?;
+            assert_redirect("/dummy/0.3.0/", &format!("{}?", base), web)?;
+            assert_redirect("/dummy/0.3.0/index.html", &format!("{}?", base), web)?;
             Ok(())
         });
     }
@@ -1184,7 +1183,7 @@ mod test {
                 .create()?;
 
             let web = env.frontend();
-            assert_redirect("/fake%2Dcrate", "/fake-crate/latest/fake_crate/", web)?;
+            assert_redirect("/fake%2Dcrate", "/fake-crate/latest/fake_crate/?", web)?;
 
             Ok(())
         });
@@ -1214,37 +1213,37 @@ mod test {
 
             let web = env.frontend();
 
-            assert_redirect("/dummy_dash", "/dummy-dash/latest/dummy_dash/", web)?;
-            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
-            assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash", "/dummy-dash/latest/dummy_dash/?", web)?;
+            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/?", web)?;
+            assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/?", web)?;
             assert_redirect(
                 "/dummy-underscore",
-                "/dummy_underscore/latest/dummy_underscore/",
+                "/dummy_underscore/latest/dummy_underscore/?",
                 web,
             )?;
             assert_redirect(
                 "/dummy-underscore/*",
-                "/dummy_underscore/0.2.0/dummy_underscore/",
+                "/dummy_underscore/0.2.0/dummy_underscore/?",
                 web,
             )?;
             assert_redirect(
                 "/dummy-underscore/0.1.0",
-                "/dummy_underscore/0.1.0/dummy_underscore/",
+                "/dummy_underscore/0.1.0/dummy_underscore/?",
                 web,
             )?;
             assert_redirect(
                 "/dummy-mixed_separators",
-                "/dummy_mixed-separators/latest/dummy_mixed_separators/",
+                "/dummy_mixed-separators/latest/dummy_mixed_separators/?",
                 web,
             )?;
             assert_redirect(
                 "/dummy_mixed_separators/*",
-                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/?",
                 web,
             )?;
             assert_redirect(
                 "/dummy-mixed-separators/0.1.0",
-                "/dummy_mixed-separators/0.1.0/dummy_mixed_separators/",
+                "/dummy_mixed-separators/0.1.0/dummy_mixed_separators/?",
                 web,
             )?;
 
