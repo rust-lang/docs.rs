@@ -107,6 +107,7 @@ use postgres::Client;
 use router::{NoRoute, TrailingSlash};
 use semver::{Version, VersionReq};
 use serde::Serialize;
+use std::borrow::Borrow;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
@@ -507,6 +508,25 @@ fn redirect_base(req: &Request) -> String {
     }
 }
 
+/// Parse and URL into a iron::Url struct.
+/// When `queries` are given these are added to the URL,
+/// with empty `queries` the `?` will be omitted.
+pub(crate) fn parse_url_with_params<I, K, V>(url: &str, queries: I) -> Result<Url, Error>
+where
+    I: IntoIterator,
+    I::Item: Borrow<(K, V)>,
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
+    let mut queries = queries.into_iter().peekable();
+    if queries.peek().is_some() {
+        Url::from_generic_url(iron::url::Url::parse_with_params(url, queries)?)
+            .map_err(|msg| anyhow!(msg))
+    } else {
+        Url::parse(url).map_err(|msg| anyhow!(msg))
+    }
+}
+
 /// MetaData used in header
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct MetaData {
@@ -728,24 +748,24 @@ mod test {
         wrapper(|env| {
             let web = env.frontend();
             for krate in &["std", "alloc", "core", "proc_macro", "test"] {
-                let target = format!("https://doc.rust-lang.org/stable/{}/?", krate);
+                let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
 
                 // with or without slash
                 assert_redirect(&format!("/{}", krate), &target, web)?;
                 assert_redirect(&format!("/{}/", krate), &target, web)?;
             }
 
-            let target = "https://doc.rust-lang.org/stable/proc_macro/?";
+            let target = "https://doc.rust-lang.org/stable/proc_macro/";
             // with or without slash
             assert_redirect("/proc-macro", target, web)?;
             assert_redirect("/proc-macro/", target, web)?;
 
-            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/?";
+            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/";
             // with or without slash
             assert_redirect("/rustc", target, web)?;
             assert_redirect("/rustc/", target, web)?;
 
-            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/?";
+            let target = "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/";
             // with or without slash
             assert_redirect("/rustdoc", target, web)?;
             assert_redirect("/rustdoc/", target, web)?;

@@ -5,7 +5,7 @@ use crate::{
     db::{Pool, PoolClient},
     impl_webpage,
     utils::report_error,
-    web::{error::Nope, match_version, page::WebPage, redirect_base},
+    web::{error::Nope, match_version, page::WebPage, parse_url_with_params, redirect_base},
     BuildQueue, Config,
 };
 use anyhow::{anyhow, Result};
@@ -20,7 +20,7 @@ use log::{debug, warn};
 use postgres::Client;
 use router::Router;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str;
 use url::form_urlencoded;
 
@@ -584,11 +584,11 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             return redirect_to_random_crate(req, &mut conn);
         }
 
-        let mut queries = std::collections::BTreeMap::new();
+        let mut queries = BTreeMap::new();
 
         let krate = match query.split_once("::") {
             Some((krate, query)) => {
-                queries.insert("search", query);
+                queries.insert("search".into(), query.into());
                 krate.to_string()
             }
             None => query.clone(),
@@ -599,7 +599,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         // matter
         if let Ok(matchver) = match_version(&mut conn, &krate, None) {
             params.remove("query");
-            queries.extend(params.iter().map(|(k, v)| (k.as_ref(), v.as_ref())));
+            queries.extend(params);
             let (version, _) = matchver.version.into_parts();
             let krate = matchver.corrected_name.unwrap_or(krate);
 
@@ -607,13 +607,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             let url = if matchver.rustdoc_status {
                 let target_name = matchver.target_name;
                 let path = format!("{base}/{krate}/{version}/{target_name}/");
-                ctry!(
-                    req,
-                    Url::from_generic_url(ctry!(
-                        req,
-                        iron::url::Url::parse_with_params(&path, queries)
-                    ))
-                )
+                ctry!(req, parse_url_with_params(&path, queries))
             } else {
                 ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
@@ -861,7 +855,7 @@ mod tests {
 
             assert_redirect(
                 "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
-                "/some_random_crate/1.0.0/some_random_crate/?",
+                "/some_random_crate/1.0.0/some_random_crate/",
                 web,
             )?;
             Ok(())
