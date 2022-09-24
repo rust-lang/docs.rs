@@ -1,12 +1,9 @@
 use super::TemplateData;
-use crate::ctry;
-use crate::web::csp::Csp;
-use iron::{
-    headers::{CacheControl, ContentType},
-    response::Response,
-    status::Status,
-    IronResult, Request,
+use crate::{
+    ctry,
+    web::{cache::CachePolicy, csp::Csp},
 };
+use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
 use serde::Serialize;
 use std::borrow::Cow;
 use tera::Context;
@@ -81,7 +78,9 @@ pub trait WebPage: Serialize + Sized {
 
         let mut response = Response::with((status, rendered));
         response.headers.set(Self::content_type());
-        response.headers.set(Self::cache_control());
+        if let Some(cache) = Self::cache_policy() {
+            response.extensions.insert::<CachePolicy>(cache);
+        }
 
         Ok(response)
     }
@@ -99,8 +98,10 @@ pub trait WebPage: Serialize + Sized {
         ContentType::html()
     }
 
-    /// The contents of the Cache-Control header. Defaults to no caching.
-    fn cache_control() -> CacheControl {
-        CacheControl(vec![])
+    /// caching for this page.
+    /// `None` leads to the default from the `CacheMiddleware`
+    /// being used.
+    fn cache_policy() -> Option<CachePolicy> {
+        None
     }
 }

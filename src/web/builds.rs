@@ -1,4 +1,4 @@
-use super::{match_version, redirect_base, MatchSemver};
+use super::{cache::CachePolicy, match_version, redirect_base, MatchSemver};
 use crate::{
     db::Pool,
     docbuilder::Limits,
@@ -7,9 +7,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use iron::{
-    headers::{
-        AccessControlAllowOrigin, CacheControl, CacheDirective, ContentType, Expires, HttpDate,
-    },
+    headers::{AccessControlAllowOrigin, ContentType},
     status, IronResult, Request, Response, Url,
 };
 use router::Router;
@@ -107,12 +105,8 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
     if is_json {
         let mut resp = Response::with((status::Ok, serde_json::to_string(&builds).unwrap()));
         resp.headers.set(ContentType::json());
-        resp.headers.set(Expires(HttpDate(time::now())));
-        resp.headers.set(CacheControl(vec![
-            CacheDirective::NoCache,
-            CacheDirective::NoStore,
-            CacheDirective::MustRevalidate,
-        ]));
+        resp.extensions
+            .insert::<CachePolicy>(CachePolicy::NoStoreMustRevalidate);
         resp.headers.set(AccessControlAllowOrigin::Any);
 
         Ok(resp)
@@ -131,7 +125,10 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{wrapper, FakeBuild};
+    use crate::{
+        test::{assert_cache_control, wrapper, FakeBuild},
+        web::cache::CachePolicy,
+    };
     use chrono::{DateTime, Duration, Utc};
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
@@ -156,12 +153,9 @@ mod tests {
                 ])
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
-                env.frontend()
-                    .get("/crate/foo/0.1.0/builds")
-                    .send()?
-                    .text()?,
-            );
+            let response = env.frontend().get("/crate/foo/0.1.0/builds").send()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            let page = kuchiki::parse_html().one(response.text()?);
 
             let rows: Vec<_> = page
                 .select("ul > li a.release")
@@ -200,12 +194,9 @@ mod tests {
                 ])
                 .create()?;
 
-            let value: serde_json::Value = serde_json::from_str(
-                &env.frontend()
-                    .get("/crate/foo/0.1.0/builds.json")
-                    .send()?
-                    .text()?,
-            )?;
+            let response = env.frontend().get("/crate/foo/0.1.0/builds.json").send()?;
+            assert_cache_control(&response, CachePolicy::NoStoreMustRevalidate, &env.config());
+            let value: serde_json::Value = serde_json::from_str(&response.text()?)?;
 
             assert_eq!(value.pointer("/0/build_status"), Some(&true.into()));
             assert_eq!(

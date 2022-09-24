@@ -1,11 +1,8 @@
 use crate::web::page::WebPage;
 
-use super::metrics::RequestRecorder;
+use super::{cache::CachePolicy, metrics::RequestRecorder};
 use ::std::borrow::Cow;
-use iron::{
-    headers::{CacheControl, CacheDirective},
-    middleware::Handler,
-};
+use iron::middleware::Handler;
 use router::Router;
 use std::collections::HashSet;
 
@@ -42,8 +39,8 @@ pub(super) fn build_routes() -> Routes {
             fn template(&self) -> Cow<'static, str> {
                 "storage-change-detection.html".into()
             }
-            fn cache_control() -> CacheControl {
-                CacheControl(vec![CacheDirective::MaxAge(604800)])
+            fn cache_policy() -> Option<CachePolicy> {
+                Some(CachePolicy::ForeverInCdnAndBrowser)
             }
         }
         fn storage_change_detection(req: &mut iron::Request) -> iron::IronResult<iron::Response> {

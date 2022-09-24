@@ -1,10 +1,9 @@
-use super::{error::Nope, redirect, redirect_base, STATIC_FILE_CACHE_DURATION};
+use super::{cache::CachePolicy, error::Nope, redirect, redirect_base};
 use crate::utils::report_error;
 use anyhow::Context;
 use chrono::prelude::*;
 use iron::{
-    headers::CacheDirective,
-    headers::{CacheControl, ContentLength, ContentType, LastModified},
+    headers::{ContentLength, ContentType, LastModified},
     status::Status,
     IronResult, Request, Response, Url,
 };
@@ -99,11 +98,9 @@ where
 {
     let mut response = Response::with((Status::Ok, resource.as_ref()));
 
-    let cache = vec![
-        CacheDirective::Public,
-        CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
-    ];
-    response.headers.set(CacheControl(cache));
+    response
+        .extensions
+        .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
 
     response
         .headers
@@ -145,8 +142,13 @@ mod tests {
     use iron::status::Status;
 
     use super::{serve_file, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
-    use crate::test::wrapper;
+    use crate::{
+        test::{assert_cache_control, wrapper},
+        web::cache::CachePolicy,
+    };
+    use reqwest::StatusCode;
     use std::fs;
+    use test_case::test_case;
 
     #[test]
     fn style_css() {
@@ -155,6 +157,7 @@ mod tests {
 
             let resp = web.get("/-/static/style.css").send()?;
             assert!(resp.status().is_success());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
@@ -173,6 +176,7 @@ mod tests {
 
             let resp = web.get("/-/static/vendored.css").send()?;
             assert!(resp.status().is_success());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
@@ -184,73 +188,23 @@ mod tests {
         });
     }
 
-    #[test]
-    fn index_js() {
+    #[test_case("/-/static/index.js", "copyTextHandler")]
+    #[test_case("/-/static/menu.js", "closeMenu")]
+    #[test_case("/-/static/keyboard.js", "handleKey")]
+    #[test_case("/-/static/source.js", "toggleSource")]
+    fn js_content(path: &str, expected_content: &str) {
         wrapper(|env| {
             let web = env.frontend();
 
-            let resp = web.get("/-/static/index.js").send()?;
+            let resp = web.get(path).send()?;
             assert!(resp.status().is_success());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"application/javascript".parse().unwrap()),
             );
             assert!(resp.content_length().unwrap() > 10);
-            assert!(resp.text()?.contains("copyTextHandler"));
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn menu_js() {
-        wrapper(|env| {
-            let web = env.frontend();
-
-            let resp = web.get("/-/static/menu.js").send()?;
-            assert!(resp.status().is_success());
-            assert_eq!(
-                resp.headers().get("Content-Type"),
-                Some(&"application/javascript".parse().unwrap()),
-            );
-            assert!(resp.content_length().unwrap() > 10);
-            assert!(resp.text()?.contains("closeMenu"));
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn keyboard_js() {
-        wrapper(|env| {
-            let web = env.frontend();
-
-            let resp = web.get("/-/static/keyboard.js").send()?;
-            assert!(resp.status().is_success());
-            assert_eq!(
-                resp.headers().get("Content-Type"),
-                Some(&"application/javascript".parse().unwrap()),
-            );
-            assert!(resp.content_length().unwrap() > 10);
-            assert!(resp.text()?.contains("handleKey"));
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn source_js() {
-        wrapper(|env| {
-            let web = env.frontend();
-
-            let resp = web.get("/-/static/source.js").send()?;
-            assert!(resp.status().is_success());
-            assert_eq!(
-                resp.headers().get("Content-Type"),
-                Some(&"application/javascript".parse().unwrap()),
-            );
-            assert!(resp.content_length().unwrap() > 10);
-            assert!(resp.text()?.contains("toggleSource"));
+            assert!(resp.text()?.contains(expected_content));
 
             Ok(())
         });
@@ -274,6 +228,7 @@ mod tests {
                     let resp = web.get(&url).send()?;
 
                     assert!(resp.status().is_success(), "failed to fetch {:?}", url);
+                    assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
                     assert_eq!(
                         resp.bytes()?,
                         fs::read(&path).unwrap(),
@@ -290,14 +245,9 @@ mod tests {
     #[test]
     fn static_file_that_doesnt_exist() {
         wrapper(|env| {
-            let web = env.frontend();
-            assert_eq!(
-                web.get("/-/static/whoop-de-do.png")
-                    .send()?
-                    .status()
-                    .as_u16(),
-                404,
-            );
+            let response = env.frontend().get("/-/static/whoop-de-do.png").send()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
             Ok(())
         });
