@@ -545,7 +545,7 @@ impl_webpage! {
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let url = req.url.as_ref();
-    let params: HashMap<_, _> = url.query_pairs().collect();
+    let mut params: HashMap<_, _> = url.query_pairs().collect();
     let query = params
         .get("query")
         .map(|q| q.to_string())
@@ -555,7 +555,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
-    if params.contains_key("i-am-feeling-lucky") || query.contains("::") {
+    if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
             return redirect_to_random_crate(req, &mut conn);
@@ -571,17 +571,12 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
             None => query.clone(),
         };
 
-        queries.extend(
-            params
-                .iter()
-                .filter(|(k, _)| !matches!(k.as_ref(), "i-am-feeling-lucky" | "query"))
-                .map(|(k, v)| (k.as_ref(), v.as_ref())),
-        );
-
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
         if let Ok(matchver) = match_version(&mut conn, &krate, None) {
+            params.remove("query");
+            queries.extend(params.iter().map(|(k, v)| (k.as_ref(), v.as_ref())));
             let (version, _) = matchver.version.into_parts();
             let krate = matchver.corrected_name.unwrap_or(krate);
 
