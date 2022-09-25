@@ -20,6 +20,7 @@ use reqwest::{
 use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
+#[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     let env = TestEnvironment::new();
     // if we didn't catch the panic, the server would hang forever
