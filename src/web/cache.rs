@@ -101,9 +101,10 @@ impl AfterMiddleware for CacheMiddleware {
             .unwrap_or(&CachePolicy::NoCaching);
 
         if cfg!(test) {
-            // handlers should never set their own caching headers and
-            // only use the caching header templates above.
-            assert!(!res.headers.has::<CacheControl>());
+            assert!(
+                !res.headers.has::<CacheControl>(), 
+                "handlers should never set their own caching headers and only use CachePolicy to control caching."
+            );
         }
 
         res.headers.set(CacheControl(cache.render(config)));
