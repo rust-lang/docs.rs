@@ -102,7 +102,7 @@ impl AfterMiddleware for CacheMiddleware {
 
         if cfg!(test) {
             assert!(
-                !res.headers.has::<CacheControl>(), 
+                !res.headers.has::<CacheControl>(),
                 "handlers should never set their own caching headers and only use CachePolicy to control caching."
             );
         }
