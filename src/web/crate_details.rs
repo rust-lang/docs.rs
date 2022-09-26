@@ -308,7 +308,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
             req,
             Url::parse(&format!("{}/crate/{}/latest", redirect_base(req), name,)),
         );
-        return Ok(super::cached_redirect(url, CachePolicy::ForeverOnlyInCdn));
+        return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
     }
 
     let mut conn = extension!(req, Pool).get()?;
@@ -329,7 +329,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 )),
             );
 
-            return Ok(super::cached_redirect(url, CachePolicy::ForeverOnlyInCdn));
+            return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
         }
     };
 
@@ -350,7 +350,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 
     let mut res = CrateDetailsPage { details }.into_response(req)?;
     res.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverOnlyInCdn
+        CachePolicy::ForeverInCdn
     } else {
         CachePolicy::ForeverInCdnAndStaleInBrowser
     });
@@ -1027,7 +1027,7 @@ mod tests {
 
             let resp = env.frontend().get("/crate/dummy/latest").send()?;
             assert!(resp.status().is_success());
-            assert_cache_control(&resp, CachePolicy::ForeverOnlyInCdn, &env.config());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/crate/dummy/latest"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
@@ -1045,7 +1045,7 @@ mod tests {
             assert_redirect_cached(
                 "/crate/dummy",
                 "/crate/dummy/latest",
-                CachePolicy::ForeverOnlyInCdn,
+                CachePolicy::ForeverInCdn,
                 web,
                 &env.config(),
             )?;
