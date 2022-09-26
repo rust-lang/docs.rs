@@ -54,7 +54,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         }
         queries.extend(req.url.as_ref().query_pairs());
         let url = ctry!(req, parse_url_with_params(&url_str, queries));
-        let mut resp = Response::with((status::Found, Redirect(url)));
+        let status = if matches!(cache_policy, CachePolicy::ForeverInCdnAndBrowser) {
+            status::MovedPermanently
+        } else {
+            status::Found
+        };
+        let mut resp = Response::with((status, Redirect(url)));
         resp.extensions.insert::<CachePolicy>(cache_policy);
         Ok(resp)
     }
@@ -190,7 +195,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         };
 
         let cache = if version == "latest" {
-            CachePolicy::ForeverInCdn
+            CachePolicy::ForeverInCdnAndBrowser
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
         };
@@ -1767,7 +1772,7 @@ mod test {
     }
 
     #[test]
-    fn test_redirect_to_latest_302() {
+    fn test_redirect_to_latest_301() {
         wrapper(|env| {
             env.fake_release().name("dummy").version("1.0.0").create()?;
             let web = env.frontend();
@@ -1777,10 +1782,10 @@ mod test {
                 .unwrap();
             let url = format!("http://{}/dummy", web.server_addr());
             let resp = client.get(url).send()?;
-            assert_eq!(resp.status(), StatusCode::FOUND);
+            assert_eq!(resp.status(), StatusCode::MOVED_PERMANENTLY);
             assert_eq!(
                 resp.headers().get("Cache-Control").unwrap(),
-                reqwest::header::HeaderValue::from_str("public").unwrap()
+                reqwest::header::HeaderValue::from_str("public, max-age=31104000").unwrap()
             );
             assert!(resp
                 .headers()
