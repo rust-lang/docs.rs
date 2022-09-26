@@ -164,7 +164,8 @@ pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFront
     Ok(())
 }
 
-/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
+/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect.
+/// Also verifies that the redirect's cache-control header matches the provided cache policy.
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect_cached(
     path: &str,
