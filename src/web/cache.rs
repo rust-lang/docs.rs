@@ -6,7 +6,7 @@ use iron::{
 };
 
 #[cfg(test)]
-pub const NO_CACHE: &str = "no-cache, max-age=0";
+pub const NO_CACHE: &str = "max-age=0";
 
 /// defines the wanted caching behaviour for a web response.
 pub enum CachePolicy {
@@ -40,7 +40,7 @@ impl CachePolicy {
     pub fn render(&self, config: &Config) -> Vec<CacheDirective> {
         match *self {
             CachePolicy::NoCaching => {
-                vec![CacheDirective::NoCache, CacheDirective::MaxAge(0)]
+                vec![CacheDirective::MaxAge(0)]
             }
             CachePolicy::NoStoreMustRevalidate => {
                 vec![
@@ -118,7 +118,7 @@ mod tests {
     use iron::headers::CacheControl;
     use test_case::test_case;
 
-    #[test_case(CachePolicy::NoCaching, "no-cache, max-age=0")]
+    #[test_case(CachePolicy::NoCaching, "max-age=0")]
     #[test_case(
         CachePolicy::NoStoreMustRevalidate,
         "no-cache, no-store, must-revalidate, max-age=0"
