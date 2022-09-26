@@ -140,7 +140,7 @@ pub fn about_handler(req: &mut Request) -> IronResult<Response> {
 
     let name = match *req.url.path().last().expect("iron is broken") {
         "about" | "index" => "index",
-        x @ "badges" | x @ "metadata" | x @ "redirections" => x,
+        x @ "badges" | x @ "metadata" | x @ "redirections" | x @ "download" => x,
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";

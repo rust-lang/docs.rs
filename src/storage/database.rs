@@ -21,6 +21,32 @@ impl DatabaseBackend {
         Ok(conn.query(query, &[&path])?[0].get(0))
     }
 
+    pub(super) fn get_public_access(&self, path: &str) -> Result<bool> {
+        match self.pool.get()?.query_opt(
+            "SELECT public 
+             FROM files 
+             WHERE path = $1",
+            &[&path],
+        )? {
+            Some(row) => Ok(row.get(0)),
+            None => Err(super::PathNotFoundError.into()),
+        }
+    }
+
+    pub(super) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
+        if self.pool.get()?.execute(
+            "UPDATE files 
+             SET public = $2 
+             WHERE path = $1",
+            &[&path, &public],
+        )? == 1
+        {
+            Ok(())
+        } else {
+            Err(super::PathNotFoundError.into())
+        }
+    }
+
     pub(super) fn get(
         &self,
         path: &str,

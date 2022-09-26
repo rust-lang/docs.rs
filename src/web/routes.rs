@@ -101,6 +101,10 @@ pub(super) fn build_routes() -> Routes {
         "/crate/:name/:version/builds",
         super::builds::build_list_handler,
     );
+    routes.internal_page(
+        "/crate/:name/:version/download",
+        super::rustdoc::download_handler,
+    );
     routes.static_resource(
         "/crate/:name/:version/builds.json",
         super::builds::build_list_handler,

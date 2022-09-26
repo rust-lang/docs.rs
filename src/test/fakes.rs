@@ -316,13 +316,21 @@ impl<'a> FakeRelease<'a> {
                 source_directory.display()
             );
             if archive_storage {
-                let archive = match kind {
-                    FileKind::Rustdoc => rustdoc_archive_path(&package.name, &package.version),
-                    FileKind::Sources => source_archive_path(&package.name, &package.version),
+                let (archive, public) = match kind {
+                    FileKind::Rustdoc => {
+                        (rustdoc_archive_path(&package.name, &package.version), true)
+                    }
+                    FileKind::Sources => {
+                        (source_archive_path(&package.name, &package.version), false)
+                    }
                 };
                 log::debug!("store in archive: {:?}", archive);
-                let (files_list, new_alg) =
-                    crate::db::add_path_into_remote_archive(&storage, &archive, source_directory)?;
+                let (files_list, new_alg) = crate::db::add_path_into_remote_archive(
+                    &storage,
+                    &archive,
+                    source_directory,
+                    public,
+                )?;
                 let mut hm = HashSet::new();
                 hm.insert(new_alg);
                 Ok((files_list, hm))

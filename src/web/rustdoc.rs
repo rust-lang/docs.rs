@@ -3,11 +3,12 @@
 use crate::{
     db::Pool,
     repositories::RepositoryStatsUpdater,
+    storage::rustdoc_archive_path,
     utils,
     web::{
         cache::CachePolicy, crate_details::CrateDetails, csp::Csp, error::Nope, file::File,
         match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base,
-        MatchSemver, MetaData,
+        report_error, MatchSemver, MetaData,
     },
     Config, Metrics, Storage,
 };
@@ -716,6 +717,52 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     res.extensions
         .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
     Ok(res)
+}
+
+pub fn download_handler(req: &mut Request) -> IronResult<Response> {
+    let router = extension!(req, Router);
+    let name = cexpect!(req, router.find("name"));
+    let req_version = cexpect!(req, router.find("version"));
+
+    let mut conn = extension!(req, Pool).get()?;
+
+    let version =
+        match match_version(&mut conn, name, Some(req_version)).and_then(|m| m.assume_exact())? {
+            MatchSemver::Exact((version, _))
+            | MatchSemver::Latest((version, _))
+            | MatchSemver::Semver((version, _)) => version,
+        };
+
+    let storage = extension!(req, Storage);
+    let config = extension!(req, Config);
+    let archive_path = rustdoc_archive_path(name, &version);
+
+    // not all archives are set for public access yet, so we check if
+    // the access is set and fix it if needed.
+
+    let archive_is_public = match storage
+        .get_public_access(&archive_path)
+        .context("reading public access for archive")
+    {
+        Ok(is_public) => is_public,
+        Err(err) => {
+            if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
+                return Err(Nope::ResourceNotFound.into());
+            } else {
+                report_error(&err);
+                return Err(Nope::InternalServerError.into());
+            }
+        }
+    };
+
+    if !archive_is_public {
+        ctry!(req, storage.set_public_access(&archive_path, true));
+    }
+
+    Ok(super::redirect(ctry!(
+        req,
+        Url::parse(&format!("{}/{}", config.s3_static_domain, archive_path))
+    )))
 }
 
 /// Serves shared web resources used by rustdoc-generated documentation.
@@ -2261,5 +2308,110 @@ mod test {
             );
             Ok(())
         })
+    }
+
+    #[test]
+    fn download_unknown_version_404() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            assert_eq!(
+                web.get("/crate/dummy/0.1.0/download").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn download_old_storage_version_404() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(false)
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_eq!(
+                web.get("/crate/dummy/0.1.0/download").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn download_semver() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_redirect_unchecked(
+                "/crate/dummy/0.1/download",
+                "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+                web,
+            )?;
+            assert!(env.storage().get_public_access("rustdoc/dummy/0.1.0.zip")?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn download_specific_version() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .create()?;
+
+            let web = env.frontend();
+
+            // disable public access to be sure that the handler will enable it
+            env.storage()
+                .set_public_access("rustdoc/dummy/0.1.0.zip", false)?;
+
+            assert_redirect_unchecked(
+                "/crate/dummy/0.1.0/download",
+                "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+                web,
+            )?;
+            assert!(env.storage().get_public_access("rustdoc/dummy/0.1.0.zip")?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn download_latest_version() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .create()?;
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .archive_storage(true)
+                .create()?;
+
+            let web = env.frontend();
+
+            assert_redirect_unchecked(
+                "/crate/dummy/latest/download",
+                "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
+                web,
+            )?;
+            assert!(env.storage().get_public_access("rustdoc/dummy/0.2.0.zip")?);
+            Ok(())
+        });
     }
 }

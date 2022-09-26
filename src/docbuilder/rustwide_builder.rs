@@ -410,6 +410,7 @@ impl RustwideBuilder {
                             &self.storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
+                            true,
                         )?;
                         algs.insert(new_alg);
                     };
@@ -421,6 +422,7 @@ impl RustwideBuilder {
                             &self.storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
+                            false,
                         )?;
                         algs.insert(new_alg);
                         files_list
