@@ -3,7 +3,7 @@ use crate::{Config, Metrics};
 use anyhow::{Context, Error};
 use aws_sdk_s3::{
     error,
-    model::{Delete, ObjectIdentifier},
+    model::{Delete, ObjectIdentifier, Tag, Tagging},
     types::SdkError,
     Client, Endpoint, Region, RetryConfig,
 };
@@ -15,6 +15,9 @@ use futures_util::{
 };
 use std::{io::Write, sync::Arc};
 use tokio::runtime::Runtime;
+
+const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
+const PUBLIC_ACCESS_VALUE: &str = "allow";
 
 pub(super) struct S3Backend {
     client: Client,
@@ -84,6 +87,71 @@ impl S3Backend {
                         || raw.http().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
+                }
+                Err(other) => Err(other.into()),
+            }
+        })
+    }
+
+    pub(super) fn get_public_access(&self, path: &str) -> Result<bool, Error> {
+        self.runtime.block_on(async {
+            match self
+                .client
+                .get_object_tagging()
+                .bucket(&self.bucket)
+                .key(path)
+                .send()
+                .await
+            {
+                Ok(tags) => Ok(tags
+                    .tag_set()
+                    .map(|tags| {
+                        tags.iter()
+                            .filter(|tag| tag.key() == Some(PUBLIC_ACCESS_TAG))
+                            .any(|tag| tag.value() == Some(PUBLIC_ACCESS_VALUE))
+                    })
+                    .unwrap_or(false)),
+                Err(SdkError::ServiceError { err, raw }) => {
+                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                        Err(super::PathNotFoundError.into())
+                    } else {
+                        Err(err.into())
+                    }
+                }
+                Err(other) => Err(other.into()),
+            }
+        })
+    }
+
+    pub(super) fn set_public_access(&self, path: &str, public: bool) -> Result<(), Error> {
+        self.runtime.block_on(async {
+            match self
+                .client
+                .put_object_tagging()
+                .bucket(&self.bucket)
+                .key(path)
+                .tagging(if public {
+                    Tagging::builder()
+                        .tag_set(
+                            Tag::builder()
+                                .key(PUBLIC_ACCESS_TAG)
+                                .value(PUBLIC_ACCESS_VALUE)
+                                .build(),
+                        )
+                        .build()
+                } else {
+                    Tagging::builder().build()
+                })
+                .send()
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(SdkError::ServiceError { err, raw }) => {
+                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                        Err(super::PathNotFoundError.into())
+                    } else {
+                        Err(err.into())
+                    }
                 }
                 Err(other) => Err(other.into()),
             }

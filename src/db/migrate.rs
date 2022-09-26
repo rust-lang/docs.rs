@@ -848,6 +848,11 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "CREATE INDEX builds_release_id_idx ON builds (rid);",
             "DROP INDEX builds_release_id_idx;",
         ),
+        sql_migration!(
+            context, 35, "add public visibility to files table",
+            "ALTER TABLE files ADD COLUMN public BOOL NOT NULL DEFAULT FALSE;",
+            "ALTER TABLE files DROP COLUMN public;"
+        ),
 
     ];
 

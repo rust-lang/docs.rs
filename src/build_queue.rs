@@ -550,7 +550,8 @@ mod tests {
     fn test_invalidate_cdn_after_build_and_error() {
         crate::test::wrapper(|env| {
             env.override_config(|config| {
-                config.cloudfront_distribution_id_web = Some("distribution_id".into());
+                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
+                config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
             });
 
             let queue = env.build_queue();
@@ -573,8 +574,16 @@ mod tests {
                 assert_eq!(
                     *ir,
                     [
-                        ("distribution_id".into(), "/will_succeed*".into()),
-                        ("distribution_id".into(), "/crate/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_succeed*".into()
+                        ),
+                        (
+                            "distribution_id_static".into(),
+                            "/sources/will_succeed*".into()
+                        ),
                     ]
                 );
             }
@@ -588,10 +597,26 @@ mod tests {
                 assert_eq!(
                     *ir,
                     [
-                        ("distribution_id".into(), "/will_succeed*".into()),
-                        ("distribution_id".into(), "/crate/will_succeed*".into()),
-                        ("distribution_id".into(), "/will_fail*".into()),
-                        ("distribution_id".into(), "/crate/will_fail*".into()),
+                        ("distribution_id_web".into(), "/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_succeed*".into()
+                        ),
+                        (
+                            "distribution_id_static".into(),
+                            "/sources/will_succeed*".into()
+                        ),
+                        ("distribution_id_web".into(), "/will_fail*".into()),
+                        ("distribution_id_web".into(), "/crate/will_fail*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_fail*".into()
+                        ),
+                        (
+                            "distribution_id_static".into(),
+                            "/sources/will_fail*".into()
+                        ),
                     ]
                 );
             }

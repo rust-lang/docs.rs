@@ -38,8 +38,12 @@ pub fn add_path_into_remote_archive<P: AsRef<Path>>(
     storage: &Storage,
     archive_path: &str,
     path: P,
+    public_access: bool,
 ) -> Result<(Value, CompressionAlgorithm)> {
     let (file_list, algorithm) = storage.store_all_in_archive(archive_path, path.as_ref())?;
+    if public_access {
+        storage.set_public_access(archive_path, true)?;
+    }
     Ok((
         file_list_to_json(file_list.into_iter().collect()),
         algorithm,
