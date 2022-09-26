@@ -67,7 +67,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
         let mut resp = Response::with((status::Found, Redirect(url)));
         resp.extensions
-            .insert::<CachePolicy>(CachePolicy::ForeverOnlyInCdn);
+            .insert::<CachePolicy>(CachePolicy::ForeverInCdn);
         Ok(resp)
     }
 
@@ -190,7 +190,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         };
 
         let cache = if version == "latest" {
-            CachePolicy::ForeverOnlyInCdn
+            CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
         };
@@ -263,7 +263,7 @@ impl RustdocPage {
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
         response.extensions.insert::<CachePolicy>(if is_latest_url {
-            CachePolicy::ForeverOnlyInCdn
+            CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
         });
@@ -356,7 +356,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            return redirect(&name, &v, &req_path, CachePolicy::ForeverOnlyInCdn);
+            return redirect(&name, &v, &req_path, CachePolicy::ForeverInCdn);
         }
     };
 
@@ -387,7 +387,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             &name,
             &version_or_latest,
             &req_path[1..],
-            CachePolicy::ForeverOnlyInCdn,
+            CachePolicy::ForeverInCdn,
         );
     }
 
@@ -427,7 +427,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                     &name,
                     &version_or_latest,
                     &req_path,
-                    CachePolicy::ForeverOnlyInCdn,
+                    CachePolicy::ForeverInCdn,
                 )
             } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
@@ -436,7 +436,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                     &format!("/crate/{}", name),
                     &format!("{}/target-redirect", version),
                     &req_path,
-                    CachePolicy::ForeverOnlyInCdn,
+                    CachePolicy::ForeverInCdn,
                 )
             } else {
                 Err(Nope::ResourceNotFound.into())
@@ -456,7 +456,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         // which means we cache slightly different for `/latest/` and
         // URLs with versions.
         response.extensions.insert::<CachePolicy>(if is_latest_url {
-            CachePolicy::ForeverOnlyInCdn
+            CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
         });
@@ -701,7 +701,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
     let url = ctry!(req, Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverOnlyInCdn
+        CachePolicy::ForeverInCdn
     } else {
         CachePolicy::ForeverInCdnAndStaleInBrowser
     });
@@ -788,7 +788,7 @@ mod test {
             .next()
         {
             let link = elem.attributes.borrow().get("href").unwrap().to_string();
-            assert_success_cached(&link, web, CachePolicy::ForeverOnlyInCdn, config)?;
+            assert_success_cached(&link, web, CachePolicy::ForeverInCdn, config)?;
             Ok(Some(link))
         } else {
             Ok(None)
@@ -898,7 +898,7 @@ mod test {
             assert_redirect_cached(
                 "/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/",
                 base,
-                CachePolicy::ForeverOnlyInCdn,
+                CachePolicy::ForeverInCdn,
                 web,
                 &env.config(),
             )?;
@@ -954,7 +954,7 @@ mod test {
                 .create()?;
 
             let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
-            assert_cache_control(&resp, CachePolicy::ForeverOnlyInCdn, &env.config());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/dummy/latest/dummy/"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
@@ -982,7 +982,7 @@ mod test {
 
             {
                 let resp = web.get("/dummy/latest/dummy/").send()?;
-                assert_cache_control(&resp, CachePolicy::ForeverOnlyInCdn, &env.config());
+                assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             }
 
             {

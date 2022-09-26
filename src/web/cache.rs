@@ -27,7 +27,7 @@ pub enum CachePolicy {
     /// Since we control the CDN we can actively purge content that is cached like
     /// this, for example after building a crate.
     /// Example usage: `/latest/` rustdoc pages and their redirects.
-    ForeverOnlyInCdn,
+    ForeverInCdn,
     /// cache forver in the CDN, but allow stale content in the browser.
     /// Example: rustdoc pages with the version in their URL.
     /// A browser will show the stale content while getting the up-to-date
@@ -56,7 +56,7 @@ impl CachePolicy {
                     CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
                 ]
             }
-            CachePolicy::ForeverOnlyInCdn => {
+            CachePolicy::ForeverInCdn => {
                 // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
                 // CloudFront using the default TTL, while the browser not seeing any caching header.
                 // This means we can have the CDN caching the documentation while just
@@ -65,7 +65,7 @@ impl CachePolicy {
                 vec![CacheDirective::Public]
             }
             CachePolicy::ForeverInCdnAndStaleInBrowser => {
-                let mut directives = CachePolicy::ForeverOnlyInCdn.render(config);
+                let mut directives = CachePolicy::ForeverInCdn.render(config);
                 if let Some(seconds) = config.cache_control_stale_while_revalidate {
                     directives.push(CacheDirective::Extension(
                         "stale-while-revalidate".to_string(),
@@ -86,8 +86,8 @@ impl iron::typemap::Key for CachePolicy {
 /// The default is an explicit "never cache" header, which
 /// can be adapted via:
 /// ```ignore
-///  resp.extensions.insert::<CachePolicy>(CachePolicy::ForeverOnlyInCdn);
-///  # change Cache::ForeverOnlyInCdn into the cache polity you want to have
+///  resp.extensions.insert::<CachePolicy>(CachePolicy::ForeverInCdn);
+///  # change Cache::ForeverInCdn into the cache polity you want to have
 /// ```
 /// in a handler function.
 pub(super) struct CacheMiddleware;
@@ -125,7 +125,7 @@ mod tests {
         "no-cache, no-store, must-revalidate, max-age=0"
     )]
     #[test_case(CachePolicy::ForeverInCdnAndBrowser, "public, max-age=31104000")]
-    #[test_case(CachePolicy::ForeverOnlyInCdn, "public")]
+    #[test_case(CachePolicy::ForeverInCdn, "public")]
     #[test_case(
         CachePolicy::ForeverInCdnAndStaleInBrowser,
         "public, stale-while-revalidate=86400"

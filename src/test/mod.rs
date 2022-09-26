@@ -263,7 +263,7 @@ impl TestEnvironment {
         config.local_archive_cache_path =
             std::env::temp_dir().join(format!("docsrs-test-index-{}", rand::random::<u64>()));
 
-        // set stale content serving so Cache::ForeverOnlyInCdn and Cache::ForeverInCdnAndStaleInBrowser
+        // set stale content serving so Cache::ForeverInCdn and Cache::ForeverInCdnAndStaleInBrowser
         // are actually different.
         config.cache_control_stale_while_revalidate = Some(86400);
 
