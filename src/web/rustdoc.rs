@@ -450,8 +450,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
         let mut response = File(blob).serve();
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
-        // We don't want to cache invocation specific assets in the browser
-        // but only in the CDN so we can invalidate these after a build.
+        // We want invocation specific assets cached in the CDN but not in the browser.
+        // That way we can invalidate the CDN cache after a build.
         // For CDN caching the same rules should apply as for HTML files,
         // which means we cache slightly different for `/latest/` and
         // URLs with versions.
