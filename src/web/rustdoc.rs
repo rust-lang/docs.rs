@@ -1778,10 +1778,7 @@ mod test {
             let url = format!("http://{}/dummy", web.server_addr());
             let resp = client.get(url).send()?;
             assert_eq!(resp.status(), StatusCode::FOUND);
-            assert_eq!(
-                resp.headers().get("Cache-Control").unwrap(),
-                reqwest::header::HeaderValue::from_str("public").unwrap()
-            );
+            assert!(resp.headers().get("Cache-Control").unwrap().is_empty());
             assert!(resp
                 .headers()
                 .get("Location")

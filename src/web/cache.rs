@@ -51,10 +51,7 @@ impl CachePolicy {
                 ]
             }
             CachePolicy::ForeverInCdnAndBrowser => {
-                vec![
-                    CacheDirective::Public,
-                    CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32),
-                ]
+                vec![CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)]
             }
             CachePolicy::ForeverInCdn => {
                 // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
@@ -62,7 +59,7 @@ impl CachePolicy {
                 // This means we can have the CDN caching the documentation while just
                 // issuing a purge after a build.
                 // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
-                vec![CacheDirective::Public]
+                vec![]
             }
             CachePolicy::ForeverInCdnAndStaleInBrowser => {
                 let mut directives = CachePolicy::ForeverInCdn.render(config);
@@ -124,11 +121,11 @@ mod tests {
         CachePolicy::NoStoreMustRevalidate,
         "no-cache, no-store, must-revalidate, max-age=0"
     )]
-    #[test_case(CachePolicy::ForeverInCdnAndBrowser, "public, max-age=31104000")]
-    #[test_case(CachePolicy::ForeverInCdn, "public")]
+    #[test_case(CachePolicy::ForeverInCdnAndBrowser, "max-age=31104000")]
+    #[test_case(CachePolicy::ForeverInCdn, "")]
     #[test_case(
         CachePolicy::ForeverInCdnAndStaleInBrowser,
-        "public, stale-while-revalidate=86400"
+        "stale-while-revalidate=86400"
     )]
     fn render(cache: CachePolicy, expected: &str) {
         wrapper(|env| {
@@ -148,7 +145,7 @@ mod tests {
             assert_eq!(
                 CacheControl(CachePolicy::ForeverInCdnAndStaleInBrowser.render(&env.config()))
                     .to_string(),
-                "public"
+                ""
             );
             Ok(())
         });
@@ -163,7 +160,7 @@ mod tests {
             assert_eq!(
                 CacheControl(CachePolicy::ForeverInCdnAndStaleInBrowser.render(&env.config()))
                     .to_string(),
-                "public, stale-while-revalidate=666"
+                "stale-while-revalidate=666"
             );
             Ok(())
         });
