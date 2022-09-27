@@ -448,19 +448,10 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     if !path.ends_with(".html") {
         rendering_time.step("serve asset");
 
-        let mut response = File(blob).serve();
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
-        // We want invocation specific assets cached in the CDN but not in the browser.
-        // That way we can invalidate the CDN cache after a build.
-        // For CDN caching the same rules should apply as for HTML files,
-        // which means we cache slightly different for `/latest/` and
-        // URLs with versions.
-        response.extensions.insert::<CachePolicy>(if is_latest_url {
-            CachePolicy::ForeverInCdn
-        } else {
-            CachePolicy::ForeverInCdnAndStaleInBrowser
-        });
-        return Ok(response);
+        // This is an edge-case when we serve invocation specific static assets under `/latest/`:
+        // https://github.com/rust-lang/docs.rs/issues/1593
+        return Ok(File(blob).serve());
     }
 
     rendering_time.step("find latest path");
@@ -850,7 +841,7 @@ mod test {
             assert_success_cached(
                 "/buggy/0.1.0/directory_3/.gitignore",
                 web,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                CachePolicy::ForeverInCdnAndBrowser,
                 &env.config(),
             )?;
             assert_success_cached(
@@ -868,7 +859,7 @@ mod test {
             assert_success_cached(
                 "/buggy/0.1.0/directory_4/empty_file_no_ext",
                 web,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                CachePolicy::ForeverInCdnAndBrowser,
                 &env.config(),
             )?;
             Ok(())
