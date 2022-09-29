@@ -48,21 +48,14 @@
                             ) }}
 
                             {{ macros::menu_link(
-                                href="https://rust-lang-nursery.github.io/rust-cookbook/",
-                                text="Rust Cookbook",
-                                target="_blank",
-                                extra_classes="menu-item-divided"
-                            ) }}
-
-                            {{ macros::menu_link(
-                                href="https://crates.io",
-                                text="Crates.io",
+                                href="http://doc.crates.io/guide.html",
+                                text="The Cargo Guide",
                                 target="_blank"
                             ) }}
 
                             {{ macros::menu_link(
-                                href="http://doc.crates.io/guide.html",
-                                text="The Cargo Guide",
+                                href="https://doc.rust-lang.org/nightly/clippy",
+                                text="Clippy Documentation",
                                 target="_blank"
                             ) }}
                         </ul>
@@ -71,7 +64,7 @@
                 {# The search bar #}
                 <div id="search-input-nav">
                     <label for="nav-search">
-                        {{ "search" | fas }}
+                        {{ "magnifying-glass" | fas }}
                     </label>
 
                     {# If there is a search query, put it in the search bar #}

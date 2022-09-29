@@ -1,5 +1,12 @@
-use crate::{db::Pool, docbuilder::Limits, impl_webpage, web::error::Nope, web::page::WebPage};
-use chrono::{DateTime, Utc};
+use crate::{
+    db::Pool,
+    docbuilder::Limits,
+    impl_webpage,
+    utils::{get_config, ConfigName},
+    web::error::Nope,
+    web::page::WebPage,
+};
+use chrono::{DateTime, TimeZone, Utc};
 use iron::{
     headers::ContentType,
     mime::{Mime, SubLevel, TopLevel},
@@ -7,7 +14,6 @@ use iron::{
 };
 use router::Router;
 use serde::Serialize;
-use serde_json::Value;
 
 /// sitemap index
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -80,6 +86,9 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
             target_name: row.get("target_name"),
             last_modified: row
                 .get::<_, DateTime<Utc>>("release_time")
+                // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+                // so they should all get recrawled if they haven't been since then.
+                .max(Utc.ymd(2022, 8, 28).and_hms(0, 0, 0))
                 .format("%+")
                 .to_string(),
         })
@@ -102,18 +111,11 @@ impl_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let res = ctry!(
-        req,
-        conn.query("SELECT value FROM config WHERE name = 'rustc_version'", &[]),
-    );
 
-    let rustc_version = res.get(0).and_then(|row| {
-        if let Ok(Some(Value::String(version))) = row.try_get(0) {
-            Some(version)
-        } else {
-            None
-        }
-    });
+    let rustc_version = ctry!(
+        req,
+        get_config::<String>(&mut conn, ConfigName::RustcVersion)
+    );
 
     AboutBuilds {
         rustc_version,
@@ -224,6 +226,26 @@ mod tests {
                 assert!(!(response.text()?.contains("some_random_crate")));
             }
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn sitemap_max_age() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            use chrono::{TimeZone, Utc};
+            env.fake_release()
+                .name("some_random_crate")
+                .release_time(Utc.ymd(2020, 1, 1).and_hms(0, 0, 0))
+                .create()?;
+
+            let response = web.get("/-/sitemap/s/sitemap.xml").send()?;
+            assert!(response.status().is_success());
+
+            let content = response.text()?;
+            assert!(content.contains(&"2022-08-28T00:00:00+00:00"));
             Ok(())
         })
     }

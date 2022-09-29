@@ -1,26 +1,27 @@
 mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
+use crate::cdn::CdnBackend;
 use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
 use crate::web::Server;
 use crate::{BuildQueue, Config, Context, Index, Metrics};
+use anyhow::Context as _;
+use fn_error_context::context;
 use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
-    blocking::{Client, RequestBuilder},
+    blocking::{Client, ClientBuilder, RequestBuilder},
     Method,
 };
-use std::fs;
-use std::net::SocketAddr;
-use std::{panic, sync::Arc};
+use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
+use tokio::runtime::Runtime;
 
+#[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
-    let _ = dotenv::dotenv();
-
     let env = TestEnvironment::new();
     // if we didn't catch the panic, the server would hang forever
     let maybe_panic = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&env)));
@@ -56,45 +57,57 @@ pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
     Ok(())
 }
 
-/// Make sure that a URL redirects to a specific page
-pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
-    // Reqwest follows redirects automatically
-    let response = web.get(path).send()?;
+fn assert_redirect_common(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
+    let response = web.get_no_redirect(path).send()?;
     let status = response.status();
-
-    let mut tmp;
-    let redirect_target = if expected_target.starts_with("https://") {
-        response.url().as_str()
-    } else {
-        tmp = String::from(response.url().path());
-        if let Some(query) = response.url().query() {
-            tmp.push('?');
-            tmp.push_str(query);
-        }
-        &tmp
-    };
-    // Either we followed a redirect to the wrong place, or there was no redirect
-    if redirect_target != expected_target {
-        // wrong place
-        if redirect_target != path {
-            panic!(
-                "{}: expected redirect to {}, got redirect to {}",
-                path, expected_target, redirect_target
-            );
-        } else {
-            // no redirect
-            panic!(
-                "{}: expected redirect to {}, got {}",
-                path, expected_target, status
-            );
-        }
+    if !status.is_redirection() {
+        anyhow::bail!("non-redirect from GET {path}: {status}");
     }
-    assert!(
-        status.is_success(),
-        "failed to GET {}: {}",
-        expected_target,
-        status
-    );
+
+    let mut redirect_target = response
+        .headers()
+        .get("Location")
+        .context("missing 'Location' header")?
+        .to_str()
+        .context("non-ASCII redirect")?;
+
+    if !expected_target.starts_with("http") {
+        // TODO: Should be able to use Url::make_relative,
+        // but https://github.com/servo/rust-url/issues/766
+        let base = format!("http://{}", web.server_addr());
+        redirect_target = redirect_target
+            .strip_prefix(&base)
+            .unwrap_or(redirect_target);
+    }
+
+    if redirect_target != expected_target {
+        anyhow::bail!("got redirect to {redirect_target}");
+    }
+
+    Ok(())
+}
+
+/// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect_unchecked(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<()> {
+    assert_redirect_common(path, expected_target, web)
+}
+
+/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
+    assert_redirect_common(path, expected_target, web)?;
+
+    let response = web.get_no_redirect(expected_target).send()?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to GET {expected_target}: {status}");
+    }
+
     Ok(())
 }
 
@@ -103,7 +116,9 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
+    cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
+    runtime: OnceCell<Arc<Runtime>>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
@@ -113,6 +128,7 @@ pub(crate) fn init_logger() {
     // initializing rustwide logging also sets the global logger
     rustwide::logging::init_with(
         env_logger::Builder::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
+            .format_timestamp_millis()
             .is_test(true)
             .build(),
     );
@@ -126,9 +142,11 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: OnceCell::new(),
             storage: OnceCell::new(),
+            cdn: OnceCell::new(),
             index: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
+            runtime: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
         }
     }
@@ -195,6 +213,12 @@ impl TestEnvironment {
             .clone()
     }
 
+    pub(crate) fn cdn(&self) -> Arc<CdnBackend> {
+        self.cdn
+            .get_or_init(|| Arc::new(CdnBackend::new(&self.config(), &self.runtime())))
+            .clone()
+    }
+
     pub(crate) fn config(&self) -> Arc<Config> {
         self.config
             .get_or_init(|| Arc::new(self.base_config()))
@@ -205,8 +229,13 @@ impl TestEnvironment {
         self.storage
             .get_or_init(|| {
                 Arc::new(
-                    Storage::new(self.db().pool(), self.metrics(), self.config())
-                        .expect("failed to initialize the storage"),
+                    Storage::new(
+                        self.db().pool(),
+                        self.metrics(),
+                        self.config(),
+                        self.runtime(),
+                    )
+                    .expect("failed to initialize the storage"),
                 )
             })
             .clone()
@@ -215,6 +244,11 @@ impl TestEnvironment {
     pub(crate) fn metrics(&self) -> Arc<Metrics> {
         self.metrics
             .get_or_init(|| Arc::new(Metrics::new().expect("failed to initialize the metrics")))
+            .clone()
+    }
+    pub(crate) fn runtime(&self) -> Arc<Runtime> {
+        self.runtime
+            .get_or_init(|| Arc::new(Runtime::new().expect("failed to initialize runtime")))
             .clone()
     }
 
@@ -277,6 +311,10 @@ impl Context for TestEnvironment {
         Ok(TestEnvironment::storage(self))
     }
 
+    fn cdn(&self) -> Result<Arc<CdnBackend>> {
+        Ok(TestEnvironment::cdn(self))
+    }
+
     fn pool(&self) -> Result<Pool> {
         Ok(self.db().pool())
     }
@@ -291,6 +329,10 @@ impl Context for TestEnvironment {
 
     fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>> {
         Ok(self.repository_stats_updater())
+    }
+
+    fn runtime(&self) -> Result<Arc<Runtime>> {
+        Ok(self.runtime())
     }
 }
 
@@ -372,22 +414,35 @@ impl Drop for TestDatabase {
 pub(crate) struct TestFrontend {
     server: Server,
     pub(crate) client: Client,
+    pub(crate) client_no_redirect: Client,
 }
 
 impl TestFrontend {
     fn new(context: &dyn Context) -> Self {
+        fn build(f: impl FnOnce(ClientBuilder) -> ClientBuilder) -> Client {
+            let base = Client::builder()
+                .connect_timeout(Duration::from_millis(2000))
+                .timeout(Duration::from_millis(2000))
+                // The test server only supports a single connection, so having two clients with
+                // idle connections deadlocks the tests
+                .pool_max_idle_per_host(0);
+            f(base).build().unwrap()
+        }
+
         Self {
             server: Server::start(Some("127.0.0.1:0"), context)
                 .expect("failed to start the web server"),
-            client: Client::new(),
+            client: build(|b| b),
+            client_no_redirect: build(|b| b.redirect(reqwest::redirect::Policy::none())),
         }
     }
 
-    fn build_request(&self, method: Method, mut url: String) -> RequestBuilder {
+    fn build_url(&self, url: &str) -> String {
         if url.is_empty() || url.starts_with('/') {
-            url = format!("http://{}{}", self.server.addr(), url);
+            format!("http://{}{}", self.server.addr(), url)
+        } else {
+            url.to_owned()
         }
-        self.client.request(method, url)
     }
 
     pub(crate) fn server_addr(&self) -> SocketAddr {
@@ -395,6 +450,14 @@ impl TestFrontend {
     }
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
-        self.build_request(Method::GET, url.to_string())
+        let url = self.build_url(url);
+        log::debug!("getting {url}");
+        self.client.request(Method::GET, url)
+    }
+
+    pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
+        let url = self.build_url(url);
+        log::debug!("getting {url} (no redirects)");
+        self.client_no_redirect.request(Method::GET, url)
     }
 }

@@ -76,6 +76,7 @@ pub struct Release {
     pub yanked: bool,
     pub is_library: bool,
     pub rustdoc_status: bool,
+    pub target_name: String,
 }
 
 impl CrateDetails {
@@ -241,15 +242,16 @@ pub(crate) fn releases_for_crate(
 ) -> Result<Vec<Release>, anyhow::Error> {
     let mut releases: Vec<Release> = conn
         .query(
-            "SELECT 
-                id, 
+            "SELECT
+                id,
                 version,
                 build_status,
                 yanked,
                 is_library,
-                rustdoc_status
+                rustdoc_status,
+                target_name
              FROM releases
-             WHERE 
+             WHERE
                  releases.crate_id = $1",
             &[&crate_id],
         )?
@@ -264,6 +266,7 @@ pub(crate) fn releases_for_crate(
                     yanked: row.get("yanked"),
                     is_library: row.get("is_library"),
                     rustdoc_status: row.get("rustdoc_status"),
+                    target_name: row.get("target_name"),
                 }),
                 Err(err) => {
                     report_error(&anyhow!(err).context(format!(
@@ -500,6 +503,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[0].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
@@ -508,6 +512,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[1].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
@@ -516,6 +521,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: false,
                         id: details.releases[2].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
@@ -524,6 +530,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[3].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
@@ -532,6 +539,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[4].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
@@ -540,6 +548,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[5].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
@@ -548,6 +557,7 @@ mod tests {
                         is_library: true,
                         rustdoc_status: true,
                         id: details.releases[6].id,
+                        target_name: "foo".to_owned(),
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
@@ -556,12 +566,31 @@ mod tests {
                         is_library: false,
                         rustdoc_status: false,
                         id: details.releases[7].id,
+                        target_name: "foo".to_owned(),
                     },
                 ]
             );
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_canonical_url() {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.0.1").create()?;
+            env.fake_release().name("foo").version("0.0.2").create()?;
+
+            let web = env.frontend();
+
+            assert!(web
+                .get("/crate/foo/0.0.1")
+                .send()?
+                .text()?
+                .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest"));
+
+            Ok(())
+        })
     }
 
     #[test]

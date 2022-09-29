@@ -1,6 +1,6 @@
 use crate::{docbuilder::RustwideBuilder, utils::report_error, BuildQueue};
-use anyhow::Error;
-use log::{debug, error, info, warn};
+use anyhow::{Context, Error};
+use log::{debug, error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,71 +8,49 @@ use std::{fs, io, thread};
 
 pub(crate) const TEMPDIR_PREFIX: &str = "docsrs-docs";
 
-// TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
 pub fn queue_builder(
     mut builder: RustwideBuilder,
     build_queue: Arc<BuildQueue>,
 ) -> Result<(), Error> {
-    /// Represents the current state of the builder thread.
-    enum BuilderState {
-        /// The builder thread has just started, and hasn't built any crates yet.
-        Fresh,
-        /// The builder has just seen an empty build queue.
-        EmptyQueue,
-        /// The builder has just seen the lock file.
-        Locked,
-        /// The builder has started (or just finished) building a crate.
-        QueueInProgress,
-    }
-
-    let mut status = BuilderState::Fresh;
-
     loop {
         if let Err(e) = remove_tempdirs() {
             report_error(&anyhow::anyhow!(e).context("failed to remove temporary directories"));
         }
 
-        if !matches!(status, BuilderState::QueueInProgress) {
-            thread::sleep(Duration::from_secs(60));
-        }
-
         // check lock file
-        if build_queue.is_locked() {
-            warn!("Lock file exists, skipping building new crates");
-            status = BuilderState::Locked;
-            continue;
-        }
-
-        // Only build crates if there are any to build
-        debug!("Checking build queue");
-        match build_queue.pending_count() {
-            Err(e) => {
-                report_error(&e.context("Failed to read the number of crates in the queue"));
+        match build_queue.is_locked().context("could not get queue lock") {
+            Ok(true) => {
+                warn!("Build queue is locked, skipping building new crates");
+                thread::sleep(Duration::from_secs(60));
                 continue;
             }
-
-            Ok(0) => {
-                debug!("Queue is empty, going back to sleep");
-                status = BuilderState::EmptyQueue;
+            Ok(false) => {}
+            Err(err) => {
+                report_error(&err);
+                thread::sleep(Duration::from_secs(60));
                 continue;
             }
-
-            Ok(queue_count) => info!("Starting build with {} crates in queue", queue_count),
         }
-
-        status = BuilderState::QueueInProgress;
 
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
+        debug!("Checking build queue");
         let res = catch_unwind(AssertUnwindSafe(|| {
-            if let Err(e) = build_queue.build_next_queue_package(&mut builder) {
-                report_error(&e.context("Failed to build crate from queue"));
+            match build_queue.build_next_queue_package(&mut builder) {
+                Ok(true) => {}
+                Ok(false) => {
+                    debug!("Queue is empty, going back to sleep");
+                    thread::sleep(Duration::from_secs(60));
+                }
+                Err(e) => {
+                    report_error(&e.context("Failed to build crate from queue"));
+                }
             }
         }));
 
         if let Err(e) = res {
             error!("GRAVE ERROR Building new crates panicked: {:?}", e);
-            // If we panic here something is really truly wrong and trying to handle the error won't help.
-            build_queue.lock().expect("failed to lock queue");
+            thread::sleep(Duration::from_secs(60));
+            continue;
         }
     }
 }

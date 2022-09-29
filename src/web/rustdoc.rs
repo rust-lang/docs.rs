@@ -6,76 +6,58 @@ use crate::{
     utils,
     web::{
         crate_details::CrateDetails, csp::Csp, error::Nope, file::File, match_version,
-        metrics::RenderingTimesRecorder, redirect_base, MatchSemver, MetaData,
+        metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base, MatchSemver,
+        MetaData,
     },
     Config, Metrics, Storage,
 };
 use anyhow::{anyhow, Context};
-use iron::url::percent_encoding::percent_decode;
 use iron::{
     headers::{CacheControl, CacheDirective, Expires, HttpDate},
     modifiers::Redirect,
-    status, Handler, IronResult, Request, Response, Url,
+    status,
+    url::percent_encoding::percent_decode,
+    Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
+use once_cell::sync::Lazy;
 use router::Router;
 use serde::Serialize;
-use std::path::Path;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Write,
+    path::Path,
+};
 
-#[derive(Clone)]
-pub struct RustLangRedirector {
-    url: Url,
-}
-
-impl RustLangRedirector {
-    pub fn new(version: &str, target: &str) -> Self {
-        let url =
-            iron::url::Url::parse(&format!("https://doc.rust-lang.org/{}/{}", version, target))
-                .expect("failed to parse rust-lang.org doc URL");
-        let url = Url::from_generic_url(url).expect("failed to convert url::Url to iron::Url");
-
-        Self { url }
-    }
-}
-
-impl iron::Handler for RustLangRedirector {
-    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-        Ok(Response::with((status::Found, Redirect(self.url.clone()))))
-    }
-}
+static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
+    HashMap::from([
+        ("alloc", "stable/alloc"),
+        ("core", "stable/core"),
+        ("proc_macro", "stable/proc_macro"),
+        ("proc-macro", "stable/proc_macro"),
+        ("std", "stable/std"),
+        ("test", "stable/test"),
+        ("rustc", "nightly/nightly-rustc"),
+        ("rustdoc", "nightly/nightly-rustc/rustdoc"),
+    ])
+});
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     fn redirect_to_doc(
         req: &Request,
-        name: &str,
-        vers: &str,
-        target: Option<&str>,
-        target_name: &str,
+        url_str: String,
+        permanent: bool,
         path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
-        let mut url_str = if let Some(target) = target {
-            format!(
-                "{}/{}/{}/{}/{}/",
-                redirect_base(req),
-                name,
-                vers,
-                target,
-                target_name
-            )
-        } else {
-            format!("{}/{}/{}/{}/", redirect_base(req), name, vers, target_name)
-        };
-        if let Some(query) = req.url.query() {
-            url_str.push('?');
-            url_str.push_str(query);
-        } else if let Some(path) = path_in_crate {
-            url_str.push_str("?search=");
-            url_str.push_str(path);
+        let mut queries = BTreeMap::new();
+        if let Some(path) = path_in_crate {
+            queries.insert("search".into(), path.into());
         }
-        let url = ctry!(req, Url::parse(&url_str));
-        let (status_code, max_age) = if vers == "latest" {
+        queries.extend(req.url.as_ref().query_pairs());
+        let url = ctry!(req, parse_url_with_params(&url_str, queries));
+        let (status_code, max_age) = if permanent {
             (status::MovedPermanently, 86400)
         } else {
             (status::Found, 0)
@@ -156,6 +138,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         Some((krate, path)) => (krate.to_string(), Some(path.to_string())),
         None => (crate_name.to_string(), None),
     };
+
+    if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
+        let url = format!("https://doc.rust-lang.org/{inner_path}/");
+        return redirect_to_doc(req, url, false, path_in_crate.as_deref());
+    }
+
     let req_version = router.find("version");
     let mut target = router.find("target");
 
@@ -197,14 +185,15 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     if has_docs {
         rendering_time.step("redirect to doc");
-        redirect_to_doc(
-            req,
-            &crate_name,
-            &version,
-            target,
-            &target_name,
-            path_in_crate.as_deref(),
-        )
+
+        let base = redirect_base(req);
+        let url_str = if let Some(target) = target {
+            format!("{base}/{crate_name}/{version}/{target}/{target_name}/")
+        } else {
+            format!("{base}/{crate_name}/{version}/{target_name}/")
+        };
+
+        redirect_to_doc(req, url_str, version == "latest", path_in_crate.as_deref())
     } else {
         rendering_time.step("redirect to crate");
         redirect_to_crate(req, &crate_name, &version)
@@ -219,7 +208,11 @@ struct RustdocPage {
     latest_version: String,
     target: String,
     inner_path: String,
+    // true if we are displaying the latest version of the crate, regardless
+    // of whether the URL specifies a version number or the string "latest."
     is_latest_version: bool,
+    // true if the URL specifies a version using the string "latest."
+    is_latest_url: bool,
     is_prerelease: bool,
     krate: CrateDetails,
     metadata: MetaData,
@@ -245,15 +238,16 @@ impl RustdocPage {
             .get::<crate::Metrics>()
             .expect("missing Metrics from the request extensions");
 
+        let is_latest_url = self.is_latest_url;
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self));
+        let config = extension!(req, Config);
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting
         let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
                 metrics.html_rewrite_ooms.inc();
 
-                let config = extension!(req, Config);
                 let err = anyhow!(
                     "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
                     file_path, config.max_parse_memory,
@@ -267,6 +261,27 @@ impl RustdocPage {
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
 
+        if is_latest_url {
+            response
+                .headers
+                .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
+        } else {
+            let mut directives = vec![];
+            if let Some(seconds) = config.cache_control_stale_while_revalidate {
+                directives.push(CacheDirective::Extension(
+                    "stale-while-revalidate".to_string(),
+                    Some(format!("{}", seconds)),
+                ));
+            }
+
+            if let Some(seconds) = config.cache_control_max_age {
+                directives.push(CacheDirective::MaxAge(seconds));
+            }
+
+            if !directives.is_empty() {
+                response.headers.set(CacheControl(directives));
+            }
+        }
         Ok(response)
     }
 }
@@ -534,6 +549,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         target,
         inner_path,
         is_latest_version,
+        is_latest_url: version_or_latest == "latest",
         is_prerelease,
         metadata: krate.metadata.clone(),
         krate,
@@ -547,8 +563,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 /// Note that path is overloaded in this context to mean both the path of a URL
 /// and the file path of a static file in the DB.
 ///
-/// `req_path` is assumed to have the following format:
-/// `rustdoc/crate/version[/platform]/module/[kind.name.html|index.html]`
+/// `file_path` is assumed to have the following format:
+/// `[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
 fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String {
@@ -589,11 +605,16 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
         // else, don't try searching at all, we don't know how to find it
         last_component.strip_suffix(".rs.html")
     };
-    if let Some(search) = search_item {
-        format!("{}?search={}", platform, search)
+    let target_name = &crate_details.target_name;
+    let mut result = if platform.is_empty() {
+        format!("{target_name}/")
     } else {
-        platform.to_owned()
+        format!("{platform}/{target_name}/")
+    };
+    if let Some(search) = search_item {
+        write!(result, "?search={search}").unwrap();
     }
+    result
 }
 
 pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
@@ -663,13 +684,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         path_for_version(&file_path, &crate_details)
     };
 
-    let url = format!(
-        "{base}/{name}/{version_or_latest}/{path}",
-        base = base,
-        name = name,
-        version_or_latest = version_or_latest,
-        path = path
-    );
+    let url = format!("{base}/{name}/{version_or_latest}/{path}");
 
     let url = ctry!(req, Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
@@ -869,6 +884,39 @@ mod test {
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
             assert!(body.contains("<a href=\"/dummy/0.1.0/dummy/index.html\""));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn cache_headers_on_version() {
+        wrapper(|env| {
+            env.override_config(|config| {
+                config.cache_control_max_age = Some(600);
+                config.cache_control_stale_while_revalidate = Some(2592000);
+            });
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let web = env.frontend();
+
+            {
+                let resp = web.get("/dummy/latest/dummy/").send()?;
+                assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
+            }
+
+            {
+                let resp = web.get("/dummy/0.1.0/dummy/").send()?;
+                assert_eq!(
+                    resp.headers().get("Cache-Control").unwrap(),
+                    &"stale-while-revalidate=2592000, max-age=600"
+                );
+            }
             Ok(())
         })
     }
@@ -1729,9 +1777,21 @@ mod test {
             )?;
             assert_redirect(
                 "/some_random_crate::some::path",
-                "/some_random_crate/latest/some_random_crate/?search=some::path",
+                "/some_random_crate/latest/some_random_crate/?search=some%3A%3Apath",
                 web,
             )?;
+            assert_redirect(
+                "/some_random_crate::some::path?go_to_first=true",
+                "/some_random_crate/latest/some_random_crate/?go_to_first=true&search=some%3A%3Apath",
+                web,
+            )?;
+
+            assert_redirect(
+                "/std::some::path",
+                "https://doc.rust-lang.org/stable/std/?search=some%3A%3Apath",
+                web,
+            )?;
+
             Ok(())
         })
     }

@@ -4,12 +4,61 @@
 
 use crate::{
     utils::{queue_builder, report_error},
-    Context, RustwideBuilder,
+    BuildQueue, Config, Context, Index, RustwideBuilder,
 };
 use anyhow::{anyhow, Context as _, Error};
 use log::{debug, info};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Run the registry watcher
+/// NOTE: this should only be run once, otherwise crates would be added
+/// to the queue multiple times.
+pub fn watch_registry(
+    build_queue: Arc<BuildQueue>,
+    config: Arc<Config>,
+    index: Arc<Index>,
+) -> Result<(), Error> {
+    let mut last_gc = Instant::now();
+
+    // On startup we fetch the last seen index reference from
+    // the database and set it in the local index repository.
+    match build_queue.last_seen_reference() {
+        Ok(Some(oid)) => {
+            index.diff()?.set_last_seen_reference(oid)?;
+        }
+        Ok(None) => {}
+        Err(err) => {
+            log::error!(
+                "queue locked because of invalid last_seen_index_reference in database: {:?}",
+                err
+            );
+            build_queue.lock()?;
+        }
+    }
+
+    loop {
+        if build_queue.is_locked()? {
+            debug!("Queue is locked, skipping checking new crates");
+        } else {
+            debug!("Checking new crates");
+            match build_queue
+                .get_new_crates(&index)
+                .context("Failed to get new crates")
+            {
+                Ok(n) => debug!("{} crates added to queue", n),
+                Err(e) => report_error(&e),
+            }
+        }
+
+        if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+            index.run_git_gc();
+            last_gc = Instant::now();
+        }
+        thread::sleep(Duration::from_secs(60));
+    }
+}
 
 fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
     let build_queue = context.build_queue()?;
@@ -22,29 +71,26 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
             // space this out to prevent it from clashing against the queue-builder thread on launch
             thread::sleep(Duration::from_secs(30));
 
-            let mut last_gc = Instant::now();
-            loop {
-                if build_queue.is_locked() {
-                    debug!("Lock file exists, skipping checking new crates");
-                } else {
-                    debug!("Checking new crates");
-                    match build_queue
-                        .get_new_crates(&index)
-                        .context("Failed to get new crates")
-                    {
-                        Ok(n) => debug!("{} crates added to queue", n),
-                        Err(e) => report_error(&e),
-                    }
-                }
-
-                if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-                    index.run_git_gc();
-                    last_gc = Instant::now();
-                }
-                thread::sleep(Duration::from_secs(60));
-            }
+            watch_registry(build_queue, config, index)
         })?;
 
+    Ok(())
+}
+
+pub fn start_background_repository_stats_updater(context: &dyn Context) -> Result<(), Error> {
+    // This call will still skip github repositories updates and continue if no token is provided
+    // (gitlab doesn't require to have a token). The only time this can return an error is when
+    // creating a pool or if config fails, which shouldn't happen here because this is run right at
+    // startup.
+    let updater = context.repository_stats_updater()?;
+    cron(
+        "repositories stats updater",
+        Duration::from_secs(60 * 60),
+        move || {
+            updater.update_all_crates()?;
+            Ok(())
+        },
+    )?;
     Ok(())
 }
 
@@ -70,19 +116,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
         })
         .unwrap();
 
-    // This call will still skip github repositories updates and continue if no token is provided
-    // (gitlab doesn't require to have a token). The only time this can return an error is when
-    // creating a pool or if config fails, which shouldn't happen here because this is run right at
-    // startup.
-    let updater = context.repository_stats_updater()?;
-    cron(
-        "repositories stats updater",
-        Duration::from_secs(60 * 60),
-        move || {
-            updater.update_all_crates()?;
-            Ok(())
-        },
-    )?;
+    start_background_repository_stats_updater(context)?;
 
     // Never returns; `server` blocks indefinitely when dropped
     // NOTE: if a anyhow occurred earlier in `start_daemon`, the server will _not_ be joined -

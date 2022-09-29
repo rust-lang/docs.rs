@@ -64,6 +64,9 @@ mkdir -p ignored/cratesfyi-prefix/crates.io-index
 cargo build
 # Start the external services
 docker-compose up -d db s3
+# anything that doesn't run via docker-compose needs the settings defined in
+# .env. Either via `. ./.env` as below, or via any dotenv shell integration.
+. ./.env
 # Setup the database you just created
 cargo run -- database migrate
 # Build a sample crate to make sure it works
@@ -76,7 +79,7 @@ cargo run -- build add-essential-files
 # It does not automatically run the migrations, so you need to do that manually (see above).
 cargo run -- start-web-server
 # If you want the server to automatically restart when code or templates change
-# you can use `cargo-watch`: 
+# you can use `cargo-watch`:
 cargo watch -x "run -- start-web-server"
 ```
 
@@ -212,7 +215,7 @@ If you want to explore or edit database manually, you can connect to the databas
 with the `psql` command.
 
 ```sh
-. .env
+. ./.env
 psql $DOCSRS_DATABASE_URL
 ```
 

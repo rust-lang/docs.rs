@@ -9,9 +9,6 @@ use iron::{
 use router::Router;
 use std::collections::HashSet;
 
-pub(super) const DOC_RUST_LANG_ORG_REDIRECTS: &[&str] =
-    &["alloc", "core", "proc_macro", "std", "test"];
-
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
@@ -166,28 +163,6 @@ pub(super) fn build_routes() -> Routes {
     routes.rustdoc_page(
         "/:crate/:version/:target/*.html",
         super::rustdoc::rustdoc_html_server_handler,
-    );
-
-    for redirect in DOC_RUST_LANG_ORG_REDIRECTS {
-        routes.internal_page(
-            &format!("/{}", redirect),
-            super::rustdoc::RustLangRedirector::new("stable", redirect),
-        );
-    }
-    // redirect proc-macro to proc_macro
-    routes.internal_page(
-        "/proc-macro",
-        super::rustdoc::RustLangRedirector::new("stable", "proc_macro"),
-    );
-    // redirect rustc to nightly rustc docs
-    routes.internal_page(
-        "/rustc",
-        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc"),
-    );
-    // redirect rustdoc to nightly rustdoc docs
-    routes.internal_page(
-        "/rustdoc",
-        super::rustdoc::RustLangRedirector::new("nightly", "nightly-rustc/rustdoc"),
     );
 
     routes

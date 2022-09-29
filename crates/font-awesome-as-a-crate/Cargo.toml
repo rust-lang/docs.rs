@@ -1,8 +1,6 @@
 [package]
 name = "font-awesome-as-a-crate"
-version = "0.2.0"
-# https://github.com/FortAwesome/Font-Awesome/blob/master/composer.json
-authors = ["Michael Howell <michael@notriddle.com>", "Travis Chase", "Dave Gandy", "Rob Madole", "Jory Raphael", "Geremia Taglialatela", "Brian Talbot", "Mike Wilkerson", "Fonticons Inc <hello@fontawesome.com>"]
+version = "0.3.0"
 edition = "2018"
 license = "CC-BY-4.0 AND MIT"
 description = "Font Awesome Free, packaged as a crate"

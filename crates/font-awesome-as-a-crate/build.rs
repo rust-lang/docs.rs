@@ -17,7 +17,7 @@ fn write_fontawesome_sprite() {
         .write_all(b"const fn fontawesome_svg(dir:&str,file:&str)->&'static str{match(dir.as_bytes(),file.as_bytes()){")
         .expect("fontawesome fn write");
     for dirname in &["brands", "regular", "solid"] {
-        let dir = read_dir(Path::new("fontawesome-free-5.14.0-web/svgs").join(dirname)).unwrap();
+        let dir = read_dir(Path::new("fontawesome-free-6.2.0-desktop/svgs").join(dirname)).unwrap();
         let mut data = String::new();
         for file in dir {
             let file = file.expect("fontawesome directory access");

@@ -4,9 +4,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
+use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
-use docs_rs::utils::{remove_crate_priority, set_crate_priority};
+use docs_rs::utils::{
+    get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
+};
 use docs_rs::{
     BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
@@ -14,10 +17,9 @@ use once_cell::sync::OnceCell;
 use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
+use tokio::runtime::Runtime;
 
 fn main() {
-    let _ = dotenv::dotenv();
-
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
         rustwide::logging::init_with(SentryLogger::with_dest(logger_init()));
         Some(sentry::init((
@@ -95,6 +97,18 @@ enum CommandLine {
         socket_addr: String,
     },
 
+    StartRegistryWatcher {
+        /// Enable or disable the repository stats updater
+        #[structopt(
+            long = "repository-stats-updater",
+            default_value = "disabled",
+            possible_values(Toggle::VARIANTS)
+        )]
+        repository_stats_updater: Toggle,
+    },
+
+    StartBuildServer,
+
     /// Starts the daemon
     Daemon {
         /// Enable or disable the registry watcher to automatically enqueue newly published crates
@@ -125,6 +139,20 @@ impl CommandLine {
 
         match self {
             Self::Build(build) => build.handle_args(ctx)?,
+            Self::StartRegistryWatcher {
+                repository_stats_updater,
+            } => {
+                if repository_stats_updater == Toggle::Enabled {
+                    docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
+                }
+
+                docs_rs::utils::watch_registry(ctx.build_queue()?, ctx.config()?, ctx.index()?)?;
+            }
+            Self::StartBuildServer => {
+                let build_queue = ctx.build_queue()?;
+                let rustwide_builder = RustwideBuilder::init(&ctx)?;
+                queue_builder(rustwide_builder, build_queue)?;
+            }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
                 let _ = Server::start(Some(&socket_addr), &ctx)?;
@@ -338,10 +366,8 @@ impl BuildSubcommand {
                         .pool()?
                         .get()
                         .context("failed to get a database connection")?;
-                    let res =
-                        conn.query("SELECT * FROM config WHERE name = 'rustc_version';", &[])?;
 
-                    if !res.is_empty() {
+                    if get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_some() {
                         println!("update-toolchain was already called in the past, exiting");
                         return Ok(());
                     }
@@ -534,11 +560,13 @@ enum DeleteSubcommand {
 struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
+    cdn: OnceCell<Arc<CdnBackend>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
     metrics: OnceCell<Arc<Metrics>>,
     index: OnceCell<Arc<Index>>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
+    runtime: OnceCell<Arc<Runtime>>,
 }
 
 impl BinContext {
@@ -546,11 +574,13 @@ impl BinContext {
         Self {
             build_queue: OnceCell::new(),
             storage: OnceCell::new(),
+            cdn: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
             metrics: OnceCell::new(),
             index: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
+            runtime: OnceCell::new(),
         }
     }
 
@@ -582,9 +612,12 @@ impl Context for BinContext {
             self.pool()?,
             self.metrics()?,
             self.config()?,
+            self.runtime()?,
         )?;
+        fn cdn(self) -> CdnBackend = CdnBackend::new(&self.config()?, &self.runtime()?);
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;
+        fn runtime(self) -> Runtime = Runtime::new()?;
         fn index(self) -> Index = {
             let config = self.config()?;
             let path = config.registry_index_path.clone();

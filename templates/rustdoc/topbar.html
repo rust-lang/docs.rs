@@ -38,7 +38,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                            {{ "balance-scale-right" | fas(fw=true) }} {{ krate.license }}
+                            {{ "scale-unbalanced-flip" | fas(fw=true) }} {{ krate.license }}
                         </a>
                     </li>
                 </ul>
@@ -52,7 +52,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- if krate.homepage_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.homepage_url }}" class="pure-menu-link">
-                                        {{ "home" | fas(fw=true) }} Homepage
+                                        {{ "house" | fas(fw=true) }} Homepage
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -61,7 +61,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- if krate.documentation_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ "file-alt" | far(fw=true) }} Documentation
+                                        {{ "file-lines" | far(fw=true) }} Documentation
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -174,7 +174,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
     {%- if is_latest_version and metadata.yanked -%}
         <li class="pure-menu-item">
             <span class="pure-menu-link warn">
-                {{ "exclamation-triangle" | fas }}
+                {{ "triangle-exclamation" | fas }}
                 <span class="title">This release has been yanked</span>
             </span>
         </li>{#
@@ -196,7 +196,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
             <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
                 data-fragment="retain"
                 title="{{ tooltip }}">
-                {{ "exclamation-triangle" | fas }}
+                {{ "triangle-exclamation" | fas }}
                 <span class="title">{{ title }}</span>
             </a>
         </li>
@@ -206,7 +206,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
     {%- if metadata.doc_targets -%}
     <li class="pure-menu-item pure-menu-has-children">
         <a href="#" class="pure-menu-link" aria-label="Platform">
-            {{ "cogs" | fas }}
+            {{ "gears" | fas }}
             <span class="title">Platform</span>
         </a>
 

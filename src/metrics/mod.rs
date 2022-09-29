@@ -158,7 +158,7 @@ impl Metrics {
         self.idle_db_connections.set(pool.idle_connections() as i64);
         self.used_db_connections.set(pool.used_connections() as i64);
         self.max_db_connections.set(pool.max_size() as i64);
-        self.queue_is_locked.set(queue.is_locked() as i64);
+        self.queue_is_locked.set(queue.is_locked()? as i64);
 
         self.queued_crates_count.set(queue.pending_count()? as i64);
         self.prioritized_crates_count

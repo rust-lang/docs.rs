@@ -1,4 +1,7 @@
-use crate::error::Result;
+use crate::{
+    error::Result,
+    utils::{get_config, ConfigName},
+};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
@@ -31,19 +34,8 @@ impl TemplateData {
 }
 
 fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
-    let res = conn.query(
-        "SELECT value FROM config WHERE name = 'rustc_version';",
-        &[],
-    )?;
-
-    if res.is_empty() {
-        anyhow::bail!("missing rustc version");
-    }
-
-    if let Ok(vers) = res[0].try_get::<_, Value>("value") {
-        if let Some(vers_str) = vers.as_str() {
-            return crate::utils::parse_rustc_version(vers_str);
-        }
+    if let Some(vers_str) = get_config::<String>(conn, ConfigName::RustcVersion)? {
+        return crate::utils::parse_rustc_version(vers_str);
     }
 
     anyhow::bail!("failed to parse the rustc version");

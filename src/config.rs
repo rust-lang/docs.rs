@@ -1,4 +1,4 @@
-use crate::storage::StorageKind;
+use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
 use std::env::VarError;
 use std::error::Error;
@@ -56,6 +56,18 @@ pub struct Config {
 
     // Content Security Policy
     pub(crate) csp_report_only: bool,
+
+    // Cache-Control header, for versioned URLs.
+    // If both are absent, don't generate the header. If only one is present,
+    // generate just that directive. Values are in seconds.
+    pub(crate) cache_control_stale_while_revalidate: Option<u32>,
+    pub(crate) cache_control_max_age: Option<u32>,
+
+    pub(crate) cdn_backend: CdnKind,
+
+    // CloudFront distribution ID for the web server.
+    // Will be used for invalidation-requests.
+    pub cloudfront_distribution_id_web: Option<String>,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -129,6 +141,15 @@ impl Config {
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
 
             csp_report_only: env("DOCSRS_CSP_REPORT_ONLY", false)?,
+
+            cache_control_stale_while_revalidate: maybe_env(
+                "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
+            )?,
+            cache_control_max_age: maybe_env("CACHE_CONTROL_MAX_AGE")?,
+
+            cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
+
+            cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
 
             local_archive_cache_path: env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",

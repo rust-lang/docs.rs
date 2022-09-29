@@ -51,9 +51,9 @@ systemstat = "0.2.0"
 prometheus = { version = "0.13.0", default-features = false }
 rustwide = "0.15.0"
 mime_guess = "2"
-dotenv = "0.15"
 zstd = "0.11.0"
-git2 = { version = "0.14.0", default-features = false }
+hostname = "0.3.1"
+git2 = { version = "0.14.4", default-features = false }
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.13"
@@ -71,10 +71,12 @@ getrandom = "0.2.1"
 # Async
 tokio = { version = "1.0", features = ["rt-multi-thread"] }
 futures-util = "0.3.5"
-aws-config = "0.47.0"
-aws-sdk-s3 = "0.17.0"
-aws-smithy-types-convert = { version = "0.47.0", features = ["convert-chrono"] }
+aws-config = "0.48.0"
+aws-sdk-s3 = "0.18.0"
+aws-sdk-cloudfront = "0.18.0"
+aws-smithy-types-convert = { version = "0.48.0", features = ["convert-chrono"] }
 http = "0.2.6"
+uuid = "1.1.2"
 
 # Data serialization and deserialization
 serde = { version = "1.0", features = ["derive"] }
@@ -113,13 +115,19 @@ kuchiki = "0.8"
 rand = "0.8"
 mockito = "0.31.0"
 test-case = "2.0.0"
+fn-error-context = "0.2.0"
+aws-smithy-client = { version = "0.48.0", features = ["test-util"]}
+aws-smithy-http = "0.48.0"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 time = "0.3"
 git2 = { version = "0.14", default-features = false }
-sass-rs = "0.2.2"
 string_cache_codegen = "0.5.1"
 walkdir = "2"
+anyhow = { version = "1.0.42", features = ["backtrace"] }
+grass = { version = "0.11.0", default-features = false }
+once_cell = { version = "1.4.0", features = ["parking_lot"] }
 
 [[bench]]
 name = "compression"

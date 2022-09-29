@@ -5,7 +5,7 @@ use crate::{
     db::{Pool, PoolClient},
     impl_webpage,
     utils::report_error,
-    web::{error::Nope, match_version, page::WebPage, redirect_base},
+    web::{error::Nope, match_version, page::WebPage, parse_url_with_params, redirect_base},
     BuildQueue, Config,
 };
 use anyhow::{anyhow, Result};
@@ -20,7 +20,7 @@ use log::{debug, warn};
 use postgres::Client;
 use router::Router;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str;
 use url::form_urlencoded;
 
@@ -56,7 +56,13 @@ impl Default for Order {
     }
 }
 
-pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Order) -> Vec<Release> {
+pub(crate) fn get_releases(
+    conn: &mut Client,
+    page: i64,
+    limit: i64,
+    order: Order,
+    latest_only: bool,
+) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
@@ -66,6 +72,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         Order::RecentFailures => ("builds.build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
     };
+
     let query = format!(
         "SELECT crates.name,
             releases.version,
@@ -75,16 +82,21 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
             builds.build_time,
             repositories.stars
         FROM crates
-        INNER JOIN releases ON crates.latest_version_id = releases.id
+        {1}
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE)) 
+            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
         LIMIT $1 OFFSET $2",
         ordering,
+        if latest_only {
+            "INNER JOIN releases ON crates.latest_version_id = releases.id"
+        } else {
+            "INNER JOIN releases ON crates.id = releases.crate_id"
+        }
     );
 
     conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
@@ -246,7 +258,7 @@ fn get_search_results(
                 releases.rustdoc_status,
                 repositories.stars
 
-            FROM crates 
+            FROM crates
             INNER JOIN releases ON crates.latest_version_id = releases.id
             INNER JOIN builds ON releases.id = builds.rid
             LEFT JOIN repositories ON releases.repository_id = repositories.id
@@ -299,7 +311,7 @@ impl_webpage! {
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime);
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true);
 
     HomePage { recent_releases }.into_response(req)
 }
@@ -316,7 +328,7 @@ impl_webpage! {
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime);
+    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true);
 
     ReleaseFeed { recent_releases }.into_response(req)
 }
@@ -353,13 +365,18 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         .and_then(|page_num| page_num.parse().ok())
         .unwrap_or(1);
 
-    let (description, release_order) = match release_type {
-        ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime),
-        ReleaseType::Stars => ("Crates with most stars", Order::GithubStars),
-        ReleaseType::RecentFailures => ("Recent crates failed to build", Order::RecentFailures),
+    let (description, release_order, latest_only) = match release_type {
+        ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime, false),
+        ReleaseType::Stars => ("Crates with most stars", Order::GithubStars, true),
+        ReleaseType::RecentFailures => (
+            "Recent crates failed to build",
+            Order::RecentFailures,
+            false,
+        ),
         ReleaseType::Failures => (
             "Crates with most stars failed to build",
             Order::FailuresByGithubStars,
+            true,
         ),
 
         ReleaseType::Owner | ReleaseType::Search => panic!(
@@ -369,7 +386,13 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
 
     let releases = {
         let mut conn = extension!(req, Pool).get()?;
-        get_releases(&mut conn, page_number, RELEASES_IN_RELEASES, release_order)
+        get_releases(
+            &mut conn,
+            page_number,
+            RELEASES_IN_RELEASES,
+            release_order,
+            latest_only,
+        )
     };
 
     // Show next and previous page buttons
@@ -498,7 +521,7 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                     releases.version,
                     releases.target_name
                 FROM (
-                    -- generate random numbers in the ID-range. 
+                    -- generate random numbers in the ID-range.
                     SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
                     FROM params, generate_series(1, $1)
                 ) AS r
@@ -545,7 +568,7 @@ impl_webpage! {
 
 pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let url = req.url.as_ref();
-    let params: HashMap<_, _> = url.query_pairs().collect();
+    let mut params: HashMap<_, _> = url.query_pairs().collect();
     let query = params
         .get("query")
         .map(|q| q.to_string())
@@ -555,45 +578,38 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
 
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
-    if params.contains_key("i-am-feeling-lucky") || query.contains("::") {
+    if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
             return redirect_to_random_crate(req, &mut conn);
         }
 
-        let (krate, query) = match query.split_once("::") {
-            Some((krate, query)) => (krate.to_string(), format!("?search={query}")),
-            None => (query.clone(), "".to_string()),
+        let mut queries = BTreeMap::new();
+
+        let krate = match query.split_once("::") {
+            Some((krate, query)) => {
+                queries.insert("search".into(), query.into());
+                krate.to_string()
+            }
+            None => query.clone(),
         };
 
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
         if let Ok(matchver) = match_version(&mut conn, &krate, None) {
+            params.remove("query");
+            queries.extend(params);
             let (version, _) = matchver.version.into_parts();
             let krate = matchver.corrected_name.unwrap_or(krate);
 
+            let base = redirect_base(req);
             let url = if matchver.rustdoc_status {
-                ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/{}/{}/{}",
-                        redirect_base(req),
-                        krate,
-                        version,
-                        query
-                    )),
-                )
+                let target_name = matchver.target_name;
+                let path = format!("{base}/{krate}/{version}/{target_name}/");
+                ctry!(req, parse_url_with_params(&path, queries))
             } else {
-                ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/crate/{}/{}",
-                        redirect_base(req),
-                        krate,
-                        version,
-                    )),
-                )
+                ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
 
             let mut resp = Response::with((status::Found, Redirect(url)));
@@ -688,12 +704,12 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
             "
             WITH dates AS (
                 -- we need this series so that days in the statistic that don't have any releases are included
-                SELECT generate_series( 
+                SELECT generate_series(
                         CURRENT_DATE - INTERVAL '30 days',
                         CURRENT_DATE - INTERVAL '1 day',
                         '1 day'::interval
                     )::date AS date_
-            ), 
+            ),
             release_stats AS (
                 SELECT
                     release_time::date AS date_,
@@ -706,16 +722,16 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
                     release_time < CURRENT_DATE
                 GROUP BY
                     release_time::date
-            ) 
-            SELECT 
+            )
+            SELECT
                 dates.date_ AS date,
                 COALESCE(rs.counts, 0) AS counts,
-                COALESCE(rs.failures, 0) AS failures 
+                COALESCE(rs.failures, 0) AS failures
             FROM
-                dates 
+                dates
                 LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
 
-            ORDER BY 
+            ORDER BY
                 dates.date_
             ",
             &[],
@@ -795,7 +811,7 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars);
+            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true);
             assert_eq!(
                 vec![
                     "bar", // 20 stars
@@ -889,7 +905,22 @@ mod tests {
             )?;
             assert_redirect(
                 "/releases/search?query=some_random_crate::some::path",
-                "/some_random_crate/1.0.0/some_random_crate/?search=some::path",
+                "/some_random_crate/1.0.0/some_random_crate/?search=some%3A%3Apath",
+                web,
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_coloncolon_path_redirects_to_crate_docs_and_keeps_query() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+
+            assert_redirect(
+                "/releases/search?query=some_random_crate::somepath&go_to_first=true",
+                "/some_random_crate/1.0.0/some_random_crate/?go_to_first=true&search=somepath",
                 web,
             )?;
             Ok(())
@@ -1277,7 +1308,13 @@ mod tests {
                 .github_stats("some/repo", 33, 22, 11)
                 .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
                 .create()?;
-            // make sure that crates get at most one release shown, so they don't crowd the page
+            env.fake_release()
+                .name("crate_that_succeeded_with_github")
+                .version("0.2.0-rc")
+                .github_stats("some/repo", 33, 22, 11)
+                .release_time(Utc.ymd(2020, 4, 16).and_hms(8, 33, 50))
+                .build_result_failed()
+                .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .github_stats("some/repo", 33, 22, 11)
@@ -1291,16 +1328,25 @@ mod tests {
                 .build_result_failed()
                 .create()?;
 
-            for page in &["/", "/releases"] {
-                let links = get_release_links(page, env.frontend())?;
+            // make sure that crates get at most one release shown, so they don't crowd the homepage
+            assert_eq!(
+                get_release_links("/", env.frontend())?,
+                [
+                    "/crate/crate_that_failed/0.1.0",
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/",
+                ]
+            );
 
-                assert_eq!(links.len(), 2);
-                assert_eq!(links[0], "/crate/crate_that_failed/0.1.0");
-                assert_eq!(
-                    links[1],
-                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/"
-                );
-            }
+            // but on the main release list they all show, including prerelease
+            assert_eq!(
+                get_release_links("/releases", env.frontend())?,
+                [
+                    "/crate/crate_that_failed/0.1.0",
+                    "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/",
+                    "/crate/crate_that_succeeded_with_github/0.2.0-rc",
+                    "/crate_that_succeeded_with_github/0.1.0/crate_that_succeeded_with_github/",
+                ]
+            );
 
             Ok(())
         })
