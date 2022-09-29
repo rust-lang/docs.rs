@@ -61,12 +61,17 @@ pub(crate) fn assert_cache_control(
     config: &Config,
 ) {
     assert!(config.cache_control_stale_while_revalidate.is_some());
-    assert_eq!(
-        res.headers()
-            .get("Cache-Control")
-            .expect("missing cache-control header"),
-        &CacheControl(cache_policy.render(config)).to_string()
-    );
+    let cache_control = res.headers().get("Cache-Control");
+
+    let expected_directives = cache_policy.render(config);
+    if expected_directives.is_empty() {
+        assert!(cache_control.is_none());
+    } else {
+        assert_eq!(
+            cache_control.expect("missing cache-control header"),
+            &CacheControl(expected_directives).to_string()
+        );
+    }
 }
 
 /// Make sure that a URL returns a status code between 200-299

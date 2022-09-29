@@ -104,7 +104,10 @@ impl AfterMiddleware for CacheMiddleware {
             );
         }
 
-        res.headers.set(CacheControl(cache.render(config)));
+        let directives = cache.render(config);
+        if !directives.is_empty() {
+            res.headers.set(CacheControl(directives))
+        }
         Ok(res)
     }
 }
