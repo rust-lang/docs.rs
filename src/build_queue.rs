@@ -9,7 +9,6 @@ use anyhow::Context;
 use crates_index_diff::Change;
 use log::{debug, info};
 
-use git2::Oid;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -49,15 +48,17 @@ impl BuildQueue {
         }
     }
 
-    pub fn last_seen_reference(&self) -> Result<Option<Oid>> {
+    pub fn last_seen_reference(&self) -> Result<Option<crates_index_diff::git::ObjectId>> {
         let mut conn = self.db.get()?;
         if let Some(value) = get_config::<String>(&mut conn, ConfigName::LastSeenIndexReference)? {
-            return Ok(Some(Oid::from_str(&value)?));
+            return Ok(Some(crates_index_diff::git::ObjectId::from_hex(
+                value.as_bytes(),
+            )?));
         }
         Ok(None)
     }
 
-    fn set_last_seen_reference(&self, oid: Oid) -> Result<()> {
+    fn set_last_seen_reference(&self, oid: &crates_index_diff::git::oid) -> Result<()> {
         let mut conn = self.db.get()?;
         set_config(
             &mut conn,
@@ -326,7 +327,7 @@ impl BuildQueue {
         // additionally set the reference in the database
         // so this survives recreating the registry watcher
         // server.
-        self.set_last_seen_reference(oid)?;
+        self.set_last_seen_reference(&oid)?;
 
         // store the last seen reference as git reference in
         // the local crates.io index repo.
@@ -642,8 +643,10 @@ mod tests {
             assert_eq!(queue.last_seen_reference()?, None);
             assert!(!queue.is_locked()?);
 
-            let oid = git2::Oid::from_str("ffffffff")?;
-            queue.set_last_seen_reference(oid)?;
+            let oid = crates_index_diff::git::ObjectId::from_hex(
+                b"ffffffffffffffffffffffffffffffffffffffff",
+            )?;
+            queue.set_last_seen_reference(&oid)?;
 
             assert_eq!(queue.last_seen_reference()?, Some(oid));
             assert!(!queue.is_locked()?);
