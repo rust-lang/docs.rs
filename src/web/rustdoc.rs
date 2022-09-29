@@ -1769,7 +1769,7 @@ mod test {
             let url = format!("http://{}/dummy", web.server_addr());
             let resp = client.get(url).send()?;
             assert_eq!(resp.status(), StatusCode::FOUND);
-            assert!(resp.headers().get("Cache-Control").unwrap().is_empty());
+            assert!(resp.headers().get("Cache-Control").is_none());
             assert!(resp
                 .headers()
                 .get("Location")
