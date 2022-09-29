@@ -163,19 +163,42 @@ impl Handler for MainHandler {
             }
         }
 
-        // This is kind of a mess.
+        // Some versions of rustdoc in 2018 did not respect the shared static root
+        // (--static-root-path) and so emitted HTML that linked to shared static files via a local
+        // path. For instance, `<script src="../main-20181217-1.33.0-nightly-adbfec229.js">` instead
+        // of (correct) `<script src="/main-20181217-1.33.0-nightly-adbfec229.js">`. Since docs.rs
+        // removes the shared static files from individual builds to save space, the "../mainXXX.js"
+        // path doesn't really exist in storage for any particular build. The appropriate main file
+        // *does* exist in the storage root, which is where the shared static files are put for each
+        // new rustdoc version. So here we give SharedResourceHandler a chance to handle all URLs
+        // before they go to the router. SharedResourceHandler looks at the last component of the
+        // request path ("main-20181217-1.33.0-nightly-adbfec229.js") and tries to fetch it from
+        // the storage root (if it's JS, CSS, etc). If the file doesn't exist, we fall through to
+        // the normal router, which may wind up serving an invocation-specific file from the crate
+        // itself. For instance, a request for "/crate/foo/search-index-XYZ.js" will get a 404 from
+        // the SharedResourceHandler because "search-index-XYZ.js" doesn't exist in the storage root
+        // (it's not a shared static file), but it will get a 200 from rustdoc_html_server_handler
+        // because it exists in a specific crate.
         //
-        // Almost all files should be served through the `router_handler`; eventually
-        // `shared_resource_handler` should go through the router too.
+        // See #1181.
         //
-        // Unfortunately, combining `shared_resource_handler` with the `router_handler` breaks
-        // things, because right now `shared_resource_handler` allows requesting files from *any*
-        // subdirectory and the router requires us to give a specific path. Changing them to a
-        // specific path means that buggy docs from 2018 will have missing CSS (#1181) so until
-        // that's fixed, we need to keep the current (buggy) behavior.
+        // Note that this causes a counterintuitive and arguably buggy behavior: files that exist in
+        // the storage root can be requested with any path. For instance:
         //
-        // It's important that `shared_resource_handler` comes first so that global rustdoc files take
-        // precedence over local ones (see #1327).
+        // https://docs.rs/this.path.does.not.exist/main-20181217-1.33.0-nightly-adbfec229.js
+        //
+        // If those 2018 crates get rebuilt, we won't have this problem anymore, and
+        // SharedResourceHandler can receive dispatch from the router, as other handlers do. That
+        // will also allow SharedResourceHandler to look up full paths in storage rather than just
+        // the last component of the requested path.
+        //
+        // Also note: this approach means that a request for a given JS/CSS may serve from two
+        // different places in storage: the storage root, or the full requested path. If the same
+        // filename exists in both places, we serve that filename from the storage root, because
+        // shared_resource_handler is called before the router. This works around a different bug
+        // that existed in certain versions of rustdoc around 2021, where an invocation specific
+        // file (cratesXXX.js) was referenced using the --static-root-path rather than the crate
+        // root. See #1340 and https://github.com/rust-lang/rust/pull/83094.
         self.shared_resource_handler
             .handle(req)
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
