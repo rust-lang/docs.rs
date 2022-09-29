@@ -1795,7 +1795,7 @@ checksum = "42c59a65ada49836d7b1ace9903dfd7e1db563b15064608238dbd2fa75e5b23f"
 dependencies = [
  "git-command",
  "git-config-value",
- "nix 0.25.0",
+ "nix",
  "parking_lot",
  "thiserror",
 ]
@@ -2729,18 +2729,6 @@ checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
 name = "nix"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa9b4819da1bc61c0ea48b63b7bc8604064dd43013e7cc325df098d49cd7c18a"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if",
- "libc",
-]
-
-[[package]]
-name = "nix"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e322c04a9e3440c327fca7b6c8a63e6890a32fa2ad689db972425f07e0d22abb"
@@ -2749,6 +2737,8 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "libc",
+ "memoffset",
+ "pin-utils",
 ]
 
 [[package]]
@@ -3800,9 +3790,9 @@ checksum = "97477e48b4cf8603ad5f7aaf897467cf42ab4218a38ef76fb14c2d6773a6d6a8"
 
 [[package]]
 name = "rustwide"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc989edb16c722fe0664b02d6067b1236056e2b0e0f593cf423ea427a4e9a0f0"
+checksum = "9926ef0f26ee8fd7870da45c594a597952a03b16fcbb755b17e444b63b10c5c5"
 dependencies = [
  "attohttpc",
  "base64 0.13.0",
@@ -3815,7 +3805,7 @@ dependencies = [
  "http",
  "lazy_static",
  "log 0.4.17",
- "nix 0.20.0",
+ "nix",
  "percent-encoding 2.1.0",
  "remove_dir_all 0.7.0",
  "scopeguard",
@@ -3828,7 +3818,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "walkdir",
- "winapi",
+ "windows-sys",
 ]
 
 [[package]]
