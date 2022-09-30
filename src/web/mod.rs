@@ -163,6 +163,8 @@ impl Handler for MainHandler {
             }
         }
 
+        // This is kind of a mess.
+        //
         // Some versions of rustdoc in 2018 did not respect the shared static root
         // (--static-root-path) and so emitted HTML that linked to shared static files via a local
         // path. For instance, `<script src="../main-20181217-1.33.0-nightly-adbfec229.js">` instead
