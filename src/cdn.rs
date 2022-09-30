@@ -1,5 +1,5 @@
 use crate::Config;
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use aws_sdk_cloudfront::{
     model::{InvalidationBatch, Paths},
     Client, RetryConfig,
@@ -18,6 +18,7 @@ pub(crate) enum CdnKind {
     CloudFront,
 }
 
+#[derive(Debug)]
 pub enum CdnBackend {
     Dummy(Arc<Mutex<Vec<(String, String)>>>),
     CloudFront {
@@ -114,6 +115,18 @@ impl CdnBackend {
 
         Ok(())
     }
+}
+
+pub(crate) fn invalidate_crate(config: &Config, cdn: &CdnBackend, name: &str) -> Result<()> {
+    if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
+        cdn.create_invalidation(
+            distribution_id,
+            &[&format!("/{}*", name), &format!("/crate/{}*", name)],
+        )
+        .context("error creating CDN invalidation")?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
