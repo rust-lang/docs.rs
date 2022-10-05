@@ -3,6 +3,10 @@
 
 {%- block title -%}{{ title | default(value="Releases - Docs.rs")}}{%- endblock title -%}
 
+{%- block meta -%}
+    <link rel="canonical" href="https://docs.rs/releases/{{ owner }}" />
+{%- endblock meta -%}
+
 {%- block header -%}
     {# These all have defaults so searches work #}
     {{
