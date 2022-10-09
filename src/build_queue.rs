@@ -58,7 +58,7 @@ impl BuildQueue {
         Ok(None)
     }
 
-    fn set_last_seen_reference(&self, oid: &crates_index_diff::git::oid) -> Result<()> {
+    fn set_last_seen_reference(&self, oid: crates_index_diff::git::ObjectId) -> Result<()> {
         let mut conn = self.db.get()?;
         set_config(
             &mut conn,
@@ -327,7 +327,7 @@ impl BuildQueue {
         // additionally set the reference in the database
         // so this survives recreating the registry watcher
         // server.
-        self.set_last_seen_reference(&oid)?;
+        self.set_last_seen_reference(oid)?;
 
         // store the last seen reference as git reference in
         // the local crates.io index repo.
@@ -646,7 +646,7 @@ mod tests {
             let oid = crates_index_diff::git::ObjectId::from_hex(
                 b"ffffffffffffffffffffffffffffffffffffffff",
             )?;
-            queue.set_last_seen_reference(&oid)?;
+            queue.set_last_seen_reference(oid)?;
 
             assert_eq!(queue.last_seen_reference()?, Some(oid));
             assert!(!queue.is_locked()?);
