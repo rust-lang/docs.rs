@@ -33,7 +33,7 @@ impl CdnBackend {
             CdnKind::CloudFront => {
                 let shared_config = runtime.block_on(aws_config::load_from_env());
                 let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
-                    .retry_config(RetryConfig::new().with_max_attempts(3));
+                    .retry_config(RetryConfig::standard().with_max_attempts(3));
 
                 Self::CloudFront {
                     runtime: runtime.clone(),
