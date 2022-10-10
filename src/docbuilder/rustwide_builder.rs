@@ -1,4 +1,3 @@
-use crate::cdn::CdnBackend;
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
@@ -10,12 +9,11 @@ use crate::index::api::ReleaseData;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
-    copy_dir_all, parse_rustc_version, queue_builder, report_error, set_config, CargoMetadata,
-    ConfigName,
+    copy_dir_all, parse_rustc_version, queue_builder, set_config, CargoMetadata, ConfigName,
 };
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
-use anyhow::{anyhow, bail, Context as _, Error};
+use anyhow::{anyhow, bail, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
 use log::{debug, info, warn, LevelFilter};
@@ -44,7 +42,6 @@ pub struct RustwideBuilder {
     config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
-    cdn: Arc<CdnBackend>,
     metrics: Arc<Metrics>,
     index: Arc<Index>,
     rustc_version: String,
@@ -83,7 +80,6 @@ impl RustwideBuilder {
             config,
             db: context.pool()?,
             storage: context.storage()?,
-            cdn: context.cdn()?,
             metrics: context.metrics()?,
             index: context.index()?,
             rustc_version: String::new(),
@@ -504,18 +500,6 @@ impl RustwideBuilder {
             .purge_from_cache(&self.workspace)
             .map_err(FailureError::compat)?;
         local_storage.close()?;
-        if let Some(distribution_id) = self.config.cloudfront_distribution_id_web.as_ref() {
-            if let Err(err) = self
-                .cdn
-                .create_invalidation(
-                    distribution_id,
-                    &[&format!("/{}*", name), &format!("/crate/{}*", name)],
-                )
-                .context("error creating CDN invalidation")
-            {
-                report_error(&err);
-            }
-        }
         Ok(successful)
     }
 
@@ -822,10 +806,7 @@ pub(crate) struct BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cdn::CdnKind,
-        test::{assert_redirect, assert_success, wrapper},
-    };
+    use crate::test::{assert_redirect, assert_success, wrapper};
     use serde_json::Value;
 
     #[test]
@@ -940,12 +921,6 @@ mod tests {
                     assert!(target_docs_present);
                     assert_success(&target_url, web)?;
                 }
-            }
-
-            assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert!(ir.is_empty());
             }
 
             Ok(())
@@ -1064,37 +1039,6 @@ mod tests {
 
             assert!(target_docs_present);
             assert_success(&target_url, web)?;
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn test_cdn_invalidation() {
-        wrapper(|env| {
-            env.override_config(|cfg| {
-                cfg.cdn_backend = CdnKind::Dummy;
-                cfg.cloudfront_distribution_id_web = Some("distribution_id".into());
-            });
-
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            assert!(builder.build_package(
-                DUMMY_CRATE_NAME,
-                DUMMY_CRATE_VERSION,
-                PackageKind::CratesIo
-            )?);
-
-            assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert_eq!(ir.len(), 2);
-                assert_eq!(ir[0], ("distribution_id".into(), "/empty-library*".into()));
-                assert_eq!(
-                    ir[1],
-                    ("distribution_id".into(), "/crate/empty-library*".into())
-                );
-            }
 
             Ok(())
         });

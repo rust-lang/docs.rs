@@ -74,6 +74,7 @@ macro_rules! extension {
 
 mod build_details;
 mod builds;
+pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 mod error;
@@ -128,6 +129,7 @@ impl MainHandler {
 
         chain.link_before(CspMiddleware);
         chain.link_after(CspMiddleware);
+        chain.link_after(cache::CacheMiddleware);
 
         chain
     }
@@ -165,17 +167,42 @@ impl Handler for MainHandler {
 
         // This is kind of a mess.
         //
-        // Almost all files should be served through the `router_handler`; eventually
-        // `shared_resource_handler` should go through the router too.
+        // Some versions of rustdoc in 2018 did not respect the shared static root
+        // (--static-root-path) and so emitted HTML that linked to shared static files via a local
+        // path. For instance, `<script src="../main-20181217-1.33.0-nightly-adbfec229.js">` instead
+        // of (correct) `<script src="/main-20181217-1.33.0-nightly-adbfec229.js">`. Since docs.rs
+        // removes the shared static files from individual builds to save space, the "../mainXXX.js"
+        // path doesn't really exist in storage for any particular build. The appropriate main file
+        // *does* exist in the storage root, which is where the shared static files are put for each
+        // new rustdoc version. So here we give SharedResourceHandler a chance to handle all URLs
+        // before they go to the router. SharedResourceHandler looks at the last component of the
+        // request path ("main-20181217-1.33.0-nightly-adbfec229.js") and tries to fetch it from
+        // the storage root (if it's JS, CSS, etc). If the file doesn't exist, we fall through to
+        // the normal router, which may wind up serving an invocation-specific file from the crate
+        // itself. For instance, a request for "/crate/foo/search-index-XYZ.js" will get a 404 from
+        // the SharedResourceHandler because "search-index-XYZ.js" doesn't exist in the storage root
+        // (it's not a shared static file), but it will get a 200 from rustdoc_html_server_handler
+        // because it exists in a specific crate.
         //
-        // Unfortunately, combining `shared_resource_handler` with the `router_handler` breaks
-        // things, because right now `shared_resource_handler` allows requesting files from *any*
-        // subdirectory and the router requires us to give a specific path. Changing them to a
-        // specific path means that buggy docs from 2018 will have missing CSS (#1181) so until
-        // that's fixed, we need to keep the current (buggy) behavior.
+        // See #1181.
         //
-        // It's important that `shared_resource_handler` comes first so that global rustdoc files take
-        // precedence over local ones (see #1327).
+        // Note that this causes a counterintuitive and arguably buggy behavior: files that exist in
+        // the storage root can be requested with any path. For instance:
+        //
+        // https://docs.rs/this.path.does.not.exist/main-20181217-1.33.0-nightly-adbfec229.js
+        //
+        // If those 2018 crates get rebuilt, we won't have this problem anymore, and
+        // SharedResourceHandler can receive dispatch from the router, as other handlers do. That
+        // will also allow SharedResourceHandler to look up full paths in storage rather than just
+        // the last component of the requested path.
+        //
+        // Also note: this approach means that a request for a given JS/CSS may serve from two
+        // different places in storage: the storage root, or the full requested path. If the same
+        // filename exists in both places, we serve that filename from the storage root, because
+        // shared_resource_handler is called before the router. This works around a different bug
+        // that existed in certain versions of rustdoc around 2021, where an invocation specific
+        // file (cratesXXX.js) was referenced using the --static-root-path rather than the crate
+        // root. See #1340 and https://github.com/rust-lang/rust/pull/83094.
         self.shared_resource_handler
             .handle(req)
             .or_else(|e| if_404(e, || self.router_handler.handle(req)))
@@ -485,7 +512,12 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
 fn redirect(url: Url) -> Response {
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.headers.set(Expires(HttpDate(time::now())));
+    resp
+}
 
+fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
+    let mut resp = Response::with((status::Found, Redirect(url)));
+    resp.extensions.insert::<cache::CachePolicy>(cache_policy);
     resp
 }
 
@@ -683,18 +715,18 @@ mod test {
             let web = env.frontend();
 
             let foo_crate = kuchiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
-            for value in &["60.0%", "6", "10", "2", "1"] {
+            for value in &["60%", "6", "10", "2", "1"] {
                 assert!(foo_crate
                     .select(".pure-menu-item b")
                     .unwrap()
-                    .any(|e| e.text_contents().contains(value)));
+                    .any(|e| dbg!(e.text_contents()).contains(value)));
             }
 
             let foo_doc = kuchiki::parse_html().one(web.get("/foo/0.0.1/foo").send()?.text()?);
             assert!(foo_doc
                 .select(".pure-menu-link b")
                 .unwrap()
-                .any(|e| e.text_contents().contains("60.0%")));
+                .any(|e| e.text_contents().contains("60%")));
 
             Ok(())
         });

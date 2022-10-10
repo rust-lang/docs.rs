@@ -1,5 +1,6 @@
 //! Database based file handler
 
+use super::cache::CachePolicy;
 use crate::storage::{Blob, Storage};
 use crate::{error::Result, Config};
 use iron::{status, Response};
@@ -21,17 +22,13 @@ impl File {
 
     /// Consumes File and creates a iron response
     pub(super) fn serve(self) -> Response {
-        use iron::headers::{CacheControl, CacheDirective, ContentType, HttpDate, LastModified};
+        use iron::headers::{ContentType, HttpDate, LastModified};
 
         let mut response = Response::with((status::Ok, self.0.content));
-        let cache = vec![
-            CacheDirective::Public,
-            CacheDirective::MaxAge(super::STATIC_FILE_CACHE_DURATION as u32),
-        ];
         response
             .headers
             .set(ContentType(self.0.mime.parse().unwrap()));
-        response.headers.set(CacheControl(cache));
+
         // FIXME: This is so horrible
         response.headers.set(LastModified(HttpDate(
             time::strptime(
@@ -41,14 +38,18 @@ impl File {
             .unwrap(),
         )));
         response
+            .extensions
+            .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
+        response
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::{test::wrapper, web::cache::CachePolicy};
     use chrono::Utc;
+    use iron::headers::CacheControl;
 
     #[test]
     fn file_roundtrip() {
@@ -66,6 +67,12 @@ mod tests {
             file.0.date_updated = now;
 
             let resp = file.serve();
+            assert!(resp.headers.get::<CacheControl>().is_none());
+            let cache = resp
+                .extensions
+                .get::<CachePolicy>()
+                .expect("missing cache response extension");
+            assert!(matches!(cache, CachePolicy::ForeverInCdnAndBrowser));
             assert_eq!(
                 resp.headers.get_raw("Last-Modified").unwrap(),
                 [now.format("%a, %d %b %Y %T GMT").to_string().into_bytes()].as_ref(),

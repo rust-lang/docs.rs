@@ -6,15 +6,16 @@ use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
-use crate::web::Server;
+use crate::web::{cache, Server};
 use crate::{BuildQueue, Config, Context, Index, Metrics};
 use anyhow::Context as _;
 use fn_error_context::context;
+use iron::headers::CacheControl;
 use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
-    blocking::{Client, ClientBuilder, RequestBuilder},
+    blocking::{Client, ClientBuilder, RequestBuilder, Response},
     Method,
 };
 use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
@@ -43,6 +44,36 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     }
 }
 
+/// check a request if the cache control header matches NoCache
+pub(crate) fn assert_no_cache(res: &Response) {
+    assert_eq!(
+        res.headers()
+            .get("Cache-Control")
+            .expect("missing cache-control header"),
+        cache::NO_CACHE,
+    );
+}
+
+/// check a request if the cache control header matches the given cache config.
+pub(crate) fn assert_cache_control(
+    res: &Response,
+    cache_policy: cache::CachePolicy,
+    config: &Config,
+) {
+    assert!(config.cache_control_stale_while_revalidate.is_some());
+    let cache_control = res.headers().get("Cache-Control");
+
+    let expected_directives = cache_policy.render(config);
+    if expected_directives.is_empty() {
+        assert!(cache_control.is_none());
+    } else {
+        assert_eq!(
+            cache_control.expect("missing cache-control header"),
+            &CacheControl(expected_directives).to_string()
+        );
+    }
+}
+
 /// Make sure that a URL returns a status code between 200-299
 pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
     let status = web.get(path).send()?.status();
@@ -50,14 +81,42 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
     Ok(())
 }
 
-/// Make sure that a URL returns a 404
-pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
-    let status = web.get(path).send()?.status();
-    assert_eq!(status, 404, "GET {} should have been a 404", path);
+/// Make sure that a URL returns a status code between 200-299,
+/// also check the cache-control headers.
+pub(crate) fn assert_success_cached(
+    path: &str,
+    web: &TestFrontend,
+    cache_policy: cache::CachePolicy,
+    config: &Config,
+) -> Result<()> {
+    let response = web.get(path).send()?;
+    assert_cache_control(&response, cache_policy, config);
+    let status = response.status();
+    assert!(status.is_success(), "failed to GET {}: {}", path, status);
     Ok(())
 }
 
-fn assert_redirect_common(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
+/// Make sure that a URL returns a 404
+pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
+    let response = web.get(path).send()?;
+
+    // for now, 404s should always have `no-cache`
+    assert_no_cache(&response);
+
+    assert_eq!(
+        response.status(),
+        404,
+        "GET {} should have been a 404",
+        path
+    );
+    Ok(())
+}
+
+fn assert_redirect_common(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<Response> {
     let response = web.get_no_redirect(path).send()?;
     let status = response.status();
     if !status.is_redirection() {
@@ -84,7 +143,7 @@ fn assert_redirect_common(path: &str, expected_target: &str, web: &TestFrontend)
         anyhow::bail!("got redirect to {redirect_target}");
     }
 
-    Ok(())
+    Ok(response)
 }
 
 /// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
@@ -94,13 +153,35 @@ pub(crate) fn assert_redirect_unchecked(
     expected_target: &str,
     web: &TestFrontend,
 ) -> Result<()> {
-    assert_redirect_common(path, expected_target, web)
+    assert_redirect_common(path, expected_target, web).map(|_| ())
 }
 
 /// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
     assert_redirect_common(path, expected_target, web)?;
+
+    let response = web.get_no_redirect(expected_target).send()?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to GET {expected_target}: {status}");
+    }
+
+    Ok(())
+}
+
+/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect.
+/// Also verifies that the redirect's cache-control header matches the provided cache policy.
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect_cached(
+    path: &str,
+    expected_target: &str,
+    cache_policy: cache::CachePolicy,
+    web: &TestFrontend,
+    config: &Config,
+) -> Result<()> {
+    let redirect_response = assert_redirect_common(path, expected_target, web)?;
+    assert_cache_control(&redirect_response, cache_policy, config);
 
     let response = web.get_no_redirect(expected_target).send()?;
     let status = response.status();
@@ -188,6 +269,10 @@ impl TestEnvironment {
         config.local_archive_cache_path =
             std::env::temp_dir().join(format!("docsrs-test-index-{}", rand::random::<u64>()));
 
+        // set stale content serving so Cache::ForeverInCdn and Cache::ForeverInCdnAndStaleInBrowser
+        // are actually different.
+        config.cache_control_stale_while_revalidate = Some(86400);
+
         config
     }
 
@@ -207,6 +292,7 @@ impl TestEnvironment {
                     self.db().pool(),
                     self.metrics(),
                     self.config(),
+                    self.cdn(),
                     self.storage(),
                 ))
             })

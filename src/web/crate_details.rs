@@ -1,6 +1,11 @@
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error};
-use crate::{db::Pool, impl_webpage, repositories::RepositoryStatsUpdater, web::page::WebPage};
+use crate::{
+    db::Pool,
+    impl_webpage,
+    repositories::RepositoryStatsUpdater,
+    web::{cache::CachePolicy, page::WebPage},
+};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use iron::prelude::*;
@@ -303,16 +308,16 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
             req,
             Url::parse(&format!("{}/crate/{}/latest", redirect_base(req), name,)),
         );
-        return Ok(super::redirect(url));
+        return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
     }
 
     let mut conn = extension!(req, Pool).get()?;
 
     let found_version =
         match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())?;
-    let (version, version_or_latest) = match found_version {
-        MatchSemver::Exact((version, _)) => (version.clone(), version),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+    let (version, version_or_latest, is_latest_url) = match found_version {
+        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         MatchSemver::Semver((version, _)) => {
             let url = ctry!(
                 req,
@@ -324,7 +329,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
                 )),
             );
 
-            return Ok(super::redirect(url));
+            return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
         }
     };
 
@@ -343,14 +348,20 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
         )
     );
 
-    CrateDetailsPage { details }.into_response(req)
+    let mut res = CrateDetailsPage { details }.into_response(req)?;
+    res.extensions.insert::<CachePolicy>(if is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    });
+    Ok(res)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
-    use crate::test::{assert_redirect, wrapper, TestDatabase};
+    use crate::test::{assert_cache_control, assert_redirect_cached, wrapper, TestDatabase};
     use anyhow::{Context, Error};
     use kuchiki::traits::TendrilSink;
     use std::collections::HashMap;
@@ -581,11 +592,14 @@ mod tests {
             env.fake_release().name("foo").version("0.0.1").create()?;
             env.fake_release().name("foo").version("0.0.2").create()?;
 
-            let web = env.frontend();
+            let response = env.frontend().get("/crate/foo/0.0.1").send()?;
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
 
-            assert!(web
-                .get("/crate/foo/0.0.1")
-                .send()?
+            assert!(response
                 .text()?
                 .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest"));
 
@@ -1013,6 +1027,7 @@ mod tests {
 
             let resp = env.frontend().get("/crate/dummy/latest").send()?;
             assert!(resp.status().is_success());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/crate/dummy/latest"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
@@ -1020,8 +1035,20 @@ mod tests {
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
 
-            assert_redirect("/crate/dummy/latest/", "/crate/dummy/latest", web)?;
-            assert_redirect("/crate/dummy", "/crate/dummy/latest", web)?;
+            assert_redirect_cached(
+                "/crate/dummy/latest/",
+                "/crate/dummy/latest",
+                CachePolicy::NoCaching,
+                web,
+                &env.config(),
+            )?;
+            assert_redirect_cached(
+                "/crate/dummy",
+                "/crate/dummy/latest",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
 
             let resp_json = env
                 .frontend()

@@ -606,6 +606,7 @@ impl Context for BinContext {
             self.pool()?,
             self.metrics()?,
             self.config()?,
+            self.cdn()?,
             self.storage()?,
         );
         fn storage(self) -> Storage = Storage::new(

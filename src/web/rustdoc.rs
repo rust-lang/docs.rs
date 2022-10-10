@@ -5,19 +5,16 @@ use crate::{
     repositories::RepositoryStatsUpdater,
     utils,
     web::{
-        crate_details::CrateDetails, csp::Csp, error::Nope, file::File, match_version,
-        metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base, MatchSemver,
-        MetaData,
+        cache::CachePolicy, crate_details::CrateDetails, csp::Csp, error::Nope, file::File,
+        match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base,
+        MatchSemver, MetaData,
     },
     Config, Metrics, Storage,
 };
 use anyhow::{anyhow, Context};
 use iron::{
-    headers::{CacheControl, CacheDirective, Expires, HttpDate},
-    modifiers::Redirect,
-    status,
-    url::percent_encoding::percent_decode,
-    Handler, IronResult, Request, Response, Url,
+    modifiers::Redirect, status, url::percent_encoding::percent_decode, Handler, IronResult,
+    Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
@@ -48,7 +45,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     fn redirect_to_doc(
         req: &Request,
         url_str: String,
-        permanent: bool,
+        cache_policy: CachePolicy,
         path_in_crate: Option<&str>,
     ) -> IronResult<Response> {
         let mut queries = BTreeMap::new();
@@ -57,14 +54,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         }
         queries.extend(req.url.as_ref().query_pairs());
         let url = ctry!(req, parse_url_with_params(&url_str, queries));
-        let (status_code, max_age) = if permanent {
-            (status::MovedPermanently, 86400)
-        } else {
-            (status::Found, 0)
-        };
-        let mut resp = Response::with((status_code, Redirect(url)));
-        resp.headers
-            .set(CacheControl(vec![CacheDirective::MaxAge(max_age)]));
+        let mut resp = Response::with((status::Found, Redirect(url)));
+        resp.extensions.insert::<CachePolicy>(cache_policy);
         Ok(resp)
     }
 
@@ -75,8 +66,8 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         );
 
         let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.headers.set(Expires(HttpDate(time::now())));
-
+        resp.extensions
+            .insert::<CachePolicy>(CachePolicy::ForeverInCdn);
         Ok(resp)
     }
 
@@ -141,7 +132,12 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
 
     if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
         let url = format!("https://doc.rust-lang.org/{inner_path}/");
-        return redirect_to_doc(req, url, false, path_in_crate.as_deref());
+        return redirect_to_doc(
+            req,
+            url,
+            CachePolicy::ForeverInCdnAndStaleInBrowser,
+            path_in_crate.as_deref(),
+        );
     }
 
     let req_version = router.find("version");
@@ -193,7 +189,13 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             format!("{base}/{crate_name}/{version}/{target_name}/")
         };
 
-        redirect_to_doc(req, url_str, version == "latest", path_in_crate.as_deref())
+        let cache = if version == "latest" {
+            CachePolicy::ForeverInCdn
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        };
+
+        redirect_to_doc(req, url_str, cache, path_in_crate.as_deref())
     } else {
         rendering_time.step("redirect to crate");
         redirect_to_crate(req, &crate_name, &version)
@@ -260,28 +262,11 @@ impl RustdocPage {
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
-
-        if is_latest_url {
-            response
-                .headers
-                .set(CacheControl(vec![CacheDirective::MaxAge(0)]));
+        response.extensions.insert::<CachePolicy>(if is_latest_url {
+            CachePolicy::ForeverInCdn
         } else {
-            let mut directives = vec![];
-            if let Some(seconds) = config.cache_control_stale_while_revalidate {
-                directives.push(CacheDirective::Extension(
-                    "stale-while-revalidate".to_string(),
-                    Some(format!("{}", seconds)),
-                ));
-            }
-
-            if let Some(seconds) = config.cache_control_max_age {
-                directives.push(CacheDirective::MaxAge(seconds));
-            }
-
-            if !directives.is_empty() {
-                response.headers.set(CacheControl(directives));
-            }
-        }
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        });
         Ok(response)
     }
 }
@@ -319,7 +304,11 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     req_path.drain(..2).for_each(drop);
 
     // Convenience closure to allow for easy redirection
-    let redirect = |name: &str, vers: &str, path: &[&str]| -> IronResult<Response> {
+    let redirect = |name: &str,
+                    vers: &str,
+                    path: &[&str],
+                    cache_policy: CachePolicy|
+     -> IronResult<Response> {
         // Format and parse the redirect url
         let redirect_path = format!(
             "{}/{}/{}/{}",
@@ -330,7 +319,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         );
         let url = ctry!(req, Url::parse(&redirect_path));
 
-        Ok(super::redirect(url))
+        Ok(super::cached_redirect(url, cache_policy))
     };
 
     rendering_time.step("match version");
@@ -343,23 +332,23 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // * If there is a semver (but not exact) match, redirect to the exact version.
     let release_found = match_version(&mut conn, &name, url_version)?;
 
-    let (version, version_or_latest) = match release_found.version {
+    let (version, version_or_latest, is_latest_url) = match release_found.version {
         MatchSemver::Exact((version, _)) => {
             // Redirect when the requested crate name isn't correct
             if let Some(name) = release_found.corrected_name {
-                return redirect(&name, &version, &req_path);
+                return redirect(&name, &version, &req_path, CachePolicy::NoCaching);
             }
 
-            (version.clone(), version)
+            (version.clone(), version, false)
         }
 
         MatchSemver::Latest((version, _)) => {
             // Redirect when the requested crate name isn't correct
             if let Some(name) = release_found.corrected_name {
-                return redirect(&name, "latest", &req_path);
+                return redirect(&name, "latest", &req_path, CachePolicy::NoCaching);
             }
 
-            (version, "latest".to_string())
+            (version, "latest".to_string(), true)
         }
 
         // Redirect when the requested version isn't correct
@@ -367,7 +356,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            return redirect(&name, &v, &req_path);
+            return redirect(&name, &v, &req_path, CachePolicy::ForeverInCdn);
         }
     };
 
@@ -394,7 +383,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
     if req_path.first().copied() == Some(&krate.metadata.default_target) {
-        return redirect(&name, &version_or_latest, &req_path[1..]);
+        return redirect(
+            &name,
+            &version_or_latest,
+            &req_path[1..],
+            CachePolicy::ForeverInCdn,
+        );
     }
 
     // Create the path to access the file from
@@ -429,7 +423,12 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 req,
                 storage.rustdoc_file_exists(&name, &version, &path, krate.archive_storage)
             ) {
-                redirect(&name, &version_or_latest, &req_path)
+                redirect(
+                    &name,
+                    &version_or_latest,
+                    &req_path,
+                    CachePolicy::ForeverInCdn,
+                )
             } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
@@ -437,6 +436,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                     &format!("/crate/{}", name),
                     &format!("{}/target-redirect", version),
                     &req_path,
+                    CachePolicy::ForeverInCdn,
                 )
             } else {
                 Err(Nope::ResourceNotFound.into())
@@ -448,6 +448,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     if !path.ends_with(".html") {
         rendering_time.step("serve asset");
 
+        // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
+        // This is an edge-case when we serve invocation specific static assets under `/latest/`:
+        // https://github.com/rust-lang/docs.rs/issues/1593
         return Ok(File(blob).serve());
     }
 
@@ -549,7 +552,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         target,
         inner_path,
         is_latest_version,
-        is_latest_url: version_or_latest == "latest",
+        is_latest_url,
         is_prerelease,
         metadata: krate.metadata.clone(),
         krate,
@@ -630,9 +633,9 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let release_found = match_version(&mut conn, name, Some(version))?;
 
-    let (version, version_or_latest) = match release_found.version {
-        MatchSemver::Exact((version, _)) => (version.clone(), version),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+    let (version, version_or_latest, is_latest_url) = match release_found.version {
+        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         // semver matching not supported here
         MatchSemver::Semver(_) => return Err(Nope::VersionNotFound.into()),
     };
@@ -688,8 +691,11 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
 
     let url = ctry!(req, Url::parse(&url));
     let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.headers.set(Expires(HttpDate(time::now())));
-
+    resp.extensions.insert::<CachePolicy>(if is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    });
     Ok(resp)
 }
 
@@ -706,7 +712,10 @@ pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(req, extension!(req, Router).find("crate"));
     let url = format!("https://img.shields.io/docsrs/{}/{}", name, version);
     let url = ctry!(req, Url::parse(&url));
-    Ok(Response::with((status::MovedPermanently, Redirect(url))))
+    let mut res = Response::with((status::MovedPermanently, Redirect(url)));
+    res.extensions
+        .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
+    Ok(res)
 }
 
 /// Serves shared web resources used by rustdoc-generated documentation.
@@ -741,7 +750,7 @@ impl Handler for SharedResourceHandler {
 
 #[cfg(test)]
 mod test {
-    use crate::test::*;
+    use crate::{test::*, web::cache::CachePolicy, Config};
     use anyhow::Context;
     use kuchiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -751,9 +760,16 @@ mod test {
     fn try_latest_version_redirect(
         path: &str,
         web: &TestFrontend,
+        config: &Config,
     ) -> Result<Option<String>, anyhow::Error> {
         assert_success(path, web)?;
-        let data = web.get(path).send()?.text()?;
+        let response = web.get(path).send()?;
+        assert_cache_control(
+            &response,
+            CachePolicy::ForeverInCdnAndStaleInBrowser,
+            config,
+        );
+        let data = response.text()?;
         log::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
         let dom = kuchiki::parse_html().one(data);
 
@@ -763,15 +779,19 @@ mod test {
             .next()
         {
             let link = elem.attributes.borrow().get("href").unwrap().to_string();
-            assert_success(&link, web)?;
+            assert_success_cached(&link, web, CachePolicy::ForeverInCdn, config)?;
             Ok(Some(link))
         } else {
             Ok(None)
         }
     }
 
-    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, anyhow::Error> {
-        try_latest_version_redirect(path, web)?
+    fn latest_version_redirect(
+        path: &str,
+        web: &TestFrontend,
+        config: &Config,
+    ) -> Result<String, anyhow::Error> {
+        try_latest_version_redirect(path, web, config)?
             .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
     }
 
@@ -799,14 +819,49 @@ mod test {
                 .build_result_failed()
                 .create()?;
             let web = env.frontend();
-            assert_success("/", web)?;
-            assert_success("/crate/buggy/0.1.0/", web)?;
-            assert_success("/buggy/0.1.0/directory_1/index.html", web)?;
-            assert_success("/buggy/0.1.0/directory_2.html/index.html", web)?;
-            assert_success("/buggy/0.1.0/directory_3/.gitignore", web)?;
-            assert_success("/buggy/0.1.0/settings.html", web)?;
-            assert_success("/buggy/0.1.0/all.html", web)?;
-            assert_success("/buggy/0.1.0/directory_4/empty_file_no_ext", web)?;
+            assert_success_cached("/", web, CachePolicy::NoCaching, &env.config())?;
+            assert_success_cached(
+                "/crate/buggy/0.1.0/",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/directory_1/index.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/directory_2.html/index.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/directory_3/.gitignore",
+                web,
+                CachePolicy::ForeverInCdnAndBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/settings.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/all.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/directory_4/empty_file_no_ext",
+                web,
+                CachePolicy::ForeverInCdnAndBrowser,
+                &env.config(),
+            )?;
             Ok(())
         });
     }
@@ -825,8 +880,19 @@ mod test {
             let web = env.frontend();
             // no explicit default-target
             let base = "/dummy/0.1.0/dummy/";
-            assert_success(base, web)?;
-            assert_redirect("/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/", base, web)?;
+            assert_success_cached(
+                base,
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_redirect_cached(
+                "/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/",
+                base,
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
 
             assert_success("/dummy/latest/dummy/", web)?;
 
@@ -879,6 +945,7 @@ mod test {
                 .create()?;
 
             let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/dummy/latest/dummy/"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
@@ -892,7 +959,6 @@ mod test {
     fn cache_headers_on_version() {
         wrapper(|env| {
             env.override_config(|config| {
-                config.cache_control_max_age = Some(600);
                 config.cache_control_stale_while_revalidate = Some(2592000);
             });
 
@@ -907,14 +973,15 @@ mod test {
 
             {
                 let resp = web.get("/dummy/latest/dummy/").send()?;
-                assert_eq!(resp.headers().get("Cache-Control").unwrap(), &"max-age=0");
+                assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             }
 
             {
                 let resp = web.get("/dummy/0.1.0/dummy/").send()?;
-                assert_eq!(
-                    resp.headers().get("Cache-Control").unwrap(),
-                    &"stale-while-revalidate=2592000, max-age=600"
+                assert_cache_control(
+                    &resp,
+                    CachePolicy::ForeverInCdnAndStaleInBrowser,
+                    &env.config(),
                 );
             }
             Ok(())
@@ -944,27 +1011,31 @@ mod test {
             let web = env.frontend();
 
             // check it works at all
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web, &env.config())?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             // check it keeps the subpage
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/", web, &env.config())?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
             );
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", web)?;
+            let redirect =
+                latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", web, &env.config())?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/blah.html"
             );
 
             // check it also works for deleted pages
-            let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/struct.will-be-deleted.html", web)?;
+            let redirect = latest_version_redirect(
+                "/dummy/0.1.0/dummy/struct.will-be-deleted.html",
+                web,
+                &env.config(),
+            )?;
             assert_eq!(redirect, "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
 
             Ok(())
@@ -991,15 +1062,21 @@ mod test {
 
             let web = env.frontend();
 
-            let redirect =
-                latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy", web)?;
+            let redirect = latest_version_redirect(
+                "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy",
+                web,
+                &env.config(),
+            )?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
             );
 
-            let redirect =
-                latest_version_redirect("/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/", web)?;
+            let redirect = latest_version_redirect(
+                "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/",
+                web,
+                &env.config(),
+            )?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-pc-windows-msvc/dummy/index.html"
@@ -1008,6 +1085,7 @@ mod test {
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/struct.Blah.html",
                 web,
+                &env.config(),
             )?;
             assert_eq!(
                 redirect,
@@ -1036,7 +1114,7 @@ mod test {
                 .create()?;
 
             let web = env.frontend();
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web, &env.config())?;
             assert_eq!(redirect, "/crate/dummy/latest");
 
             Ok(())
@@ -1068,13 +1146,13 @@ mod test {
                 .create()?;
 
             let web = env.frontend();
-            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web)?;
+            let redirect = latest_version_redirect("/dummy/0.1.0/dummy/", web, &env.config())?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
-            let redirect = latest_version_redirect("/dummy/0.2.1/dummy/", web)?;
+            let redirect = latest_version_redirect("/dummy/0.2.1/dummy/", web, &env.config())?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
@@ -1154,6 +1232,11 @@ mod test {
             }
             println!("({} -> {})", last_url, current_url);
             assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndBrowser,
+                &env.config(),
+            );
             assert_eq!(
                 current_url.as_str(),
                 "https://img.shields.io/docsrs/zstd/latest"
@@ -1343,7 +1426,6 @@ mod test {
                 })
                 .collect())
         }
-
         fn assert_platform_links(
             web: &TestFrontend,
             path: &str,
@@ -1676,7 +1758,7 @@ mod test {
     }
 
     #[test]
-    fn test_redirect_to_latest_301() {
+    fn test_redirect_to_latest_302() {
         wrapper(|env| {
             env.fake_release().name("dummy").version("1.0.0").create()?;
             let web = env.frontend();
@@ -1686,11 +1768,8 @@ mod test {
                 .unwrap();
             let url = format!("http://{}/dummy", web.server_addr());
             let resp = client.get(url).send()?;
-            assert_eq!(resp.status(), StatusCode::MOVED_PERMANENTLY);
-            assert_eq!(
-                resp.headers().get("Cache-Control").unwrap(),
-                reqwest::header::HeaderValue::from_str("max-age=86400").unwrap()
-            );
+            assert_eq!(resp.status(), StatusCode::FOUND);
+            assert!(resp.headers().get("Cache-Control").is_none());
             assert!(resp
                 .headers()
                 .get("Location")
@@ -1929,7 +2008,8 @@ mod test {
             assert_eq!(
                 latest_version_redirect(
                     "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
-                    env.frontend()
+                    env.frontend(),
+                    &env.config()
                 )?,
                 "/crate/tungstenite/latest/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
             );
@@ -1952,7 +2032,8 @@ mod test {
             assert_eq!(
                 latest_version_redirect(
                     "/pyo3/0.2.7/src/pyo3/objects/exc.rs.html",
-                    env.frontend()
+                    env.frontend(),
+                    &env.config(),
                 )?,
                 target_redirect
             );

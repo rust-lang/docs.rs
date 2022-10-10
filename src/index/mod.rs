@@ -3,7 +3,6 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::Context;
 use crates_index_diff::git;
-use crates_index_diff::git::prelude::ObjectIdExt;
 use url::Url;
 
 use self::api::Api;
