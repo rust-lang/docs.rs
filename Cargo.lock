@@ -1213,7 +1213,7 @@ dependencies = [
  "font-awesome-as-a-crate",
  "futures-util",
  "getrandom 0.2.7",
- "git2",
+ "git-repository",
  "grass",
  "hostname",
  "http",
