@@ -31,14 +31,8 @@ struct IndexConfig {
 /// [RFC 2141]: https://rust-lang.github.io/rfcs/2141-alternative-registries.html
 fn load_config(repo: &git::Repository) -> Result<IndexConfig> {
     let file = repo
-        .rev_parse_single("refs/remotes/origin/master")?
-        .object()?
-        .try_into_commit()?
-        .tree()?
-        .lookup_entry_by_path("config.json")?
-        .with_context(|| anyhow::anyhow!("registry index missing config"))?
-        .oid
-        .attach(&repo)
+        .rev_parse_single("refs/remotes/origin/master:config.json")
+        .with_context(|| anyhow::anyhow!("registry index missing ./config.json in root"))?
         .object()?;
 
     let config = serde_json::from_slice(&file.data)?;
