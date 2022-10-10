@@ -761,7 +761,7 @@ pub fn download_handler(req: &mut Request) -> IronResult<Response> {
 
     Ok(super::redirect(ctry!(
         req,
-        Url::parse(&format!("{}/{}", config.s3_static_domain, archive_path))
+        Url::parse(&format!("{}/{}", config.s3_static_root_path, archive_path))
     )))
 }
 

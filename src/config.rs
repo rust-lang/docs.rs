@@ -28,7 +28,7 @@ pub struct Config {
 
     // CloudFront domain which we can access
     // public S3 files through
-    pub(crate) s3_static_domain: String,
+    pub(crate) s3_static_root_path: String,
 
     // Github authentication
     pub(crate) github_accesstoken: Option<String>,
@@ -131,7 +131,7 @@ impl Config {
             #[cfg(test)]
             s3_bucket_is_temporary: false,
 
-            s3_static_domain: env("S3_STATIC_DOMAIN", "https://static.docs.rs".to_string())?,
+            s3_static_root_path: env("S3_STATIC_ROOT_PATH", "https://static.docs.rs".to_string())?,
 
             github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
