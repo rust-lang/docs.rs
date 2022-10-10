@@ -580,10 +580,6 @@ mod tests {
                             "distribution_id_static".into(),
                             "/rustdoc/will_succeed*".into()
                         ),
-                        (
-                            "distribution_id_static".into(),
-                            "/sources/will_succeed*".into()
-                        ),
                     ]
                 );
             }
@@ -603,19 +599,11 @@ mod tests {
                             "distribution_id_static".into(),
                             "/rustdoc/will_succeed*".into()
                         ),
-                        (
-                            "distribution_id_static".into(),
-                            "/sources/will_succeed*".into()
-                        ),
                         ("distribution_id_web".into(), "/will_fail*".into()),
                         ("distribution_id_web".into(), "/crate/will_fail*".into()),
                         (
                             "distribution_id_static".into(),
                             "/rustdoc/will_fail*".into()
-                        ),
-                        (
-                            "distribution_id_static".into(),
-                            "/sources/will_fail*".into()
                         ),
                     ]
                 );

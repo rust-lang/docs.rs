@@ -126,14 +126,8 @@ pub(crate) fn invalidate_crate(config: &Config, cdn: &CdnBackend, name: &str) ->
         .context("error creating web CDN invalidation")?;
     }
     if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-        cdn.create_invalidation(
-            distribution_id,
-            &[
-                &format!("/rustdoc/{}*", name),
-                &format!("/sources/{}*", name),
-            ],
-        )
-        .context("error creating static CDN invalidation")?;
+        cdn.create_invalidation(distribution_id, &[&format!("/rustdoc/{}*", name)])
+            .context("error creating static CDN invalidation")?;
     }
 
     Ok(())
@@ -196,7 +190,6 @@ mod tests {
                         ("distribution_id_web".into(), "/krate*".into()),
                         ("distribution_id_web".into(), "/crate/krate*".into()),
                         ("distribution_id_static".into(), "/rustdoc/krate*".into()),
-                        ("distribution_id_static".into(), "/sources/krate*".into()),
                     ]
                 );
             }
