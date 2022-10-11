@@ -949,9 +949,9 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "13.0.0"
+version = "13.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a31e4890573f1972f24cc0dd8087638beb7655aca08eed75462e093bd767019"
+checksum = "fc4728d29b6ae7380f91a63f8b26f898eec3c451654ad40cd1a819d6676e7275"
 dependencies = [
  "bstr 1.0.1",
  "git-repository",
