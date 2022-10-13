@@ -1371,39 +1371,6 @@ mod tests {
     }
 
     #[test]
-    fn nonexistent_owner_page() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("some_random_crate")
-                .add_owner(CrateOwner {
-                    login: "foobar".into(),
-                    avatar: "https://example.org/foobar".into(),
-                    name: "Foo Bar".into(),
-                    email: "foobar@example.org".into(),
-                })
-                .create()?;
-            let page = kuchiki::parse_html().one(
-                env.frontend()
-                    .get("/releases/random-author")
-                    .send()?
-                    .text()?,
-            );
-
-            assert_eq!(page.select("#crate-title").unwrap().count(), 1);
-            assert_eq!(
-                page.select("#crate-title")
-                    .unwrap()
-                    .next()
-                    .unwrap()
-                    .text_contents(),
-                "The requested owner does not exist",
-            );
-
-            Ok(())
-        });
-    }
-
-    #[test]
     fn home_page_links() {
         wrapper(|env| {
             let web = env.frontend();
