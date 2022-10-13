@@ -114,61 +114,6 @@ pub(crate) fn get_releases(
         .collect()
 }
 
-fn get_releases_by_owner(
-    conn: &mut Client,
-    page: i64,
-    limit: i64,
-    owner: &str,
-) -> (String, Vec<Release>) {
-    let offset = (page - 1) * limit;
-
-    let query = "SELECT crates.name,
-                        releases.version,
-                        releases.description,
-                        releases.target_name,
-                        builds.build_time,
-                        releases.rustdoc_status,
-                        repositories.stars,
-                        owners.name,
-                        owners.login
-                 FROM crates
-                 INNER JOIN releases ON releases.id = crates.latest_version_id
-                 INNER JOIN builds ON releases.id = builds.rid
-                 INNER JOIN owner_rels ON owner_rels.cid = crates.id
-                 INNER JOIN owners ON owners.id = owner_rels.oid
-                 LEFT JOIN repositories ON releases.repository_id = repositories.id
-                 WHERE owners.login = $1
-                 ORDER BY repositories.stars DESC NULLS LAST
-                 LIMIT $2 OFFSET $3";
-    let query = conn.query(query, &[&owner, &limit, &offset]).unwrap();
-
-    let mut owner_name = None;
-    let packages = query
-        .into_iter()
-        .map(|row| {
-            if owner_name.is_none() {
-                owner_name = Some(if !row.get::<usize, String>(7).is_empty() {
-                    row.get(7)
-                } else {
-                    row.get(8)
-                });
-            }
-
-            Release {
-                name: row.get(0),
-                version: row.get(1),
-                description: row.get(2),
-                target_name: row.get(3),
-                build_time: row.get(4),
-                rustdoc_status: row.get(5),
-                stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
-            }
-        })
-        .collect();
-
-    (owner_name.unwrap_or_default(), packages)
-}
-
 struct SearchResult {
     pub results: Vec<Release>,
     pub executed_query: Option<String>,
@@ -355,7 +300,6 @@ pub(super) enum ReleaseType {
     Stars,
     RecentFailures,
     Failures,
-    Owner,
     Search,
 }
 
@@ -379,9 +323,9 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
             true,
         ),
 
-        ReleaseType::Owner | ReleaseType::Search => panic!(
-            "The owners and search page have special requirements and cannot use this handler",
-        ),
+        ReleaseType::Search => {
+            panic!("The search page has special requirements and cannot use this handler",)
+        }
     };
 
     let releases = {
@@ -431,45 +375,14 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
 
 pub fn owner_handler(req: &mut Request) -> IronResult<Response> {
     let router = extension!(req, Router);
-    // page number of releases
-    let page_number: i64 = router
-        .find("page")
-        .and_then(|page_num| page_num.parse().ok())
-        .unwrap_or(1);
-    let owner_route_value = router.find("owner").unwrap();
-
-    let (owner_name, releases) = {
-        let mut conn = extension!(req, Pool).get()?;
-
-        // We need to keep the owner_route_value unchanged, as we may render paginated links in the page.
-        // Changing the owner_route_value directly will cause the link to change, for example: @foobar -> foobar.
-        let mut owner = owner_route_value;
-        if owner.starts_with('@') {
-            owner = &owner[1..];
-        }
-        get_releases_by_owner(&mut conn, page_number, RELEASES_IN_RELEASES, owner)
-    };
-
-    if releases.is_empty() {
-        return Err(Nope::OwnerNotFound.into());
+    let mut owner = router.find("owner").unwrap();
+    if owner.starts_with('@') {
+        owner = &owner[1..];
     }
-
-    // Show next and previous page buttons
-    let (show_next_page, show_previous_page) = (
-        releases.len() == RELEASES_IN_RELEASES as usize,
-        page_number != 1,
-    );
-
-    ViewReleases {
-        releases,
-        description: format!("Crates from {}", owner_name),
-        release_type: ReleaseType::Owner,
-        show_next_page,
-        show_previous_page,
-        page_number,
-        owner: Some(owner_route_value.into()),
+    match format!("https://crates.io/users/{}", owner).parse() {
+        Ok(url) => Ok(super::redirect(url)),
+        Err(_) => Err(Nope::OwnerNotFound.into()),
     }
-    .into_response(req)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
