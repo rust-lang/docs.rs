@@ -17,6 +17,7 @@ struct FeaturesPage {
     metadata: MetaData,
     features: Option<Vec<Feature>>,
     default_len: usize,
+    canonical_url: String,
 }
 
 impl_webpage! {
@@ -76,6 +77,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
         ),
         features,
         default_len,
+        canonical_url: format!("https://docs.rs/crate/{}/latest/features", name),
     }
     .into_response(req)
 }
