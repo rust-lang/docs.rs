@@ -27,6 +27,7 @@ struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
     limits: Limits,
+    canonical_url: String,
 }
 
 impl_webpage! {
@@ -118,6 +119,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             ),
             builds,
             limits,
+            canonical_url: format!("https://docs.rs/crate/{}/latest/builds", name),
         }
         .into_response(req)
     }
