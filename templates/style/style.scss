@@ -364,6 +364,14 @@ div.recent-releases-container {
         }
     }
 
+    .deploymentstatus {
+        font-weight: normal;
+
+        @media #{$media-sm} {
+            text-align: right;
+        }
+    }
+
     div.pagination {
         text-align: center;
         margin: 1em;

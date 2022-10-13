@@ -2,6 +2,7 @@
 
 use crate::{
     build_queue::QueuedCrate,
+    cdn::crate_invalidation_pending,
     db::{Pool, PoolClient},
     impl_webpage,
     utils::report_error,
@@ -38,6 +39,7 @@ pub struct Release {
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
+    deployment_pending: bool,
     pub(crate) build_time: DateTime<Utc>,
     stars: i32,
 }
@@ -109,6 +111,7 @@ pub(crate) fn get_releases(
             target_name: row.get(3),
             rustdoc_status: row.get(4),
             build_time: row.get(5),
+            deployment_pending: crate_invalidation_pending(&row.get(5)),
             stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
         })
         .collect()
@@ -222,6 +225,7 @@ fn get_search_results(
                     version: row.get("version"),
                     description: row.get("description"),
                     build_time: row.get("build_time"),
+                    deployment_pending: crate_invalidation_pending(&row.get("build_time")),
                     target_name: row.get("target_name"),
                     rustdoc_status: row.get("rustdoc_status"),
                     stars: stars.unwrap_or(0),

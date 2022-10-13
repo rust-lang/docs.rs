@@ -4,6 +4,7 @@ use aws_sdk_cloudfront::{
     model::{InvalidationBatch, Paths},
     Client, RetryConfig,
 };
+use chrono::{DateTime, Utc};
 use std::sync::{Arc, Mutex};
 use strum::EnumString;
 use tokio::runtime::Runtime;
@@ -133,14 +134,37 @@ pub(crate) fn invalidate_crate(config: &Config, cdn: &CdnBackend, name: &str) ->
     Ok(())
 }
 
+/// Return if we count the deploy as pending based on the build-time.
+/// CloudFront invalidations can take up to 15 minutes. Until we have
+/// live queries of the invalidation status we just assume it's fine
+/// latest 20 minutes after the build.
+/// TODO: should be replaced be keeping track or querying the active invalidation from CloudFront
+pub(crate) fn crate_invalidation_pending(build_time: &DateTime<Utc>) -> bool {
+    Utc::now().signed_duration_since(*build_time) <= chrono::Duration::minutes(20)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::wrapper;
+    use chrono::Duration;
+    use test_case::test_case;
 
     use aws_sdk_cloudfront::{Client, Config, Credentials, Region};
     use aws_smithy_client::{erase::DynConnector, test_connection::TestConnection};
     use aws_smithy_http::body::SdkBody;
+
+    #[test_case(10, true)]
+    #[test_case(19, true)]
+    #[test_case(21, false)]
+    #[test_case(9999, false)]
+    fn get_invalidation_pending(minutes: i64, expected: bool) {
+        let now = Utc::now();
+        assert_eq!(
+            crate_invalidation_pending(&(now - Duration::minutes(minutes))),
+            expected
+        );
+    }
 
     #[test]
     fn create_cloudfront() {
