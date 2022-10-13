@@ -1404,50 +1404,6 @@ mod tests {
     }
 
     #[test]
-    fn owners_page() {
-        wrapper(|env| {
-            let web = env.frontend();
-            env.fake_release()
-                .name("some_random_crate")
-                .add_owner(CrateOwner {
-                    login: "foobar".into(),
-                    avatar: "https://example.org/foobar".into(),
-                    name: "Foo Bar".into(),
-                    email: "foobar@example.org".into(),
-                })
-                .create()?;
-            // Request an owner without @ sign.
-            assert_success("/releases/foobar", web)?;
-            // Request an owner with @ sign.
-            assert_success("/releases/@foobar", web)
-        })
-    }
-
-    #[test]
-    fn owners_pagination() {
-        wrapper(|env| {
-            let web = env.frontend();
-            for i in 0..RELEASES_IN_RELEASES {
-                env.fake_release()
-                    .name(&format!("some_random_crate_{}", i))
-                    .add_owner(CrateOwner {
-                        login: "foobar".into(),
-                        avatar: "https://example.org/foobar".into(),
-                        name: "Foo Bar".into(),
-                        email: "foobar@example.org".into(),
-                    })
-                    .create()?;
-            }
-            let page = kuchiki::parse_html().one(web.get("/releases/@foobar").send()?.text()?);
-            let button = page.select_first("a[href='/releases/@foobar/2']");
-
-            assert!(button.is_ok());
-
-            Ok(())
-        })
-    }
-
-    #[test]
     fn home_page_links() {
         wrapper(|env| {
             let web = env.frontend();
