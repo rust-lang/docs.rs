@@ -696,7 +696,9 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
-    use crate::test::{assert_redirect, assert_success, wrapper, TestFrontend};
+    use crate::test::{
+        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
+    };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
     use kuchiki::traits::TendrilSink;
@@ -1469,6 +1471,16 @@ mod tests {
                 tester(url);
             }
 
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_owner_releases_redirect() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            assert_redirect_unchecked("/releases/someone", "https://crates.io/users/someone", web)?;
             Ok(())
         });
     }
