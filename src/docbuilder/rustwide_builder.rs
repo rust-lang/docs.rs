@@ -11,6 +11,7 @@ use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
     copy_dir_all, parse_rustc_version, queue_builder, set_config, CargoMetadata, ConfigName,
 };
+use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Error};
@@ -225,7 +226,8 @@ impl RustwideBuilder {
                         .prefix("essential-files")
                         .tempdir()?;
                     copy_dir_all(source, &dest)?;
-                    add_path_into_database(&self.storage, "", &dest)?;
+
+                    add_path_into_database(&self.storage, RUSTDOC_STATIC_STORAGE_PREFIX, &dest)?;
 
                     set_config(
                         &mut conn,
@@ -710,7 +712,7 @@ impl RustwideBuilder {
 
         #[rustfmt::skip]
         const UNCONDITIONAL_ARGS: &[&str] = &[
-            "--static-root-path", "/",
+            "--static-root-path", "/-/rustdoc.static/",
             "--cap-lints", "warn",
             "--disable-per-crate-search",
             "--extern-html-root-takes-precedence",

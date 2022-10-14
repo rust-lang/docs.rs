@@ -3,14 +3,14 @@
 use crate::{
     db::Pool,
     repositories::RepositoryStatsUpdater,
-    storage::rustdoc_archive_path,
+    storage::{rustdoc_archive_path, PathNotFoundError},
     utils,
     web::{
         cache::CachePolicy, crate_details::CrateDetails, csp::Csp, error::Nope, file::File,
         match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base,
         report_error, MatchSemver, MetaData,
     },
-    Config, Metrics, Storage,
+    Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
 use anyhow::{anyhow, Context};
 use iron::{
@@ -766,14 +766,51 @@ pub fn download_handler(req: &mut Request) -> IronResult<Response> {
     )))
 }
 
+/// Serves shared resources used by rustdoc-generated documentation.
+///
+/// This serves files from S3, and is pointed to by the `--static-root-path` flag to rustdoc.
+pub fn static_asset_handler(req: &mut Request) -> IronResult<Response> {
+    let storage = extension!(req, Storage);
+    let config = extension!(req, Config);
+
+    let filename = req.url.path()[2..].join("/");
+    let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, filename);
+
+    // Prevent accessing static files outside the root. This could happen if the path
+    // contains `/` or `..`. The check doesn't outright prevent those strings to be present
+    // to allow accessing files in subdirectories.
+    let canonical_path =
+        std::fs::canonicalize(&storage_path).map_err(|_| Nope::ResourceNotFound)?;
+    let canonical_root =
+        std::fs::canonicalize(&storage_path).map_err(|_| Nope::ResourceNotFound)?;
+
+    if !canonical_path.starts_with(canonical_root) {
+        return Err(Nope::ResourceNotFound.into());
+    }
+
+    match File::from_path(storage, &storage_path, config) {
+        Ok(file) => Ok(file.serve()),
+        Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
+            Err(Nope::ResourceNotFound.into())
+        }
+        Err(err) => {
+            utils::report_error(&err);
+            Err(Nope::InternalServerError.into())
+        }
+    }
+}
+
 /// Serves shared web resources used by rustdoc-generated documentation.
 ///
 /// This includes common `css` and `js` files that only change when the compiler is updated, but are
 /// otherwise the same for all crates documented with that compiler. Those have a custom handler to
 /// deduplicate them and save space.
-pub struct SharedResourceHandler;
+///
+/// This handler considers only the last component of the request path, and looks for a matching file
+/// in the Storage root.
+pub struct LegacySharedResourceHandler;
 
-impl Handler for SharedResourceHandler {
+impl Handler for LegacySharedResourceHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path();
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
@@ -793,6 +830,29 @@ impl Handler for SharedResourceHandler {
 
         // Just always return a 404 here - the main handler will then try the other handlers
         Err(Nope::ResourceNotFound.into())
+    }
+}
+
+/// Serves shared web resources used by rustdoc-generated documentation.
+///
+/// Rustdoc has certain JS, CSS, font and image files that are required for all
+/// documentation it generates, and these don't change often. We make one copy
+/// of these per rustdoc release and serve them from a common location.
+///
+/// This handler considers the whole path, and looks for a file at that path in
+/// the Storage.
+pub struct SharedResourceHandler;
+
+impl Handler for SharedResourceHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let storage = extension!(req, Storage);
+        let config = extension!(req, Config);
+
+        let storage_path = format!("/{}", req.url.path().join("/"));
+        match File::from_path(storage, &storage_path, config) {
+            Ok(file) => Ok(file.serve()),
+            Err(_) => Err(Nope::ResourceNotFound.into()),
+        }
     }
 }
 

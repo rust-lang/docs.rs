@@ -55,3 +55,6 @@ pub const BUILD_VERSION: &str = concat!(
     " ",
     include_str!(concat!(env!("OUT_DIR"), "/git_version"))
 );
+
+/// Where rustdoc's static files are stored in S3.
+pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
