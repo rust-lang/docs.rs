@@ -138,8 +138,10 @@ impl MainHandler {
         let inject_extensions = InjectExtensions::new(context, template_data)?;
 
         let routes = routes::build_routes();
-        let shared_resources =
-            Self::chain(inject_extensions.clone(), rustdoc::SharedResourceHandler);
+        let shared_resources = Self::chain(
+            inject_extensions.clone(),
+            rustdoc::LegacySharedResourceHandler,
+        );
         let router_chain = Self::chain(inject_extensions.clone(), routes.iron_router());
 
         Ok(MainHandler {
@@ -174,13 +176,13 @@ impl Handler for MainHandler {
         // removes the shared static files from individual builds to save space, the "../mainXXX.js"
         // path doesn't really exist in storage for any particular build. The appropriate main file
         // *does* exist in the storage root, which is where the shared static files are put for each
-        // new rustdoc version. So here we give SharedResourceHandler a chance to handle all URLs
-        // before they go to the router. SharedResourceHandler looks at the last component of the
+        // new rustdoc version. So here we give LegacySharedResourceHandler a chance to handle all URLs
+        // before they go to the router. LegacySharedResourceHandler looks at the last component of the
         // request path ("main-20181217-1.33.0-nightly-adbfec229.js") and tries to fetch it from
         // the storage root (if it's JS, CSS, etc). If the file doesn't exist, we fall through to
         // the normal router, which may wind up serving an invocation-specific file from the crate
         // itself. For instance, a request for "/crate/foo/search-index-XYZ.js" will get a 404 from
-        // the SharedResourceHandler because "search-index-XYZ.js" doesn't exist in the storage root
+        // the LegacySharedResourceHandler because "search-index-XYZ.js" doesn't exist in the storage root
         // (it's not a shared static file), but it will get a 200 from rustdoc_html_server_handler
         // because it exists in a specific crate.
         //
@@ -192,8 +194,8 @@ impl Handler for MainHandler {
         // https://docs.rs/this.path.does.not.exist/main-20181217-1.33.0-nightly-adbfec229.js
         //
         // If those 2018 crates get rebuilt, we won't have this problem anymore, and
-        // SharedResourceHandler can receive dispatch from the router, as other handlers do. That
-        // will also allow SharedResourceHandler to look up full paths in storage rather than just
+        // LegacySharedResourceHandler can receive dispatch from the router, as other handlers do. That
+        // will also allow LegacySharedResourceHandler to look up full paths in storage rather than just
         // the last component of the requested path.
         //
         // Also note: this approach means that a request for a given JS/CSS may serve from two

@@ -31,6 +31,11 @@ pub(super) fn build_routes() -> Routes {
 
     routes.static_resource("/-/static/:single", super::statics::static_handler);
     routes.static_resource("/-/static/*", super::statics::static_handler);
+    routes.internal_page(
+        "/-/rustdoc.static/:single",
+        super::rustdoc::static_asset_handler,
+    );
+    routes.internal_page("/-/rustdoc.static/*", super::rustdoc::static_asset_handler);
     routes.internal_page("/-/storage-change-detection.html", {
         #[derive(Debug, serde::Serialize)]
         struct StorageChangeDetection {}
@@ -356,6 +361,8 @@ fn calculate_id(pattern: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::test::*;
+    use crate::web::cache::CachePolicy;
+    use reqwest::StatusCode;
 
     #[test]
     fn test_root_redirects() {
@@ -376,5 +383,42 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn serve_rustdoc_content_not_found() {
+        wrapper(|env| {
+            let response = env.frontend().get("/-/rustdoc-static/style.css").send()?;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn serve_rustdoc_content() {
+        wrapper(|env| {
+            let web = env.frontend();
+            env.storage().store_one("style.css", *b"content")?;
+            env.storage()
+                .store_one("will_not/be_found.css", *b"something")?;
+
+            let response = web.get("/-/rustdoc-static/style.css").send()?;
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndBrowser,
+                &env.config(),
+            );
+            assert!(response.status().is_success());
+            assert_eq!(response.text()?, "content");
+
+            assert_eq!(
+                web.get("/-/rustdoc-static/will_not/be_found.css")
+                    .send()?
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+            Ok(())
+        })
     }
 }
