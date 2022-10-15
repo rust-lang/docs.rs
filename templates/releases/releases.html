@@ -50,15 +50,22 @@
                                         {{ release.build_time | timeformat(relative=true) }}
                                     </div>
                                 {%- endif %}
-                                {% if release.deployment_pending -%}
-                                    <div class="pure-u-1 pure-u-sm-1-24 pure-u-md-1-24 deploymentstatus"
-                                        title="deployment pending, it may take up to 20 minutes for this version to be visible to everybody">
-                                        {{ "spinner" | fas }}
-                                    </div>
+                                {%- if release.rustdoc_status -%}
+                                    {%- if release.deployment_pending -%}
+                                        <div class="pure-u-1 pure-u-sm-1-24 pure-u-md-1-24 deploymentstatus"
+                                            title="deployment pending, it may take up to 20 minutes for this version to be visible to everybody">
+                                            {{ "spinner" | fas }}
+                                        </div>
+                                    {%- else -%}
+                                        <div class="pure-u-1 pure-u-sm-1-24 pure-u-md-1-24 deploymentstatus"
+                                            title="deployment finished">
+                                            {{ "check" | fas }}
+                                        </div>
+                                    {%- endif -%}
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-1-24 pure-u-md-1-24 deploymentstatus"
-                                        title="deployment finished">
-                                        {{ "check" | fas }}
+                                        title="build error">
+                                        {{ "triangle-exclamation" | fas(fw=true) }}
                                     </div>
                                 {%- endif -%}
                             </div>
