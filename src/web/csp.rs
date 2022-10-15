@@ -15,7 +15,7 @@ impl Csp {
         getrandom::getrandom(&mut random).expect("failed to generate a nonce");
 
         Self {
-            nonce: base64::encode(&random),
+            nonce: base64::encode(random),
             suppress: false,
         }
     }

@@ -535,7 +535,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
     let search_result = ctry!(
         req,
         if let Some(paginate) = params.get("paginate") {
-            let decoded = base64::decode(&paginate.as_bytes()).map_err(|e| -> IronError {
+            let decoded = base64::decode(paginate.as_bytes()).map_err(|e| -> IronError {
                 warn!(
                     "error when decoding pagination base64 string \"{}\": {:?}",
                     paginate, e
@@ -571,9 +571,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
         }
     );
 
-    let executed_query = search_result
-        .executed_query
-        .unwrap_or_else(|| "".to_string());
+    let executed_query = search_result.executed_query.unwrap_or_default();
 
     let title = if search_result.results.is_empty() {
         format!("No results found for '{}'", executed_query)

@@ -85,10 +85,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
 fn order_features_and_count_default_len(raw: Vec<Feature>) -> (Vec<Feature>, usize) {
     let mut feature_map = get_feature_map(raw);
     let mut features = get_tree_structure_from_default(&mut feature_map);
-    let mut remaining: Vec<_> = feature_map
-        .into_iter()
-        .map(|(_, feature)| feature)
-        .collect();
+    let mut remaining = Vec::from_iter(feature_map.into_values());
     remaining.sort_by_key(|feature| feature.subfeatures.len());
 
     let default_len = features.len();
