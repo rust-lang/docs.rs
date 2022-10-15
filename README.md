@@ -56,6 +56,7 @@ docker is installed and the service is running.
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
 cd docs.rs
+git submodule update --init
 # Configure the default settings for external services
 cp .env.sample .env
 # Create the DOCSRS_PREFIX directory

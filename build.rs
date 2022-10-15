@@ -79,7 +79,12 @@ fn main() -> Result<()> {
     write_git_version(out_dir)?;
     compile_sass(out_dir)?;
     write_known_targets(out_dir)?;
-    compile_syntax(out_dir)?;
+    compile_syntax(out_dir).context(
+        "\
+            could not compile syntax files\n\n\
+            Note: you may need to run `git submodule update --init`\
+        ",
+    )?;
     Ok(())
 }
 
