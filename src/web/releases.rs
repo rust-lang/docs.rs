@@ -716,7 +716,8 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{
-        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
+        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, FakeBuild,
+        TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -732,12 +733,36 @@ mod tests {
         wrapper(|env| {
             let db = env.db();
 
-            env.fake_release().name("foo").version("1.0.0").create()?;
+            let now = Utc::now();
 
-            assert!(
-                !get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, false).is_empty()
+            env.fake_release()
+                .name("recent")
+                .version("1.0.0")
+                .builds(vec![FakeBuild::default().build_time(now)])
+                .create()?;
+
+            env.fake_release()
+                .name("old")
+                .version("1.0.0")
+                .builds(vec![
+                    FakeBuild::default().build_time(now - Duration::minutes(21))
+                ])
+                .create()?;
+
+            assert_eq!(
+                get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, false)
+                    .iter()
+                    .map(|r| r.name.clone())
+                    .collect::<Vec<_>>(),
+                vec!["recent", "old"],
             );
-            assert!(get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, true).is_empty());
+            assert_eq!(
+                get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, true)
+                    .iter()
+                    .map(|r| r.name.clone())
+                    .collect::<Vec<_>>(),
+                vec!["old"],
+            );
             Ok(())
         })
     }
@@ -1255,25 +1280,44 @@ mod tests {
                 .version("0.1.0")
                 .github_stats("some/repo", 33, 22, 11)
                 .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .builds(vec![
+                    FakeBuild::default().build_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                ])
                 .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .version("0.2.0-rc")
                 .github_stats("some/repo", 33, 22, 11)
                 .release_time(Utc.ymd(2020, 4, 16).and_hms(8, 33, 50))
-                .build_result_failed()
+                .has_docs(false)
+                .builds(vec![FakeBuild::default()
+                    .build_time(Utc.ymd(2020, 4, 16).and_hms(8, 33, 50))
+                    .successful(false)])
                 .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .github_stats("some/repo", 33, 22, 11)
                 .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .builds(vec![
+                    FakeBuild::default().build_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                ])
                 .version("0.2.0")
                 .create()?;
             env.fake_release()
                 .name("crate_that_failed")
                 .version("0.1.0")
                 .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
-                .build_result_failed()
+                .has_docs(false)
+                .builds(vec![FakeBuild::default()
+                    .build_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                    .successful(false)])
+                .create()?;
+            let now = Utc::now();
+            env.fake_release()
+                .name("crate_that_was_just_deployed_and_will_not_be_shown")
+                .version("0.1.0")
+                .release_time(now)
+                .builds(vec![FakeBuild::default().build_time(now)])
                 .create()?;
 
             // make sure that crates get at most one release shown, so they don't crowd the homepage
@@ -1289,6 +1333,7 @@ mod tests {
             assert_eq!(
                 get_release_links("/releases", env.frontend())?,
                 [
+                    "/crate_that_was_just_deployed_and_will_not_be_shown/0.1.0/crate_that_was_just_deployed_and_will_not_be_shown/",
                     "/crate/crate_that_failed/0.1.0",
                     "/crate_that_succeeded_with_github/0.2.0/crate_that_succeeded_with_github/",
                     "/crate/crate_that_succeeded_with_github/0.2.0-rc",
