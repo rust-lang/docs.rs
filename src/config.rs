@@ -131,7 +131,10 @@ impl Config {
             #[cfg(test)]
             s3_bucket_is_temporary: false,
 
-            s3_static_root_path: env("S3_STATIC_ROOT_PATH", "https://static.docs.rs".to_string())?,
+            s3_static_root_path: env(
+                "DOCSRS_S3_STATIC_ROOT_PATH",
+                "https://static.docs.rs".to_string(),
+            )?,
 
             github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
