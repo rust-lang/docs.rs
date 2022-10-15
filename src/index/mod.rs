@@ -109,7 +109,7 @@ impl Index {
         let gc = Command::new("git")
             .arg("-C")
             .arg(&self.path)
-            .args(&["gc", "--auto"])
+            .args(["gc", "--auto"])
             .output()
             .with_context(|| format!("failed to run `git gc --auto`\npath: {:#?}", &self.path));
 

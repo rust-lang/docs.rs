@@ -302,7 +302,7 @@ impl Storage {
 
         Ok(Blob {
             path: format!("{}/{}", archive_path, path),
-            mime: detect_mime(&path).into(),
+            mime: detect_mime(path).into(),
             date_updated: blob.date_updated,
             content: blob.content,
             compression: None,

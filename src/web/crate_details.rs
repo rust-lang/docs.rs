@@ -303,7 +303,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
     let name = cexpect!(req, router.find("name"));
     let req_version = router.find("version");
 
-    if req_version == None {
+    if req_version.is_none() {
         let url = ctry!(
             req,
             Url::parse(&format!("{}/crate/{}/latest", redirect_base(req), name,)),

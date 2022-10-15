@@ -154,7 +154,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
     let (mut version, id) = v.version.into_parts();
 
-    if req_version == None || req_version == Some("latest") {
+    if let None | Some("latest") = req_version {
         version = "latest".to_string()
     }
 

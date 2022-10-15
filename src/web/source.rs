@@ -98,9 +98,9 @@ impl FileList {
                     }
 
                     // look only files for req_path
-                    if path.starts_with(&req_path) {
+                    if path.starts_with(req_path) {
                         // remove req_path from path to reach files in this directory
-                        let path = path.replace(&req_path, "");
+                        let path = path.replace(req_path, "");
                         let path_splited: Vec<&str> = path.split('/').collect();
 
                         // if path have '/' it is a directory
@@ -245,10 +245,10 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
             conn.query(
                 "
                 SELECT archive_storage
-                FROM releases 
+                FROM releases
                 INNER JOIN crates ON releases.crate_id = crates.id
-                WHERE 
-                    name = $1 AND 
+                WHERE
+                    name = $1 AND
                     version = $2
                 ",
                 &[&crate_name, &version]

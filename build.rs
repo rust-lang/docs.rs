@@ -162,7 +162,7 @@ fn write_known_targets(out_dir: &Path) -> Result<()> {
     use std::io::BufRead;
 
     let targets: Vec<String> = std::process::Command::new("rustc")
-        .args(&["--print", "target-list"])
+        .args(["--print", "target-list"])
         .output()?
         .stdout
         .lines()
