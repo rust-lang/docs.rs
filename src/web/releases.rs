@@ -64,6 +64,7 @@ pub(crate) fn get_releases(
     limit: i64,
     order: Order,
     latest_only: bool,
+    deployed_only: bool,
 ) -> Vec<Release> {
     let offset = (page - 1) * limit;
 
@@ -104,6 +105,7 @@ pub(crate) fn get_releases(
     conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
         .unwrap()
         .into_iter()
+        .filter(|row| !deployed_only || !crate_invalidation_pending(&row.get(5)))
         .map(|row| Release {
             name: row.get(0),
             version: row.get(1),
@@ -260,7 +262,14 @@ impl_webpage! {
 
 pub fn home_page(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true);
+    let recent_releases = get_releases(
+        &mut conn,
+        1,
+        RELEASES_IN_HOME,
+        Order::ReleaseTime,
+        true,
+        true,
+    );
 
     HomePage { recent_releases }.into_response(req)
 }
@@ -277,7 +286,14 @@ impl_webpage! {
 
 pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true);
+    let recent_releases = get_releases(
+        &mut conn,
+        1,
+        RELEASES_IN_FEED,
+        Order::ReleaseTime,
+        true,
+        false,
+    );
 
     ReleaseFeed { recent_releases }.into_response(req)
 }
@@ -340,6 +356,7 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
             RELEASES_IN_RELEASES,
             release_order,
             latest_only,
+            false,
         )
     };
 
@@ -711,6 +728,21 @@ mod tests {
     use test_case::test_case;
 
     #[test]
+    fn get_releases_only_deployed() {
+        wrapper(|env| {
+            let db = env.db();
+
+            env.fake_release().name("foo").version("1.0.0").create()?;
+
+            assert!(
+                !get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, false).is_empty()
+            );
+            assert!(get_releases(&mut db.conn(), 1, 10, Order::ReleaseTime, true, true).is_empty());
+            Ok(())
+        })
+    }
+
+    #[test]
     fn get_releases_by_stars() {
         wrapper(|env| {
             let db = env.db();
@@ -728,7 +760,7 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true);
+            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true, false);
             assert_eq!(
                 vec![
                     "bar", // 20 stars
@@ -739,7 +771,6 @@ mod tests {
                     .map(|release| release.name.as_str())
                     .collect::<Vec<_>>(),
             );
-
             Ok(())
         })
     }
