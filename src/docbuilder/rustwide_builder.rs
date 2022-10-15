@@ -673,6 +673,7 @@ impl RustwideBuilder {
 
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
+            "--offline".into(),
             // We know that `metadata` unconditionally passes `-Z rustdoc-map`.
             // Don't copy paste this, since that fact is not stable and may change in the future.
             "-Zunstable-options".into(),
