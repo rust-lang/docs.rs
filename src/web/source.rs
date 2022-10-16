@@ -24,28 +24,19 @@ struct File {
     name: String,
     /// The mime type of the file
     mime: String,
-    /// The extension of the file, if it has one
-    extension: Option<String>,
 }
 
 impl File {
     fn from_path_and_mime(path: &str, mime: &str) -> File {
-        let (name, mime, extension) = if let Some((dir, _)) = path.split_once('/') {
-            (dir, "dir", None)
+        let (name, mime) = if let Some((dir, _)) = path.split_once('/') {
+            (dir, "dir")
         } else {
-            let extension = if path.starts_with('.') {
-                None
-            } else {
-                path.rsplit_once('.').map(|(_, ext)| ext)
-            };
-
-            (path, mime, extension)
+            (path, mime)
         };
 
         Self {
             name: name.to_owned(),
             mime: mime.to_owned(),
-            extension: extension.map(|s| s.to_owned()),
         }
     }
 }
@@ -437,5 +428,33 @@ mod tests {
             assert_success("/crate/rustc-ap-syntax/178.0.0/source/fold.rs", web)?;
             Ok(())
         })
+    }
+
+    #[test]
+    fn cargo_special_filetypes_are_highlighted() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file("Cargo.toml.orig", b"[package]")
+                .source_file("Cargo.lock", b"[dependencies]")
+                .create()?;
+
+            let web = env.frontend();
+
+            let response = web
+                .get("/crate/fake/0.1.0/source/Cargo.toml.orig")
+                .send()?
+                .text()?;
+            assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
+
+            let response = web
+                .get("/crate/fake/0.1.0/source/Cargo.lock")
+                .send()?
+                .text()?;
+            assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
+
+            Ok(())
+        });
     }
 }

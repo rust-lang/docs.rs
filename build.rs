@@ -186,7 +186,10 @@ fn write_known_targets(out_dir: &Path) -> Result<()> {
 }
 
 fn compile_syntax(out_dir: &Path) -> Result<()> {
-    use syntect::{dumps::dump_to_uncompressed_file, parsing::SyntaxSetBuilder};
+    use syntect::{
+        dumps::dump_to_uncompressed_file,
+        parsing::{SyntaxDefinition, SyntaxSetBuilder},
+    };
 
     fn tracked_add_from_folder(
         builder: &mut SyntaxSetBuilder,
@@ -207,7 +210,16 @@ fn compile_syntax(out_dir: &Path) -> Result<()> {
         &mut builder,
         "assets/syntaxes/Packages/Markdown/Markdown.sublime-syntax",
     )?;
-    tracked_add_from_folder(&mut builder, "assets/syntaxes/Extras/TOML/")?;
+
+    // The TOML syntax already includes `Cargo.lock` in its alternative file extensions, but we
+    // also want to support `Cargo.toml.orig` files.
+    let mut toml = SyntaxDefinition::load_from_str(
+        &tracked::read_to_string("assets/syntaxes/Extras/TOML/TOML.sublime-syntax")?,
+        true,
+        Some("TOML"),
+    )?;
+    toml.file_extensions.push("Cargo.toml.orig".into());
+    builder.add(toml);
 
     dump_to_uncompressed_file(&builder.build(), out_dir.join("syntect.packdump"))?;
 
