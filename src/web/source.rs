@@ -457,4 +457,25 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn dotfiles_with_extension_are_highlighted() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file(".rustfmt.toml", b"[rustfmt]")
+                .create()?;
+
+            let web = env.frontend();
+
+            let response = web
+                .get("/crate/fake/0.1.0/source/.rustfmt.toml")
+                .send()?
+                .text()?;
+            assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
+
+            Ok(())
+        });
+    }
 }

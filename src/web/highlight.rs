@@ -38,12 +38,8 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
 fn select_syntax(name: Option<&str>, code: &str) -> &'static SyntaxReference {
     name.and_then(|name| {
         SYNTAXES.find_syntax_by_token(name).or_else(|| {
-            if name.starts_with('.') {
-                None
-            } else {
-                name.rsplit_once('.')
-                    .and_then(|(_, ext)| SYNTAXES.find_syntax_by_token(ext))
-            }
+            name.rsplit_once('.')
+                .and_then(|(_, ext)| SYNTAXES.find_syntax_by_token(ext))
         })
     })
     .or_else(|| SYNTAXES.find_syntax_by_first_line(code))
@@ -74,5 +70,12 @@ mod tests {
 
         assert_eq!(select_syntax(Some("Cargo.toml.orig"), "").name, toml.name);
         assert_eq!(select_syntax(Some("Cargo.lock"), "").name, toml.name);
+    }
+
+    #[test]
+    fn dotfile_with_extension() {
+        let toml = select_syntax(Some("toml"), "");
+
+        assert_eq!(select_syntax(Some(".rustfmt.toml"), "").name, toml.name);
     }
 }
