@@ -113,7 +113,7 @@
             {# If the file has content, then display it in a codeblock #}
             {%- if file_content -%}
                 <div id="source-code" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
-                    {{- file_content | highlight(lang=file.extension) -}}
+                    {{- file_content | highlight(lang=file.name) -}}
                 </div>
             {%- endif -%}
         </div>
