@@ -1348,6 +1348,7 @@ dependencies = [
  "grass",
  "hostname",
  "http",
+ "indoc",
  "iron",
  "kuchiki",
  "log 0.4.17",
@@ -2650,6 +2651,12 @@ dependencies = [
  "autocfg 1.1.0",
  "hashbrown 0.12.3",
 ]
+
+[[package]]
+name = "indoc"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adab1eaa3408fb7f0c777a73e7465fd5656136fc93b670eb6df3c88c2c1344e3"
 
 [[package]]
 name = "instant"
