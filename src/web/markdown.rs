@@ -4,15 +4,17 @@ use comrak::{
     ComrakRenderPlugins,
 };
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
-use std::fmt::Write;
+use std::{collections::HashMap, fmt::Write};
 
 #[derive(Debug)]
-struct CodeAdapter;
+struct CodeAdapter<F>(F);
 
-impl SyntaxHighlighterAdapter for CodeAdapter {
+impl<F: Fn(Option<&str>, &str) -> String> SyntaxHighlighterAdapter for CodeAdapter<F> {
     fn highlight(&self, lang: Option<&str>, code: &str) -> String {
-        highlight_code(lang, code)
+        // comrak does not treat `,` as an info-string delimiter, so we do that here
+        // TODO: https://github.com/kivikakk/comrak/issues/246
+        let lang = lang.and_then(|lang| lang.split(',').next());
+        (self.0)(lang, code)
     }
 
     fn build_pre_tag(&self, attributes: &HashMap<String, String>) -> String {
@@ -20,7 +22,21 @@ impl SyntaxHighlighterAdapter for CodeAdapter {
     }
 
     fn build_code_tag(&self, attributes: &HashMap<String, String>) -> String {
-        build_opening_tag("code", attributes)
+        // similarly to above, since comrak does not treat `,` as an info-string delimiter it will
+        // try to apply `class="language-rust,ignore"` for the info-string `rust,ignore`, so we
+        // have to detect that case and fixup the class here
+        // TODO: https://github.com/kivikakk/comrak/issues/246
+        let mut attributes = attributes.clone();
+        if let Some(classes) = attributes.get_mut("class") {
+            *classes = classes
+                .split(' ')
+                .flat_map(|class| [class.split(',').next().unwrap_or(class), " "])
+                .collect();
+            // remove trailing ' '
+            // TODO: https://github.com/rust-lang/rust/issues/79524 or itertools
+            classes.pop();
+        }
+        build_opening_tag("code", &attributes)
     }
 }
 
@@ -82,8 +98,10 @@ pub fn highlight_code(lang: Option<&str>, code: &str) -> String {
     }
 }
 
-/// Wrapper around the Markdown parser and renderer to render markdown
-pub(crate) fn render(text: &str) -> String {
+fn render_with_highlighter(
+    text: &str,
+    highlighter: impl Fn(Option<&str>, &str) -> String,
+) -> String {
     comrak::markdown_to_html_with_plugins(
         text,
         &ComrakOptions {
@@ -99,8 +117,52 @@ pub(crate) fn render(text: &str) -> String {
         },
         &ComrakPlugins {
             render: ComrakRenderPlugins {
-                codefence_syntax_highlighter: Some(&CodeAdapter),
+                codefence_syntax_highlighter: Some(&CodeAdapter(highlighter)),
             },
         },
     )
+}
+
+/// Wrapper around the Markdown parser and renderer to render markdown
+pub fn render(text: &str) -> String {
+    render_with_highlighter(text, highlight_code)
+}
+
+#[cfg(test)]
+mod test {
+    use super::{highlight_code, render_with_highlighter};
+    use indoc::indoc;
+    use std::cell::RefCell;
+
+    #[test]
+    fn ignore_info_string_attributes() {
+        let highlighted = RefCell::new(vec![]);
+
+        let output = render_with_highlighter(
+            indoc! {"
+                ```rust,ignore
+                ignore::commas();
+                ```
+
+                ```rust ignore
+                ignore::spaces();
+                ```
+            "},
+            |lang, code| {
+                highlighted
+                    .borrow_mut()
+                    .push((lang.map(str::to_owned), code.to_owned()));
+                highlight_code(lang, code)
+            },
+        );
+
+        assert!(output.matches(r#"<code class="language-rust">"#).count() == 2);
+        assert_eq!(
+            highlighted.borrow().as_slice(),
+            [
+                (Some("rust".into()), "ignore::commas();\n".into()),
+                (Some("rust".into()), "ignore::spaces();\n".into())
+            ]
+        );
+    }
 }
