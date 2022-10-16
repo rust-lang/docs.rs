@@ -1,9 +1,8 @@
-use crate::error::Result;
+use crate::web::highlight;
 use comrak::{
     adapters::SyntaxHighlighterAdapter, ComrakExtensionOptions, ComrakOptions, ComrakPlugins,
     ComrakRenderPlugins,
 };
-use once_cell::sync::Lazy;
 use std::{collections::HashMap, fmt::Write};
 
 #[derive(Debug)]
@@ -49,55 +48,6 @@ fn build_opening_tag(tag: &str, attributes: &HashMap<String, String>) -> String 
     tag_parts
 }
 
-pub fn try_highlight_code(lang: Option<&str>, code: &str) -> Result<String> {
-    use syntect::{
-        html::{ClassStyle, ClassedHTMLGenerator},
-        parsing::SyntaxSet,
-        util::LinesWithEndings,
-    };
-
-    static SYNTAX_DATA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/syntect.packdump"));
-    static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
-        let syntaxes: SyntaxSet = syntect::dumps::from_uncompressed_data(SYNTAX_DATA).unwrap();
-        let names = syntaxes
-            .syntaxes()
-            .iter()
-            .map(|s| &s.name)
-            .collect::<Vec<_>>();
-        log::debug!("known syntaxes {names:?}");
-        syntaxes
-    });
-
-    let syntax = lang
-        .and_then(|lang| SYNTAXES.find_syntax_by_token(lang))
-        .or_else(|| SYNTAXES.find_syntax_by_first_line(code))
-        .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
-
-    log::trace!("Using syntax {:?} for language {lang:?}", syntax.name);
-
-    let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
-        syntax,
-        &SYNTAXES,
-        ClassStyle::SpacedPrefixed { prefix: "syntax-" },
-    );
-
-    for line in LinesWithEndings::from(code) {
-        html_generator.parse_html_for_line_which_includes_newline(line)?;
-    }
-
-    Ok(html_generator.finalize())
-}
-
-pub fn highlight_code(lang: Option<&str>, code: &str) -> String {
-    match try_highlight_code(lang, code) {
-        Ok(highlighted) => highlighted,
-        Err(err) => {
-            log::error!("failed while highlighting code: {err:?}");
-            code.to_owned()
-        }
-    }
-}
-
 fn render_with_highlighter(
     text: &str,
     highlighter: impl Fn(Option<&str>, &str) -> String,
@@ -125,12 +75,12 @@ fn render_with_highlighter(
 
 /// Wrapper around the Markdown parser and renderer to render markdown
 pub fn render(text: &str) -> String {
-    render_with_highlighter(text, highlight_code)
+    render_with_highlighter(text, highlight::with_lang)
 }
 
 #[cfg(test)]
 mod test {
-    use super::{highlight_code, render_with_highlighter};
+    use super::render_with_highlighter;
     use indoc::indoc;
     use std::cell::RefCell;
 
@@ -152,7 +102,7 @@ mod test {
                 highlighted
                     .borrow_mut()
                     .push((lang.map(str::to_owned), code.to_owned()));
-                highlight_code(lang, code)
+                code.to_owned()
             },
         );
 

@@ -325,7 +325,7 @@ impl tera::Filter for Highlight {
                 }
             })
             .transpose()?;
-        let highlighted = crate::web::markdown::highlight_code(lang, code);
+        let highlighted = crate::web::highlight::with_lang(lang, code);
         Ok(format!("<pre><code>{highlighted}</code></pre>").into())
     }
 
