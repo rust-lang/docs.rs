@@ -5,8 +5,8 @@ pub(crate) mod page;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use anyhow::anyhow;
-use log::info;
 use serde_json::Value;
+use tracing::info;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -363,7 +363,7 @@ fn match_version(
         VersionReq::STAR
     } else {
         VersionReq::parse(&req_version).map_err(|err| {
-            log::info!(
+            tracing::info!(
                 "could not parse version requirement \"{}\": {:?}",
                 req_version,
                 err

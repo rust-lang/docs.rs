@@ -37,7 +37,7 @@ pub(crate) fn report_error(err: &anyhow::Error) {
         sentry_anyhow::capture_anyhow(err);
     } else {
         // Debug-format for anyhow errors includes context & backtrace
-        log::error!("{:?}", err);
+        tracing::error!("{:?}", err);
     }
 }
 

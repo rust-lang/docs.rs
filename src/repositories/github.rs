@@ -1,12 +1,12 @@
 use crate::error::Result;
 use crate::Config;
 use chrono::{DateTime, Utc};
-use log::{trace, warn};
 use reqwest::{
     blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
 };
 use serde::Deserialize;
+use tracing::{trace, warn};
 
 use crate::repositories::{
     FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,

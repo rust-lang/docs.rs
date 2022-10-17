@@ -16,17 +16,17 @@ pub fn run_check(
         anyhow::bail!("TODO: only a --dry-run synchronization is supported currently");
     }
 
-    log::info!("Loading data from database...");
+    tracing::info!("Loading data from database...");
     let timer = std::time::Instant::now();
     let db_data =
         self::db::load(conn).context("Loading crate data from database for consistency check")?;
-    log::info!("...loaded in {:?}", timer.elapsed());
+    tracing::info!("...loaded in {:?}", timer.elapsed());
 
-    log::info!("Loading data from index...");
+    tracing::info!("Loading data from index...");
     let timer = std::time::Instant::now();
     let index_data =
         self::index::load(index).context("Loading crate data from index for consistency check")?;
-    log::info!("...loaded in {:?}", timer.elapsed());
+    tracing::info!("...loaded in {:?}", timer.elapsed());
 
     let diff = db_data.diff(index_data);
 

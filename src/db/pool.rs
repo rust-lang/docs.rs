@@ -1,9 +1,9 @@
 use crate::metrics::Metrics;
 use crate::Config;
-use log::debug;
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 use std::sync::Arc;
+use tracing::debug;
 
 pub type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
 

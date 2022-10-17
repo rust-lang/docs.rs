@@ -1,10 +1,10 @@
 use crate::{docbuilder::RustwideBuilder, utils::report_error, BuildQueue};
 use anyhow::{Context, Error};
-use log::{debug, error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, io, thread};
+use tracing::{debug, error, warn};
 
 pub(crate) const TEMPDIR_PREFIX: &str = "docsrs-docs";
 

@@ -90,9 +90,9 @@ impl Index {
     pub(crate) fn crates(&self) -> Result<crates_index::Index> {
         // First ensure the index is up to date, peeking will pull the latest changes without
         // affecting anything else.
-        log::debug!("Updating index");
+        tracing::debug!("Updating index");
         self.diff()?.peek_changes()?;
-        log::debug!("Opening with `crates_index`");
+        tracing::debug!("Opening with `crates_index`");
         // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
         let repo_url = self
             .repository_url

@@ -414,7 +414,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             if !matches!(err.downcast_ref(), Some(Nope::ResourceNotFound))
                 && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
             {
-                log::debug!("got error serving {}: {}", path, err);
+                tracing::debug!("got error serving {}: {}", path, err);
             }
             // If it fails, we try again with /index.html at the end
             path.to_mut().push_str("/index.html");
@@ -817,7 +817,7 @@ mod test {
             config,
         );
         let data = response.text()?;
-        log::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
+        tracing::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom

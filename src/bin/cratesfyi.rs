@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
@@ -14,14 +15,28 @@ use docs_rs::{
     BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
 use once_cell::sync::OnceCell;
-use sentry_log::SentryLogger;
 use structopt::StructOpt;
 use strum::VariantNames;
 use tokio::runtime::Runtime;
+use tracing_log::LogTracer;
+use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
 
 fn main() {
+    // set the global log::logger for backwards compatibility
+    // through rustwide.
+    rustwide::logging::init_with(LogTracer::new());
+
+    let tracing_registry = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
+                .with_env_var("DOCSRS_LOG")
+                .from_env_lossy(),
+        );
+
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        rustwide::logging::init_with(SentryLogger::with_dest(logger_init()));
+        tracing_registry.with(sentry_tracing::layer()).init();
         Some(sentry::init((
             sentry_dsn,
             sentry::ClientOptions {
@@ -32,7 +47,7 @@ fn main() {
             .add_integration(sentry_panic::PanicIntegration::default()),
         )))
     } else {
-        rustwide::logging::init_with(logger_init());
+        tracing_registry.init();
         None
     };
 
@@ -54,24 +69,6 @@ fn main() {
         drop(_sentry_guard);
         std::process::exit(1);
     }
-}
-
-fn logger_init() -> env_logger::Logger {
-    use std::io::Write;
-
-    let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "docs_rs=info");
-    env_logger::Builder::from_env(env)
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] {}: {}",
-                time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
-                record.level(),
-                record.target(),
-                record.args()
-            )
-        })
-        .build()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::EnumVariantNames)]

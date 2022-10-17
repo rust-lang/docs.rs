@@ -1,9 +1,9 @@
 //! Database migrations
 
-use log::{log, Level};
 use postgres::{Client, Error as PostgresError, Transaction};
 use schemamama::{Migration, Migrator, Version};
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
+use tracing::{event, Level};
 
 /// Creates a new PostgresMigration from upgrade and downgrade closures.
 /// Directly using `migration` is only needed for data-migrations or more
@@ -21,6 +21,11 @@ use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 ///                                   // downgrade logic here
 ///                               } );
 /// ```
+const LOG_LEVEL: Level = if cfg!(test) {
+    Level::TRACE
+} else {
+    Level::INFO
+};
 macro_rules! migration {
     ($context:expr, $version:expr, $description:expr, $up_func:expr, $down_func:expr $(,)?) => {{
         struct Amigration;
@@ -35,13 +40,8 @@ macro_rules! migration {
 
         impl PostgresMigration for Amigration {
             fn up(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
-                let level = if cfg!(test) {
-                    Level::Trace
-                } else {
-                    Level::Info
-                };
-                log!(
-                    level,
+                event!(
+                    LOG_LEVEL,
                     "Applying migration {}: {}",
                     self.version(),
                     self.description()
@@ -50,13 +50,8 @@ macro_rules! migration {
                 $up_func(transaction)
             }
             fn down(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
-                let level = if cfg!(test) {
-                    Level::Trace
-                } else {
-                    Level::Info
-                };
-                log!(
-                    level,
+                event!(
+                    LOG_LEVEL,
                     "Removing migration {}: {}",
                     self.version(),
                     self.description()

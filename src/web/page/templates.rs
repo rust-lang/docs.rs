@@ -21,13 +21,13 @@ pub(crate) struct TemplateData {
 
 impl TemplateData {
     pub(crate) fn new(conn: &mut Client) -> Result<Self> {
-        log::trace!("Loading templates");
+        tracing::trace!("Loading templates");
 
         let data = Self {
             templates: load_templates(conn)?,
         };
 
-        log::trace!("Finished loading templates");
+        tracing::trace!("Finished loading templates");
 
         Ok(data)
     }
@@ -84,7 +84,7 @@ pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
         &mut tera,
         "rustc_resource_suffix",
         Value::String(load_rustc_resource_suffix(conn).unwrap_or_else(|err| {
-            log::error!("Failed to load rustc resource suffix: {:?}", err);
+            tracing::error!("Failed to load rustc resource suffix: {:?}", err);
             // This is not fatal because the server might be started before essential files are
             // generated during development. Returning "???" provides a degraded UX, but allows the
             // server to start every time.
