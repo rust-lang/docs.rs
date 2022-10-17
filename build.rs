@@ -204,12 +204,8 @@ fn compile_syntax(out_dir: &Path) -> Result<()> {
 
     let mut builder = SyntaxSetBuilder::new();
     builder.add_plain_text_syntax();
-    tracked_add_from_folder(&mut builder, "assets/syntaxes/Packages/Rust/")?;
-    // Some of the extended syntaxes fail to compile, so only load the primary markdown syntax
-    tracked_add_from_folder(
-        &mut builder,
-        "assets/syntaxes/Packages/Markdown/Markdown.sublime-syntax",
-    )?;
+
+    tracked_add_from_folder(&mut builder, "assets/syntaxes/Packages/")?;
 
     // The TOML syntax already includes `Cargo.lock` in its alternative file extensions, but we
     // also want to support `Cargo.toml.orig` files.
