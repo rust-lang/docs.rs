@@ -273,10 +273,11 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let (file, file_content) = if let Some(blob) = blob {
+        let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
         // serve the file with DatabaseFileHandler if file isn't text and not empty
-        if !blob.mime.starts_with("text") && !blob.is_empty() {
+        if !is_text && !blob.is_empty() {
             return Ok(DbFile(blob).serve());
-        } else if blob.mime.starts_with("text") && !blob.is_empty() {
+        } else if is_text && !blob.is_empty() {
             let path = blob
                 .path
                 .rsplit_once('/')
@@ -474,6 +475,31 @@ mod tests {
                 .send()?
                 .text()?;
             assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn json_is_served_as_rendered_html() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file("config.json", b"{}")
+                .create()?;
+
+            let web = env.frontend();
+
+            let response = web.get("/crate/fake/0.1.0/source/config.json").send()?;
+            assert!(response
+                .headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("text/html"));
+            assert!(response.text()?.starts_with(r#"<!DOCTYPE html>"#));
 
             Ok(())
         });
