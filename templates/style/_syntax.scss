@@ -26,3 +26,11 @@ pre > code {
 
 // Markdown
 .syntax-heading { color: var(--color-syntax-attribute); font-weight: bold; }
+
+// YAML
+.syntax-yaml .syntax-string { color: var(--color-syntax-string); }
+.syntax-yaml .syntax-name { color: var(--color-syntax-foreground); }
+// 99% of the time a "boolean" is actually `on` which is really a string
+.syntax-yaml .syntax-boolean { color: var(--color-syntax-foreground); }
+.syntax-yaml .syntax-punctuation { color: var(--color-syntax-keyword1); }
+.syntax-yaml .syntax-comment .syntax-punctuation { color: var(--color-syntax-comment); }
