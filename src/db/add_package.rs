@@ -8,7 +8,6 @@ use crate::{
     web::crate_details::CrateDetails,
 };
 use anyhow::{anyhow, Context};
-use log::{debug, info};
 use postgres::Client;
 use serde_json::Value;
 use slug::slugify;
@@ -18,6 +17,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
+use tracing::{debug, info};
 
 /// Adds a package into database.
 ///

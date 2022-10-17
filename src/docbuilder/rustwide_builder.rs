@@ -16,7 +16,6 @@ use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
-use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
@@ -25,6 +24,7 @@ use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, Workspac
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DUMMY_CRATE_NAME: &str = "empty-library";
@@ -160,8 +160,8 @@ impl RustwideBuilder {
         // NOTE: this ignores the error so that you can still run a build without rustfmt.
         // This should only happen if you run a build for the first time when rustfmt isn't available.
         if let Err(err) = self.toolchain.add_component(&self.workspace, "rustfmt") {
-            log::warn!("failed to install rustfmt: {}", err);
-            log::info!("continuing anyway, since this must be the first build");
+            tracing::warn!("failed to install rustfmt: {}", err);
+            tracing::info!("continuing anyway, since this must be the first build");
         }
 
         self.rustc_version = self.detect_rustc_version()?;
@@ -486,7 +486,7 @@ impl RustwideBuilder {
                         // won't lead to non-existing docs.
                         for prefix in &["rustdoc", "sources"] {
                             let prefix = format!("{}/{}/{}/", prefix, name, version);
-                            log::debug!("cleaning old storage folder {}", prefix);
+                            tracing::debug!("cleaning old storage folder {}", prefix);
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
@@ -606,7 +606,7 @@ impl RustwideBuilder {
             format!("-{}", parse_rustc_version(&self.rustc_version)?),
         ]);
 
-        let mut storage = LogStorage::new(LevelFilter::Info);
+        let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
         // we have to run coverage before the doc-build because currently it
@@ -615,8 +615,8 @@ impl RustwideBuilder {
         let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
             Ok(cov) => cov,
             Err(err) => {
-                log::info!("error when trying to get coverage: {}", err);
-                log::info!("continuing anyways.");
+                tracing::info!("error when trying to get coverage: {}", err);
+                tracing::info!("continuing anyways.");
                 None
             }
         };

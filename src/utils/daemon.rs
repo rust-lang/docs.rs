@@ -7,10 +7,10 @@ use crate::{
     BuildQueue, Config, Context, Index, RustwideBuilder,
 };
 use anyhow::{anyhow, Context as _, Error};
-use log::{debug, info};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use tracing::{debug, info};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
@@ -30,7 +30,7 @@ pub fn watch_registry(
         }
         Ok(None) => {}
         Err(err) => {
-            log::error!(
+            tracing::error!(
                 "queue locked because of invalid last_seen_index_reference in database: {:?}",
                 err
             );

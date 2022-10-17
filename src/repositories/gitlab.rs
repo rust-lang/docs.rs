@@ -1,6 +1,5 @@
 use crate::error::Result;
 use chrono::{DateTime, Utc};
-use log::warn;
 use reqwest::{
     blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
@@ -8,6 +7,7 @@ use reqwest::{
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::str::FromStr;
+use tracing::warn;
 
 use crate::repositories::{
     FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,

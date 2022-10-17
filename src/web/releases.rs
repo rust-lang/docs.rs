@@ -16,12 +16,12 @@ use iron::{
     modifiers::Redirect,
     status, IronError, IronResult, Request, Response, Url,
 };
-use log::{debug, warn};
 use postgres::Client;
 use router::Router;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::str;
+use tracing::{debug, warn};
 use url::form_urlencoded;
 
 /// Number of release in home page

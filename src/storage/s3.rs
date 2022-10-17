@@ -261,7 +261,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                 self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
-                                log::warn!("Failed to upload blob to S3: {:?}", err);
+                                tracing::warn!("Failed to upload blob to S3: {:?}", err);
                                 // Reintroduce failed blobs for a retry
                                 blob
                             }),
@@ -324,7 +324,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
 
                     if let Some(errs) = resp.errors {
                         for err in &errs {
-                            log::error!("error deleting file from s3: {:?}", err);
+                            tracing::error!("error deleting file from s3: {:?}", err);
                         }
 
                         anyhow::bail!("deleting from s3 failed");
