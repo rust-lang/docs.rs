@@ -26,6 +26,7 @@ use std::{
     fmt::Write,
     path::Path,
 };
+use tracing::debug;
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -414,7 +415,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             if !matches!(err.downcast_ref(), Some(Nope::ResourceNotFound))
                 && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
             {
-                tracing::debug!("got error serving {}: {}", path, err);
+                debug!("got error serving {}: {}", path, err);
             }
             // If it fails, we try again with /index.html at the end
             path.to_mut().push_str("/index.html");
@@ -803,6 +804,7 @@ mod test {
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
     use std::collections::BTreeMap;
     use test_case::test_case;
+    use tracing::info;
 
     fn try_latest_version_redirect(
         path: &str,
@@ -817,7 +819,7 @@ mod test {
             config,
         );
         let data = response.text()?;
-        tracing::info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
+        info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom

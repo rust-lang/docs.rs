@@ -1,6 +1,7 @@
 use self::diff::{Diff, Diffable};
 use crate::Index;
 use anyhow::Context;
+use tracing::info;
 
 mod data;
 mod db;
@@ -16,17 +17,17 @@ pub fn run_check(
         anyhow::bail!("TODO: only a --dry-run synchronization is supported currently");
     }
 
-    tracing::info!("Loading data from database...");
+    info!("Loading data from database...");
     let timer = std::time::Instant::now();
     let db_data =
         self::db::load(conn).context("Loading crate data from database for consistency check")?;
-    tracing::info!("...loaded in {:?}", timer.elapsed());
+    info!("...loaded in {:?}", timer.elapsed());
 
     tracing::info!("Loading data from index...");
     let timer = std::time::Instant::now();
     let index_data =
         self::index::load(index).context("Loading crate data from index for consistency check")?;
-    tracing::info!("...loaded in {:?}", timer.elapsed());
+    info!("...loaded in {:?}", timer.elapsed());
 
     let diff = db_data.diff(index_data);
 

@@ -9,6 +9,7 @@ use postgres::Client;
 use serde_json::Value;
 use std::{collections::HashMap, fmt, path::PathBuf};
 use tera::{Result as TeraResult, Tera};
+use tracing::{error, trace};
 use walkdir::WalkDir;
 
 const TEMPLATES_DIRECTORY: &str = "templates";
@@ -21,13 +22,13 @@ pub(crate) struct TemplateData {
 
 impl TemplateData {
     pub(crate) fn new(conn: &mut Client) -> Result<Self> {
-        tracing::trace!("Loading templates");
+        trace!("Loading templates");
 
         let data = Self {
             templates: load_templates(conn)?,
         };
 
-        tracing::trace!("Finished loading templates");
+        trace!("Finished loading templates");
 
         Ok(data)
     }
@@ -84,7 +85,7 @@ pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
         &mut tera,
         "rustc_resource_suffix",
         Value::String(load_rustc_resource_suffix(conn).unwrap_or_else(|err| {
-            tracing::error!("Failed to load rustc resource suffix: {:?}", err);
+            error!("Failed to load rustc resource suffix: {:?}", err);
             // This is not fatal because the server might be started before essential files are
             // generated during development. Returning "???" provides a degraded UX, but allows the
             // server to start every time.

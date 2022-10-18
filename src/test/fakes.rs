@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use postgres::Client;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tracing::debug;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {
@@ -303,14 +304,14 @@ impl<'a> FakeRelease<'a> {
                         .with_context(|| format!("failed to create {}", path.display()))?;
                 }
                 let file = base_path.join(&path);
-                tracing::debug!("writing file {}", file.display());
+                debug!("writing file {}", file.display());
                 fs::write(file, data)?;
             }
             Ok(())
         };
 
         let upload_files = |kind: FileKind, source_directory: &Path| {
-            tracing::debug!(
+            debug!(
                 "adding directory {:?} from {}",
                 kind,
                 source_directory.display()
@@ -324,7 +325,7 @@ impl<'a> FakeRelease<'a> {
                         (source_archive_path(&package.name, &package.version), false)
                     }
                 };
-                tracing::debug!("store in archive: {:?}", archive);
+                debug!("store in archive: {:?}", archive);
                 let (files_list, new_alg) = crate::db::add_path_into_remote_archive(
                     &storage,
                     &archive,
@@ -347,11 +348,11 @@ impl<'a> FakeRelease<'a> {
             }
         };
 
-        tracing::debug!("before upload source");
+        debug!("before upload source");
         let source_tmp = create_temp_dir();
         store_files_into(&self.source_files, source_tmp.path())?;
         let (source_meta, algs) = upload_files(FileKind::Sources, source_tmp.path())?;
-        tracing::debug!("added source files {}", source_meta);
+        debug!("added source files {}", source_meta);
 
         // If the test didn't add custom builds, inject a default one
         if self.builds.is_empty() {
@@ -370,7 +371,7 @@ impl<'a> FakeRelease<'a> {
 
             // store default target files
             store_files_into(&rustdoc_files, rustdoc_path)?;
-            tracing::debug!("added rustdoc files");
+            debug!("added rustdoc files");
 
             for target in &package.targets[1..] {
                 let platform = target.src_path.as_ref().unwrap();
@@ -378,11 +379,11 @@ impl<'a> FakeRelease<'a> {
                 fs::create_dir(&platform_dir)?;
 
                 store_files_into(&rustdoc_files, &platform_dir)?;
-                tracing::debug!("added platform files for {}", platform);
+                debug!("added platform files for {}", platform);
             }
 
             let (rustdoc_meta, _) = upload_files(FileKind::Rustdoc, rustdoc_path)?;
-            tracing::debug!("uploaded rustdoc files: {}", rustdoc_meta);
+            debug!("uploaded rustdoc files: {}", rustdoc_meta);
         }
 
         let repository = match self.github_stats {

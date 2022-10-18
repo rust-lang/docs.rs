@@ -19,7 +19,7 @@ use reqwest::{
 };
 use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
-use tracing::error;
+use tracing::{debug, error};
 
 #[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -536,13 +536,13 @@ impl TestFrontend {
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         let url = self.build_url(url);
-        tracing::debug!("getting {url}");
+        debug!("getting {url}");
         self.client.request(Method::GET, url)
     }
 
     pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
         let url = self.build_url(url);
-        tracing::debug!("getting {url} (no redirects)");
+        debug!("getting {url} (no redirects)");
         self.client_no_redirect.request(Method::GET, url)
     }
 }
