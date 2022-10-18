@@ -6,6 +6,8 @@ use iron::prelude::*;
 use iron::status::Status;
 use prometheus::{Encoder, HistogramVec, TextEncoder};
 use std::time::{Duration, Instant};
+#[cfg(test)]
+use tracing::debug;
 
 pub(super) fn metrics_handler(req: &mut Request) -> IronResult<Response> {
     let metrics = extension!(req, Metrics);
@@ -93,7 +95,7 @@ impl<'a> RenderingTimesRecorder<'a> {
     fn record_current(&mut self) {
         if let Some(current) = self.current.take() {
             #[cfg(test)]
-            tracing::debug!(
+            debug!(
                 "rendering time - {}: {:?}",
                 current.step,
                 current.start.elapsed()

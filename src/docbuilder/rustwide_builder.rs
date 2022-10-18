@@ -160,8 +160,8 @@ impl RustwideBuilder {
         // NOTE: this ignores the error so that you can still run a build without rustfmt.
         // This should only happen if you run a build for the first time when rustfmt isn't available.
         if let Err(err) = self.toolchain.add_component(&self.workspace, "rustfmt") {
-            tracing::warn!("failed to install rustfmt: {}", err);
-            tracing::info!("continuing anyway, since this must be the first build");
+            warn!("failed to install rustfmt: {}", err);
+            info!("continuing anyway, since this must be the first build");
         }
 
         self.rustc_version = self.detect_rustc_version()?;
@@ -486,7 +486,7 @@ impl RustwideBuilder {
                         // won't lead to non-existing docs.
                         for prefix in &["rustdoc", "sources"] {
                             let prefix = format!("{}/{}/{}/", prefix, name, version);
-                            tracing::debug!("cleaning old storage folder {}", prefix);
+                            debug!("cleaning old storage folder {}", prefix);
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
@@ -615,8 +615,8 @@ impl RustwideBuilder {
         let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
             Ok(cov) => cov,
             Err(err) => {
-                tracing::info!("error when trying to get coverage: {}", err);
-                tracing::info!("continuing anyways.");
+                info!("error when trying to get coverage: {}", err);
+                info!("continuing anyways.");
                 None
             }
         };

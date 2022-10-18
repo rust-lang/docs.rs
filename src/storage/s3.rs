@@ -2,7 +2,7 @@ use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
 use anyhow::{Context, Error};
 use aws_sdk_s3::{
-    error,
+    error as s3_error,
     model::{Delete, ObjectIdentifier, Tag, Tagging},
     types::SdkError,
     Client, Endpoint, Region, RetryConfig,
@@ -15,6 +15,7 @@ use futures_util::{
 };
 use std::{io::Write, sync::Arc};
 use tokio::runtime::Runtime;
+use tracing::{error, warn};
 
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
 const PUBLIC_ACCESS_VALUE: &str = "allow";
@@ -83,7 +84,7 @@ impl S3Backend {
             {
                 Ok(_) => Ok(true),
                 Err(SdkError::ServiceError { err, raw })
-                    if (matches!(err.kind, error::HeadObjectErrorKind::NotFound(_))
+                    if (matches!(err.kind, s3_error::HeadObjectErrorKind::NotFound(_))
                         || raw.http().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
@@ -174,7 +175,7 @@ impl S3Backend {
                 .send()
                 .map_err(|err| match err {
                     SdkError::ServiceError { err, raw }
-                        if (matches!(err.kind, error::GetObjectErrorKind::NoSuchKey(_))
+                        if (matches!(err.kind, s3_error::GetObjectErrorKind::NoSuchKey(_))
                             || raw.http().status() == http::StatusCode::NOT_FOUND) =>
                     {
                         super::PathNotFoundError.into()
@@ -261,7 +262,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                 self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
-                                tracing::warn!("Failed to upload blob to S3: {:?}", err);
+                                warn!("Failed to upload blob to S3: {:?}", err);
                                 // Reintroduce failed blobs for a retry
                                 blob
                             }),
@@ -324,7 +325,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
 
                     if let Some(errs) = resp.errors {
                         for err in &errs {
-                            tracing::error!("error deleting file from s3: {:?}", err);
+                            error!("error deleting file from s3: {:?}", err);
                         }
 
                         anyhow::bail!("deleting from s3 failed");

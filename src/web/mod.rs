@@ -363,10 +363,9 @@ fn match_version(
         VersionReq::STAR
     } else {
         VersionReq::parse(&req_version).map_err(|err| {
-            tracing::info!(
+            info!(
                 "could not parse version requirement \"{}\": {:?}",
-                req_version,
-                err
+                req_version, err
             );
             Nope::VersionNotFound
         })?

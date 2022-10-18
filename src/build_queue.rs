@@ -8,7 +8,7 @@ use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
 use crates_index_diff::Change;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use git2::Oid;
 use std::sync::Arc;
@@ -239,11 +239,9 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
                     return Err(err);
                 } else {
                     let sleep_for = 2u32.pow(attempt);
-                    tracing::warn!(
+                    warn!(
                         "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt,
-                        sleep_for,
-                        err
+                        attempt, sleep_for, err
                     );
                     thread::sleep(Duration::from_secs(sleep_for as u64));
                 }

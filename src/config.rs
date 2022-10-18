@@ -4,6 +4,7 @@ use std::env::VarError;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
+use tracing::trace;
 
 #[derive(Debug)]
 pub struct Config {
@@ -205,7 +206,7 @@ where
             .map(Some)
             .with_context(|| format!("failed to parse configuration variable {}", var))?),
         Err(VarError::NotPresent) => {
-            tracing::trace!("optional configuration variable {} is not set", var);
+            trace!("optional configuration variable {} is not set", var);
             Ok(None)
         }
         Err(VarError::NotUnicode(_)) => Err(anyhow!("configuration variable {} is not UTF-8", var)),

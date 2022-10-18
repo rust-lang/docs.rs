@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context as _, Error};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
@@ -30,7 +30,7 @@ pub fn watch_registry(
         }
         Ok(None) => {}
         Err(err) => {
-            tracing::error!(
+            error!(
                 "queue locked because of invalid last_seen_index_reference in database: {:?}",
                 err
             );
