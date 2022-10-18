@@ -39,6 +39,8 @@ pub struct Release {
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
+    build_status: bool,
+    is_library: bool,
     deployment_pending: bool,
     pub(crate) build_time: DateTime<Utc>,
     stars: i32,
@@ -83,7 +85,9 @@ pub(crate) fn get_releases(
             releases.target_name,
             releases.rustdoc_status,
             builds.build_time,
-            repositories.stars
+            repositories.stars,
+            releases.build_status,
+            releases.is_library
         FROM crates
         {1}
         INNER JOIN builds ON releases.id = builds.rid
@@ -115,6 +119,8 @@ pub(crate) fn get_releases(
             build_time: row.get(5),
             deployment_pending: crate_invalidation_pending(&row.get(5)),
             stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
+            build_status: row.get(7),
+            is_library: row.get(8),
         })
         .collect()
 }
@@ -206,7 +212,9 @@ fn get_search_results(
                 builds.build_time,
                 releases.target_name,
                 releases.rustdoc_status,
-                repositories.stars
+                repositories.stars,
+                releases.build_status,
+                releases.is_library
 
             FROM crates
             INNER JOIN releases ON crates.latest_version_id = releases.id
@@ -231,6 +239,8 @@ fn get_search_results(
                     target_name: row.get("target_name"),
                     rustdoc_status: row.get("rustdoc_status"),
                     stars: stars.unwrap_or(0),
+                    build_status: row.get("build_status"),
+                    is_library: row.get("is_library"),
                 },
             )
         })
