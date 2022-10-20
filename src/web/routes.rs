@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn serve_rustdoc_content_not_found() {
         wrapper(|env| {
-            let response = env.frontend().get("/-/rustdoc-static/style.css").send()?;
+            let response = env.frontend().get("/-/rustdoc.static/style.css").send()?;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
             Ok(())
@@ -399,21 +399,22 @@ mod tests {
     fn serve_rustdoc_content() {
         wrapper(|env| {
             let web = env.frontend();
-            env.storage().store_one("style.css", *b"content")?;
             env.storage()
-                .store_one("will_not/be_found.css", *b"something")?;
+                .store_one("/rustdoc-static/style.css", "content".as_bytes())?;
+            env.storage()
+                .store_one("/will_not/be_found.css", "something".as_bytes())?;
 
-            let response = web.get("/-/rustdoc-static/style.css").send()?;
+            let response = web.get("/-/rustdoc.static/style.css").send()?;
+            assert!(response.status().is_success());
             assert_cache_control(
                 &response,
                 CachePolicy::ForeverInCdnAndBrowser,
                 &env.config(),
             );
-            assert!(response.status().is_success());
             assert_eq!(response.text()?, "content");
 
             assert_eq!(
-                web.get("/-/rustdoc-static/will_not/be_found.css")
+                web.get("/-/rustdoc.static/will_not/be_found.css")
                     .send()?
                     .status(),
                 StatusCode::NOT_FOUND
