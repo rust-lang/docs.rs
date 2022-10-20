@@ -776,18 +776,6 @@ pub fn static_asset_handler(req: &mut Request) -> IronResult<Response> {
     let filename = req.url.path()[2..].join("/");
     let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, filename);
 
-    // Prevent accessing static files outside the root. This could happen if the path
-    // contains `/` or `..`. The check doesn't outright prevent those strings to be present
-    // to allow accessing files in subdirectories.
-    let canonical_path =
-        std::fs::canonicalize(&storage_path).map_err(|_| Nope::ResourceNotFound)?;
-    let canonical_root =
-        std::fs::canonicalize(&storage_path).map_err(|_| Nope::ResourceNotFound)?;
-
-    if !canonical_path.starts_with(canonical_root) {
-        return Err(Nope::ResourceNotFound.into());
-    }
-
     match File::from_path(storage, &storage_path, config) {
         Ok(file) => Ok(file.serve()),
         Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
@@ -830,29 +818,6 @@ impl Handler for LegacySharedResourceHandler {
 
         // Just always return a 404 here - the main handler will then try the other handlers
         Err(Nope::ResourceNotFound.into())
-    }
-}
-
-/// Serves shared web resources used by rustdoc-generated documentation.
-///
-/// Rustdoc has certain JS, CSS, font and image files that are required for all
-/// documentation it generates, and these don't change often. We make one copy
-/// of these per rustdoc release and serve them from a common location.
-///
-/// This handler considers the whole path, and looks for a file at that path in
-/// the Storage.
-pub struct SharedResourceHandler;
-
-impl Handler for SharedResourceHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let storage = extension!(req, Storage);
-        let config = extension!(req, Config);
-
-        let storage_path = format!("/{}", req.url.path().join("/"));
-        match File::from_path(storage, &storage_path, config) {
-            Ok(file) => Ok(file.serve()),
-            Err(_) => Err(Nope::ResourceNotFound.into()),
-        }
     }
 }
 
