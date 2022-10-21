@@ -227,7 +227,23 @@ impl RustwideBuilder {
                         .tempdir()?;
                     copy_dir_all(source, &dest)?;
 
-                    add_path_into_database(&self.storage, RUSTDOC_STATIC_STORAGE_PREFIX, &dest)?;
+                    // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
+                    // put in their own directory, "static.files". To make sure those files are
+                    // available at --static-root-path, we add files from that subdirectory, if present.
+                    let static_files = dest.as_ref().join("static.files");
+                    if static_files.try_exists()? {
+                        add_path_into_database(
+                            &self.storage,
+                            RUSTDOC_STATIC_STORAGE_PREFIX,
+                            &static_files,
+                        )?;
+                    } else {
+                        add_path_into_database(
+                            &self.storage,
+                            RUSTDOC_STATIC_STORAGE_PREFIX,
+                            &dest,
+                        )?;
+                    }
 
                     set_config(
                         &mut conn,
