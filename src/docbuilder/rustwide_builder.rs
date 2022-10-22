@@ -867,6 +867,11 @@ mod tests {
                 .map(|v| v.as_str().unwrap().to_owned())
                 .collect();
             targets.sort();
+            assert_ne!(
+                std::env::var("DOCSRS_INCLUDE_DEFAULT_TARGETS").unwrap(),
+                "false",
+                "This test requires setting $DOCSRS_INCLUDE_DEFAULT_TARGETS to true"
+            );
             assert_eq!(
                 targets,
                 vec![
