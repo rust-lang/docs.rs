@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@master
 
       - name: get test binaries from cache
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: test-binaries-${{ github.sha }}
           path: ./test-binaries/
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@master
 
       - name: get test binaries from cache
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: test-binaries-${{ github.sha }}
           path: ./test-binaries/
