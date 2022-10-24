@@ -24,10 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        run: |
+          rustup override set stable
+          rustup update stable
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v1
@@ -129,16 +128,12 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add rustfmt
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - run: cargo fmt -- --check
 
   clippy:
     name: Clippy
@@ -147,16 +142,12 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: clippy
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add clippy
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v1
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-features --all-targets --workspace --locked -- -D warnings
+      - run: cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
