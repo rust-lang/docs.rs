@@ -29,7 +29,7 @@ jobs:
           rustup update stable
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: cargo build --workspace --locked
@@ -148,6 +148,6 @@ jobs:
           rustup component add clippy
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - run: cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
