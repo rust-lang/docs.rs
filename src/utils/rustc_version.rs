@@ -9,7 +9,7 @@ pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
     let version_regex = Regex::new(r" ([\w.-]+) \((\w+) (\d+)-(\d+)-(\d+)\)")?;
     let captures = version_regex
         .captures(version.as_ref())
-        .with_context(|| anyhow!("Failed to parse rustc version"))?;
+        .with_context(|| anyhow!("Failed to parse rustc version '{}'", version.as_ref()))?;
 
     Ok(format!(
         "{}{}{}-{}-{}",
