@@ -18,6 +18,7 @@ use anyhow::{anyhow, bail, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
 use postgres::Client;
+use regex::Regex;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
@@ -73,7 +74,16 @@ impl RustwideBuilder {
             .purge_all_build_dirs()
             .map_err(FailureError::compat)?;
 
-        let toolchain = Toolchain::dist(&config.toolchain);
+        // If the toolchain is all hex, assume it references an artifact from
+        // CI, for instance an `@bors try` build.
+        let re = Regex::new(r"^[a-fA-F0-9]+$").unwrap();
+        let toolchain = if re.is_match(&config.toolchain) {
+            debug!("using CI build {}", &config.toolchain);
+            Toolchain::ci(&config.toolchain, false)
+        } else {
+            debug!("using toolchain {}", &config.toolchain);
+            Toolchain::dist(&config.toolchain)
+        };
 
         Ok(RustwideBuilder {
             workspace,
@@ -108,6 +118,23 @@ impl RustwideBuilder {
     }
 
     pub fn update_toolchain(&mut self) -> Result<bool> {
+        // For CI builds, a lot of the normal update_toolchain things don't apply.
+        // CI builds are only for one platform (https://forge.rust-lang.org/infra/docs/rustc-ci.html#try-builds)
+        // so we only try installing for the current platform. If that's not a match,
+        // for instance if we're running on macOS or Windows, this will error.
+        // Also, detecting the rustc version relies on calling rustc through rustup with the
+        // +channel argument, but the +channel argument doesn't work for CI builds. So
+        // we fake the rustc version and install from scratch every time since we can't detect
+        // the already-installed rustc version.
+        if let Some(ci) = self.toolchain.as_ci() {
+            self.toolchain
+                .install(&self.workspace)
+                .map_err(FailureError::compat)?;
+            self.rustc_version = format!("rustc 1.9999.0-nightly ({} 2999-12-29)", ci.sha());
+            self.add_essential_files()?;
+            return Ok(true);
+        }
+
         // Ignore errors if detection fails.
         let old_version = self.detect_rustc_version().ok();
 
@@ -174,6 +201,8 @@ impl RustwideBuilder {
         Ok(has_changed)
     }
 
+    /// Return a string containing the output of `rustc --version`. Only valid
+    /// for dist toolchains. Will error if run with a CI toolchain.
     fn detect_rustc_version(&self) -> Result<String> {
         info!("detecting rustc's version...");
         let res = Command::new(&self.workspace, self.toolchain.rustc())
@@ -190,7 +219,6 @@ impl RustwideBuilder {
     }
 
     pub fn add_essential_files(&mut self) -> Result<()> {
-        self.rustc_version = self.detect_rustc_version()?;
         let rustc_version = parse_rustc_version(&self.rustc_version)?;
 
         info!("building a dummy crate to get essential files");
