@@ -179,7 +179,7 @@ mod tests {
                 config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
                 config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
             });
-            invalidate_crate(&*env.config(), &*env.cdn(), "krate")?;
+            invalidate_crate(&env.config(), &env.cdn(), "krate")?;
 
             assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
             if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {

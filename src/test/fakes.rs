@@ -303,7 +303,7 @@ impl<'a> FakeRelease<'a> {
                     fs::create_dir_all(&path)
                         .with_context(|| format!("failed to create {}", path.display()))?;
                 }
-                let file = base_path.join(&path);
+                let file = base_path.join(path);
                 debug!("writing file {}", file.display());
                 fs::write(file, data)?;
             }
@@ -422,7 +422,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )?;
         for build in &self.builds {
-            build.create(&mut db.conn(), &*storage, release_id, default_target)?;
+            build.create(&mut db.conn(), &storage, release_id, default_target)?;
         }
         if let Some(coverage) = self.doc_coverage {
             crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;

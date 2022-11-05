@@ -213,8 +213,8 @@ mod tests {
             assert!(response.status().is_success());
 
             let content = response.text()?;
-            assert!(content.contains(&"some_random_crate"));
-            assert!(!(content.contains(&"some_random_crate_that_failed")));
+            assert!(content.contains("some_random_crate"));
+            assert!(!(content.contains("some_random_crate_that_failed")));
 
             // and not in the others
             for letter in ('a'..='z').filter(|&c| c != 's') {
@@ -245,7 +245,7 @@ mod tests {
             assert!(response.status().is_success());
 
             let content = response.text()?;
-            assert!(content.contains(&"2022-08-28T00:00:00+00:00"));
+            assert!(content.contains("2022-08-28T00:00:00+00:00"));
             Ok(())
         })
     }
