@@ -35,6 +35,6 @@ mod tera_tests {
             "fa_icon": "https://gph.is/1uOvmqR"
         });
 
-        assert_eq!(correct_json, serde_json::to_value(&alert).unwrap());
+        assert_eq!(correct_json, serde_json::to_value(alert).unwrap());
     }
 }
