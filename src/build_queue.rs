@@ -58,7 +58,7 @@ impl BuildQueue {
         Ok(None)
     }
 
-    fn set_last_seen_reference(&self, oid: crates_index_diff::gix::ObjectId) -> Result<()> {
+    pub fn set_last_seen_reference(&self, oid: crates_index_diff::gix::ObjectId) -> Result<()> {
         let mut conn = self.db.get()?;
         set_config(
             &mut conn,
@@ -77,7 +77,7 @@ impl BuildQueue {
         registry: Option<&str>,
     ) -> Result<()> {
         self.db.get()?.execute(
-            "INSERT INTO queue (name, version, priority, registry) 
+            "INSERT INTO queue (name, version, priority, registry)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (name, version) DO UPDATE
                 SET priority = EXCLUDED.priority,
@@ -104,10 +104,10 @@ impl BuildQueue {
 
     pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
         let res = self.db.get()?.query(
-            "SELECT 
-                priority, 
-                COUNT(*) 
-            FROM queue 
+            "SELECT
+                priority,
+                COUNT(*)
+            FROM queue
             WHERE attempt < $1
             GROUP BY priority",
             &[&self.max_attempts],
@@ -154,9 +154,9 @@ impl BuildQueue {
             .query_opt(
                 "SELECT id
                  FROM queue
-                 WHERE 
-                    attempt < $1 AND 
-                    name = $2 AND 
+                 WHERE
+                    attempt < $1 AND
+                    name = $2 AND
                     version = $3
                  ",
                 &[&self.max_attempts, &name, &version],
@@ -183,7 +183,7 @@ impl BuildQueue {
                  FROM queue
                  WHERE attempt < $1
                  ORDER BY priority ASC, attempt ASC, id ASC
-                 LIMIT 1 
+                 LIMIT 1
                  FOR UPDATE SKIP LOCKED",
                 &[&self.max_attempts],
             )?
@@ -482,7 +482,7 @@ mod tests {
             let mut conn = env.db().conn();
             conn.execute(
                 "
-                INSERT INTO queue (name, version, priority, attempt ) 
+                INSERT INTO queue (name, version, priority, attempt )
                 VALUES ('failed_crate', '0.1.1', 0, 99)",
                 &[],
             )?;
@@ -496,7 +496,7 @@ mod tests {
             let row = conn
                 .query_opt(
                     "SELECT priority, attempt
-                     FROM queue 
+                     FROM queue
                      WHERE name = $1 AND version = $2",
                     &[&"failed_crate", &"0.1.1"],
                 )?

@@ -212,6 +212,14 @@ enum QueueSubcommand {
         #[command(subcommand)]
         subcommand: PrioritySubcommand,
     },
+
+    /// Get the registry watcher's last seen reference
+    GetLastSeenReference,
+
+    /// Set the register watcher's last seen reference
+    SetLastSeenReference {
+        reference: crates_index_diff::gix::ObjectId,
+    },
 }
 
 impl QueueSubcommand {
@@ -227,6 +235,18 @@ impl QueueSubcommand {
                 build_priority,
                 ctx.config()?.registry_url.as_deref(),
             )?,
+
+            Self::GetLastSeenReference => {
+                if let Some(reference) = ctx.build_queue()?.last_seen_reference()? {
+                    println!("Last seen reference: {reference}");
+                } else {
+                    println!("No last seen reference available");
+                }
+            }
+
+            Self::SetLastSeenReference { reference } => {
+                ctx.build_queue()?.set_last_seen_reference(reference)?;
+            }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
