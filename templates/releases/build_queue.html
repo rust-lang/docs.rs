@@ -1,37 +1,64 @@
 {%- extends "base.html" -%}
 {%- import "releases/header.html" as release_macros -%}
 
-{%- block title -%}Build Queue - Docs.rs{%- endblock title -%}
+{%- block title -%}Queue - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Build Queue", description=description, tab="queue") }}
+    {{ release_macros::header(title="Queue", description=description, tab="queue") }}
 {%- endblock header -%}
 
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
+            {%- if active_deployments %}
+                <div class="release">
+                    <strong>active CDN deployments</strong>
+                </div>
+
+                <div class = "pure-g">
+                    <div class="pure-u-1-2">
+                        <ol class="queue-list">
+                            {% for invalidation in active_deployments -%}
+                                <li>
+                                    <a href="https://docs.rs/{{ invalidation.name }}">
+                                        {{ invalidation.name }}
+                                    </a>
+                                </li>
+                            {%- endfor %}
+                        </ol>
+                    </div>
+                    <div class="pure-u-1-2">
+                        <div class="about">
+                            <p>
+                                After the build finishes it may take up to 20 minutes for all documentation
+                                pages to be up-to-date and available to everybody.
+                            </p>
+                            <p>Especially <code>/latest/</code> URLs might be affected.</p>
+                        </div>
+                    </div>
+                </div>
+            {%- endif %}
 
             <div class="release">
-                {% set queue_length = queue | length -%}
-                {%- if queue_length == 0  -%}
-                    <strong>There is nothing in the queue</strong>
-                {%- else -%}
-                    <strong>Queue</strong>
-                {%- endif %}
+                <strong>Build Queue</strong>
             </div>
 
             <ol class="queue-list">
-                {% for crate in queue -%}
-                    <li>
-                        <a href="https://crates.io/crates/{{ crate.name }}">
-                            {{ crate.name }} {{ crate.version }}
-                        </a>
+                {%- if queue -%}
+                    {% for crate in queue -%}
+                        <li>
+                            <a href="https://crates.io/crates/{{ crate.name }}">
+                                {{ crate.name }} {{ crate.version }}
+                            </a>
 
-                        {% if crate.priority != 0 -%}
-                            (priority: {{ crate.priority }})
-                        {%- endif %}
-                    </li>
-                {%- endfor %}
+                            {% if crate.priority != 0 -%}
+                                (priority: {{ crate.priority }})
+                            {%- endif %}
+                        </li>
+                    {%- endfor %}
+                {%- else %}
+                    <strong>There is nothing in the queue</strong>
+                {%- endif %}
             </ol>
         </div>
     </div>

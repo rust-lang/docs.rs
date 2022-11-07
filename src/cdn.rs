@@ -4,6 +4,8 @@ use aws_sdk_cloudfront::{
     model::{InvalidationBatch, Paths},
     Client, RetryConfig,
 };
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use strum::EnumString;
 use tokio::runtime::Runtime;
@@ -133,14 +135,51 @@ pub(crate) fn invalidate_crate(config: &Config, cdn: &CdnBackend, name: &str) ->
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct CrateInvalidation {
+    pub name: String,
+    pub created: DateTime<Utc>,
+}
+
+/// Return fake active cloudfront invalidations.
+/// CloudFront invalidations can take up to 15 minutes. Until we have
+/// live queries of the invalidation status we just assume it's fine
+/// latest 20 minutes after the build.
+/// TODO: should be replaced be keeping track or querying the active invalidation from CloudFront
+pub(crate) fn active_crate_invalidations(
+    conn: &mut postgres::Client,
+) -> Result<Vec<CrateInvalidation>> {
+    Ok(conn
+        .query(
+            r#"
+             SELECT
+                 crates.name,
+                 MIN(builds.build_time) as build_time
+             FROM crates
+             INNER JOIN releases ON crates.id = releases.crate_id
+             INNER JOIN builds ON releases.id = builds.rid
+             WHERE builds.build_time >= CURRENT_TIMESTAMP - INTERVAL '20 minutes'
+             GROUP BY crates.name
+             ORDER BY MIN(builds.build_time)"#,
+            &[],
+        )?
+        .iter()
+        .map(|row| CrateInvalidation {
+            name: row.get(0),
+            created: row.get(1),
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::test::{wrapper, FakeBuild};
 
     use aws_sdk_cloudfront::{Client, Config, Credentials, Region};
     use aws_smithy_client::{erase::DynConnector, test_connection::TestConnection};
     use aws_smithy_http::body::SdkBody;
+    use chrono::{Duration, Timelike};
 
     #[test]
     fn create_cloudfront() {
@@ -211,6 +250,56 @@ mod tests {
             .await;
 
         Config::new(&cfg)
+    }
+
+    #[test]
+    fn get_active_invalidations() {
+        wrapper(|env| {
+            let now = Utc::now().with_nanosecond(0).unwrap();
+            let past_deploy = now - Duration::minutes(21);
+            let first_running_deploy = now - Duration::minutes(10);
+            let second_running_deploy = now;
+
+            env.fake_release()
+                .name("krate_2")
+                .version("0.0.1")
+                .builds(vec![FakeBuild::default().build_time(first_running_deploy)])
+                .create()?;
+
+            env.fake_release()
+                .name("krate_2")
+                .version("0.0.2")
+                .builds(vec![FakeBuild::default().build_time(second_running_deploy)])
+                .create()?;
+
+            env.fake_release()
+                .name("krate_1")
+                .version("0.0.2")
+                .builds(vec![FakeBuild::default().build_time(second_running_deploy)])
+                .create()?;
+
+            env.fake_release()
+                .name("krate_1")
+                .version("0.0.3")
+                .builds(vec![FakeBuild::default().build_time(past_deploy)])
+                .create()?;
+
+            assert_eq!(
+                active_crate_invalidations(&mut env.db().conn())?,
+                vec![
+                    CrateInvalidation {
+                        name: "krate_2".into(),
+                        created: first_running_deploy,
+                    },
+                    CrateInvalidation {
+                        name: "krate_1".into(),
+                        created: second_running_deploy,
+                    }
+                ]
+            );
+
+            Ok(())
+        })
     }
 
     #[tokio::test]
