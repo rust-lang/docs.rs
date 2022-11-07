@@ -2,6 +2,7 @@
 
 use crate::{
     build_queue::QueuedCrate,
+    cdn::{self, CrateInvalidation},
     db::{Pool, PoolClient},
     impl_webpage,
     utils::report_error,
@@ -668,6 +669,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
+    active_deployments: Vec<CrateInvalidation>,
 }
 
 impl_webpage! {
@@ -683,9 +685,12 @@ pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
         krate.priority = -krate.priority;
     }
 
+    let mut conn = extension!(req, Pool).get()?;
+
     BuildQueuePage {
-        description: "List of crates scheduled to build",
+        description: "crate documentation scheduled to build & deploy",
         queue,
+        active_deployments: ctry!(req, cdn::active_crate_invalidations(&mut conn)),
     }
     .into_response(req)
 }
@@ -695,7 +700,8 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{
-        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
+        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, FakeBuild,
+        TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -1327,6 +1333,40 @@ mod tests {
     }
 
     #[test]
+    fn test_deployment_queue() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            env.fake_release()
+                .name("krate_2")
+                .version("0.0.1")
+                .builds(vec![
+                    FakeBuild::default().build_time(Utc::now() - Duration::minutes(10))
+                ])
+                .create()?;
+
+            let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            assert!(empty
+                .select(".release > strong")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("active CDN deployments")));
+
+            let full = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let items = full
+                .select(".queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            assert_eq!(items.len(), 1);
+            let a = items[0].as_node().select_first("a").expect("missing link");
+
+            assert!(a.text_contents().contains("krate_2"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_releases_queue() {
         wrapper(|env| {
             let queue = env.build_queue();
@@ -1334,9 +1374,14 @@ mod tests {
 
             let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
-                .select(".release > strong")
+                .select(".queue-list > strong")
                 .expect("missing heading")
                 .any(|el| el.text_contents().contains("nothing")));
+
+            assert!(!empty
+                .select(".release > strong")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("active CDN deployments")));
 
             queue.add_crate("foo", "1.0.0", 0, None)?;
             queue.add_crate("bar", "0.1.0", -10, None)?;
