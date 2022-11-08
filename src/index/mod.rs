@@ -3,6 +3,7 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::Context;
 use crates_index_diff::git;
+use tracing::debug;
 use url::Url;
 
 use self::api::Api;
@@ -91,9 +92,9 @@ impl Index {
     pub(crate) fn crates(&self) -> Result<crates_index::Index> {
         // First ensure the index is up to date, peeking will pull the latest changes without
         // affecting anything else.
-        log::debug!("Updating index");
+        debug!("Updating index");
         self.diff()?.peek_changes()?;
-        log::debug!("Opening with `crates_index`");
+        debug!("Opening with `crates_index`");
         // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
         let repo_url = self
             .repository_url
@@ -110,7 +111,7 @@ impl Index {
         let gc = Command::new("git")
             .arg("-C")
             .arg(&self.path)
-            .args(&["gc", "--auto"])
+            .args(["gc", "--auto"])
             .output()
             .with_context(|| format!("failed to run `git gc --auto`\npath: {:#?}", &self.path));
 

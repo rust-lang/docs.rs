@@ -11,12 +11,12 @@ use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
     copy_dir_all, parse_rustc_version, queue_builder, set_config, CargoMetadata, ConfigName,
 };
+use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
-use log::{debug, info, warn, LevelFilter};
 use postgres::Client;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
@@ -25,6 +25,7 @@ use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, Workspac
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const DUMMY_CRATE_NAME: &str = "empty-library";
@@ -160,8 +161,8 @@ impl RustwideBuilder {
         // NOTE: this ignores the error so that you can still run a build without rustfmt.
         // This should only happen if you run a build for the first time when rustfmt isn't available.
         if let Err(err) = self.toolchain.add_component(&self.workspace, "rustfmt") {
-            log::warn!("failed to install rustfmt: {}", err);
-            log::info!("continuing anyway, since this must be the first build");
+            warn!("failed to install rustfmt: {}", err);
+            info!("continuing anyway, since this must be the first build");
         }
 
         self.rustc_version = self.detect_rustc_version()?;
@@ -225,7 +226,24 @@ impl RustwideBuilder {
                         .prefix("essential-files")
                         .tempdir()?;
                     copy_dir_all(source, &dest)?;
-                    add_path_into_database(&self.storage, "", &dest)?;
+
+                    // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
+                    // put in their own directory, "static.files". To make sure those files are
+                    // available at --static-root-path, we add files from that subdirectory, if present.
+                    let static_files = dest.as_ref().join("static.files");
+                    if static_files.try_exists()? {
+                        add_path_into_database(
+                            &self.storage,
+                            RUSTDOC_STATIC_STORAGE_PREFIX,
+                            &static_files,
+                        )?;
+                    } else {
+                        add_path_into_database(
+                            &self.storage,
+                            RUSTDOC_STATIC_STORAGE_PREFIX,
+                            &dest,
+                        )?;
+                    }
 
                     set_config(
                         &mut conn,
@@ -410,6 +428,7 @@ impl RustwideBuilder {
                             &self.storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
+                            true,
                         )?;
                         algs.insert(new_alg);
                     };
@@ -421,6 +440,7 @@ impl RustwideBuilder {
                             &self.storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
+                            false,
                         )?;
                         algs.insert(new_alg);
                         files_list
@@ -484,7 +504,7 @@ impl RustwideBuilder {
                         // won't lead to non-existing docs.
                         for prefix in &["rustdoc", "sources"] {
                             let prefix = format!("{}/{}/{}/", prefix, name, version);
-                            log::debug!("cleaning old storage folder {}", prefix);
+                            debug!("cleaning old storage folder {}", prefix);
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
@@ -604,7 +624,7 @@ impl RustwideBuilder {
             format!("-{}", parse_rustc_version(&self.rustc_version)?),
         ]);
 
-        let mut storage = LogStorage::new(LevelFilter::Info);
+        let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
         // we have to run coverage before the doc-build because currently it
@@ -613,8 +633,8 @@ impl RustwideBuilder {
         let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
             Ok(cov) => cov,
             Err(err) => {
-                log::info!("error when trying to get coverage: {}", err);
-                log::info!("continuing anyways.");
+                info!("error when trying to get coverage: {}", err);
+                info!("continuing anyways.");
                 None
             }
         };
@@ -673,6 +693,7 @@ impl RustwideBuilder {
 
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
+            "--offline".into(),
             // We know that `metadata` unconditionally passes `-Z rustdoc-map`.
             // Don't copy paste this, since that fact is not stable and may change in the future.
             "-Zunstable-options".into(),
@@ -707,7 +728,7 @@ impl RustwideBuilder {
 
         #[rustfmt::skip]
         const UNCONDITIONAL_ARGS: &[&str] = &[
-            "--static-root-path", "/",
+            "--static-root-path", "/-/rustdoc.static/",
             "--cap-lints", "warn",
             "--disable-per-crate-search",
             "--extern-html-root-takes-precedence",

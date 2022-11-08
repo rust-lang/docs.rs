@@ -5,6 +5,10 @@
     {{ macros::doc_title(name=file_list.metadata.name, version=file_list.metadata.version) }}
 {%- endblock title -%}
 
+{%- block meta -%}
+    <link rel="canonical" href="{{ canonical_url | safe }}" />
+{%- endblock -%}
+
 {%- block topbar -%}
   {%- set metadata = file_list.metadata -%}
   {%- set latest_version = "" -%}

@@ -231,7 +231,7 @@ mod tests {
                     assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
                     assert_eq!(
                         resp.bytes()?,
-                        fs::read(&path).unwrap(),
+                        fs::read(path).unwrap(),
                         "failed to fetch {:?}",
                         url,
                     );

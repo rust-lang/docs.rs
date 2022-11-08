@@ -11,7 +11,6 @@ use crate::{BuildQueue, Config, Context, Index, Metrics};
 use anyhow::Context as _;
 use fn_error_context::context;
 use iron::headers::CacheControl;
-use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
@@ -20,6 +19,7 @@ use reqwest::{
 };
 use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
+use tracing::{debug, error};
 
 #[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -206,13 +206,12 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) fn init_logger() {
-    // initializing rustwide logging also sets the global logger
-    rustwide::logging::init_with(
-        env_logger::Builder::from_env(env_logger::Env::default().filter("DOCSRS_LOG"))
-            .format_timestamp_millis()
-            .is_test(true)
-            .build(),
-    );
+    rustwide::logging::init_with(tracing_log::LogTracer::new());
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_test_writer()
+        .finish();
+    let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
 impl TestEnvironment {
@@ -537,13 +536,13 @@ impl TestFrontend {
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         let url = self.build_url(url);
-        log::debug!("getting {url}");
+        debug!("getting {url}");
         self.client.request(Method::GET, url)
     }
 
     pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
         let url = self.build_url(url);
-        log::debug!("getting {url} (no redirects)");
+        debug!("getting {url} (no redirects)");
         self.client_no_redirect.request(Method::GET, url)
     }
 }

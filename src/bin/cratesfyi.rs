@@ -1,9 +1,11 @@
 use std::env;
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
+use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
@@ -14,14 +16,26 @@ use docs_rs::{
     BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
 };
 use once_cell::sync::OnceCell;
-use sentry_log::SentryLogger;
-use structopt::StructOpt;
-use strum::VariantNames;
 use tokio::runtime::Runtime;
+use tracing_log::LogTracer;
+use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
 
 fn main() {
+    // set the global log::logger for backwards compatibility
+    // through rustwide.
+    rustwide::logging::init_with(LogTracer::new());
+
+    let tracing_registry = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
+                .with_env_var("DOCSRS_LOG")
+                .from_env_lossy(),
+        );
+
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        rustwide::logging::init_with(SentryLogger::with_dest(logger_init()));
+        tracing_registry.with(sentry_tracing::layer()).init();
         Some(sentry::init((
             sentry_dsn,
             sentry::ClientOptions {
@@ -32,11 +46,11 @@ fn main() {
             .add_integration(sentry_panic::PanicIntegration::default()),
         )))
     } else {
-        rustwide::logging::init_with(logger_init());
+        tracing_registry.init();
         None
     };
 
-    if let Err(err) = CommandLine::from_args().handle_args() {
+    if let Err(err) = CommandLine::parse().handle_args() {
         let mut msg = format!("Error: {}", err);
         for cause in err.chain() {
             write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
@@ -56,53 +70,41 @@ fn main() {
     }
 }
 
-fn logger_init() -> env_logger::Logger {
-    use std::io::Write;
-
-    let env = env_logger::Env::default().filter_or("DOCSRS_LOG", "docs_rs=info");
-    env_logger::Builder::from_env(env)
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] {}: {}",
-                time::now().strftime("%Y/%m/%d %H:%M:%S").unwrap(),
-                record.level(),
-                record.target(),
-                record.args()
-            )
-        })
-        .build()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::EnumVariantNames)]
-#[strum(serialize_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "snake_case")]
 enum Toggle {
     Enabled,
     Disabled,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
-#[structopt(
-    name = "cratesfyi",
+#[derive(Debug, Clone, PartialEq, Eq, Parser)]
+#[command(
     about = env!("CARGO_PKG_DESCRIPTION"),
     version = docs_rs::BUILD_VERSION,
     rename_all = "kebab-case",
 )]
 enum CommandLine {
-    Build(Build),
+    Build {
+        /// Skips building documentation if documentation exists
+        #[arg(name = "SKIP_IF_EXISTS", short = 's', long = "skip")]
+        skip_if_exists: bool,
+
+        #[command(subcommand)]
+        subcommand: BuildSubcommand,
+    },
 
     /// Starts web server
     StartWebServer {
-        #[structopt(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
+        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
         socket_addr: String,
     },
 
     StartRegistryWatcher {
         /// Enable or disable the repository stats updater
-        #[structopt(
+        #[arg(
             long = "repository-stats-updater",
             default_value = "disabled",
-            possible_values(Toggle::VARIANTS)
+            value_enum
         )]
         repository_stats_updater: Toggle,
     },
@@ -112,23 +114,19 @@ enum CommandLine {
     /// Starts the daemon
     Daemon {
         /// Enable or disable the registry watcher to automatically enqueue newly published crates
-        #[structopt(
-            long = "registry-watcher",
-            default_value = "enabled",
-            possible_values(Toggle::VARIANTS)
-        )]
+        #[arg(long = "registry-watcher", default_value = "enabled", value_enum)]
         registry_watcher: Toggle,
     },
 
     /// Database operations
     Database {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         subcommand: DatabaseSubcommand,
     },
 
     /// Interactions with the build queue
     Queue {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         subcommand: QueueSubcommand,
     },
 }
@@ -138,7 +136,10 @@ impl CommandLine {
         let ctx = BinContext::new();
 
         match self {
-            Self::Build(build) => build.handle_args(ctx)?,
+            Self::Build {
+                skip_if_exists,
+                subcommand,
+            } => subcommand.handle_args(ctx, skip_if_exists)?,
             Self::StartRegistryWatcher {
                 repository_stats_updater,
             } => {
@@ -168,20 +169,20 @@ impl CommandLine {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum QueueSubcommand {
     /// Add a crate to the build queue
     Add {
         /// Name of crate to build
-        #[structopt(name = "CRATE_NAME")]
+        #[arg(name = "CRATE_NAME")]
         crate_name: String,
         /// Version of crate to build
-        #[structopt(name = "CRATE_VERSION")]
+        #[arg(name = "CRATE_VERSION")]
         crate_version: String,
         /// Priority of build (new crate builds get priority 0)
-        #[structopt(
+        #[arg(
             name = "BUILD_PRIORITY",
-            short = "p",
+            short = 'p',
             long = "priority",
             default_value = "5"
         )]
@@ -190,7 +191,7 @@ enum QueueSubcommand {
 
     /// Interactions with build queue priorities
     DefaultPriority {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         subcommand: PrioritySubcommand,
     },
 }
@@ -215,12 +216,12 @@ impl QueueSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum PrioritySubcommand {
     /// Set all crates matching a pattern to a priority level
     Set {
         /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
-        #[structopt(name = "PATTERN")]
+        #[arg(name = "PATTERN")]
         pattern: String,
         /// The priority to give crates matching the given `PATTERN`
         priority: i32,
@@ -229,7 +230,7 @@ enum PrioritySubcommand {
     /// Remove the prioritization of crates for a pattern
     Remove {
         /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
-        #[structopt(name = "PATTERN")]
+        #[arg(name = "PATTERN")]
         pattern: String,
     },
 }
@@ -256,25 +257,7 @@ impl PrioritySubcommand {
     }
 }
 
-/// Builds documentation in a chroot environment
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
-struct Build {
-    /// Skips building documentation if documentation exists
-    #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
-    skip_if_exists: bool,
-
-    #[structopt(subcommand)]
-    subcommand: BuildSubcommand,
-}
-
-impl Build {
-    fn handle_args(self, ctx: BinContext) -> Result<()> {
-        self.subcommand.handle_args(ctx, self.skip_if_exists)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum BuildSubcommand {
     /// Builds documentation of every crate
     World,
@@ -282,26 +265,22 @@ enum BuildSubcommand {
     /// Builds documentation for a crate
     Crate {
         /// Crate name
-        #[structopt(
-            name = "CRATE_NAME",
-            required_unless("local"),
-            requires("CRATE_VERSION")
-        )]
+        #[arg(name = "CRATE_NAME", requires("CRATE_VERSION"))]
         crate_name: Option<String>,
 
         /// Version of crate
-        #[structopt(name = "CRATE_VERSION")]
+        #[arg(name = "CRATE_VERSION")]
         crate_version: Option<String>,
 
         /// Build a crate at a specific path
-        #[structopt(short = "l", long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
+        #[arg(short = 'l', long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
         local: Option<PathBuf>,
     },
 
     /// update the currently installed rustup toolchain
     UpdateToolchain {
         /// Update the toolchain only if no toolchain is currently installed
-        #[structopt(name = "ONLY_FIRST_TIME", long = "only-first-time")]
+        #[arg(name = "ONLY_FIRST_TIME", long = "only-first-time")]
         only_first_time: bool,
     },
 
@@ -392,12 +371,12 @@ impl BuildSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum DatabaseSubcommand {
     /// Run database migration
     Migrate {
         /// The database version to migrate to
-        #[structopt(name = "VERSION")]
+        #[arg(name = "VERSION")]
         version: Option<i64>,
     },
 
@@ -409,25 +388,25 @@ enum DatabaseSubcommand {
 
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
-        #[structopt(name = "CRATE")]
+        #[arg(name = "CRATE")]
         name: String,
     },
 
     AddDirectory {
         /// Path of file or directory
-        #[structopt(name = "DIRECTORY")]
+        #[arg(name = "DIRECTORY")]
         directory: PathBuf,
     },
 
     /// Remove documentation from the database
     Delete {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         command: DeleteSubcommand,
     },
 
     /// Blacklist operations
     Blacklist {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         command: BlacklistSubcommand,
     },
 
@@ -435,7 +414,7 @@ enum DatabaseSubcommand {
     #[cfg(feature = "consistency_check")]
     Synchronize {
         /// Don't actually resolve the inconsistencies, just log them
-        #[structopt(long)]
+        #[arg(long)]
         dry_run: bool,
     },
 }
@@ -496,7 +475,7 @@ impl DatabaseSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum BlacklistSubcommand {
     /// List all crates on the blacklist
     List,
@@ -504,14 +483,14 @@ enum BlacklistSubcommand {
     /// Add a crate to the blacklist
     Add {
         /// Crate name
-        #[structopt(name = "CRATE_NAME")]
+        #[arg(name = "CRATE_NAME")]
         crate_name: String,
     },
 
     /// Remove a crate from the blacklist
     Remove {
         /// Crate name
-        #[structopt(name = "CRATE_NAME")]
+        #[arg(name = "CRATE_NAME")]
         crate_name: String,
     },
 }
@@ -537,22 +516,22 @@ impl BlacklistSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, StructOpt)]
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum DeleteSubcommand {
     /// Delete a whole crate
     Crate {
         /// Name of the crate to delete
-        #[structopt(name = "CRATE_NAME")]
+        #[arg(name = "CRATE_NAME")]
         name: String,
     },
     /// Delete a single version of a crate (which may include multiple builds)
     Version {
         /// Name of the crate to delete
-        #[structopt(name = "CRATE_NAME")]
+        #[arg(name = "CRATE_NAME")]
         name: String,
 
         /// The version of the crate to delete
-        #[structopt(name = "VERSION")]
+        #[arg(name = "VERSION")]
         version: String,
     },
 }

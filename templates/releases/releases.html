@@ -58,20 +58,14 @@
 
             <div class="pagination">
                 {% block pagination %}
-                    {%- if release_type == 'owner' -%}
-                        {%- set page_link = "/releases/" ~ owner -%}
-                    {%- else -%}
-                        {%- set page_link = "/releases/" ~ release_type -%}
-                    {%- endif -%}
-
                     {%- if show_previous_page -%}
-                        <a class="pure-button pure-button-normal" href="{{ page_link | safe }}/{{ page_number - 1 }}{{ query | default(value='') }}">
+                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number - 1 }}{{ query | default(value='') }}">
                             {{ "arrow-left" | fas }} Previous Page
                         </a>
                     {%- endif -%}
 
                     {%- if show_next_page -%}
-                        <a class="pure-button pure-button-normal" href="{{ page_link | safe }}/{{ page_number + 1 }}{{ query | default(value='') }}">
+                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number + 1 }}{{ query | default(value='') }}">
                             Next Page {{ "arrow-right" | fas }}
                         </a>
                     {%- endif -%}

@@ -98,9 +98,9 @@ impl FileList {
                     }
 
                     // look only files for req_path
-                    if path.starts_with(&req_path) {
+                    if path.starts_with(req_path) {
                         // remove req_path from path to reach files in this directory
-                        let path = path.replace(&req_path, "");
+                        let path = path.replace(req_path, "");
                         let path_splited: Vec<&str> = path.split('/').collect();
 
                         // if path have '/' it is a directory
@@ -165,6 +165,7 @@ struct SourcePage {
     show_parent_link: bool,
     file_content: Option<String>,
     is_rust_source: bool,
+    canonical_url: String,
 }
 
 impl_webpage! {
@@ -232,6 +233,11 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (path, file_path)
     };
 
+    let canonical_url = format!(
+        "https://docs.rs/crate/{}/latest/source/{}",
+        crate_name, file_path
+    );
+
     let storage = extension!(req, Storage);
     let archive_storage: bool = {
         let rows = ctry!(
@@ -239,10 +245,10 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
             conn.query(
                 "
                 SELECT archive_storage
-                FROM releases 
+                FROM releases
                 INNER JOIN crates ON releases.crate_id = crates.id
-                WHERE 
-                    name = $1 AND 
+                WHERE
+                    name = $1 AND
                     version = $2
                 ",
                 &[&crate_name, &version]
@@ -295,6 +301,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         show_parent_link: !req_path.is_empty(),
         file_content,
         is_rust_source,
+        canonical_url,
     }
     .into_response(req)
 }

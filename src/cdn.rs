@@ -123,7 +123,11 @@ pub(crate) fn invalidate_crate(config: &Config, cdn: &CdnBackend, name: &str) ->
             distribution_id,
             &[&format!("/{}*", name), &format!("/crate/{}*", name)],
         )
-        .context("error creating CDN invalidation")?;
+        .context("error creating web CDN invalidation")?;
+    }
+    if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
+        cdn.create_invalidation(distribution_id, &[&format!("/rustdoc/{}*", name)])
+            .context("error creating static CDN invalidation")?;
     }
 
     Ok(())
@@ -166,6 +170,31 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn invalidate_a_crate() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
+                config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
+            });
+            invalidate_crate(&env.config(), &env.cdn(), "krate")?;
+
+            assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
+            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
+                let ir = invalidation_requests.lock().unwrap();
+                assert_eq!(
+                    *ir,
+                    [
+                        ("distribution_id_web".into(), "/krate*".into()),
+                        ("distribution_id_web".into(), "/crate/krate*".into()),
+                        ("distribution_id_static".into(), "/rustdoc/krate*".into()),
+                    ]
+                );
+            }
+            Ok(())
+        });
     }
 
     async fn get_mock_config() -> aws_sdk_cloudfront::Config {

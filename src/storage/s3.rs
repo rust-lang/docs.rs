@@ -2,8 +2,8 @@ use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
 use anyhow::{Context, Error};
 use aws_sdk_s3::{
-    error,
-    model::{Delete, ObjectIdentifier},
+    error as s3_error,
+    model::{Delete, ObjectIdentifier, Tag, Tagging},
     types::SdkError,
     Client, Endpoint, Region, RetryConfig,
 };
@@ -15,6 +15,10 @@ use futures_util::{
 };
 use std::{io::Write, sync::Arc};
 use tokio::runtime::Runtime;
+use tracing::{error, warn};
+
+const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
+const PUBLIC_ACCESS_VALUE: &str = "allow";
 
 pub(super) struct S3Backend {
     client: Client,
@@ -80,10 +84,75 @@ impl S3Backend {
             {
                 Ok(_) => Ok(true),
                 Err(SdkError::ServiceError { err, raw })
-                    if (matches!(err.kind, error::HeadObjectErrorKind::NotFound(_))
+                    if (matches!(err.kind, s3_error::HeadObjectErrorKind::NotFound(_))
                         || raw.http().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
+                }
+                Err(other) => Err(other.into()),
+            }
+        })
+    }
+
+    pub(super) fn get_public_access(&self, path: &str) -> Result<bool, Error> {
+        self.runtime.block_on(async {
+            match self
+                .client
+                .get_object_tagging()
+                .bucket(&self.bucket)
+                .key(path)
+                .send()
+                .await
+            {
+                Ok(tags) => Ok(tags
+                    .tag_set()
+                    .map(|tags| {
+                        tags.iter()
+                            .filter(|tag| tag.key() == Some(PUBLIC_ACCESS_TAG))
+                            .any(|tag| tag.value() == Some(PUBLIC_ACCESS_VALUE))
+                    })
+                    .unwrap_or(false)),
+                Err(SdkError::ServiceError { err, raw }) => {
+                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                        Err(super::PathNotFoundError.into())
+                    } else {
+                        Err(err.into())
+                    }
+                }
+                Err(other) => Err(other.into()),
+            }
+        })
+    }
+
+    pub(super) fn set_public_access(&self, path: &str, public: bool) -> Result<(), Error> {
+        self.runtime.block_on(async {
+            match self
+                .client
+                .put_object_tagging()
+                .bucket(&self.bucket)
+                .key(path)
+                .tagging(if public {
+                    Tagging::builder()
+                        .tag_set(
+                            Tag::builder()
+                                .key(PUBLIC_ACCESS_TAG)
+                                .value(PUBLIC_ACCESS_VALUE)
+                                .build(),
+                        )
+                        .build()
+                } else {
+                    Tagging::builder().build()
+                })
+                .send()
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(SdkError::ServiceError { err, raw }) => {
+                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                        Err(super::PathNotFoundError.into())
+                    } else {
+                        Err(err.into())
+                    }
                 }
                 Err(other) => Err(other.into()),
             }
@@ -106,7 +175,7 @@ impl S3Backend {
                 .send()
                 .map_err(|err| match err {
                     SdkError::ServiceError { err, raw }
-                        if (matches!(err.kind, error::GetObjectErrorKind::NoSuchKey(_))
+                        if (matches!(err.kind, s3_error::GetObjectErrorKind::NoSuchKey(_))
                             || raw.http().status() == http::StatusCode::NOT_FOUND) =>
                     {
                         super::PathNotFoundError.into()
@@ -193,7 +262,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                                 self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
-                                log::warn!("Failed to upload blob to S3: {:?}", err);
+                                warn!("Failed to upload blob to S3: {:?}", err);
                                 // Reintroduce failed blobs for a retry
                                 blob
                             }),
@@ -256,7 +325,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
 
                     if let Some(errs) = resp.errors {
                         for err in &errs {
-                            log::error!("error deleting file from s3: {:?}", err);
+                            error!("error deleting file from s3: {:?}", err);
                         }
 
                         anyhow::bail!("deleting from s3 failed");

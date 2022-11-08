@@ -24,6 +24,7 @@ use anyhow::Result;
 use postgres::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tracing::error;
 pub(crate) mod sized_buffer;
 
 pub(crate) const APP_USER_AGENT: &str = concat!(
@@ -37,7 +38,7 @@ pub(crate) fn report_error(err: &anyhow::Error) {
         sentry_anyhow::capture_anyhow(err);
     } else {
         // Debug-format for anyhow errors includes context & backtrace
-        log::error!("{:?}", err);
+        error!("{:?}", err);
     }
 }
 

@@ -26,6 +26,10 @@
                         {% set text = "road" | fas(fw=true) %}
                         {% set text = text ~ ' <span class="title">Shorthand URLs</span>' %}
                         {{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
+
+                        {% set text = "download" | fas(fw=true) %}
+                        {% set text = text ~ ' <span class="title">Download</span>' %}
+                        {{ macros::active_link(expected="download", href="/about/download", text=text) }}
                     </ul>
                 </div>
             </div>

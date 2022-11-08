@@ -8,7 +8,7 @@ use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
 use crates_index_diff::Change;
-use log::{debug, info};
+use tracing::{debug, info, warn};
 
 use std::sync::Arc;
 use std::thread;
@@ -240,11 +240,9 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
                     return Err(err);
                 } else {
                     let sleep_for = 2u32.pow(attempt);
-                    log::warn!(
+                    warn!(
                         "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt,
-                        sleep_for,
-                        err
+                        attempt, sleep_for, err
                     );
                     thread::sleep(Duration::from_secs(sleep_for as u64));
                 }
@@ -551,7 +549,8 @@ mod tests {
     fn test_invalidate_cdn_after_build_and_error() {
         crate::test::wrapper(|env| {
             env.override_config(|config| {
-                config.cloudfront_distribution_id_web = Some("distribution_id".into());
+                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
+                config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
             });
 
             let queue = env.build_queue();
@@ -574,8 +573,12 @@ mod tests {
                 assert_eq!(
                     *ir,
                     [
-                        ("distribution_id".into(), "/will_succeed*".into()),
-                        ("distribution_id".into(), "/crate/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_succeed*".into()
+                        ),
                     ]
                 );
             }
@@ -589,10 +592,18 @@ mod tests {
                 assert_eq!(
                     *ir,
                     [
-                        ("distribution_id".into(), "/will_succeed*".into()),
-                        ("distribution_id".into(), "/crate/will_succeed*".into()),
-                        ("distribution_id".into(), "/will_fail*".into()),
-                        ("distribution_id".into(), "/crate/will_fail*".into()),
+                        ("distribution_id_web".into(), "/will_succeed*".into()),
+                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_succeed*".into()
+                        ),
+                        ("distribution_id_web".into(), "/will_fail*".into()),
+                        ("distribution_id_web".into(), "/crate/will_fail*".into()),
+                        (
+                            "distribution_id_static".into(),
+                            "/rustdoc/will_fail*".into()
+                        ),
                     ]
                 );
             }

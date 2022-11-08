@@ -140,6 +140,20 @@ impl Storage {
         }
     }
 
+    pub(crate) fn get_public_access(&self, path: &str) -> Result<bool> {
+        match &self.backend {
+            StorageBackend::Database(db) => db.get_public_access(path),
+            StorageBackend::S3(s3) => s3.get_public_access(path),
+        }
+    }
+
+    pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
+        match &self.backend {
+            StorageBackend::Database(db) => db.set_public_access(path, public),
+            StorageBackend::S3(s3) => s3.set_public_access(path, public),
+        }
+    }
+
     fn max_file_size_for(&self, path: &str) -> usize {
         if path.ends_with(".html") {
             self.config.max_file_size_html
@@ -302,7 +316,7 @@ impl Storage {
 
         Ok(Blob {
             path: format!("{}/{}", archive_path, path),
-            mime: detect_mime(&path).into(),
+            mime: detect_mime(path).into(),
             date_updated: blob.date_updated,
             content: blob.content,
             compression: None,
@@ -620,9 +634,38 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_set_public(storage: &Storage) -> Result<()> {
+        let path: &str = "foo/bar.txt";
+
+        storage.store_blobs(vec![Blob {
+            path: path.into(),
+            mime: "text/plain".into(),
+            date_updated: Utc::now(),
+            compression: None,
+            content: b"test content\n".to_vec(),
+        }])?;
+
+        assert!(!storage.get_public_access(path)?);
+        storage.set_public_access(path, true)?;
+        assert!(storage.get_public_access(path)?);
+        storage.set_public_access(path, false)?;
+        assert!(!storage.get_public_access(path)?);
+
+        for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
+            assert!(storage
+                .set_public_access(path, true)
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+        }
+
+        Ok(())
+    }
+
     fn test_get_object(storage: &Storage) -> Result<()> {
+        let path: &str = "foo/bar.txt";
         let blob = Blob {
-            path: "foo/bar.txt".into(),
+            path: path.into(),
             mime: "text/plain".into(),
             date_updated: Utc::now(),
             compression: None,
@@ -631,13 +674,22 @@ mod backend_tests {
 
         storage.store_blobs(vec![blob.clone()])?;
 
-        let found = storage.get("foo/bar.txt", std::usize::MAX)?;
+        let found = storage.get(path, std::usize::MAX)?;
         assert_eq!(blob.mime, found.mime);
         assert_eq!(blob.content, found.content);
+
+        // default visibility is private
+        assert!(!storage.get_public_access(path)?);
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(storage
                 .get(path, std::usize::MAX)
+                .unwrap_err()
+                .downcast_ref::<PathNotFoundError>()
+                .is_some());
+
+            assert!(storage
+                .get_public_access(path)
                 .unwrap_err()
                 .downcast_ref::<PathNotFoundError>()
                 .is_some());
@@ -1028,6 +1080,7 @@ mod backend_tests {
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
+            test_set_public,
         }
 
         tests_with_metrics {

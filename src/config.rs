@@ -4,6 +4,7 @@ use std::env::VarError;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
+use tracing::trace;
 
 #[derive(Debug)]
 pub struct Config {
@@ -25,6 +26,10 @@ pub struct Config {
     pub(crate) s3_endpoint: Option<String>,
     #[cfg(test)]
     pub(crate) s3_bucket_is_temporary: bool,
+
+    // CloudFront domain which we can access
+    // public S3 files through
+    pub(crate) s3_static_root_path: String,
 
     // Github authentication
     pub(crate) github_accesstoken: Option<String>,
@@ -67,6 +72,8 @@ pub struct Config {
     // CloudFront distribution ID for the web server.
     // Will be used for invalidation-requests.
     pub cloudfront_distribution_id_web: Option<String>,
+    /// same for the `static.docs.rs` distribution
+    pub cloudfront_distribution_id_static: Option<String>,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -125,6 +132,11 @@ impl Config {
             #[cfg(test)]
             s3_bucket_is_temporary: false,
 
+            s3_static_root_path: env(
+                "DOCSRS_S3_STATIC_ROOT_PATH",
+                "https://static.docs.rs".to_string(),
+            )?,
+
             github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
 
@@ -148,6 +160,7 @@ impl Config {
             cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
 
             cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
+            cloudfront_distribution_id_static: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?,
 
             local_archive_cache_path: env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
@@ -193,7 +206,7 @@ where
             .map(Some)
             .with_context(|| format!("failed to parse configuration variable {}", var))?),
         Err(VarError::NotPresent) => {
-            log::trace!("optional configuration variable {} is not set", var);
+            trace!("optional configuration variable {} is not set", var);
             Ok(None)
         }
         Err(VarError::NotUnicode(_)) => Err(anyhow!("configuration variable {} is not UTF-8", var)),

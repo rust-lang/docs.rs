@@ -3,12 +3,12 @@ use crate::repositories::{GitHub, GitLab, RateLimitReached};
 use crate::utils::MetadataPackage;
 use crate::{db::Pool, Config};
 use chrono::{DateTime, Utc};
-use log::{debug, info, trace, warn};
 use once_cell::sync::Lazy;
 use postgres::Client;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use tracing::{debug, info, trace, warn};
 
 pub trait RepositoryForge {
     /// Result used both as the `host` column in the DB and to match repository URLs during

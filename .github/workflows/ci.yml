@@ -22,15 +22,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        run: |
+          rustup override set stable
+          rustup update stable
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: cargo build --workspace --locked
@@ -55,10 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
 
       - name: get test binaries from cache
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: test-binaries-${{ github.sha }}
           path: ./test-binaries/
@@ -90,10 +89,10 @@ jobs:
     needs: build
 
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
 
       - name: get test binaries from cache
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: test-binaries-${{ github.sha }}
           path: ./test-binaries/
@@ -127,36 +126,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add rustfmt
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - run: cargo fmt -- --check
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - id: install
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: clippy
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add clippy
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-features --all-targets --workspace --locked -- -D warnings
+      - run: cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
