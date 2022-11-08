@@ -43,7 +43,7 @@ jobs:
             -executable -type f \
             -exec cp {} ./test-binaries/ \;
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         name: set up test binaries to cache
         with:
           name: test-binaries-${{ github.sha }}
