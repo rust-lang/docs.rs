@@ -6,20 +6,31 @@ use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
-use crate::web::{cache, Server};
+use crate::web::{
+    build_axum_app, build_strangler_service, cache, page::TemplateData, start_iron_server,
+};
 use crate::{BuildQueue, Config, Context, Index, Metrics};
 use anyhow::Context as _;
 use fn_error_context::context;
-use iron::headers::CacheControl;
+use iron::{headers::CacheControl, Listening};
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, ClientBuilder, RequestBuilder, Response},
     Method,
 };
-use std::{fs, net::SocketAddr, panic, str::FromStr, sync::Arc, time::Duration};
-use tokio::runtime::Runtime;
-use tracing::{debug, error};
+use std::thread::{self, JoinHandle};
+use std::{
+    fs,
+    net::{SocketAddr, TcpListener},
+    panic,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
+use tokio::runtime::{Builder, Runtime};
+use tokio::sync::oneshot::Sender;
+use tracing::{debug, error, instrument, trace};
 
 #[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -240,7 +251,7 @@ impl TestEnvironment {
 
     fn cleanup(self) {
         if let Some(frontend) = self.frontend.into_inner() {
-            frontend.server.leak();
+            frontend.shutdown();
         }
         if let Some(storage) = self.storage.get() {
             storage
@@ -340,7 +351,14 @@ impl TestEnvironment {
     }
     pub(crate) fn runtime(&self) -> Arc<Runtime> {
         self.runtime
-            .get_or_init(|| Arc::new(Runtime::new().expect("failed to initialize runtime")))
+            .get_or_init(|| {
+                Arc::new(
+                    Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("failed to initialize runtime"),
+                )
+            })
             .clone()
     }
 
@@ -504,12 +522,16 @@ impl Drop for TestDatabase {
 }
 
 pub(crate) struct TestFrontend {
-    server: Server,
+    iron_server: Listening,
+    axum_server_thread: JoinHandle<()>,
+    axum_server_shutdown_signal: Sender<()>,
+    axum_server_address: SocketAddr,
     pub(crate) client: Client,
     pub(crate) client_no_redirect: Client,
 }
 
 impl TestFrontend {
+    #[instrument(skip_all)]
     fn new(context: &dyn Context) -> Self {
         fn build(f: impl FnOnce(ClientBuilder) -> ClientBuilder) -> Client {
             let base = Client::builder()
@@ -521,24 +543,92 @@ impl TestFrontend {
             f(base).build().unwrap()
         }
 
+        debug!("loading template data");
+        let template_data =
+            Arc::new(TemplateData::new(&mut context.pool().unwrap().get().unwrap()).unwrap());
+
+        debug!("starting iron server");
+        let iron_server = start_iron_server(context, template_data.clone(), Some(1))
+            .expect("could not start iron server");
+
+        debug!("binding local TCP port for axum");
+        let axum_listener =
+            TcpListener::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
+
+        let axum_addr = axum_listener.local_addr().unwrap();
+        debug!("bound to local address: {}", axum_addr);
+
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+        debug!("building axum app");
+        let axum_app = build_axum_app(context, template_data).expect("could not build axum app");
+
+        let handle = thread::spawn({
+            let runtime = context.runtime().unwrap();
+            move || {
+                runtime.block_on(async {
+                    axum::Server::from_tcp(axum_listener)
+                        .unwrap()
+                        .serve(
+                            axum_app
+                                .fallback(
+                                    build_strangler_service(iron_server.socket)
+                                        .expect("cloud not build strangler service"),
+                                )
+                                .into_make_service(),
+                        )
+                        .with_graceful_shutdown(async {
+                            rx.await.ok();
+                        })
+                        .await
+                        .expect("error from axum server")
+                })
+            }
+        });
+
         Self {
-            server: Server::start(Some("127.0.0.1:0"), context)
-                .expect("failed to start the web server"),
+            iron_server,
+            axum_server_address: axum_addr,
+            axum_server_thread: handle,
+            axum_server_shutdown_signal: tx,
             client: build(|b| b),
             client_no_redirect: build(|b| b.redirect(reqwest::redirect::Policy::none())),
         }
     }
 
+    #[instrument(skip_all)]
+    fn shutdown(self) {
+        trace!("sending axum shutdown signal");
+        self.axum_server_shutdown_signal
+            .send(())
+            .expect("could not send shutdown signal");
+
+        trace!("joining axum server thread");
+        self.axum_server_thread
+            .join()
+            .expect("could not join axum background thread error");
+
+        trace!("forgetting about iron");
+        // Iron is bugged, and it never closes the server even when the listener is dropped. To
+        // avoid never-ending tests this method forgets about the server, leaking it and allowing the
+        // program to end.
+        //
+        // The OS will then close all the dangling servers once the process exits.
+        //
+        // https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
+        std::mem::forget(self.iron_server);
+    }
+
     fn build_url(&self, url: &str) -> String {
         if url.is_empty() || url.starts_with('/') {
-            format!("http://{}{}", self.server.addr(), url)
+            format!("http://{}{}", self.axum_server_address, url)
         } else {
             url.to_owned()
         }
     }
 
     pub(crate) fn server_addr(&self) -> SocketAddr {
-        self.server.addr()
+        self.axum_server_address
     }
 
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {

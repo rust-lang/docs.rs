@@ -4,6 +4,7 @@
 
 use crate::{
     utils::{queue_builder, report_error},
+    web::start_web_server,
     BuildQueue, Config, Context, Index, RustwideBuilder,
 };
 use anyhow::{anyhow, Context as _, Error};
@@ -94,21 +95,26 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
     Ok(())
 }
 
-pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Result<(), Error> {
+pub fn start_daemon<C: Context + Send + Clone + 'static>(
+    context: C,
+    enable_registry_watcher: bool,
+) -> Result<(), Error> {
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
-    let server = crate::Server::start(None, context)?;
-    let server_thread = thread::spawn(|| drop(server));
+    let webserver_thread = thread::spawn({
+        let context = context.clone();
+        move || start_web_server(None, &context)
+    });
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(context)?;
+        start_registry_watcher(&context)?;
     }
 
     // build new crates every minute
     let build_queue = context.build_queue()?;
-    let rustwide_builder = RustwideBuilder::init(context)?;
+    let rustwide_builder = RustwideBuilder::init(&context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
@@ -116,14 +122,13 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
         })
         .unwrap();
 
-    start_background_repository_stats_updater(context)?;
+    start_background_repository_stats_updater(&context)?;
 
-    // Never returns; `server` blocks indefinitely when dropped
     // NOTE: if a anyhow occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.
-    server_thread
+    webserver_thread
         .join()
-        .map_err(|_| anyhow!("web server panicked"))
+        .map_err(|_| anyhow!("web server panicked"))?
 }
 
 pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>

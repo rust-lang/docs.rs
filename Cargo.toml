@@ -22,6 +22,7 @@ consistency_check = ["crates-index", "rayon"]
 sentry = "0.27.0"
 sentry-panic = "0.27.0"
 sentry-tracing = "0.27.0"
+sentry-tower = { version = "0.27.0", features = ["http"] }
 sentry-anyhow = { version = "0.27.0", features = ["backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
@@ -88,6 +89,14 @@ memmap2 = "0.5.0"
 # iron dependencies
 iron = "0.6"
 router = "0.6"
+
+# axum dependencies
+axum = "0.5.17"
+hyper = { version = "0.14.15", default-features = false }
+tower = "0.4.11"
+tower-service = "0.3.2"
+tower-http = { version = "0.3.4", features = ["trace"] }
+mime = "0.3.16"
 
 # NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
 tempfile = "3.1.0"

@@ -1,26 +1,71 @@
 use crate::web::page::WebPage;
 
+use super::metrics::request_recorder;
 use super::{cache::CachePolicy, metrics::RequestRecorder};
-use ::std::borrow::Cow;
+use axum::{
+    handler::Handler as AxumHandler, middleware, response::Redirect, routing::get,
+    routing::MethodRouter, Router as AxumRouter,
+};
 use iron::middleware::Handler;
-use router::Router;
-use std::collections::HashSet;
+use router::Router as IronRouter;
+use std::{borrow::Cow, collections::HashSet, convert::Infallible};
+use tracing::instrument;
+
+#[instrument(skip_all)]
+fn get_static<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
+where
+    H: AxumHandler<T, B>,
+    B: Send + 'static + hyper::body::HttpBody,
+    T: 'static,
+{
+    get(handler).route_layer(middleware::from_fn(|request, next| async {
+        request_recorder(request, next, Some("static resource")).await
+    }))
+}
+
+#[instrument(skip_all)]
+fn get_internal<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
+where
+    H: AxumHandler<T, B>,
+    B: Send + 'static + hyper::body::HttpBody,
+    T: 'static,
+{
+    get(handler).route_layer(middleware::from_fn(|request, next| async {
+        request_recorder(request, next, None).await
+    }))
+}
+
+pub(super) fn build_axum_routes() -> AxumRouter {
+    AxumRouter::new()
+        // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
+        // must live at the site root:
+        //   https://developers.google.com/search/reference/robots_txt#handling-http-result-codes
+        //   https://support.google.com/webmasters/answer/183668?hl=en
+        .route(
+            "/robots.txt",
+            get_static(|| async { Redirect::permanent("/-/static/robots.txt") }),
+        )
+        .route(
+            "/favicon.ico",
+            get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
+        )
+        .route(
+            "/sitemap.xml",
+            get_internal(super::sitemap::sitemapindex_handler),
+        )
+        .route(
+            "/-/sitemap/:letter/sitemap.xml",
+            get_internal(super::sitemap::sitemap_handler),
+        )
+        .route(
+            "/about/builds",
+            get_internal(super::sitemap::about_builds_handler),
+        )
+}
 
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
-
-    // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
-    // must live at the site root:
-    //   https://developers.google.com/search/reference/robots_txt#handling-http-result-codes
-    //   https://support.google.com/webmasters/answer/183668?hl=en
-    routes.static_resource("/robots.txt", PermanentRedirect("/-/static/robots.txt"));
-    routes.static_resource("/favicon.ico", PermanentRedirect("/-/static/favicon.ico"));
-    routes.internal_page("/sitemap.xml", super::sitemap::sitemapindex_handler);
-    routes.internal_page(
-        "/-/sitemap/:letter/sitemap.xml",
-        super::sitemap::sitemap_handler,
-    );
 
     // This should not need to be served from the root as we reference the inner path in links,
     // but clients might have cached the url and need to update it.
@@ -58,7 +103,6 @@ pub(super) fn build_routes() -> Routes {
 
     routes.internal_page("/about", super::sitemap::about_handler);
     routes.internal_page("/about/metrics", super::metrics::metrics_handler);
-    routes.internal_page("/about/builds", super::sitemap::about_builds_handler);
     routes.internal_page("/about/:subpage", super::sitemap::about_handler);
 
     routes.internal_page("/releases", super::releases::recent_releases_handler);
@@ -201,8 +245,8 @@ impl Routes {
         self.page_prefixes.clone()
     }
 
-    pub(super) fn iron_router(mut self) -> Router {
-        let mut router = Router::new();
+    pub(super) fn iron_router(mut self) -> IronRouter {
+        let mut router = IronRouter::new();
         for (pattern, handler) in self.get.drain(..) {
             router.get(&pattern, handler, calculate_id(&pattern));
         }

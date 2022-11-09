@@ -13,10 +13,11 @@ use docs_rs::utils::{
     get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
 };
 use docs_rs::{
-    BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder, Server, Storage,
+    start_web_server, BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder,
+    Storage,
 };
 use once_cell::sync::OnceCell;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
 use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
 
@@ -156,10 +157,10 @@ impl CommandLine {
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
-                let _ = Server::start(Some(&socket_addr), &ctx)?;
+                start_web_server(Some(&socket_addr), &ctx)?;
             }
             Self::Daemon { registry_watcher } => {
-                docs_rs::utils::start_daemon(&ctx, registry_watcher == Toggle::Enabled)?;
+                docs_rs::utils::start_daemon(ctx, registry_watcher == Toggle::Enabled)?;
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
@@ -536,6 +537,7 @@ enum DeleteSubcommand {
     },
 }
 
+#[derive(Clone)]
 struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
@@ -597,7 +599,11 @@ impl Context for BinContext {
         fn cdn(self) -> CdnBackend = CdnBackend::new(&self.config()?, &self.runtime()?);
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;
-        fn runtime(self) -> Runtime = Runtime::new()?;
+        fn runtime(self) -> Runtime = {
+            Builder::new_multi_thread()
+                .enable_all()
+                .build()?
+        };
         fn index(self) -> Index = {
             let config = self.config()?;
             let path = config.registry_index_path.clone();

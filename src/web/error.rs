@@ -1,6 +1,10 @@
 use crate::{
     db::PoolError,
-    web::{page::WebPage, releases::Search, ErrorPage},
+    web::{page::WebPage, releases::Search, AxumErrorPage, ErrorPage},
+};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response as AxumResponse},
 };
 use iron::{status::Status, Handler, IronError, IronResult, Request, Response};
 
@@ -42,7 +46,7 @@ impl From<Nope> for IronError {
 
 impl Handler for Nope {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        match *self {
+        match self {
             Nope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
                 // TODO: Display the attempted page
@@ -130,6 +134,110 @@ impl From<PoolError> for IronError {
     fn from(err: PoolError) -> IronError {
         IronError::new(err, Status::InternalServerError)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[allow(dead_code)] // FIXME: remove after iron is gone
+pub enum AxumNope {
+    #[error("Requested resource not found")]
+    ResourceNotFound,
+    #[error("Requested build not found")]
+    BuildNotFound,
+    #[error("Requested crate not found")]
+    CrateNotFound,
+    #[error("Requested owner not found")]
+    OwnerNotFound,
+    #[error("Requested crate does not have specified version")]
+    VersionNotFound,
+    #[error("Search yielded no results")]
+    NoResults,
+    #[error("Internal server error")]
+    InternalServerError,
+    #[error("internal error")]
+    InternalError(#[from] anyhow::Error),
+    #[error("internal threading error")]
+    InternalTokio(#[from] tokio::task::JoinError),
+}
+
+impl IntoResponse for AxumNope {
+    fn into_response(self) -> AxumResponse {
+        match self {
+            AxumNope::ResourceNotFound => {
+                // user tried to navigate to a resource (doc page/file) that doesn't exist
+                AxumErrorPage {
+                    title: "Requested resource does not exist",
+                    message: Some("no such resource".into()),
+                    status: StatusCode::NOT_FOUND,
+                }
+                .into_response()
+            }
+
+            AxumNope::BuildNotFound => AxumErrorPage {
+                title: "The requested build does not exist",
+                message: Some("no such build".into()),
+                status: StatusCode::NOT_FOUND,
+            }
+            .into_response(),
+
+            AxumNope::CrateNotFound => {
+                // user tried to navigate to a crate that doesn't exist
+                // TODO: Display the attempted crate and a link to a search for said crate
+                AxumErrorPage {
+                    title: "The requested crate does not exist",
+                    message: Some("no such crate".into()),
+                    status: StatusCode::NOT_FOUND,
+                }
+                .into_response()
+            }
+
+            AxumNope::OwnerNotFound => AxumErrorPage {
+                title: "The requested owner does not exist",
+                message: Some("no such owner".into()),
+                status: StatusCode::NOT_FOUND,
+            }
+            .into_response(),
+
+            AxumNope::VersionNotFound => {
+                // user tried to navigate to a crate with a version that does not exist
+                // TODO: Display the attempted crate and version
+                AxumErrorPage {
+                    title: "The requested version does not exist",
+                    message: Some("no such version for this crate".into()),
+                    status: StatusCode::NOT_FOUND,
+                }
+                .into_response()
+            }
+            AxumNope::NoResults => {
+                todo!("to be implemented when search-handler is migrated to axum")
+            }
+            AxumNope::InternalServerError => {
+                // something went wrong, details should have been logged
+                AxumErrorPage {
+                    title: "Internal server error",
+                    message: Some("internal server error".into()),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                }
+                .into_response()
+            }
+            AxumNope::InternalError(source) => generate_internal_error_page(source).into_response(),
+            AxumNope::InternalTokio(source) => generate_internal_error_page(source).into_response(),
+        }
+    }
+}
+
+fn generate_internal_error_page<E: Into<anyhow::Error>>(error: E) -> impl IntoResponse {
+    let error = anyhow::anyhow!(error);
+
+    let web_error = crate::web::AxumErrorPage {
+        title: "Internal Server Error",
+        message: ::std::option::Option::Some(::std::borrow::Cow::Owned(error.to_string())),
+        status: ::http::StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    // TODO: check: does the sentry tower layer add the request as context?
+    crate::utils::report_error(&error);
+
+    web_error
 }
 
 #[cfg(test)]

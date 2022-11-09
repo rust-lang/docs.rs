@@ -42,7 +42,7 @@ fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
     anyhow::bail!("failed to parse the rustc version");
 }
 
-pub(super) fn load_templates(conn: &mut Client) -> Result<Tera> {
+fn load_templates(conn: &mut Client) -> Result<Tera> {
     // This uses a custom function to find the templates in the filesystem instead of Tera's
     // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
     // application and running the tests.
