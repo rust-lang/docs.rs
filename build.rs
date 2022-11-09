@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Error, Result};
-use git2::Repository;
+use git_repository as git;
 use std::{env, path::Path};
 
 mod tracked {
@@ -90,19 +90,15 @@ fn write_git_version(out_dir: &Path) -> Result<()> {
 }
 
 fn get_git_hash() -> Result<Option<String>> {
-    match Repository::open(env::current_dir()?) {
+    match git::open_opts(env::current_dir()?, git::open::Options::isolated()) {
         Ok(repo) => {
-            let head = repo.head()?;
+            let head_id = repo.head()?.id();
 
             // TODO: are these right?
             tracked::track(".git/HEAD")?;
             tracked::track(".git/index")?;
 
-            Ok(head.target().map(|h| {
-                let mut h = format!("{}", h);
-                h.truncate(7);
-                h
-            }))
+            Ok(head_id.map(|h| format!("{}", h.shorten_or_id())))
         }
         Err(err) => {
             eprintln!("failed to get git repo: {err}");

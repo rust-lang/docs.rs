@@ -31,7 +31,7 @@ regex = "1"
 clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "0.18.5", optional = true }
 rayon = { version = "1", optional = true }
-crates-index-diff = "10.0.0"
+crates-index-diff = "13.0.2"
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
@@ -55,7 +55,6 @@ rustwide = "0.15.0"
 mime_guess = "2"
 zstd = "0.11.0"
 hostname = "0.3.1"
-git2 = { version = "0.14.4", default-features = false }
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.13"
@@ -124,7 +123,7 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 time = "0.3"
-git2 = { version = "0.14", default-features = false }
+git-repository = { version = "0.27.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }

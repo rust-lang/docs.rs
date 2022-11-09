@@ -10,7 +10,6 @@ use anyhow::Context;
 use crates_index_diff::Change;
 use tracing::{debug, info, warn};
 
-use git2::Oid;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -53,15 +52,17 @@ impl BuildQueue {
         }
     }
 
-    pub fn last_seen_reference(&self) -> Result<Option<Oid>> {
+    pub fn last_seen_reference(&self) -> Result<Option<crates_index_diff::git::ObjectId>> {
         let mut conn = self.db.get()?;
         if let Some(value) = get_config::<String>(&mut conn, ConfigName::LastSeenIndexReference)? {
-            return Ok(Some(Oid::from_str(&value)?));
+            return Ok(Some(crates_index_diff::git::ObjectId::from_hex(
+                value.as_bytes(),
+            )?));
         }
         Ok(None)
     }
 
-    fn set_last_seen_reference(&self, oid: Oid) -> Result<()> {
+    fn set_last_seen_reference(&self, oid: crates_index_diff::git::ObjectId) -> Result<()> {
         let mut conn = self.db.get()?;
         set_config(
             &mut conn,
@@ -323,7 +324,7 @@ impl BuildQueue {
                     }
                 }
 
-                Change::Deleted(krate) => {
+                Change::Deleted { name: krate } => {
                     match delete_crate(&mut conn, &self.storage, &self.config, krate)
                         .with_context(|| format!("failed to delete crate {}", krate)) {
                             Ok(_) => info!("crate {} was deleted from the index and will be deleted from the database", krate), 
@@ -729,7 +730,9 @@ mod tests {
             assert_eq!(queue.last_seen_reference()?, None);
             assert!(!queue.is_locked()?);
 
-            let oid = git2::Oid::from_str("ffffffff")?;
+            let oid = crates_index_diff::git::ObjectId::from_hex(
+                b"ffffffffffffffffffffffffffffffffffffffff",
+            )?;
             queue.set_last_seen_reference(oid)?;
 
             assert_eq!(queue.last_seen_reference()?, Some(oid));
