@@ -1,5 +1,5 @@
 mod templates;
-mod web_page;
+pub(crate) mod web_page;
 
 pub(crate) use templates::TemplateData;
 pub(super) use web_page::WebPage;

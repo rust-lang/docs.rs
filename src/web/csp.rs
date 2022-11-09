@@ -1,6 +1,9 @@
 use crate::config::Config;
+use axum::{
+    http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
+};
 use iron::{AfterMiddleware, BeforeMiddleware, IronResult, Request, Response};
-use std::fmt::Write;
+use std::{fmt::Write, sync::Arc};
 
 pub(super) struct Csp {
     nonce: String,
@@ -135,6 +138,52 @@ impl AfterMiddleware for CspMiddleware {
         }
         Ok(res)
     }
+}
+
+pub(crate) async fn csp_middleware<B>(mut req: AxumHttpRequest<B>, next: Next<B>) -> AxumResponse {
+    let csp_report_only = req
+        .extensions()
+        .get::<Arc<Config>>()
+        .expect("missing config extension in request")
+        .csp_report_only;
+
+    let csp = Arc::new(Csp::new());
+    req.extensions_mut().insert(csp.clone());
+
+    let mut response = next.run(req).await;
+
+    let content_type = response
+        .headers()
+        .get("Content-Type")
+        .map(|header| header.as_bytes());
+
+    let preset = match content_type {
+        Some(b"text/html; charset=utf-8") => ContentType::Html,
+        Some(b"text/svg+xml") => ContentType::Svg,
+        _ => ContentType::Other,
+    };
+
+    let rendered = csp.render(preset);
+
+    if let Some(rendered) = rendered {
+        let mut headers = response.headers_mut().clone();
+        headers.insert(
+            // The Report-Only header tells the browser to just log CSP failures instead of
+            // actually enforcing them. This is useful to check if the CSP works without
+            // impacting production traffic.
+            if csp_report_only {
+                "Content-Security-Policy-Report-Only"
+            } else {
+                "Content-Security-Policy"
+            },
+            rendered
+                .parse()
+                .expect("rendered CSP could not be parsed into header value"),
+        );
+        *response.headers_mut() = headers;
+    }
+
+    response
 }
 
 #[cfg(test)]

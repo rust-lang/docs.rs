@@ -3,7 +3,6 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::Context;
 use crates_index_diff::git;
-use tracing::debug;
 use url::Url;
 
 use self::api::Api;
@@ -90,6 +89,7 @@ impl Index {
 
     #[cfg(feature = "consistency_check")]
     pub(crate) fn crates(&self) -> Result<crates_index::Index> {
+        use tracing::debug;
         // First ensure the index is up to date, peeking will pull the latest changes without
         // affecting anything else.
         debug!("Updating index");

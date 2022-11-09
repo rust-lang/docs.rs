@@ -1,12 +1,12 @@
 //! Web interface of docs.rs
 
-pub(crate) mod page;
+pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use anyhow::anyhow;
 use serde_json::Value;
-use tracing::info;
+use tracing::{info, instrument};
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -90,9 +90,15 @@ mod rustdoc;
 mod sitemap;
 mod source;
 mod statics;
+mod strangler;
 
-use crate::{impl_webpage, Context};
+use crate::{impl_axum_webpage, impl_webpage, Context};
 use anyhow::Error;
+use axum::{
+    extract::Extension,
+    http::{uri::Authority, StatusCode},
+    middleware, Router as AxumRouter,
+};
 use chrono::{DateTime, Utc};
 use csp::CspMiddleware;
 use error::Nope;
@@ -112,13 +118,16 @@ use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::borrow::Borrow;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
+use strangler::StranglerService;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 
-struct MainHandler {
+pub(crate) struct MainHandler {
     shared_resource_handler: Box<dyn Handler>,
     router_handler: Box<dyn Handler>,
     inject_extensions: InjectExtensions,
@@ -136,7 +145,10 @@ impl MainHandler {
         chain
     }
 
-    fn new(template_data: Arc<TemplateData>, context: &dyn Context) -> Result<MainHandler, Error> {
+    pub(crate) fn new(
+        template_data: Arc<TemplateData>,
+        context: &dyn Context,
+    ) -> Result<MainHandler, Error> {
         let inject_extensions = InjectExtensions::new(context, template_data)?;
 
         let routes = routes::build_routes();
@@ -224,9 +236,7 @@ impl Handler for MainHandler {
             .or_else(|e| {
                 let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
                     *err
-                } else if e.error.downcast_ref::<NoRoute>().is_some()
-                    || e.response.status == Some(status::NotFound)
-                {
+                } else if e.error.is::<NoRoute>() || e.response.status == Some(status::NotFound) {
                     error::Nope::ResourceNotFound
                 } else if e.response.status == Some(status::InternalServerError) {
                     report_error(&anyhow!("internal server error: {}", e.error));
@@ -416,51 +426,71 @@ fn match_version(
     Err(Nope::VersionNotFound)
 }
 
-#[must_use = "`Server` blocks indefinitely when dropped"]
-pub struct Server {
-    inner: Listening,
+#[instrument(skip_all)]
+pub(crate) fn build_axum_app(
+    context: &dyn Context,
+    template_data: Arc<TemplateData>,
+) -> Result<AxumRouter, Error> {
+    Ok(routes::build_axum_routes().layer(
+        // It’s recommended to use tower::ServiceBuilder to apply multiple middleware at once,
+        // instead of calling Router::layer repeatedly:
+        ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
+            .layer(sentry_tower::NewSentryLayer::new_from_top())
+            .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(Extension(context.pool()?))
+            .layer(Extension(context.build_queue()?))
+            .layer(Extension(context.metrics()?))
+            .layer(Extension(context.config()?))
+            .layer(Extension(context.storage()?))
+            .layer(Extension(template_data))
+            .layer(middleware::from_fn(csp::csp_middleware))
+            .layer(middleware::from_fn(
+                page::web_page::render_templates_middleware,
+            )),
+    ))
 }
 
-impl Server {
-    pub fn start(addr: Option<&str>, context: &dyn Context) -> Result<Self, Error> {
-        // Initialize templates
-        let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
-        let server = Self::start_inner(addr.unwrap_or(DEFAULT_BIND), template_data, context)?;
-        info!("Running docs.rs web server on http://{}", server.addr());
-        Ok(server)
-    }
+#[instrument(skip_all)]
+pub(crate) fn build_strangler_service(addr: SocketAddr) -> Result<StranglerService, Error> {
+    Ok(StranglerService::new(Authority::try_from(
+        addr.to_string(),
+    )?))
+}
 
-    fn start_inner(
-        addr: &str,
-        template_data: Arc<TemplateData>,
-        context: &dyn Context,
-    ) -> Result<Self, Error> {
-        let mut iron = Iron::new(MainHandler::new(template_data, context)?);
-        if cfg!(test) {
-            iron.threads = 1;
-        }
-        let inner = iron
-            .http(addr)
-            .unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
-
-        Ok(Server { inner })
+#[instrument(skip_all)]
+pub(crate) fn start_iron_server(
+    context: &dyn Context,
+    template_data: Arc<TemplateData>,
+    threads: Option<usize>,
+) -> Result<Listening, Error> {
+    let mut iron = Iron::new(MainHandler::new(template_data, context)?);
+    if let Some(threads) = threads {
+        iron.threads = threads;
     }
+    Ok(iron.http("127.0.0.1:0")?)
+}
 
-    pub(crate) fn addr(&self) -> SocketAddr {
-        self.inner.socket
-    }
+#[instrument(skip_all)]
+pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(), Error> {
+    let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
 
-    /// Iron is bugged, and it never closes the server even when the listener is dropped. To
-    /// avoid never-ending tests this method forgets about the server, leaking it and allowing the
-    /// program to end.
-    ///
-    /// The OS will then close all the dangling servers once the process exits.
-    ///
-    /// https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
-    #[cfg(test)]
-    pub(crate) fn leak(self) {
-        std::mem::forget(self.inner);
-    }
+    let iron_server = start_iron_server(context, template_data.clone(), None)?;
+
+    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
+
+    context.runtime()?.block_on(async {
+        axum::Server::bind(&axum_addr)
+            .serve(
+                build_axum_app(context, template_data)?
+                    .fallback(build_strangler_service(iron_server.socket)?)
+                    .into_make_service(),
+            )
+            .await?;
+        Ok::<(), Error>(())
+    })?;
+
+    Ok(())
 }
 
 /// Converts Timespec to nice readable relative time string
@@ -629,6 +659,21 @@ pub(crate) struct ErrorPage {
 
 impl_webpage! {
     ErrorPage = "error.html",
+    status = |err| err.status,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct AxumErrorPage {
+    /// The title of the page
+    pub title: &'static str,
+    /// The error message, displayed as a description
+    pub message: Option<Cow<'static, str>>,
+    #[serde(skip)]
+    pub status: StatusCode,
+}
+
+impl_axum_webpage! {
+    AxumErrorPage = "error.html",
     status = |err| err.status,
 }
 

@@ -1,19 +1,18 @@
 use crate::{
     db::Pool,
     docbuilder::Limits,
-    impl_webpage,
+    impl_axum_webpage, impl_webpage,
     utils::{get_config, ConfigName},
-    web::error::Nope,
-    web::page::WebPage,
+    web::{error::AxumNope, page::WebPage},
+};
+use axum::{
+    extract::{Extension, Path},
+    response::IntoResponse,
 };
 use chrono::{DateTime, TimeZone, Utc};
-use iron::{
-    headers::ContentType,
-    mime::{Mime, SubLevel, TopLevel},
-    IronResult, Request, Response,
-};
-use router::Router;
+use iron::{IronResult, Request as IronRequest, Response as IronResponse};
 use serde::Serialize;
+use tokio::task::spawn_blocking;
 
 /// sitemap index
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -21,15 +20,15 @@ struct SitemapIndexXml {
     sitemaps: Vec<char>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     SitemapIndexXml   = "core/sitemapindex.xml",
-    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+    content_type = "application/xml",
 }
 
-pub fn sitemapindex_handler(req: &mut Request) -> IronResult<Response> {
+pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     let sitemaps: Vec<char> = ('a'..='z').collect();
 
-    SitemapIndexXml { sitemaps }.into_response(req)
+    SitemapIndexXml { sitemaps }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -45,26 +44,25 @@ struct SitemapXml {
     releases: Vec<SitemapRow>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     SitemapXml   = "core/sitemap.xml",
-    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+    content_type = "application/xml",
 }
 
-pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let letter = cexpect!(req, router.find("letter"));
-
+pub(crate) async fn sitemap_handler(
+    Path(letter): Path<String>,
+    Extension(pool): Extension<Pool>,
+) -> Result<impl IntoResponse, AxumNope> {
     if letter.len() != 1 {
-        return Err(Nope::ResourceNotFound.into());
+        return Err(AxumNope::ResourceNotFound);
     } else if let Some(ch) = letter.chars().next() {
         if !(ch.is_ascii_lowercase()) {
-            return Err(Nope::ResourceNotFound.into());
+            return Err(AxumNope::ResourceNotFound);
         }
     }
-
-    let mut conn = extension!(req, Pool).get()?;
-    let query = conn
-        .query(
+    let releases = spawn_blocking(move || -> anyhow::Result<_> {
+        let mut conn = pool.get()?;
+        let query = conn.query(
             "SELECT crates.name,
                     releases.target_name,
                     MAX(releases.release_time) as release_time
@@ -76,25 +74,26 @@ pub fn sitemap_handler(req: &mut Request) -> IronResult<Response> {
              GROUP BY crates.name, releases.target_name
              ",
             &[&format!("{}%", letter)],
-        )
-        .unwrap();
+        )?;
 
-    let releases = query
-        .into_iter()
-        .map(|row| SitemapRow {
-            crate_name: row.get("name"),
-            target_name: row.get("target_name"),
-            last_modified: row
-                .get::<_, DateTime<Utc>>("release_time")
-                // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
-                // so they should all get recrawled if they haven't been since then.
-                .max(Utc.ymd(2022, 8, 28).and_hms(0, 0, 0))
-                .format("%+")
-                .to_string(),
-        })
-        .collect();
+        Ok(query
+            .into_iter()
+            .map(|row| SitemapRow {
+                crate_name: row.get("name"),
+                target_name: row.get("target_name"),
+                last_modified: row
+                    .get::<_, DateTime<Utc>>("release_time")
+                    // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+                    // so they should all get recrawled if they haven't been since then.
+                    .max(Utc.ymd(2022, 8, 28).and_hms(0, 0, 0))
+                    .format("%+")
+                    .to_string(),
+            })
+            .collect())
+    })
+    .await??;
 
-    SitemapXml { releases }.into_response(req)
+    Ok(SitemapXml { releases })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -107,22 +106,22 @@ struct AboutBuilds {
     active_tab: &'static str,
 }
 
-impl_webpage!(AboutBuilds = "core/about/builds.html");
+impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 
-pub fn about_builds_handler(req: &mut Request) -> IronResult<Response> {
-    let mut conn = extension!(req, Pool).get()?;
-
-    let rustc_version = ctry!(
-        req,
+pub(crate) async fn about_builds_handler(
+    Extension(pool): Extension<Pool>,
+) -> Result<impl IntoResponse, AxumNope> {
+    let rustc_version = spawn_blocking(move || -> anyhow::Result<_> {
+        let mut conn = pool.get()?;
         get_config::<String>(&mut conn, ConfigName::RustcVersion)
-    );
+    })
+    .await??;
 
-    AboutBuilds {
+    Ok(AboutBuilds {
         rustc_version,
         limits: Limits::default(),
         active_tab: "builds",
-    }
-    .into_response(req)
+    })
 }
 
 #[derive(Serialize)]
@@ -134,7 +133,7 @@ struct AboutPage<'a> {
 
 impl_webpage!(AboutPage<'_> = |this: &AboutPage| this.template.clone().into());
 
-pub fn about_handler(req: &mut Request) -> IronResult<Response> {
+pub fn about_handler(req: &mut IronRequest) -> IronResult<IronResponse> {
     use super::ErrorPage;
     use iron::status::Status;
 

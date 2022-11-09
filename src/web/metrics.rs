@@ -1,11 +1,18 @@
 use crate::db::Pool;
 use crate::BuildQueue;
 use crate::Metrics;
+use axum::{
+    extract::MatchedPath, http::Request as AxumRequest, middleware::Next, response::IntoResponse,
+};
 use iron::headers::ContentType;
 use iron::prelude::*;
 use iron::status::Status;
 use prometheus::{Encoder, HistogramVec, TextEncoder};
-use std::time::{Duration, Instant};
+use std::{
+    borrow::Cow,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 #[cfg(test)]
 use tracing::debug;
 
@@ -30,6 +37,52 @@ pub(super) fn metrics_handler(req: &mut Request) -> IronResult<Response> {
 fn duration_to_seconds(d: Duration) -> f64 {
     let nanos = f64::from(d.subsec_nanos()) / 1e9;
     d.as_secs() as f64 + nanos
+}
+
+/// Request recorder middleware
+///
+/// Looks similar, but *is not* a usable middleware / layer
+/// since we need the route-name.
+///
+/// Can be used like:
+/// ```ignore
+/// get(handler).route_layer(middleware::from_fn(|request, next| async {
+///     request_recorder(request, next, Some("static resource")).await
+/// }))
+/// ```
+pub(crate) async fn request_recorder<B>(
+    request: AxumRequest<B>,
+    next: Next<B>,
+    route_name: Option<&str>,
+) -> impl IntoResponse {
+    let route_name = if let Some(rn) = route_name {
+        Cow::Borrowed(rn)
+    } else if let Some(path) = request.extensions().get::<MatchedPath>() {
+        Cow::Owned(path.as_str().to_string())
+    } else {
+        Cow::Owned(request.uri().path().to_string())
+    };
+
+    let metrics = request
+        .extensions()
+        .get::<Arc<Metrics>>()
+        .expect("metrics missing in request extensions")
+        .clone();
+
+    let start = Instant::now();
+    let result = next.run(request).await;
+    let resp_time = duration_to_seconds(start.elapsed());
+
+    metrics
+        .routes_visited
+        .with_label_values(&[&route_name])
+        .inc();
+    metrics
+        .response_time
+        .with_label_values(&[&route_name])
+        .observe(resp_time);
+
+    result
 }
 
 pub(super) struct RequestRecorder {
