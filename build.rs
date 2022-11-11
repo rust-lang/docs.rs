@@ -191,6 +191,16 @@ fn compile_syntax(out_dir: &Path) -> Result<()> {
         parsing::{SyntaxDefinition, SyntaxSetBuilder},
     };
 
+    if std::fs::metadata("assets/syntaxes").is_err() {
+        let status = std::process::Command::new("git")
+            .args(["submodule", "update", "--init"])
+            .status()
+            .context("attempting to initialize submodules")?;
+        if !status.success() {
+            return Err(anyhow::anyhow!("initializing submodules failed"));
+        }
+    }
+
     fn tracked_add_from_folder(
         builder: &mut SyntaxSetBuilder,
         path: impl AsRef<Path>,
