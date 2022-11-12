@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>Symbol List</string>
+	<key>scope</key>
+	<string>source.asp meta.class.identifier.asp, source.asp meta.method.identifier.asp</string>
+	<key>settings</key>
+	<dict>
+		<key>showInSymbolList</key>
+		<integer>1</integer>
+		<key>symbolTransformation</key>
+		<string><![CDATA[
+			s/(\[[^\]]*\])|\b_\b\s*|\(.*|(\s{2,})/$1(?2 )/g; (?# this ignores anything in square brackets, and:
+			- finds an underscore line continuation character and any whitespace following it, and replaces it with nothing
+			- finds an open paren and anything following it, and replaces it with nothing
+			- collapses multiple spaces into one
+			We don't have to worry about comments, because they are not allowed after an underscore.)
+		]]></string>
+	</dict>
+</dict>
+</plist>

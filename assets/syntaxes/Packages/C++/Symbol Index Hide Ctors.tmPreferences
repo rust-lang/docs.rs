@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>scope</key>
+	<string><![CDATA[(source.c++ | source.objc++) & (meta.class | meta.struct | meta.union) & meta.block entity.name.function.constructor]]></string>
+	<key>settings</key>
+	<dict>
+		<key>showInIndexedSymbolList</key>
+		<integer>0</integer>
+	</dict>
+</dict>
+</plist>

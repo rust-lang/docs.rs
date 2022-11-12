@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>scope</key>
+	<string>source.erlang</string>
+	<key>settings</key>
+	<dict>
+		<key>decreaseIndentPattern</key>
+		<string>^\s*end(?![\w@])</string>
+		<key>increaseIndentPattern</key>
+		<string><![CDATA[(?x:
+			# anything up to a comment sign
+			^[^%]* (
+			# line ends with `->` or `of`
+			(->|(^|[^\w@])of)\s*(%.*)?$ |
+			# line start or word break without `@`
+			(^|[^\w@])
+			# line contains special keyword ...
+			(if|case|receive|after|fun|try|catch|begin|query)(?![\w@])
+			# ... but no `end` found after it
+			(?!.*[^\w@]end(?![\w@]))
+		))]]></string>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,16 @@
+<snippet>
+	<content><![CDATA[/**
+ * $1
+ */
+class ${1:name}
+{
+	this($2)
+	{
+		$0
+	}
+}
+]]></content>
+	<tabTrigger>class</tabTrigger>
+	<scope>source.d</scope>
+	<description>class … { … }</description>
+</snippet>
