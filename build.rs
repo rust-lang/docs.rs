@@ -79,12 +79,7 @@ fn main() -> Result<()> {
     write_git_version(out_dir)?;
     compile_sass(out_dir)?;
     write_known_targets(out_dir)?;
-    compile_syntax(out_dir).context(
-        "\
-            could not compile syntax files\n\n\
-            Note: you may need to run `git submodule update --init`\
-        ",
-    )?;
+    compile_syntax(out_dir).context("could not compile syntax files")?;
     Ok(())
 }
 
@@ -190,16 +185,6 @@ fn compile_syntax(out_dir: &Path) -> Result<()> {
         dumps::dump_to_uncompressed_file,
         parsing::{SyntaxDefinition, SyntaxSetBuilder},
     };
-
-    if std::fs::metadata("assets/syntaxes").is_err() {
-        let status = std::process::Command::new("git")
-            .args(["submodule", "update", "--init"])
-            .status()
-            .context("attempting to initialize submodules")?;
-        if !status.success() {
-            return Err(anyhow::anyhow!("initializing submodules failed"));
-        }
-    }
 
     fn tracked_add_from_folder(
         builder: &mut SyntaxSetBuilder,
