@@ -1,6 +1,0 @@
-[submodule "assets/syntaxes/Packages"]
-	path = assets/syntaxes/Packages
-	url = https://github.com/sublimehq/Packages
-[submodule "assets/syntaxes/Extras/TOML"]
-	path = assets/syntaxes/Extras/TOML
-	url = https://github.com/jasonwilliams/sublime_toml_highlighting
