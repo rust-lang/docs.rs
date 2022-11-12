@@ -1,9 +1,14 @@
 use super::STATIC_FILE_CACHE_DURATION;
 use crate::config::Config;
+use axum::{
+    http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
+};
+use http::header::CACHE_CONTROL;
 use iron::{
     headers::{CacheControl, CacheDirective},
     AfterMiddleware, IronResult, Request, Response,
 };
+use std::sync::Arc;
 
 #[cfg(test)]
 pub const NO_CACHE: &str = "max-age=0";
@@ -110,6 +115,40 @@ impl AfterMiddleware for CacheMiddleware {
         }
         Ok(res)
     }
+}
+
+pub(crate) async fn cache_middleware<B>(req: AxumHttpRequest<B>, next: Next<B>) -> AxumResponse {
+    let config = req
+        .extensions()
+        .get::<Arc<Config>>()
+        .cloned()
+        .expect("missing config extension in request");
+
+    let mut response = next.run(req).await;
+
+    let cache = response
+        .extensions()
+        .get::<CachePolicy>()
+        .unwrap_or(&CachePolicy::NoCaching);
+
+    if cfg!(test) {
+        assert!(
+            !response.headers().contains_key(CACHE_CONTROL),
+            "handlers should never set their own caching headers and only use CachePolicy to control caching."
+        );
+    }
+
+    let directives = cache.render(&config);
+    if !directives.is_empty() {
+        response.headers_mut().insert(
+            CACHE_CONTROL,
+            CacheControl(directives)
+                .to_string()
+                .parse()
+                .expect("cache-control header could not be parsed"),
+        );
+    }
+    response
 }
 
 #[cfg(test)]
