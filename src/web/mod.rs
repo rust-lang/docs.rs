@@ -447,7 +447,8 @@ pub(crate) fn build_axum_app(
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(middleware::from_fn(
                 page::web_page::render_templates_middleware,
-            )),
+            ))
+            .layer(middleware::from_fn(cache::cache_middleware)),
     ))
 }
 
