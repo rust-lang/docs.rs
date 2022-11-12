@@ -10,6 +10,7 @@ use anyhow::Context;
 use crates_index_diff::Change;
 use tracing::{debug, info, warn};
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -93,19 +94,32 @@ impl BuildQueue {
     }
 
     pub(crate) fn pending_count(&self) -> Result<usize> {
-        let res = self.db.get()?.query(
-            "SELECT COUNT(*) FROM queue WHERE attempt < $1;",
-            &[&self.max_attempts],
-        )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        Ok(self.pending_count_by_priority()?.values().sum::<usize>())
     }
 
     pub(crate) fn prioritized_count(&self) -> Result<usize> {
+        Ok(self
+            .pending_count_by_priority()?
+            .iter()
+            .filter(|(&priority, _)| priority <= 0)
+            .map(|(_, count)| count)
+            .sum::<usize>())
+    }
+
+    pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
         let res = self.db.get()?.query(
-            "SELECT COUNT(*) FROM queue WHERE attempt < $1 AND priority <= 0;",
+            "SELECT 
+                priority, 
+                COUNT(*) 
+            FROM queue 
+            WHERE attempt < $1
+            GROUP BY priority",
             &[&self.max_attempts],
         )?;
-        Ok(res[0].get::<_, i64>(0) as usize)
+        Ok(res
+            .iter()
+            .map(|row| (row.get::<_, i32>(0), row.get::<_, i64>(1) as usize))
+            .collect())
     }
 
     pub(crate) fn failed_count(&self) -> Result<usize> {
@@ -651,6 +665,31 @@ mod tests {
                 Ok(())
             })?;
             assert_eq!(queue.prioritized_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_count_by_priority() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            assert!(queue.pending_count_by_priority()?.is_empty());
+
+            queue.add_crate("one", "1.0.0", 1, None)?;
+            queue.add_crate("two", "2.0.0", 2, None)?;
+            queue.add_crate("two_more", "2.0.0", 2, None)?;
+
+            assert_eq!(
+                queue.pending_count_by_priority()?,
+                HashMap::from_iter(vec![(1, 1), (2, 2)])
+            );
+
+            while queue.pending_count()? > 0 {
+                queue.process_next_crate(|_| Ok(()))?;
+            }
+            assert!(queue.pending_count_by_priority()?.is_empty());
 
             Ok(())
         });

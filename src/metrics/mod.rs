@@ -26,6 +26,8 @@ metrics! {
         failed_crates_count: IntGauge,
         /// Whether the build queue is locked
         queue_is_locked: IntGauge,
+        /// queued crates by priority
+        queued_crates_count_by_priority: IntGaugeVec["priority"],
 
         /// The number of idle database connections
         idle_db_connections: IntGauge,
@@ -163,6 +165,15 @@ impl Metrics {
         self.queued_crates_count.set(queue.pending_count()? as i64);
         self.prioritized_crates_count
             .set(queue.prioritized_count()? as i64);
+
+        let queue_pending_count = queue.pending_count_by_priority()?;
+
+        for (priority, count) in queue_pending_count.iter() {
+            self.queued_crates_count_by_priority
+                .with_label_values(&[&priority.to_string()])
+                .set(*count as i64);
+        }
+
         self.failed_crates_count.set(queue.failed_count()? as i64);
 
         self.recently_accessed_releases.gather(self);
