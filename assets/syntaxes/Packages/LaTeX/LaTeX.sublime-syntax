@@ -1,0 +1,1702 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: LaTeX
+file_extensions:
+  - tex
+  - ltx
+scope: text.tex.latex
+contexts:
+  prototype:
+    - include: comments
+
+  main:
+    - include: unique-latex
+    - include: packages
+    - include: plain-tex
+    - include: begin-end-commands
+    - include: general-commands
+    - include: global-braces
+
+  unique-latex:
+    - include: preamble
+    - include: structure
+    - include: includes
+    - include: sections
+    - include: text-decorators
+    - include: footnote
+    - include: references
+    - include: verbatim
+    - include: verb
+    - include: url
+    - include: graphics
+    - include: lists
+
+  plain-tex:
+    - include: macros
+    - include: scope:text.tex#controls
+    - include: scope:text.tex#catcode
+    - include: boxes
+    - include: block-math
+    - include: inline-math
+    - include: general-constants
+
+  comments:
+    - include: scope:text.tex#comments
+
+  global-braces:
+    - match: '\{'
+      scope: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.group.brace.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+
+  # these are used to identify arguments in commands
+  general-optional-arguments:
+    - match: '\['
+      scope: punctuation.definition.group.bracket.begin.latex
+      push:
+        - meta_scope: meta.group.bracket.latex
+        - match: '\]'
+          scope: punctuation.definition.group.bracket.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: global-braces
+        - match: '[A-Za-z[:digit:]-]*(?=\s*\=)'
+          scope: variable.parameter.bracket.latex
+
+  argument-brace:
+    - meta_scope: meta.group.brace.latex
+    - match: '\}'
+      scope: punctuation.definition.group.brace.end.latex
+      pop: true
+    - include: main
+
+  argument:
+    - match: '\{'
+      scope: punctuation.definition.group.brace.begin.latex
+      set: argument-brace
+    - match: '(?=\S)'
+      pop: true
+
+  optional-arguments:
+    - include: general-optional-arguments
+    - match: '(?=\S)'
+      pop: true
+
+  # used in macros to prevent matching of \begin{env}...\end{env}
+  macro-braces:
+    - match: '\{'
+      scope: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.group.brace.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+  macros:
+    - include: scope:text.tex#macros
+    - match: |-
+        (?x)
+        (
+          (\\)
+          (?:(?:re)?newcommand\*?)
+        )
+        (?:
+          (\{)(\\[A-Za-z@]+)(\})
+          | (\\[A-Za-z@])+
+        )
+        (?:(\[)(?:[^\]]*)(\]))*
+        (\{)
+      captures:
+        1: support.function.newcommand.latex storage.modifier.newcommand.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: support.function.latex entity.name.newcommand.latex
+        5: punctuation.definition.group.brace.end.latex
+        6: support.function.latex
+        7: punctuation.definition.group.bracket.begin.latex
+        8: punctuation.definition.group.bracket.end.latex
+        9: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.newcommand.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+    - match: |-
+        (?x)
+        (
+          (\\)
+          DeclareMathOperator\*?
+        )
+        (?:
+          (\{)(\\[A-Za-z@]+)(\})
+          | (\\[A-Za-z@])+
+        )
+        (?:(\[)(?:[^\]]*)(\]))?
+        (\{)
+      captures:
+        1: support.function.declare-math-operator.latex storage.modifier.declare-math-operator.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: support.function.latex entity.name.declare-math-operator.latex
+        5: punctuation.definition.group.brace.end.latex
+        6: support.function.latex
+        7: punctuation.definition.group.bracket.begin.latex
+        8: punctuation.definition.group.bracket.end.latex
+        9: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.declare-math-operator.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+  general-constants:
+    - match: '(\\\\)(?:(\[)\s*-?((?:[[:digit:]]|\.)*)\s*(\w*)\s*(\]))?'
+      captures:
+        1: constant.character.newline.latex
+        2: punctuation.definition.group.bracket.begin.newline.latex
+        3: constant.numeric.newline.latex
+        4: keyword.other.newline.latex
+        5: punctuation.definition.group.bracket.begin.newline.latex
+    - include: scope:text.tex#general-constants
+
+  general-commands:
+    - match: '(\\)[A-Za-z@]+'
+      scope: support.function.general.latex
+      captures:
+        1: punctuation.definition.backslash.latex
+
+  boxes:
+    - match: '((\\)[hvmf]box)\s*(\{)'
+      captures:
+        1: support.function.box.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.box.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)(?:framebox|makebox))\b'
+      captures:
+        1: support.function.box.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - [{meta_scope: meta.function.box.latex}, {match: '', pop: true}]
+        - argument
+        - optional-arguments
+    - match: '((\\)parbox)\b'
+      captures:
+        1: support.function.box.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - [{meta_scope: meta.function.box.latex}, {match: '', pop: true}]
+        - argument
+        - argument
+        - optional-arguments
+    - match: '((\\)raisebox)\b'
+      captures:
+        1: support.function.box.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - [{meta_scope: meta.function.box.latex}, {match: '', pop: true}]
+        - argument
+        - optional-arguments
+
+  preamble:
+    - match: '(\\)documentclass\b'
+      captures:
+        0: keyword.control.preamble.latex
+        1: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.preamble.documentclass.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_scope: meta.preamble.documentclass.latex meta.group.brace.latex
+            - match: '[A-Za-z[:digit:]-]'
+              scope: support.class.latex
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              pop: true
+        - match: ''
+          pop: true
+
+    - match: '(\\)usepackage\b'
+      captures:
+        0: keyword.control.preamble.latex
+        1: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.preamble.usepackage.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_scope: meta.preamble.usepackage.latex meta.group.brace.latex
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              pop: true
+            - match: '[A-Za-z[:digit:]-]*'
+              scope: support.class.latex
+        - match: ''
+          pop: true
+
+  includes:
+    - match: '((\\)(?:include|includeonly))(\{)'
+      scope: meta.function.include.latex
+      captures:
+        1: keyword.control.include.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.include.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+
+  sections:
+    - match: |-
+        (?x)
+        (
+          (\\)
+          (?:
+            (?:sub){0,2}section
+            | (?:sub)?paragraph
+            | chapter|part|addpart
+            | addchap|addsec|minisec
+          )
+          (?:\*)?
+        )
+        (?:
+          (\[)([^\[]*?)(\])               # optional Title
+        )?
+        (\{)
+      captures:
+        1: support.function.section.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: entity.name.section.latex
+        5: punctuation.definition.group.brace.end.latex
+        6: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.section.latex
+        - meta_content_scope: entity.name.section.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+
+  structure:
+    - match: ((\\)(?:frontmatter|mainmatter|backmatter|appendix|printindex))\b
+      captures:
+        1: keyword.control.latex
+        2: punctuation.definition.backslash.latex
+
+  verbatim:
+    - match: '((\\)begin)(\{)\s*((?:[vV]erbatim|alltt)\*?)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.environment.verbatim.verbatim.latex
+        - meta_content_scope: markup.raw.verbatim.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+
+  lists:
+    - match: '((\\)begin)(\{)\s*(itemize\*?)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.list.itemize.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)begin)(\{)\s*(enumerate\*?)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.list.enumerate.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)begin)(\{)\s*(list\*?)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.list.list.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)begin)(\{)\s*(description\*?)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.list.description.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+
+  math-braces:
+    - match: '\{'
+      scope: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.group.brace.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: math-content
+
+  math-content:
+    # unique to latex
+    - include: verb
+    - include: text-decorators
+    - include: references
+    - include: begin-end-commands
+    # extended from tex
+    - include: scope:text.tex#greeks
+    - include: scope:text.tex#math-brackets
+    - include: math-braces
+    - include: boxes
+    - include: scope:text.tex#math-commands
+    - include: scope:text.tex#math-operators
+    - include: scope:text.tex#math-characters
+    - include: scope:text.tex#math-numerics
+    - include: general-constants
+    - match: (?=\})
+      pop: true
+
+  inline-math:
+    - match: \$
+      scope: string.other.math.latex punctuation.definition.string.begin.latex
+      push:
+        - meta_scope: meta.environment.math.inline.dollar.latex
+        - match: \$
+          scope: string.other.math.latex punctuation.definition.string.end.latex
+          pop: true
+        - include: math-content
+    - match: '((\\)ensuremath)(\{)'
+      captures:
+        1: support.function.ensuremath.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.ensuremath.latex
+        - meta_content_scope: meta.environment.math.inline.ensuremath.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: math-content
+
+    - match: (\\\()
+      scope: string.other.math.latex
+      captures:
+        1: punctuation.definition.string.begin.latex
+      push:
+        - meta_scope: meta.environment.math.inline.paren.latex
+        - match: (\\\))
+          scope: string.other.math.latex punctuation.definition.string.end.latex
+          pop: true
+        - include: math-content
+
+  block-math:
+    - match: \$\$
+      scope: string.other.math.latex punctuation.definition.string.begin.latex
+      push:
+        - meta_scope: meta.environment.math.block.dollar.latex
+        - match: \$\$
+          scope: string.other.math.latex punctuation.definition.string.end.latex
+          pop: true
+        - include: math-content
+
+    - match: '(\\\[)'
+      scope: string.other.math.latex punctuation.definition.string.begin.latex
+      push:
+        - meta_scope: meta.environment.math.block.bracket.latex
+        - match: '(\\\])'
+          scope: string.other.math.latex punctuation.definition.string.end.latex
+          pop: true
+        - include: math-content
+
+    - match: |-
+        (?x)
+        ((\\)begin)(\{)\s*((?:
+          align|alignat|aligned|alignedat|displaymath
+          |eqnarray|equation|flalign|gather|gathered
+          |math|multline|x?xalignat|split
+          |dmath|dseries|dgroup|darray|dsuspend
+        )\*?)\s*(\})
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_content_scope: meta.environment.math.block.be.latex
+        - match: '((\\)end)(\{)\s*(\4)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.begin.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: math-content
+
+  graphics:
+    - match: '((\\)includegraphics)\b'
+      captures:
+        1: support.function.includegraphics.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - [{meta_scope: meta.function.includegraphics.latex}, {match: '', pop: true}]
+        - argument
+        - optional-arguments
+
+  url:
+    - match: '((\\)(?:url|href|path))(\{)([^}]*)(\})'
+      scope: meta.function.link.url.latex
+      captures:
+        1: support.function.url.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: markup.underline.link.latex
+        5: punctuation.definition.group.brace.end.latex
+
+  verb:
+    - match: ((\\)verb)(\W)
+      captures:
+        1: support.function.verb.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.verb.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.environment.verbatim.verb.latex
+        - meta_content_scope: markup.raw.verb.latex
+        - match: '\3'
+          scope: punctuation.definition.verb.latex
+          pop: true
+
+
+  text-decorators:
+    - match: '((\\)emph)(\{)'
+      captures:
+        1: support.function.emph.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.emph.latex
+        - meta_content_scope: markup.italic.emph.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)textit)(\{)'
+      captures:
+        1: support.function.textit.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.textit.latex
+        - meta_content_scope: markup.italic.textit.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)textbf)(\{)'
+      captures:
+        1: support.function.textbf.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.textbf.latex
+        - meta_content_scope: markup.bold.textbf.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)texttt)(\{)'
+      captures:
+        1: support.function.texttt.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.texttt.latex
+        - meta_content_scope: markup.raw.texttt.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)textsl)(\{)'
+      captures:
+        1: support.function.textsl.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.textsl.latex
+        - meta_content_scope: markup.italic.textsl.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)text)(\{)'
+      captures:
+        1: support.function.text.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+    - match: '((\\)underline)(\{)'
+      captures:
+        1: support.function.text.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.underline.latex
+        - meta_content_scope: markup.underline.underline.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: main
+
+  footnote:
+    - match: ((\\)footnote(?:text)?)\b
+      captures:
+        1: support.function.footnote.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.function.footnote.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_scope: meta.function.footnote.latex meta.group.brace.latex
+            - meta_content_scope: markup.italic.footnote.latex
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              pop: true
+            - include: main
+        - match: '(?=\S)'
+          pop: true
+    - match: |-
+        (?x)
+        ((\\)footnotemark)\b
+      captures:
+        1: support.function.footnote.latex
+        2: punctuation.definition.backslash.latex
+      push: optional-arguments
+
+  references:
+    - match: |-
+        (?x)
+        (\\)
+        (?:
+          # biblatex commands
+          #   http://mirrors.ibiblio.org/CTAN/macros/latex/exptl/biblatex/doc/biblatex.pdf section 3.8
+          # commands with multicite variant
+            (?:[aA]uto|foot|[pP]aren|[sS]mart|super|[tT]ext)cites?
+          | [Cc]ites?
+          | footcitetexts?
+          # text commands
+          | [cC]ite(?:author)
+          | cite(?:title|year|date)
+          | citeurl
+          # special
+          | (?:[aA]|no|full|footfull)cites?
+          | [vV]olcites?
+          | (?:[pPfFsStTaA]|ft)volcites?
+          | (?:[pPf]?n|N)otecite
+          # non-biblatex
+          | [aA]cite
+          | [cC]ite(?:t|p|alt|alp|text|yearpar)
+        )\b
+        # For simplicity with using \b, we match a star for all variants
+        \*?
+      scope: support.function.cite.latex keyword.other.cite.latex
+      captures:
+        1: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.function.citation.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          # Some commands, e.g. \parencites, allow multiple [][]{} argument sequences,
+          # so we `push` instead of `set`.
+          push:
+            - meta_scope: meta.group.brace.latex
+            - match: '[a-zA-Z0-9\.:/*!^_-]+'
+              scope: constant.other.citation.latex
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              pop: true
+        - match: ''
+          pop: true
+    - match: |-
+        (?x)
+        (
+          (\\)
+          (?:eq|c?page|[vV]|auto|name|[cC])?ref
+          \*?
+        )\b
+      captures:
+        1: support.function.reference.latex keyword.other.reference.latex
+        2: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.function.reference.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_scope: meta.function.reference.latex meta.group.brace.latex
+            - match: '[a-zA-Z0-9\.:/*!^_-]+'
+              scope: constant.other.reference.latex
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              pop: true
+        - match: ''
+          pop: true
+    - match: '((\\)label)(\{)'
+      captures:
+        1: support.function.label.latex storage.type.label.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.label.latex
+        - match: '[a-zA-Z0-9\.:/*!^_-]+'
+          scope: entity.name.label.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+
+  begin-end-commands:
+    - match: '((\\)begin)(\{)\s*(\w*)\*?\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - include: general-optional-arguments
+        - match: ''
+          pop: true
+    - match: '((\\)end)(\{)\s*(\w*)\*?\s*(\})'
+      captures:
+        1: support.function.end.latex keyword.control.flow.end.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+
+  # external packages
+  packages:
+    - include: pkglistings
+    - include: minted
+    - include: pkgcomment
+    - include: beamer
+    - include: pkgarray
+
+  # listings package
+  pkglistings:
+    - match: (\\)lstinline\b
+      captures:
+        0: support.function.lstinline.latex
+        1: punctuation.definition.backslash.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.environment.verbatim.lstinline.latex
+        - include: general-optional-arguments
+        - match: '\{'
+          scope: punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_include_prototype: false
+            - meta_scope: meta.group.brace.latex
+            - meta_content_scope: meta.environment.verbatim.lstinline.latex markup.raw.verb.latex
+            - match: '\}'
+              scope: meta.environment.verbatim.lstinline.latex punctuation.definition.group.brace.end.latex
+              pop: true
+        - match: '(\W)'
+          scope: punctuation.definition.verb.latex
+          set:
+            - meta_include_prototype: false
+            - meta_content_scope: meta.environment.verbatim.lstinline.latex markup.raw.verb.latex
+            - match: '\1'
+              scope: meta.environment.verbatim.lstinline.latex punctuation.definition.verb.latex
+              pop: true
+
+    - match: ((\\)begin)(\{)(lstlisting)(\})
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.environment.verbatim.lstlisting.latex
+        - match: '((\\)end)(\{)(lstlisting)(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.end.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-optional-arguments
+        - match: '.*(%\s*(?i:c))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.c
+          embed_scope: meta.environment.embedded.c.latex source.c.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:cpp|c\+\+))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.c++
+          embed_scope: meta.environment.embedded.c++.latex source.c++.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:haskell|hs))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.haskell
+          embed_scope: meta.environment.embedded.haskell.latex source.haskell.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:java))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.java
+          embed_scope: meta.environment.embedded.java.latex source.java.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:html))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:text.html.basic
+          embed_scope: meta.environment.embedded.html.latex source.html.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:tex|latex))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:text.tex.latex
+          embed_scope: meta.environment.embedded.latex.latex source.latex.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:lisp))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.lisp
+          embed_scope: meta.environment.embedded.lisp.latex source.lisp.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:lua))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.lua
+          embed_scope: meta.environment.embedded.lua.latex source.lua.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:perl))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.perl
+          embed_scope: meta.environment.embedded.perl.latex source.perl.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:php))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.php
+          embed_scope: meta.environment.embedded.php.latex source.php.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:python|py))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.python
+          embed_scope: meta.environment.embedded.python.latex source.python.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:r))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.r
+          embed_scope: meta.environment.embedded.r.latex source.r.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:ruby))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.ruby
+          embed_scope: meta.environment.embedded.ruby.latex source.ruby.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:sh|shell|bash ))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.shell
+          embed_scope: meta.environment.embedded.shell.latex source.shell.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:sql|mysql|ddl|dml))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.sql
+          embed_scope: meta.environment.embedded.sql.latex source.sql.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:xml))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:text.xml
+          embed_scope: meta.environment.embedded.xml.latex source.xml.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: '.*(%\s*(?i:yaml))$'
+          captures:
+            1: comment.line.percentage.latex
+          embed: scope:source.yaml
+          embed_scope: meta.environment.embedded.yaml.latex source.yaml.embedded
+          escape: '(?=\\end\{lstlisting\})'
+        - match: ''
+          push:
+            - meta_scope: meta.environment.embedded.generic.latex markup.raw.verb.latex
+            - match: '(?=\\end\{lstlisting\})'
+              pop: true
+
+  minted:
+    - include: minted-env
+    - include: mint
+
+  minted-env:
+    - match: ((\\)begin)(\{)(minted)(\})
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.environment.verbatim.minted.latex
+        - match: '((\\)end)(\{)(minted)(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.end.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-optional-arguments
+        - match: '(\{)(c)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.c
+          embed_scope: meta.environment.embedded.c.latex source.c.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(cpp|c\+\+)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.c++
+          embed_scope: meta.environment.embedded.c++.latex source.c++.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(diff)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.diff
+          embed_scope: meta.environment.embedded.diff.latex source.diff.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(go|golang)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.go
+          embed_scope: meta.environment.embedded.go.latex source.go.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(haskell|hs)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.haskell
+          embed_scope: meta.environment.embedded.haskell.latex source.haskell.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(html)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:text.html.basic
+          embed_scope: meta.environment.embedded.html.latex text.html.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(java)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.java
+          embed_scope: meta.environment.embedded.java.latex source.java.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(javascript|js)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.js
+          embed_scope: meta.environment.embedded.js.latex source.js.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(json)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.json
+          embed_scope: meta.environment.embedded.json.latex source.json.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(tex|latex)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:text.tex.latex
+          embed_scope: meta.environment.embedded.latex.latex text.tex.latex.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(lisp)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.lisp
+          embed_scope: meta.environment.embedded.lisp.latex source.lisp.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(lua)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.lua
+          embed_scope: meta.environment.embedded.lua.latex source.lua.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(obj(?:ective\-|)c)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.objc
+          embed_scope: meta.environment.embedded.objc.latex source.objc.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(obj(?:ective\-|)c\+\+)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.objc++
+          embed_scope: meta.environment.embedded.objc++.latex source.objc++.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(perl)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.perl
+          embed_scope: meta.environment.embedded.perl.latex source.perl.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(php)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.php
+          embed_scope: meta.environment.embedded.php.latex source.php.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(python|py)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.python
+          embed_scope: meta.environment.embedded.python.latex source.python.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(r)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.r
+          embed_scope: meta.environment.embedded.r.latex source.r.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(ruby)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.ruby
+          embed_scope: meta.environment.embedded.ruby.latex source.ruby.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(sh|shell|bash )(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.shell
+          embed_scope: meta.environment.embedded.shell.latex source.shell.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(sql|mysql|ddl|dml)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.sql
+          embed_scope: meta.environment.embedded.sql.latex source.sql.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(xml)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:text.xml
+          embed_scope: meta.environment.embedded.xml.latex text.xml.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: '(\{)(yaml)(\})'
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+          embed: scope:source.yaml
+          embed_scope: meta.environment.embedded.yaml.latex source.yaml.embedded
+          escape: '(?=\\end\{minted\})'
+        - match: ''
+          push:
+            - meta_scope: meta.environment.embedded.generic.latex markup.raw.verb.latex
+            - match: '(?=\\end\{minted\})'
+              pop: true
+
+  mint:
+    - match: ((\\)mint)\b|((\\)mintinline)\b
+      captures:
+        1: support.function.mint.latex
+        2: punctuation.definition.backslash.latex
+        3: support.function.mintinline.latex
+        4: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.environment.verbatim.minted.latex
+        - include: general-optional-arguments
+        - match: '(\{)(c)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.c
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.c.latex source.c.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(cpp|c\+\+)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.c++
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.c++.latex source.c++.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(diff)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.diff
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.diff.latex source.diff.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(go|golang)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.go
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.go.latex source.go.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(haskell|hs)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.haskell
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.haskell.latex source.haskell.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(html)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:text.html.basic
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.html.latex text.html.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(java)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.java
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.java.latex source.java.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(javascript|js)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.js
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.js.latex source.js.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(json)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.json
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.json.latex source.json.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(tex|latex)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:text.tex.latex
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.latex.latex text.tex.latex.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(lisp)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.lisp
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.lisp.latex source.lisp.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(lua)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.lua
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.lua.latex source.lua.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(obj(?:ective\-|)c)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.objc
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.objc.latex source.objc.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(obj(?:ective\-|)c\+\+)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.objc++
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.objc++.latex source.objc++.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(perl)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.perl
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.perl.latex source.perl.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(php)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.php
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.php.latex source.php.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(python|py)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.python
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.python.latex source.python.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(r)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.r
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.r.latex source.r.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(ruby)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.ruby
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.ruby.latex source.ruby.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(sh|shell|bash )(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.shell
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.shell.latex source.shell.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(sql|mysql|ddl|dml)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.sql
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.sql.latex source.sql.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(xml)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:text.xml
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.xml.latex text.xml.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: '(\{)(yaml)(\})((\{)|(\W))'
+          scope: meta.environment.verbatim.minted.latex
+          captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: variable.parameter.function.latex
+            3: punctuation.definition.group.brace.end.latex
+            5: punctuation.definition.group.brace.begin.latex
+            6: punctuation.definition.verb.latex
+          embed: scope:source.yaml
+          embed_scope: meta.environment.verbatim.minted.latex meta.environment.embedded.yaml.latex source.yaml.embedded
+          escape: '(\})|(\4)'
+          escape_captures:
+            1: punctuation.definition.group.brace.begin.latex
+            2: punctuation.definition.verb.latex
+        - match: ''
+          pop: true
+
+  # comment package
+  pkgcomment:
+    - match: '^(\\)comment\b'
+      captures:
+        0: punctuation.definition.comment.start.latex
+        1: punctuation.definition.backslash.latex
+      push:
+        - meta_scope: meta.environment.comment.latex comment.block.command.comment.latex
+        - match: '^(\\)endcomment\b'
+          captures:
+            0: punctuation.definition.comment.end.latex
+            1: punctuation.definition.backslash.latex
+          pop: true
+    - match: '((\\)begin)(\{)\s*(comment)\s*(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.comment.latex
+        - meta_content_scope: comment.block.environment.comment.latex
+        - match: '((\\)end)(\{)\s*(comment)\s*(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.end.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+
+  # beamer support
+  beamer:
+    - match: '((\\)begin)(\{)(frame)(\})'
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+      push:
+        - meta_scope: meta.environment.frame.latex
+        - match: '((\\)end)(\{)(frame)(\})'
+          captures:
+            1: support.function.end.latex keyword.control.flow.end.latex
+            2: punctuation.definition.backslash.latex
+            3: punctuation.definition.group.brace.begin.latex
+            4: variable.parameter.function.latex
+            5: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: frametitles
+        - include: main
+
+  frametitles:
+    - match: '((\\)frametitle)(\{)(.*)(\})'
+      scope: meta.function.frametitle.latex
+      captures:
+       1: support.function.frametitle.latex
+       2: punctuation.definition.backslash.latex
+       3: punctuation.definition.group.brace.begin.latex
+       4: entity.name.function.frame.latex
+       5: punctuation.definition.group.brace.end.latex
+
+  # support for array package
+  pkgarray:
+    - match: |-
+        (?x)
+        (
+          (\\)newcolumntype
+        )
+        (?:
+          (\{)
+          (
+            (?:\\[A-Za-z@]+)
+            | (?:[A-Za-z@])
+          )
+          (\})
+        )
+        (?:(\[)(?:[^\]]*)(\]))*
+        (\{)
+      captures:
+        1: support.function.newcolumntype.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: support.function.latex entity.name.newcolumntype.latex
+        5: punctuation.definition.group.brace.end.latex
+        6: punctuation.definition.group.bracket.begin.latex
+        7: punctuation.definition.group.bracket.end.latex
+        8: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_include_prototype: false
+        - meta_scope: meta.function.newcolumntype.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: array-preamble
+
+
+    - match: |-
+        (?x)
+        ((\\)begin)(\{)(tabular)(\})
+        (?:(\[)(?:b|c|t)(\]))?
+        (?=\s*\{)
+      captures:
+        1: support.function.begin.latex keyword.control.flow.begin.latex
+        2: punctuation.definition.backslash.latex
+        3: punctuation.definition.group.brace.begin.latex
+        4: variable.parameter.function.latex
+        5: punctuation.definition.group.brace.end.latex
+        6: punctuation.definition.group.bracket.begin.latex
+        7: punctuation.definition.group.bracket.end.latex
+      push:
+        - meta_scope: meta.environment.tabular.latex
+        - match: '\{'
+          scope: meta.function.column-spec.latex punctuation.definition.group.brace.begin.latex
+          set:
+            - meta_content_scope: meta.environment.tabular.latex meta.function.column-spec.latex
+            - include: array-preamble
+            - match: '\}'
+              scope: punctuation.definition.group.brace.end.latex
+              set:
+                - meta_content_scope: meta.environment.tabular.latex
+                - match: '((\\)end)(\{)(tabular)(\})'
+                  scope: meta.environment.tabular.latex
+                  captures:
+                    1: support.function.end.latex keyword.control.flow.end.latex
+                    2: punctuation.definition.backslash.latex
+                    3: punctuation.definition.group.brace.begin.latex
+                    4: variable.parameter.function.latex
+                    5: punctuation.definition.group.brace.end.latex
+                  pop: true
+                - include: main
+
+
+  array-preamble:
+    - match: '\{'
+      scope: punctuation.definition.group.brace.begin.latex
+      push:
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: array-preamble
+
+    - match: 'l|r|c'
+      scope: keyword.other.column-type.latex
+
+    - match: '(?:p|m|b)(?=\s*\{)'
+      scope: support.function.parbox-column.latex
+      push:
+        - [{meta_scope: meta.function.parbox-column.latex}, {match: '', pop: true}]
+        - argument
+
+    - match: '(>)\s*(\{)'
+      captures:
+        1: support.function.insert-before-column.latex
+        2: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.before-column-decl.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+    - match: '(<)\s*(\{)'
+      captures:
+        1: support.function.insert-after-column.latex
+        2: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.after-column-decl.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+    - match: '\|'
+      scope: keyword.operator.inter-column-line.latex
+
+    - match: '(@)\s*(\{)'
+      captures:
+        1: support.function.inter-column-nospace.latex
+        2: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.inter-column-decl.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+    - match: '(!)\s*(\{)'
+      captures:
+        1: support.function.inter-column.latex
+        2: punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_scope: meta.function.inter-column-decl.latex
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          pop: true
+        - include: general-constants
+        - include: general-commands
+        - include: macro-braces
+
+    - match: '(\*)\s*(\{)'
+      captures:
+        1: support.function.insert-repeated.latex
+        2: meta.function.insert-repeated-count.latex punctuation.definition.group.brace.begin.latex
+      push:
+        - meta_content_scope: meta.function.insert-repeated-count.latex
+        - match: '\d+'
+          scope: constant.numeric.array-count.latex
+        - include: general-commands
+        - match: '\}'
+          scope: punctuation.definition.group.brace.end.latex
+          set:
+            - match: '\{'
+              scope: meta.function.insert-repeated-content.latex punctuation.definition.group.brace.begin.latex
+              set:
+                - meta_content_scope: meta.function.insert-repeated-content.latex
+                - include: array-preamble
+                - match: '\}'
+                  scope: meta.function.insert-repeated-content.latex punctuation.definition.group.brace.end.latex
+                  pop: true
+            - match: ''
+              pop: true

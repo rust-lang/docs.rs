@@ -1,0 +1,639 @@
+## SYNTAX TEST "Packages/HTML/HTML.sublime-syntax"
+<?xml version="1.0" encoding="utf-8"?>
+## <- meta.tag.preprocessor punctuation.definition.tag.begin
+##^^^entity.name.tag.xml
+##                                   ^ punctuation.definition.tag.end
+<!DOCTYPE html SYSTEM "html5.dtd" [ <!-- comment -->
+## <- meta.tag.sgml.doctype punctuation.definition.tag.begin
+##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.sgml.doctype
+##^^^^^^^ keyword.declaration.doctype
+##        ^^^^ constant.language.doctype
+##             ^^^^^^ keyword.content.external
+##                    ^^^^^^^^^^^ string.quoted.double
+##                                ^ meta.brackets meta.internal-subset punctuation.section.brackets.begin
+##                                  ^^^^^^^^^^^^^^^^ comment.block
+##                                  ^^^^ punctuation.definition.comment.begin
+##                                               ^^^ punctuation.definition.comment.end
+    <!ENTITY name "&#160;">;
+##  ^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.sgml.doctype meta.brackets meta.internal-subset
+]>
+## <- meta.tag.sgml.doctype meta.brackets meta.internal-subset punctuation.section.brackets.end
+<html>
+    <head>
+        <title>Test HTML</title>
+
+        <script> <!--
+        ## ^^^^^ meta.tag.script.begin.html
+        ## ^ entity.name.tag.script - source.js.embedded.html
+        ##       ^^^^ comment.block.html punctuation.definition.comment.begin.html
+            var foo = 100;
+            var baz = function() {
+                ## <- entity.name.function.js
+            }
+
+            (a --> b);
+            ## ^^^ source.js.embedded.html meta.group.js keyword.operator
+        --> </script>
+        ## <- comment.block.html punctuation.definition.comment.end.html
+        ##    ^^^^^^ entity.name.tag.script.html
+        ##  ^^^^^^^^^ meta.tag.script.end.html - source.js.embedded.html
+        ##           ^ - meta.tag
+
+        <script type="text/javascript"> <!--
+        ## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.script.begin.html
+        ## ^ entity.name.tag.script - source.js.embedded.html
+        ##            ^ string.quoted.double.html - source.js.embedded.html
+        ##                              ^^^^ comment.block.html punctuation.definition.comment.begin.html
+            var foo = 100;
+            var baz = function() {
+                ## <- entity.name.function.js
+            }
+
+            (a --> b);
+            ## ^^^ source.js.embedded.html meta.group.js keyword.operator
+        --> </script>
+        ## <- comment.block.html punctuation.definition.comment.end.html
+        ##    ^^^^^^ entity.name.tag.script.html
+        ##  ^^^^^^^^^ meta.tag.script.end.html - source.js.embedded.html
+        ##           ^ - meta.tag
+
+        <script
+        type
+        =
+        application/jAvAsCrIpT>
+            var foo = 100;
+        ##  ^^^^^^^^^^^^^^^ source.js.embedded
+        </script>
+
+        <script type = "text/html"> <!--
+        ## ^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.script.begin.html
+        ## ^ entity.name.tag.script - text.html.embedded.html
+        ##             ^ string.quoted.double.html - text.html.embedded.html
+        ##                          ^^^^ comment.block.html punctuation
+            comment -->
+        ##  ^^^^^^^^^^^ text.html.embedded.html comment.block.html
+            <div></div>
+        ##  ^^^^^^^^^^^ text.html.basic text.html.embedded meta.tag.block.any
+            <script type=text/javascript>
+        ##  ^ text.html.basic text.html.embedded.html - source.js.embedded.html
+                function test() {}
+        ##  ^ text.html.basic text.html.embedded.html source.js.embedded.html
+            </script>
+        ##  ^^^^^^^^^ text.html.basic text.html.embedded.html meta.tag.script.end
+        </script>
+##     ^ text.html.basic text.html.embedded.html
+##      ^^^^^^^^^ text.html.basic - text.html.embedded.html meta.tag.script.end
+##               ^ text.html.basic - text.html.embedded.html
+
+        <script>42</script >
+##      ^^^^^^^^ meta.tag.script.begin
+##              ^^ source.js.embedded
+##                ^^^^^^^^^^ meta.tag.script.end
+
+        <script
+        type
+        =
+        'other'
+        >
+            var foo = 100;
+        ##  ^^^^^^^^^^^^^^^ - source.js
+        </script>
+
+        <style type="text/css">
+        ## ^^^^^^^^^^^^^^^^^^^^ meta.tag.style.begin.html
+        ## ^ entity.name.tag.style.html
+        ## ^^^^^^^^^^^^^^^^^^^^ - source.css.embedded.html
+        ##      ^ entity.other.attribute-name
+        ##                     ^ - meta.tag
+            h2 {
+            ## <- entity.name.tag.css
+## <- source.css.embedded.html
+                font-family: "Arial";
+                ##             ^ string.quoted.double.css
+            }
+        </style>
+        ##^^^^^ entity.name.tag.style.html
+        ##<- meta.tag.style.end.html - source.css.embedded.html
+        ##^^^^^^ meta.tag.style.end.html - source.css.embedded.html
+        ##      ^ - meta.tag
+
+        <style
+        type
+        =
+        text/css>
+            div {}
+        ##  ^^^^^^ source.css.embedded
+        </style>
+
+        <style
+        type
+        =
+        text/csss>
+            div {}
+        ##  ^^^^^^ - source.css
+        </style>
+
+        <style />
+        ##       ^ - source.css.embedded.html
+        ## ^ meta.tag.style entity.name.tag.style
+        <script />
+        ##        ^ - source.js.embedded.html
+        ## ^ meta.tag.script entity.name.tag.script
+    </head>
+    <body>
+
+     <![CDATA[<!DOCTYPE catalog plist "dtd">]]>
+##   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.sgml.cdata
+##   ^^^ punctuation.definition.tag.begin
+##      ^^^^^ keyword.declaration.cdata
+##           ^ punctuation.definition.tag.begin
+##            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.unquoted.cdata
+##                                          ^ - string.unquoted.cdata
+##                                          ^^^ punctuation.definition.tag.end
+     <![CDATA[
+##   ^^^^^^^^^^ meta.tag.sgml.cdata
+##   ^^^ punctuation.definition.tag.begin
+##      ^^^^^ keyword.declaration.cdata
+##           ^ punctuation.definition.tag.begin
+        <!DOCTYPE catalog plist "dtd">
+##      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.unquoted.cdata
+    ]]>
+##  ^ - string.unquoted.cdata
+##  ^^^ punctuation.definition.tag.end
+
+     <![CDATA[
+        <![CDATA[ unparsed! ]]>
+##      ^^^^^^^^^^^^^^^^^^^^ string.unquoted.cdata
+##      ^^^ - punctuation.definition.tag.begin
+##         ^^^^^ - keyword.declaration.cdata
+##              ^ - punctuation.definition.tag.begin
+##                          ^^^ punctuation.definition.tag.end
+    ]]>
+##  ^^^ - punctuation.definition.tag.end - illegal
+
+    <code>]]></code>
+##        ^^^ - punctuation.definition.tag.end - illegal
+
+        <!-- Comment -->
+##      ^^^^^^^^^^^^^^^^ comment.block.html
+##      ^^^^ punctuation.definition.comment.begin.html
+##                   ^^^ punctuation.definition.comment.end.html
+##          ^^^^^^^^^ - punctuation
+
+        <!----- hyphens - -- --- -->
+##      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block - invalid.illegal.bad-comments-or-CDATA
+
+        <!-->-- hyphens <!-- --!> <!--->
+##      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block
+##          ^ invalid.illegal.bad-comments-or-CDATA
+##                      ^^^^ invalid.illegal.bad-comments-or-CDATA
+##                           ^^^^ invalid.illegal.bad-comments-or-CDATA
+##                                ^^^ invalid.illegal.bad-comments-or-CDATA
+
+        <!--->- hyphens <!-   -!> <!-->
+##      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block
+##          ^^ invalid.illegal.bad-comments-or-CDATA
+##                      ^^^^^^^^^^^^^^^ - invalid.illegal.bad-comments-or-CDATA
+
+        <script type=html/text/>
+        ##     ^ - meta.attribute-with-value
+        ##      ^^^^ entity.other.attribute-name
+        ##      ^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##           ^^^^^^^^^ string.unquoted
+        ##                    ^^ punctuation.definition.tag.end.html
+
+        <img title/>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##   ^^^^^ meta.attribute-with-value
+        ##        ^^ punctuation.definition.tag.end.html
+
+        <img src=//>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^ entity.other.attribute-name
+        ##   ^^^^^ meta.attribute-with-value
+        ##       ^ string.unquoted.html
+        ##        ^^ punctuation.definition.tag.end.html
+
+        <img src=/f̱oo⏡/bar/baz//>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^ entity.other.attribute-name
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##       ^^^^^^^^^^^^^^^ string.unquoted
+        ##                      ^^ punctuation.definition.tag.end.html
+
+        <img src=/f̱oo⏡/bar/baz/ />
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^ entity.other.attribute-name
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##       ^^^^^^^^^^^^^^^ string.unquoted
+        ##                      ^ - meta.attribute-with-value
+        ##                       ^^ punctuation.definition.tag.end.html
+
+        <img title=foo"/>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##   ^^^^^^^^^^ meta.attribute-with-value
+        ##         ^^^^ string.unquoted.html
+        ##            ^ invalid.illegal.attribute-value.html
+        ##             ^^ punctuation.definition.tag.end.html
+
+        <img title=/f̱oo⏡/"bar"/baz//>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##   ^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##         ^^^^^^^^^^^^^^^^^ string.unquoted.html
+        ##                ^ invalid.illegal.attribute-value.html
+        ##                    ^ invalid.illegal.attribute-value.html
+        ##                          ^^ punctuation.definition.tag.end.html
+
+        <div title=description></div>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##   ^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##         ^^^^^^^^^^^ string.unquoted
+
+<div
+title="description"></div>
+## <- entity.other.attribute-name
+
+<div
+title = "description"></div>
+## <- entity.other.attribute-name
+##    ^ punctuation.separator.key-value.html
+##      ^^^^^^^^^^^^^ string
+
+<div title=
+    "description"></div>
+##  ^^^^^^^^^^^^^ string
+
+<div title
+    ="description"></div>
+##  ^ punctuation.separator.key-value
+##   ^^^^^^^^^^^^^ string
+
+<div title="description"
+class="foo"></div>
+## <- entity.other.attribute-name.class
+
+        <div title='description'></div>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##         ^^^^^^^^^^^^^ string.quoted.single
+        ##         ^ punctuation.definition.string.begin
+        ##                     ^ punctuation.definition.string.end
+
+        <div title="description"></div>
+        ##  ^ - meta.attribute-with-value
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value
+        ##   ^^^^^ entity.other.attribute-name
+        ##         ^^^^^^^^^^^^^ string.quoted.double
+        ##         ^ punctuation.definition.string.begin
+        ##                     ^ punctuation.definition.string.end
+
+        <div id=MyId></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##   ^^^^^^^ meta.attribute-with-value.id
+        ##      ^^^^ string.unquoted meta.toc-list.id
+
+        <div id=My&#x49;d></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##   ^^^^^^^^^^^^ meta.attribute-with-value.id
+        ##      ^^^^^^^^^ string.unquoted meta.toc-list.id
+        ##        ^^^^^^ constant.character.entity.hexadecimal
+
+        <div id='MyId2'></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^^^^^^^^^ meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##      ^^^^^^^ string.quoted.single
+        ##      ^ punctuation.definition.string.begin - meta.toc-list.id
+        ##       ^^^^^ meta.toc-list.id
+        ##            ^ punctuation.definition.string.end - meta.toc-list.id
+
+        <div id="ElementID"></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^^^^^^^^^ meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##      ^^^^^^^^^^^ string.quoted.double
+        ##      ^ punctuation.definition.string.begin - meta.toc-list.id
+        ##       ^^^^^^^^^ meta.toc-list.id
+        ##                ^ punctuation.definition.string.end - meta.toc-list.id
+
+        <div id=el-&foo;" bar&baz;></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##   ^^^^^^^^^^^^ meta.attribute-with-value.id
+        ##      ^^^^^^^^^ string.unquoted meta.toc-list.id
+        ##         ^^^^^ constant.character.entity.named
+        ##              ^ invalid.illegal.attribute-value.html
+        ##               ^ - meta.attribute-with-value - entity - constant - string - punctuation
+        ##                ^^^^^^^^ meta.attribute-with-value entity.other.attribute-name
+
+        <div id='el-&foo;" bar&baz;'></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##      ^^^^^^^^^^^^^^^^^^^^ string.quoted.single
+        ##      ^ punctuation.definition.string.begin - meta.toc-list.id
+        ##       ^^^^^^^^^ meta.toc-list.id
+        ##          ^^^^^ constant.character.entity
+        ##                ^ - meta.toc-list.id
+        ##                 ^^^^^^^^ meta.toc-list.id
+        ##                    ^^^^^ constant.character.entity
+        ##                         ^ punctuation.definition.string.end - meta.toc-list.id
+
+        <div id="el-&foo;' bar&baz;"></div>
+        ##  ^ - meta.attribute-with-value.id
+        ##   ^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.id
+        ##   ^^ entity.other.attribute-name.id
+        ##      ^^^^^^^^^^^^^^^^^^^^ string.quoted.double
+        ##      ^ punctuation.definition.string.begin - meta.toc-list.id
+        ##       ^^^^^^^^^ meta.toc-list.id
+        ##          ^^^^^ constant.character.entity
+        ##                ^ - meta.toc-list.id
+        ##                 ^^^^^^^^ meta.toc-list.id
+        ##                    ^^^^^ constant.character.entity
+        ##                         ^ punctuation.definition.string.end - meta.toc-list.id
+
+        <div class=element-class></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##         ^^^^^^^^^^^^^ string.unquoted meta.class-name
+
+        <div class=element&#xAD;class></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##   ^^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##         ^^^^^^^^^^^^^^^^^^ string.unquoted meta.class-name
+        ##                ^^^^^^ constant.character.entity.hexadecimal
+
+        <div class='element-class'></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##         ^^^^^^^^^^^^^^^ string.quoted.single
+        ##         ^ punctuation.definition.string.begin - meta.class-name
+        ##          ^^^^^^^^^^^^^ meta.class-name
+        ##                       ^ punctuation.definition.string.end - meta.class-name
+
+        <div class="element-class"></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##         ^^^^^^^^^^^^^^^ string.quoted.double
+        ##         ^ punctuation.definition.string.begin - meta.class-name
+        ##          ^^^^^^^^^^^^^ meta.class-name
+        ##                       ^ punctuation.definition.string.end - meta.class-name
+
+        <div class=el-&foo;" bar&baz;></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##   ^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##         ^^^^^^^^^ string.unquoted meta.class-name
+        ##            ^^^^^ constant.character.entity.named
+        ##                 ^ invalid.illegal.attribute-value.html
+        ##                  ^ - meta.attribute-with-value - entity - constant - string - punctuation
+        ##                   ^^^^^^^^ meta.attribute-with-value entity.other.attribute-name
+
+        <div class='el-&foo;" bar&baz;'></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##         ^^^^^^^^^^^^^^^^^^^^ string.quoted.single
+        ##         ^ punctuation.definition.string.begin - meta.class-name
+        ##          ^^^^^^^^^ meta.class-name
+        ##             ^^^^^ constant.character.entity
+        ##                   ^ - meta.class-name
+        ##                    ^^^^^^^^ meta.class-name
+        ##                       ^^^^^ constant.character.entity
+        ##                            ^ punctuation.definition.string.end - meta.class-name
+
+        <div class="el-&foo;' bar&baz;"></div>
+        ##  ^ - meta.attribute-with-value.class
+        ##   ^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.class
+        ##   ^^^^^ entity.other.attribute-name.class
+        ##         ^^^^^^^^^^^^^^^^^^^^ string.quoted.double
+        ##         ^ punctuation.definition.string.begin - meta.class-name
+        ##          ^^^^^^^^^ meta.class-name
+        ##             ^^^^^ constant.character.entity
+        ##                   ^ - meta.class-name
+        ##                    ^^^^^^^^ meta.class-name
+        ##                       ^^^^^ constant.character.entity
+        ##                            ^ punctuation.definition.string.end - meta.class-name
+
+        <div style="width: 100%"></div>
+        ##  ^ - meta.attribute-with-value.style
+        ##   ^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.style
+        ##   ^^^^^ meta.attribute-with-value.style.html entity.other.attribute-name.style.html
+        ##         ^ punctuation.definition.string.begin.html - source.css
+        ##          ^^^^^^^^^^^ source.css
+        ##                     ^ punctuation.definition.string.end.html - source.css
+        ##          ^^^^^ meta.property-name.css support.type.property-name.css
+        ##                 ^^^^ meta.property-value.css constant.numeric.integer.decimal.css
+
+        <div style='width: 100%;'></div>
+        ##  ^ - meta.attribute-with-value.style
+        ##   ^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.style
+        ##   ^^^^^ meta.attribute-with-value.style.html entity.other.attribute-name.style.html
+        ##         ^ punctuation.definition.string.begin.html - source.css
+        ##                      ^ punctuation.definition.string.end.html - source.css
+        ##          ^^^^^^^^^^^^ source.css
+        ##          ^^^^^ meta.property-name.css support.type.property-name.css
+        ##                 ^^^^ meta.property-value.css constant.numeric.integer.decimal.css
+
+        <tag attr otherattr attr-with-dashes attr_with_underscores attr.with.dot attr.with.dot.value="val"></tag>
+        ##   ^ entity.other.attribute-name.html
+        ##        ^ entity.other.attribute-name.html
+        ##                  ^ entity.other.attribute-name.html
+        ##                                   ^ entity.other.attribute-name.html
+        ##                                                         ^^^^^^^^^^^^^ entity.other.attribute-name.html
+        ##                                                                       ^^^^^^^^^^^^^^^^^^^ entity.other.attribute-name.html
+
+        <tag "f'o`o<bar"="bar"></tag>
+        ##   ^^^^^^^^^^^^^^^^^ meta.attribute-with-value.html
+        ##   ^^^^^^^^^^^ entity.other.attribute-name.html
+        ##   ^ invalid.illegal.attribute-name.html
+        ##     ^ invalid.illegal.attribute-name.html
+        ##       ^ invalid.illegal.attribute-name.html
+        ##         ^ invalid.illegal.attribute-name.html
+        ##             ^ invalid.illegal.attribute-name.html
+
+        <tag *([&\=></tag>
+        ##   ^^^^^^^ - invalid
+        ##   ^^^^^ entity.other.attribute-name
+        ##        ^ punctuation.separator.key-value
+
+        <tag    foo	bar></tag>Mind the tab character!
+        ##      ^^^ entity.other.attribute-name
+        ##         ^ - entity.other.attribute-name
+        ##          ^^^ entity.other.attribute-name
+
+        <tag foo=a bar=b></tag>
+        ##   ^^^ entity.other.attribute-name
+        ##       ^ string.unquoted
+        ##         ^^^ entity.other.attribute-name
+        ##             ^ string.unquoted
+
+        <a disabled onclick="setTimeout(function(){}, 100)">Test</a>
+        ##         ^ - meta.attribute-with-value.event
+        ##          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.attribute-with-value.event
+        ##                  ^ - source.js
+        ##                                                ^ - source.js
+        ##                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ source.js
+        ##                   ^ meta.function-call.js support.function
+        ## ^^^^^^^^ entity.other.attribute-name
+
+        <article><span><othertag></othertag><othertag /></span></article>
+        ## ^^^^^ entity.name.tag.block.any.html
+        ##        ^^^^ entity.name.tag.inline.any.html
+        ##              ^^^^^^^^ entity.name.tag.other.html
+        ##                                           ^ - punctuation.definition.tag.end.html
+        ##                                            ^^ meta.tag.other.html punctuation.definition.tag.end.html
+
+        <body·other attrib=1/>
+        ## ^^^^^^^^ entity.name.tag.other.html
+        ##          ^^^^^^ entity.other.attribute-name.html
+
+        <xsl:tag></xsl:tag>
+        ##^^^^^^ entity.name.tag.other.html
+        ##         ^^^^^^^ entity.name.tag.other.html
+
+        <t*([&/>
+        ##^^^^ entity.name.tag.other.html
+        ##    ^^ punctuation.definition.tag.end.html
+
+        <t*℗[& *([&\="₦"></t*([&>
+        ##^^^^ entity.name.tag.other.html
+        ##^^^^^^^^^^^^^^^^^^^^^^^ - invalid
+        ##     ^^^^^ entity.other.attribute-name.html
+        ##          ^ punctuation.separator.key-value.html
+        ##           ^^^ string.quoted.double.html
+        ##              ^ punctuation.definition.tag.end.html
+        ##               ^^ punctuation.definition.tag.begin.html
+        ##                 ^^^^^ entity.name.tag.other.html
+        ##                      ^ punctuation.definition.tag.end.html
+
+        <form-custom-tag><div-custom-tag><span-custom-tag></span-custom-tag></div-custom-tag></form-custom-tag>
+        ##^^^^^^^^^^^^^^ entity.name.tag.custom.html
+        ##                ^^^^^^^^^^^^^^ entity.name.tag.custom.html
+        ##                                ^^^^^^^^^^^^^^^ entity.name.tag.custom.html
+        ##                                                  ^^^^^^^^^^^^^^^ entity.name.tag.custom.html
+        ##                                                                    ^^^^^^^^^^^^^^ entity.name.tag.custom.html
+
+        <test-custom-tag/>
+        ##^^^^^^^^^^^^^^^^ meta.tag.custom.html
+        ##              ^^ punctuation.definition.tag.end.html
+        ##                ^ - meta.tag.custom.html - punctuation.definition.tag.end.html
+
+        <body-custom·tag₡name/>
+        ## ^^^^^^^^^^^^^^^^^^ entity.name.tag.custom.html
+
+        <INVALID-custom-TAG></INVALID-CUSTOM-TAG>
+        ## ^^^^^ invalid.illegal.custom-tag-name.html
+        ##       ^^^^^^ - invalid.illegal.custom-tag-name.html
+        ##              ^^^ invalid.illegal.custom-tag-name.html
+        ##                    ^^^^^^^ invalid.illegal.custom-tag-name.html
+        ##                            ^^^^^^ invalid.illegal.custom-tag-name.html
+        ##                                   ^^^ invalid.illegal.custom-tag-name.html
+
+        <form name="formName" type="post">
+        ## ^ entity.name.tag.block.form.html
+        ## <- punctuation.definition.tag.begin.html
+        ##                               ^ punctuation.definition.tag.end.html
+            <label for="inputId">
+            ## ^ entity.name.tag.inline.form.html
+            ##     ^ entity.other.attribute-name.html
+            ##        ^ punctuation.separator.key-value.html
+            <input id="inputId" type="text" value="value">
+            ## ^ entity.name.tag.inline.form.html
+            ##                   ^ entity.other.attribute-name.html
+            <textarea name="texareaName"></textarea>
+            ## ^ entity.name.tag.inline.form.html
+        </form>
+
+        <table border="0" cellspacing="0" cellpadding="2" class="editor">
+        ## ^ entity.name.tag.inline.table.html
+            <thead>
+            ## ^ entity.name.tag.inline.table.html
+                <tr>
+            ##   ^ entity.name.tag.inline.table.html
+                    <th> </th>
+                </tr>
+            </thead>
+            ## ^ entity.name.tag.inline.table.html
+            <tfoot>
+            ## ^ entity.name.tag.inline.table.html
+                <tr>
+                    <td> </td>
+                    ##^ entity.name.tag.inline.table.html
+                </tr>
+            </tfoot>
+            ## ^ entity.name.tag.inline.table.html
+            <tbody>
+                <tr>
+                    <td> </td>
+                </tr>
+            </tbody>
+        </table>
+
+        &amp;
+##      ^^^^^ constant.character.entity.named
+##      ^ punctuation.definition.entity
+##          ^ punctuation.terminator.entity
+
+        &#123;
+##      ^^^^^^ constant.character.entity.decimal
+##      ^^ punctuation.definition.entity
+##           ^ punctuation.terminator.entity
+
+        &#x7f;
+##      ^^^^^^ constant.character.entity.hexadecimal
+##      ^^^ punctuation.definition.entity
+##           ^ punctuation.terminator.entity
+
+        &#X7F;
+##      ^^^^^^ constant.character.entity.hexadecimal
+##      ^^^ punctuation.definition.entity
+##           ^ punctuation.terminator.entity
+
+        &β;
+##      ^^^ - constant.character.entity
+
+        &#;
+##      ^^^ - constant.character.entity
+
+        &#x;
+##      ^^^^ - constant.character.entity
+
+
+        <a href="http://google.com/?one=1&amp;two=2"></a>
+        ##                               ^^^^^ constant.character.entity
+        <a href="http://google.com/?one=1&two=2"></a>
+        ##                               ^ - constant.character.entity
+        ##                               ^ - invalid.illegal
+
+        <hr/><hr />
+        ## ^^ meta.tag.block.any punctuation.definition.tag.end
+        ##    ^^ entity.name.tag.block.any
+        ##       ^^ punctuation.definition.tag.end
+
+        # make sure to stop tag names before the next < to prevent php
+        # and other syntaxes from breaking.
+        <article<?php>
+        ##^^^^^^ entity.name.tag.block.any.html
+        ##      ^^^^^^ - entity.name.tag
+
+        <_notag>
+        ##^^^^^ - entity.name.tag
+
+        <2notag>
+        ##^^^^^ - entity.name.tag
+
+    </body>
+    # ^^^^ entity.name.tag.structure
+</html>

@@ -1,0 +1,424 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Batch File
+file_extensions:
+  - bat
+  - cmd
+scope: source.dosbatch
+variables:
+  colon_comment_start: '(?::[+=,;: ])'
+  command_terminators: (?=$\n|[&|><)])
+  set_arithmetic_operators_unquoted: (?:\+|-|\*|/|%%|~)
+  set_arithmetic_operators_quoted: (?:\||<<|>>|&|\^)
+
+contexts:
+  main:
+    - include: expressions
+
+  expressions:
+    - include: comments
+    - include: labels
+    - include: strings
+    - include: parens
+    - include: numbers
+    - include: constants
+    - include: operators
+    - include: escaped_characters
+    - include: variables
+    - include: commands
+    - match: \b(?i)exit\b
+      scope: keyword.control.statement.dosbatch
+    - match: \b(?i)(goto|call)\b(?:\s*(:)?(?:(eof)|(\w+)))?
+      captures:
+        1: keyword.control.statement.dosbatch
+        2: punctuation.separator.dosbatch
+        3: keyword.control.flow.return.dosbatch
+        4: meta.function-call.dosbatch variable.function.dosbatch
+    - match: \b(?i)(if)\s+(?:(not)\s+)?(exist|defined|errorlevel|cmdextversion)\b
+      captures:
+        1: keyword.control.conditional.dosbatch
+        2: keyword.operator.logical.dosbatch
+        3: keyword.other.dosbatch
+    - match: \b(?i)(?:if|else)\b
+      scope: keyword.control.conditional.dosbatch
+    - match: \b(?i)for\b
+      scope: keyword.control.repeat.dosbatch
+
+  commands:
+    - match: \b(?i:echo)\b
+      scope: keyword.command.dosbatch
+      push:
+        - match: '{{command_terminators}}'
+          pop: true
+        - include: escaped_characters
+        - include: variables
+        - include: numbers
+        - include: strings
+    - include: command_set
+    - match: \b(?i:aciniupd|adprep|append|arp|assoc|at|atmadm|attrib|autofail|backup|basica|bcdedit|bootcfg|break|cacls|cd|cdburn|certreq|certutil|change logon|change port|change user|change|chcp|chdir|chglogon|chgport|chgusr|chkdsk|chkntfs|choice|cipher|cleanmgr|clip|cls|cluadmin|cluster|cmd|cmdkey|cmstp|color|comp|compact|control|convert|copy|cprofile|cscript|csvde|ctty|date|dcgpofix|debug|defrag|del|deltree|devcon|dfscmd|dhcploc|diantz|dir|diskcomp|diskcopy|diskpart|doskey|dpath|driverquery|dsadd|dsget|dsmod|dsmove|dsquery|dsrm|dvdburn|edit|edlin|endlocal|epal|erase|eventcreate|eventtriggers|evntcmd|exe2bin|expand|explorer|extract|fastopen|fc|fdisk|filever|find|findramd|findstr|finger|flattemp|forcedos|forfiles|format|freedisk|fsutil|ftp|ftype|getmac|gettype|gpresult|gpupdate|graftabl|gwbasic|help|helpctr|hostname|icacls|iexpress|ifconfig|iisreset|inuse|ipconfig|ipxroute|irftp|jt|keyb|label|ldifde|lfnfor|lh|loadhigh|lock|lodctr|logman|logoff|lpq|lpr|macfile|makecab|md|mem|mkdir|mklink|mmc|mode|more|mountvol|move|mrinfo|msd|msg|msiexec|msinfo32|mstsc|mtrace|nbtstat|net accounts|net computer|net config|net continue|net file|net group|net help|net helpmsg|net localgroup|net name|net pause|net print|net send|net session|net share|net start|net statistics|net stop|net time|net use|net user|net view|net|netdom|netsh|netstat|nlb|nlbmgr|nltest|notepad|nslookup|ntbackup|ntcmdprompt|ntdsutil|ntsd|ocsetup|odbcconf|openfiles|path|pathping|pause|pbadmin|pentnt|perfmon|ping|ping6|pkgmgr|popd|powercfg|print|prompt|pushd|qappsrv|qbasic|qchain|qfarm|qprocess|qserver|query process|query session|query termserver|query user|query|quser|qwinsta|rasdial|rasphone|rcp|rd|readline|recimg|recover|reg|regedit|regedt32|regini|register|regsvr32|relog|rem|ren|rename|replace|reset session|reset|restore|rexec|risetup|rmdir|robocopy|route|rsh|rsm|rss|runas|rundll|rundll32|sc|schtasks|secedit|set|setlocal|setx|sfc|shadow|shift|shutdown|sort|start|subinacl|subst|sysocmgr|systeminfo|takeown|tapicfg|taskkill|tasklist|tcmsetup|tftp|time|timeout|title|tracerpt|tracert|tracert6|tracerte|tree|truename|tscon|tsdiscon|tsecimp|tskill|tsprof|tsshutdn|type|typeperf|tzchange|unlock|unlodctr|ver|verify|vhdmount|vol|vssadmin|w32tm|waitfor|where|whoami|winmsd|winmsdp|winnt|winnt32|winpop|winsat|wlbs|wmic|wscript|wupdmgr|xcacls|xcopy)\b
+      scope: keyword.command.dosbatch
+
+  command_set:
+    - match: '(?i)\bSET\b'
+      scope: keyword.command.dosbatch
+      push: inside_command_set
+
+  inside_command_set:
+      - match: '{{command_terminators}}'
+        pop: true
+      - include: escaped_characters
+      - include: variables
+      - match: (")\s*([^ ][^=]*)(=)
+        captures:
+          1: punctuation.definition.string.begin.dosbatch
+          2: variable.other.readwrite.dosbatch
+          3: keyword.operator.assignment.dosbatch
+        push:
+          - meta_scope: string.quoted.double.dosbatch
+          - match: '"(?=\s*(?:{{command_terminators}}))'
+            scope: punctuation.definition.string.end.dosbatch
+            pop: true
+          - include: escaped_characters
+          - include: variables
+          - include: numbers
+          - include: parens
+      - match: ([^ ][^=]*)(=)
+        captures:
+          1: variable.other.readwrite.dosbatch
+          2: keyword.operator.assignment.dosbatch
+        push:
+          - meta_content_scope: string.unquoted.dosbatch
+          - match: '{{command_terminators}}'
+            pop: true
+          - include: variables
+          - match: '"'
+            scope: punctuation.definition.string.begin.dosbatch
+            push:
+              - meta_scope: string.quoted.double.dosbatch
+              - clear_scopes: 1
+              - match: '"'
+                scope: punctuation.definition.string.end.dosbatch
+                pop: true
+              - include: escaped_characters
+              - include: variables
+      - include: numbers
+      - include: parens
+      - match: \b([^ ][^=\n]*)$
+        scope: variable.other.readwrite.dosbatch
+      - include: strings
+      - match: '\s+/[aA]\s+' # SET arithmetic
+        push:
+          - meta_content_scope: meta.expression.set.dosbatch
+          - include: set_arithmetic_unquoted
+      - match: '\s+/[pP]\s+' # SET from standard input
+        push:
+          - match: '{{command_terminators}}'
+            pop: true
+          - match: ([^ ][^=]*)(=)
+            captures:
+              1: variable.other.readwrite.dosbatch
+              2: keyword.operator.assignment.dosbatch
+            set:
+              - meta_scope: meta.prompt.set.dosbatch
+              - match: '{{command_terminators}}'
+                pop: true
+              - match: (?=")
+                push:
+                  - include: strings
+                  - match: '{{command_terminators}}'
+                    pop: true
+                  - match: .
+                    scope: comment.line.ignored.dosbatch
+              - match: ''
+                push:
+                  - meta_content_scope: string.unquoted.dosbatch
+                  - match: '{{command_terminators}}'
+                    pop: true
+                  - include: variables
+
+  set_arithmetic_unquoted:
+    - match: '{{command_terminators}}'
+      pop: true
+    - include: set_arithmetic_operator_common
+    - match: \(
+      scope: punctuation.section.group.begin.dosbatch
+      push: command_set_group_unquoted
+    - match: '"'
+      scope: punctuation.definition.string.begin.dosbatch
+      push: set_arithmetic_quoted
+    - include: inside_command_set_arithmetic
+
+  command_set_group_unquoted:
+    - meta_scope: meta.group.dosbatch
+    - match: \)
+      scope: punctuation.section.group.end.dosbatch
+      pop: true
+    - match: '"'
+      scope: punctuation.definition.string.begin.dosbatch
+      set: command_set_group_newly_quoted
+    - include: set_arithmetic_unquoted
+
+  set_arithmetic_operator_common:
+    - match: ({{set_arithmetic_operators_unquoted}})=
+      scope: keyword.operator.assignment.augmented.dosbatch
+    - match: (\^)(\^=)
+      captures:
+        1: constant.character.escape.dosbatch
+        2: keyword.operator.assignment.augmented.dosbatch
+    - match: ({{set_arithmetic_operators_unquoted}})
+      scope: keyword.operator.arithmetic.dosbatch
+    - match: (\^)(\^)
+      captures:
+        1: constant.character.escape.dosbatch
+        2: keyword.operator.arithmetic.dosbatch
+    - match: =
+      scope: keyword.operator.assignment.dosbatch
+
+  set_arithmetic_operator_quoted:
+    - match: ({{set_arithmetic_operators_quoted}})=
+      scope: keyword.operator.assignment.augmented.dosbatch
+    - match: ({{set_arithmetic_operators_quoted}})
+      scope: keyword.operator.arithmetic.dosbatch
+    - include: set_arithmetic_operator_common
+
+  set_arithmetic_quoted:
+    - meta_scope: string.quoted.double.dosbatch
+    - match: $
+      pop: true
+    - match: '"'
+      scope: punctuation.definition.string.end.dosbatch
+      pop: true
+    - match: \(
+      scope: punctuation.section.group.begin.dosbatch
+      set:
+        - meta_scope: meta.group.dosbatch
+        - match: ''
+          set: command_set_group_newly_quoted
+    - include: set_arithmetic_operator_quoted
+    - include: inside_command_set_arithmetic
+
+  command_set_group_already_quoted:
+    - meta_scope: meta.group.dosbatch
+    - match: \)
+      scope: punctuation.section.group.end.dosbatch
+      pop: true
+    - match: '"'
+      scope: punctuation.definition.string.end.dosbatch
+      set:
+        - match: ''
+          set: command_set_group_unquoted
+    - include: set_arithmetic_quoted
+
+  command_set_group_newly_quoted:
+    - meta_scope: string.quoted.double.dosbatch meta.group.dosbatch
+    - match: \(
+      scope: punctuation.section.group.begin.dosbatch
+      push: command_set_group_already_quoted
+    - match: \)
+      scope: punctuation.section.group.end.dosbatch
+      set:
+        - match: ''
+          set: set_arithmetic_quoted
+    - include: command_set_group_already_quoted
+
+  inside_command_set_arithmetic:
+    - match: '!'
+      scope: keyword.operator.logical.dosbatch
+    - include: numbers
+    - include: comma_separator
+    - include: variables
+    - include: escaped_characters
+    - match: (?:(?!{{set_arithmetic_operators_unquoted}}|{{set_arithmetic_operators_quoted}}|[=")])\S)+
+      scope: variable.other.readwrite.dosbatch
+
+  variables:
+    # global parameters
+    - match: '(%)((~([fdpnxsatz]|\$PATH:)*)?\d|\*)'
+      scope: variable.parameter.dosbatch
+      captures:
+        1: punctuation.definition.variable.dosbatch
+    - match: (?i)(%)errorlevel(%)
+      scope: variable.language.dosbatch
+      captures:
+        1: punctuation.definition.variable.begin.dosbatch
+        2: punctuation.definition.variable.end.dosbatch
+    - include: variable
+    - include: variable_delayed_expansion
+
+  variable:
+    # variable
+    - match: '%(?=[^%]+%)'
+      scope: punctuation.definition.variable.begin.dosbatch
+      push:
+        - meta_scope: variable.other.readwrite.dosbatch
+        - match: '(%)|\n'
+          captures:
+            1: punctuation.definition.variable.end.dosbatch
+          pop: true
+          # substring expansion
+        - match: ':~'
+          scope: punctuation.separator.dosbatch
+          push:
+            - meta_content_scope: meta.variable.substring.dosbatch
+            - match: '(?=%|\n)'
+              pop: true
+            - include: inside_variable_substring
+          # string substitution
+        - match: ':'
+          scope: punctuation.separator.dosbatch
+          push:
+            - meta_content_scope: meta.variable.substitution.dosbatch
+            - match: '(?=%|\n)'
+              pop: true
+            - include: variable_substitution_replacee
+            - match: '='
+              scope: punctuation.separator.dosbatch
+              push:
+                - match: '(?=%|\n)'
+                  pop: true
+                - include: variable_delayed_expansion
+                - match: '[^%]+'
+                  scope: string.unquoted.dosbatch
+
+  variable_delayed_expansion:
+    # variable with delayed expansion
+    - match: '!(?=[^!]+!)'
+      scope: punctuation.definition.variable.begin.dosbatch
+      push:
+        - meta_scope: variable.other.readwrite.dosbatch
+        - match: '(!)|\n'
+          captures:
+            1: punctuation.definition.variable.end.dosbatch
+          pop: true
+          # substring expansion
+        - match: ':~'
+          scope: punctuation.separator.dosbatch
+          push:
+            - meta_content_scope: meta.variable.substring.dosbatch
+            - match: '(?=!|\n)'
+              pop: true
+            - include: inside_variable_substring
+          # string substitution
+        - match: ':'
+          scope: punctuation.separator.dosbatch
+          push:
+            - meta_content_scope: meta.variable.substitution.dosbatch
+            - match: '(?=!|\n)'
+              pop: true
+            - include: variable
+            - include: variable_substitution_replacee
+            - match: '='
+              scope: punctuation.separator.dosbatch
+              push:
+                - match: '(?=!|\n)'
+                  pop: true
+                - include: variable
+                - match: '[^!]+'
+                  scope: string.unquoted.dosbatch
+
+  variable_substitution_replacee:
+    - match: '[^=]+'
+      scope: string.unquoted.dosbatch
+
+  inside_variable_substring:
+    - match: '[+-]?\d+'
+      scope: constant.numeric.dosbatch
+    - include: comma_separator
+
+  comma_separator:
+    - match: ','
+      scope: punctuation.separator.dosbatch
+
+  numbers:
+    - match: '\b(0[xX])\h*\b'
+      scope: constant.numeric.integer.hexadecimal.dosbatch
+      captures:
+        1: punctuation.definition.numeric.hexadecimal.dosbatch
+    - match: '\b(0)[0-7]+\b'
+      scope: constant.numeric.integer.octal.dosbatch
+      captures:
+        1: punctuation.definition.numeric.octal.dosbatch
+    - match: '\b(?:0|[1-9][0-9]*)\b'
+      scope: constant.numeric.integer.decimal.dosbatch
+
+  constants:
+    - match: \b(?i:NUL)\b
+      scope: constant.language.dosbatch
+
+  operators:
+    - match: '@(?=\S)'
+      scope: keyword.operator.at.dosbatch
+    - match: \b(?i:EQU|NEQ|LSS|LEQ|GTR|GEQ)\b|==
+      scope: keyword.operator.comparison.dosbatch
+    - match: \b(?i:NOT)\b
+      scope: keyword.operator.logical.dosbatch
+    - match: '&&?|\|\|'
+      scope: keyword.operator.conditional.dosbatch
+    - match: '\|'
+      scope: keyword.operator.pipe.dosbatch
+    - match: '<&?|>[&>]?'
+      scope: keyword.operator.redirection.dosbatch
+
+  labels:
+    - match: '^\s*(:)([^+=,;:\s].*)$'
+      captures:
+        1: punctuation.separator.dosbatch
+        2: entity.name.label.dosbatch
+
+  comments:
+    - match: '(?:^|(&))\s*(?=({{colon_comment_start}}))'
+      captures:
+        1: keyword.operator.conditional.dosbatch
+      push:
+        - match: '\n'
+          scope: comment.line.rem.dosbatch
+          pop: true
+        - match: '({{colon_comment_start}})'
+          scope: punctuation.definition.comment.dosbatch
+          push:
+            - meta_scope: comment.line.colon.dosbatch
+            - match: '(?=\n)'
+              pop: true
+    # REM command
+    # https://technet.microsoft.com/en-us/library/bb490986.aspx
+    - match: \b(?i)rem\b
+      scope: keyword.command.rem.dosbatch
+      push:
+        # meta_content_scope is used since rem should not be
+        # highlighted as a comment, but a command
+        - meta_content_scope: comment.line.rem.dosbatch
+        - match: \n
+          scope: comment.line.rem.dosbatch
+          pop: true
+        - match: '[(|)]'
+          scope: invalid.illegal.unexpected-character.dosbatch
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.dosbatch
+      push:
+        - meta_scope: string.quoted.double.dosbatch
+        - match: (")|(\n)
+          captures:
+            1: punctuation.definition.string.end.dosbatch
+            2: invalid.illegal.newline.dosbatch
+          pop: true
+        - include: escaped_characters
+        - include: variables
+
+  parens:
+    - match: \(
+      scope: punctuation.section.group.begin.dosbatch
+      push:
+        - meta_scope: meta.group.dosbatch
+        - match: \)
+          scope: punctuation.section.group.end.dosbatch
+          pop: true
+        - match: ',|;'
+          scope: punctuation.separator.dosbatch
+        - include: expressions
+
+  escaped_characters:
+  - match: '%%|\^\^!|\^.|\^\n'
+    scope: constant.character.escape.dosbatch

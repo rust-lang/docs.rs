@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>Symbol List: Method</string>
+	<key>scope</key>
+	<string>meta.method.declaration.r</string>
+	<key>settings</key>
+	<dict>
+		<key>showInSymbolList</key>
+		<integer>1</integer>
+		<key>symbolTransformation</key>
+		<string>s/\s*(.+?)\s*\(\s*("|\x27)(.*?)\s*\2/$1 "$3"/;</string>
+	</dict>
+</dict>
+</plist>

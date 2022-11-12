@@ -1,0 +1,4 @@
+{
+    "shell_cmd": "Rscript \"$file\"",
+    "selector": "source.r",
+}

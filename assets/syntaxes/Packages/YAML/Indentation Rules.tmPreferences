@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>scope</key>
+	<string>source.yaml - string - comment</string>
+	<key>settings</key>
+	<dict>
+		<key>increaseIndentPattern</key>
+		<string>^.*[:\[{]\s*$</string>
+		<key>decreaseIndentPattern</key>
+		<string>^\s*[\]}]</string>
+	</dict>
+</dict>
+</plist>

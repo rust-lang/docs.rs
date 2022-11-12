@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>Symbol List (Rd Documentation)</string>
+	<key>scope</key>
+	<string>keyword.other.section.rd</string>
+	<key>settings</key>
+	<dict>
+		<key>showInSymbolList</key>
+		<integer>1</integer>
+		<key>symbolTransformation</key>
+		<string>s/\\(.*)/$1/;</string>
+	</dict>
+</dict>
+</plist>
