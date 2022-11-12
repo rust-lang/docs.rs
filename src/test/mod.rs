@@ -17,7 +17,7 @@ use reqwest::{
     blocking::{Client, ClientBuilder, RequestBuilder, Response},
     Method,
 };
-use std::{fs, net::SocketAddr, panic, sync::Arc, time::Duration};
+use std::{fs, net::SocketAddr, panic, str::FromStr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing::{debug, error};
 
@@ -206,9 +206,16 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) fn init_logger() {
+    use tracing_subscriber::{filter::Directive, EnvFilter};
+
     rustwide::logging::init_with(tracing_log::LogTracer::new());
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
+                .with_env_var("DOCSRS_LOG")
+                .from_env_lossy(),
+        )
         .with_test_writer()
         .finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
