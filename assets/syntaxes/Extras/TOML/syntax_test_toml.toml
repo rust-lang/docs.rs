@@ -1,0 +1,910 @@
+# SYNTAX TEST "Packages/TOML/TOML.sublime-syntax"
+
+# This is a TOML document. Boom.
+# <- comment.line.number-sign punctuation.definition.comment
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.number-sign
+
+##############################################################################
+# Table name tests
+##############################################################################
+[table]  # comment
+# <- punctuation.definition.table.begin - entity.name.table
+#^^^^^ meta.tag.table entity.name.table
+#     ^ punctuation.definition.table.end - entity.name.table
+#        ^ punctuation.definition.comment
+#        ^^^^^^^^^ comment.line.number-sign
+
+[nested.table]
+# <- punctuation.definition.table.begin - entity.name.table
+#^^^^^^^^^^^^ meta.tag.table
+#^^^^^^ entity.name.table
+#      ^ punctuation.separator.table
+#       ^^^^^ entity.name.table
+#            ^ punctuation.definition.table.end - entity.name.table
+
+['quoted']
+#^ punctuation.definition.string.begin
+#^^^^^^^^ meta.tag.table string.quoted.single.literal
+#       ^ punctuation.definition.string.end
+#        ^ punctuation.definition.table.end
+
+["quoted"]
+#^ punctuation.definition.string.begin
+#^^^^^^^^ meta.tag.table string.quoted.double.basic
+#       ^ punctuation.definition.string.end
+#        ^ punctuation.definition.table.end
+
+[a.b.c]
+# <- punctuation.definition.table.begin - entity.name.table
+#^^^^^ meta.tag.table
+#^ entity.name.table
+# ^ punctuation.separator.table
+#  ^ entity.name.table
+#   ^ punctuation.separator.table
+#    ^ entity.name.table
+#     ^ punctuation.definition.table.end - entity.name.table
+[ d.e.f ]
+# <- punctuation.definition.table.begin - entity.name.table
+#^ -meta.tag.table
+# ^^^^^ meta.tag.table
+# ^ entity.name.table
+#  ^ punctuation.separator.table
+#   ^ entity.name.table
+#    ^ punctuation.separator.table
+#     ^ entity.name.table
+#      ^ -meta.tag.table, -entity.name.table
+#       ^ punctuation.definition.table.end - entity.name.table
+[ g .  h  . i ]
+# ^^^^^^^^^^^ meta.tag.table
+# ^ meta.tag.table entity.name.table
+#   ^ punctuation.separator.table
+#      ^ entity.name.table
+#         ^ punctuation.separator.table
+#           ^ entity.name.table
+#             ^ punctuation.definition.table.end
+[ j . "ʞ" . 'l' ]
+# <- punctuation.definition.table.begin
+# ^^^^^^^^^^^^^ meta.tag.table
+# ^ entity.name.table
+#   ^ punctuation.separator.table
+#     ^^^ string.quoted.double.basic
+#         ^ punctuation.separator.table
+#           ^^^ string.quoted.single.literal
+#               ^ punctuation.definition.table.end
+['a'."b"]
+#^^^^^^^ meta.tag.table
+#^ punctuation.definition.string.begin
+#^^^ string.quoted.single.literal
+#  ^ punctuation.definition.string.end
+#   ^ punctuation.separator.table
+#    ^^^ string.quoted.double.basic
+#    ^ punctuation.definition.string.begin
+#      ^ punctuation.definition.string.end
+#       ^ punctuation.definition.table.end
+
+#-----------------------------------------------------------------------------
+# Array tables
+#-----------------------------------------------------------------------------
+ [[array-table]]
+#^^ punctuation.definition.table.array.begin
+#  ^^^^^^^^^^^ meta.tag.table.array entity.name.table
+#             ^^ punctuation.definition.table.array.end
+ [[a.b.'nest'."name"]]
+#^^ punctuation.definition.table.array.begin
+#  ^^^^^^^^^^^^^^^^^ meta.tag.table.array
+#  ^ meta.tag.table.array entity.name.table
+#   ^ punctuation.separator.table
+#    ^ meta.tag.table.array entity.name.table
+#     ^ punctuation.separator.table
+#      ^ punctuation.definition.string.begin
+#      ^^^^^^ string.quoted.single.literal
+#           ^ punctuation.definition.string.end
+#            ^ punctuation.separator.table
+#             ^ punctuation.definition.string.begin
+#             ^^^^^^ string.quoted.double.basic
+#                  ^ punctuation.definition.string.end
+#                   ^^ punctuation.definition.table.array.end
+
+#-----------------------------------------------------------------------------
+# Invalid tables
+#-----------------------------------------------------------------------------
+[]     # INVALID
+# <- invalid.illegal
+#^ invalid.illegal
+#      ^^^^^^^^^ comment.line.number-sign
+ [[]]
+#^^^^ invalid.illegal
+ [ ]
+#^^^ invalid.illegal
+ [ [ ] ]
+#  ^^^^^ invalid.illegal
+[a.]   # INVALID
+# <- punctuation.definition.table.begin
+#^^ meta.tag.table
+# ^ invalid.illegal
+[a..] # INVALID
+#^ meta.tag.table entity.name.table
+# ^^^ invalid.illegal.table
+[.b]   # INVALID
+#^^^ invalid.illegal
+#      ^^^^^^^^^ comment.line.number-sign
+[.]    # INVALID
+#^^ invalid.illegal
+#      ^^^^^^^^^ comment.line.number-sign
+[table]key = 123
+#^^^^^ entity.name.table
+#      ^^^^^^^^^ invalid.illegal
+[a'asdf']
+# ^ invalid.illegal
+#      ^ invalid.illegal
+#       ^ punctuation.definition.table.end
+[!@$%^&*]
+#^^^^^^^^ invalid.illegal
+[
+#^ invalid.illegal
+["
+# ^ invalid.illegal
+['
+#^ invalid.illegal
+[[
+# ^ invalid.illegal
+ [[]
+#^^^ invalid.illegal
+ [[array]
+#        ^ invalid.illegal
+ [ [array]]
+#  ^^^^^^^^ invalid.illegal
+ [[array] ]
+#        ^^ invalid.illegal
+ [a[b]
+#  ^ invalid.illegal
+ [a b]
+#  ^ invalid.illegal
+ [a#b]
+#  ^ invalid.illegal
+
+##############################################################################
+# Keys
+##############################################################################
+ key = 123 # Comment
+#<- -entity.name.tag
+#^^^ entity.name.tag
+#   ^-entity.name.tag
+#    ^ punctuation.definition.key-value
+#      ^^^ constant.numeric.integer
+#          ^ punctuation.definition.comment
+#          ^^^^^^^^^ comment.line.number-sign
+nospace=123
+#<- entity.name.tag
+#^^^^^^ entity.name.tag
+#      ^ punctuation.definition.key-value
+#       ^^^ constant.numeric.integer
+ 'key' = 123
+#^^^^^ meta.tag.key string.quoted.single.literal
+#^ punctuation.definition.string.begin
+#    ^ punctuation.definition.string.end
+#      ^ punctuation.definition.key-value
+ "key" = 123
+#^^^^^ meta.tag.key string.quoted.double.basic
+#^ punctuation.definition.string.begin
+#    ^ punctuation.definition.string.end
+#      ^ punctuation.definition.key-value
+ "key\b\t\n\f\r\"\\\u1234\U12345678" = 123
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.tag.key string.quoted.double.basic
+#^ punctuation.definition.string.begin
+#    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.character.escape
+#                                  ^ punctuation.definition.string.end
+#                                    ^ punctuation.definition.key-value
+'quoted "value"' = "value"
+#<- meta.tag.key string.quoted.single.literal punctuation.definition.string.begin
+#^^^^^^^^^^^^^^^ meta.tag.key string.quoted.single.literal
+#              ^ punctuation.definition.string.end
+#                ^ punctuation.definition.key-value
+#                  ^ punctuation.definition.string.begin
+#                  ^^^^^^^ string.quoted.double.basic
+ 123 = 123
+#^^^ entity.name.tag
+#    ^ punctuation.definition.key-value
+#      ^^^ constant.numeric.integer
+
+#-----------------------------------------------------------------------------
+# Dotted keys
+#-----------------------------------------------------------------------------
+ a.b = 123
+#^^^ meta.tag.key
+#^ entity.name.tag
+# ^ punctuation.separator.key
+#  ^ entity.name.tag
+#    ^ punctuation.definition.key-value
+#      ^^^ constant.numeric.integer
+ a.b.c = 1
+#^^^^^ meta.tag.key
+#^ entity.name.tag
+# ^ punctuation.separator.key
+#  ^ entity.name.tag
+#   ^ punctuation.separator.key
+#    ^ entity.name.tag
+#      ^ punctuation.definition.key-value
+#        ^ constant.numeric.integer
+ a.'foo'."bar".c = 1
+#^^^^^^^^^^^^^^^ meta.tag.key
+#^ entity.name.tag
+# ^ punctuation.separator.key
+#  ^^^^^ string.quoted.single.literal
+#  ^ punctuation.definition.string.begin
+#      ^ punctuation.definition.string.end
+#       ^ punctuation.separator.key
+#        ^^^^^ string.quoted.double.basic
+#        ^ punctuation.definition.string.begin
+#            ^ punctuation.definition.string.end
+#             ^ punctuation.separator.key
+#              ^ entity.name.tag
+#                ^ punctuation.definition.key-value
+#                  ^ constant.numeric.integer
+ a  .  b  .  d = 2
+#^^^^^^^^^^^^^ meta.tag.key
+#^ meta.tag.key entity.name.tag
+#   ^ punctuation.separator.key
+#      ^ entity.name.tag
+#         ^ punctuation.separator.key
+#            ^ entity.name.tag
+#              ^ punctuation.definition.key-value
+#                ^ constant.numeric.integer
+ in = { type.name = "cat", type.color = "blue" }
+#       ^^^^^^^^^ meta.tag.key
+#       ^^^^ entity.name.tag
+#           ^ punctuation.separator.key
+#            ^^^^ entity.name.tag
+#                 ^ punctuation.definition.key-value
+#                          ^^^^^^^^^^ meta.tag.key
+#                          ^^^^ entity.name.tag
+#                              ^ punctuation.separator.key
+#                               ^^^^^ entity.name.tag
+#                                     ^ punctuation.definition.key-value
+
+#-----------------------------------------------------------------------------
+# Invalid but accepted keys
+#-----------------------------------------------------------------------------
+# Incomplete key/values are not marked as invalid to avoid frequent red
+# highlighting while typing.
+ key
+#^^^ entity.name.tag -invalid
+ key =
+#^^^ entity.name.tag -invalid
+#   ^^^ -invalid
+#    ^ punctuation.definition.key-value
+ key =
+ 1
+#^ entity.name.tag
+
+#-----------------------------------------------------------------------------
+# Invalid keys
+#-----------------------------------------------------------------------------
+key key
+#  ^ invalid.illegal
+key key = 1
+#  ^ invalid.illegal
+ '
+#^ invalid.illegal
+ 'key
+#^^^^ invalid.illegal
+ "
+# ^ invalid.illegal
+ "key
+#    ^ invalid.illegal
+ key.,!@$%^&**&()
+#    ^^^^^^^^^^^^ invalid.illegal
+ !@$%^&*()
+#^^^^^^^^^ invalid.illegal
+ =
+#^ invalid.illegal
+ = 123
+#^^^^^ invalid.illegal
+
+
+##############################################################################
+# Invalid values
+##############################################################################
+key = value
+#   ^ punctuation.definition.key-value
+#     ^^^^^ invalid.illegal
+key = 123'asdf'
+#        ^^^^^^ invalid.illegal
+key# comment
+#  ^^^^^^^^^ invalid.illegal
+key = = 1
+#     ^^^ invalid.illegal
+a = 1 b = 2
+#    ^^^^^^ invalid.illegal
+
+##############################################################################
+# Boolean
+##############################################################################
+key = true
+#     ^^^^ constant.language
+key = false # COMMENT
+#     ^^^^^ constant.language
+#           ^^^^^^^^^ comment.line.number-sign
+
+#-----------------------------------------------------------------------------
+# Invalid boolean
+#-----------------------------------------------------------------------------
+key = truefalse
+#         ^^^^^ invalid.illegal
+key = true123
+#         ^^^ invalid.illegal
+key = true!
+#         ^ invalid.illegal
+
+##############################################################################
+# Integer
+##############################################################################
+a = 0 # Comment
+#   ^ constant.numeric.integer
+#     ^^^^^^^^^ comment.line.number-sign
+a = +0
+#   ^ keyword.operator.arithmetic
+#   ^^ constant.numeric.integer
+a = -0
+#   ^ keyword.operator.arithmetic
+#   ^^ constant.numeric.integer
+a = 123
+#   ^^^ constant.numeric.integer
+a = -456
+#   ^ keyword.operator.arithmetic
+#   ^^^^ constant.numeric.integer
+a = 1_000
+#   ^^^^^ constant.numeric.integer
+a = 5_349_221
+#   ^^^^^^^^^ constant.numeric.integer
+a = 1_2_3_4_5     # VALID but discouraged
+#   ^^^^^^^^^ constant.numeric.integer
+
+# hexadecimal with prefix `0x`
+hex1 = 0xDEADBEEF
+#      ^^^^^^^^^^ constant.numeric.integer
+hex2 = 0xdeadbeef
+#      ^^^^^^^^^^ constant.numeric.integer
+hex3 = 0xdead_beef
+#      ^^^^^^^^^^^ constant.numeric.integer
+# octal with prefix `0o`
+oct1 = 0o01234567
+#      ^^^^^^^^^^ constant.numeric.integer
+oct2 = 0o755 # useful for Unix file permissions
+#      ^^^^^ constant.numeric.integer
+# binary with prefix `0b`
+bin1 = 0b11010110
+#      ^^^^^^^^^^ constant.numeric.integer
+
+#-----------------------------------------------------------------------------
+# Invalid integers
+#-----------------------------------------------------------------------------
+a = 0000
+#   ^^^^ invalid.illegal
+a = 0123
+#   ^^^^ invalid.illegal
+a = -012
+#   ^^^^ invalid.illegal
+a = 123abc
+#   ^^^^^^ invalid.illegal
+a = 123 abc
+#      ^^^^ invalid.illegal
+a = 123true
+#   ^^^^^^^ invalid.illegal
+a = 123+123
+#      ^^^^ invalid.illegal
+a = 1 2
+#    ^^ invalid.illegal
+a = 1__2
+#   ^^^^ invalid.illegal
+a = 1_
+#   ^^ invalid.illegal
+a = _
+#   ^ invalid.illegal
+a = _1
+#   ^^ invalid.illegal
+a = 1 2
+#    ^^ invalid.illegal
+a = -0x1
+#   ^^^^ invalid.illegal
+a = 0x-1
+#   ^^^^ invalid.illegal
+
+##############################################################################
+# Float
+##############################################################################
+a = +1.0
+#   ^ keyword.operator.arithmetic
+#   ^^^^ constant.numeric.float
+a = 3.1415
+#   ^^^^^^ constant.numeric.float
+a = -0.01
+#   ^ keyword.operator.arithmetic
+#   ^^^^^ constant.numeric.float
+a = 5e+22
+#   ^^^^^ constant.numeric.float
+a = 1e6
+#   ^^^ constant.numeric.float
+a = 1e06
+#   ^^^^ constant.numeric.float
+a = 1e+06
+#   ^^^^^ constant.numeric.float
+a = -2E-2
+#   ^ keyword.operator.arithmetic
+#   ^^^^^ constant.numeric.float
+a = 6.626e-34
+#   ^^^^^^^^^ constant.numeric.float
+a = 9_224_617.445_991_228_313
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^ constant.numeric.float
+
+# infinity
+sf1 = inf  # positive infinity
+#     ^^^ constant.numeric.float
+sf2 = +inf # positive infinity
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+sf3 = -inf # negative infinity
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+# not a number
+sf4 = nan  # actual sNaN/qNaN encoding is implementation specific
+#     ^^^ constant.numeric.float
+sf5 = +nan # same as `nan`
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+sf6 = -nan # valid, actual encoding is implementation specific
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+# zero
+sf7 = +0.0
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+sf8 = -0.0
+#     ^ constant.numeric.float keyword.operator.arithmetic
+#     ^^^^ constant.numeric.float
+
+#-----------------------------------------------------------------------------
+# Invalid float
+#-----------------------------------------------------------------------------
+a = x1.0
+#   ^^^^ invalid.illegal
+a = 0.
+#    ^ invalid.illegal
+a = .0
+#   ^^ invalid.illegal
+a = +.0
+#   ^^^ invalid.illegal
+a = 1e
+#   ^^ invalid.illegal
+a = 1.1__2
+#    ^^^^^ invalid.illegal
+a = 1._
+#    ^^ invalid.illegal
+a = 1._2
+#    ^^^ invalid.illegal
+a = 1.2_
+#    ^^^ invalid.illegal
+a = 1_.2
+#   ^^^^ invalid.illegal
+a = _1.2
+#   ^^^^ invalid.illegal
+a = -.123
+#   ^^^^^ invalid.illegal
+a = 03.13
+#   ^^^^^ invalid.illegal
+a = -03.13
+#   ^^^^^^ invalid.illegal
+
+
+##############################################################################
+# Date-Time
+##############################################################################
+odt1 = 1979-05-27T07:32:00Z
+#      ^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+odt2 = 1979-05-27T00:32:00-07:00
+#      ^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+odt3 = 1979-05-27T00:32:00.999999-07:00
+#      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+ldt1 = 1979-05-27T07:32:00
+#      ^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+ldt2 = 1979-05-27T00:32:00.999999
+#      ^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+ld1 = 1979-05-27
+#     ^^^^^^^^^^ constant.other.datetime
+lt1 = 07:32:00
+#     ^^^^^^^^ constant.other.datetime
+lt2 = 00:32:00.999999
+#     ^^^^^^^^^^^^^^^ constant.other.datetime
+odt1s = 1979-05-27 07:32:00Z
+#       ^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+odt2s = 1979-05-27 00:32:00-07:00
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+odt3s = 1979-05-27 00:32:00.999999-07:00
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+ldt1s = 1979-05-27 07:32:00
+#       ^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+ldt2s = 1979-05-27 00:32:00.999999
+#       ^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+lowercase = 1997-09-09t09:09:09z
+#           ^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+
+#-----------------------------------------------------------------------------
+# Invalid Date-Time
+#-----------------------------------------------------------------------------
+a = 9999-99-99
+#       ^^^^^^ invalid.illegal
+a = 1999-12-31T
+#             ^ invalid.illegal
+no-leads = 1987-7-05T17:45:00Z
+#              ^^^^^^^^^^^^^^^ invalid.illegal
+no-secs = 1987-07-05T17:45Z
+#                   ^^^^^^^ invalid.illegal
+no-t = 1987-07-0517:45:00Z
+#                        ^ invalid.illegal
+with-milli = 1987-07-5T17:45:00.12Z
+#                ^^^^^^^^^^^^^^^^^^ invalid.illegal
+
+
+##############################################################################
+# String
+##############################################################################
+s = "" # Comment
+#   ^^ string.quoted.double.basic
+#   ^ punctuation.definition.string.begin
+#    ^ punctuation.definition.string.end
+#      ^^^^^^^^^ comment.line.number-sign
+s = "I'm a string. \"You can quote me\". Name\tJos\u00E9\nLocation\tSF."
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.basic
+#   ^ punctuation.definition.string.begin
+#                  ^^ constant.character.escape
+#                                    ^^ constant.character.escape
+#                                            ^^ constant.character.escape
+#                                                 ^^^^^^^^ constant.character.escape
+#                                                                 ^^ constant.character.escape
+#                                                                      ^ punctuation.definition.string.end
+s = "\b\t\n\f\r\"\\\u1234\U12345678"
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.basic
+#   ^ punctuation.definition.string.begin
+#    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ constant.character.escape
+#                                  ^ punctuation.definition.string.end
+s = ''
+#   ^^ string.quoted.single.literal
+#   ^ punctuation.definition.string.begin
+#    ^ punctuation.definition.string.end
+winpath  = 'C:\Users\nodejs\templates'
+#          ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.single.literal
+#          ^ punctuation.definition.string.begin
+#                                    ^ punctuation.definition.string.end
+winpath2 = '\\ServerX\admin$\system32\'
+#          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.single.literal
+#          ^ punctuation.definition.string.begin
+#                                     ^ punctuation.definition.string.end
+quoted   = 'Tom "Dubs" Preston-Werner'
+#          ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.single.literal
+#          ^ punctuation.definition.string.begin
+#                                    ^ punctuation.definition.string.end
+regex    = '<\i\c*\s*>'
+#          ^^^^^^^^^^^^ string.quoted.single.literal
+#          ^ punctuation.definition.string.begin
+#                     ^ punctuation.definition.string.end
+str1 = """
+#      ^^^ string.quoted.triple.basic.block punctuation.definition.string.begin
+Roses are red
+#^^^^^^^^^^^^^ string.quoted.triple.basic.block
+Violets are blue"""
+#^^^^^^^^^^^^^^^ string.quoted.triple.basic.block
+#               ^^^ string.quoted.triple.basic.block punctuation.definition.string.end
+str2 = """
+#      ^^^ string.quoted.triple.basic.block punctuation.definition.string.begin
+The quick brown \
+#^^^^^^^^^^^^^^^^^ string.quoted.triple.basic.block
+
+  fox jumps over \
+    the lazy dog."""
+#^^^^^^^^^^^^^^^^ string.quoted.triple.basic.block
+#                ^^^ string.quoted.triple.basic.block punctuation.definition.string.end
+str3 = """\
+#      ^^^ string.quoted.triple.basic.block punctuation.definition.string.begin
+#         ^^ string.quoted.triple.basic.block
+       The quick brown \
+#^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.basic.block
+       fox jumps over \
+       the lazy dog.\
+       """
+#      ^^^ string.quoted.triple.basic.block punctuation.definition.string.end
+s = """\b\t\n\f\r\"\\\u1234\U12345678"""
+#   ^^^ string.quoted.triple.basic.block punctuation.definition.string.begin
+#      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.basic.block constant.character.escape
+#                                    ^^^ string.quoted.triple.basic.block punctuation.definition.string.end
+s = """"""
+#   ^^^ string.quoted.triple.basic.block punctuation.definition.string.begin
+#      ^^^ string.quoted.triple.basic.block punctuation.definition.string.end
+regex2 = '''I [dw]on't need \d{2} apples'''
+#        ^^^ string.quoted.triple.literal.block punctuation.definition.string.begin
+#           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.literal.block
+#                                       ^^^ string.quoted.triple.literal.block punctuation.definition.string.end
+lines  = '''
+#        ^^^ string.quoted.triple.literal.block punctuation.definition.string.begin
+The first newline is
+#^^^^^^^^^^^^^^^^^^^^ string.quoted.triple.literal.block
+trimmed in raw strings.
+   All other whitespace
+   is preserved.
+'''
+#^^ string.quoted.triple.literal.block punctuation.definition.string.end
+s = ''''''
+#   ^^^ string.quoted.triple.literal.block punctuation.definition.string.begin
+#      ^^^ string.quoted.triple.literal.block punctuation.definition.string.end
+
+#-----------------------------------------------------------------------------
+# Invalid string
+#-----------------------------------------------------------------------------
+s = "
+#    ^ invalid.illegal.string.non-terminated
+s = "\a\x12"
+#    ^^^^ invalid.illegal.string.escape
+s = "\u"
+#    ^^ invalid.illegal.string.escape
+s = "\u1"
+#    ^^ invalid.illegal.string.escape
+s = "\uasdf"
+#    ^^ invalid.illegal.string.escape
+s = "\U"
+#    ^^ invalid.illegal.string.escape
+s = "\U1234"
+#    ^^ invalid.illegal.string.escape
+s = '
+#   ^ invalid.illegal
+s = '' true
+#     ^^^^^ invalid.illegal
+s = ''''''''''''
+#         ^^^^^^ invalid.illegal
+s = """"""""
+#         ^^ invalid.illegal
+
+
+##############################################################################
+# Array
+##############################################################################
+empty = [] # Comment
+#       ^ punctuation.definition.array.begin
+#        ^ punctuation.definition.array.end
+#          ^^^^^^^^^ comment.line.number-sign
+empty = [
+#       ^ punctuation.definition.array.begin
+# Interior comment
+#^^^^^^^^^^^^^^^^^ comment.line.number-sign
+]
+#<- punctuation.definition.array.end
+
+a = [ # Comment
+#     ^^^^^^^^^ comment.line.number-sign
+#   ^ punctuation.definition.array.begin
+
+  1,
+# ^ constant.numeric.integer
+#  ^ punctuation.separator.array
+
+]
+#<- punctuation.definition.array.end
+
+arr1 = [ 1, 2, 3 ] # Comment
+#      ^ punctuation.definition.array.begin
+#        ^ constant.numeric.integer
+#         ^ punctuation.separator.array
+#           ^ constant.numeric.integer
+#            ^ punctuation.separator.array
+#              ^ constant.numeric.integer
+#                ^ punctuation.definition.array.end
+#                  ^^^^^^^^^ comment.line.number-sign
+arr2 = [ "red", "yellow", "green" ]
+#      ^ punctuation.definition.array.begin
+#        ^^^^^ string.quoted.double.basic
+#             ^ punctuation.separator.array
+#               ^^^^^^^^ string.quoted.double.basic
+#                         ^^^^^^^ string.quoted.double.basic
+#                                 ^ punctuation.definition.array.end
+arr3 = [ [ 1, 2 ], [3, 4, 5] ]
+#      ^ punctuation.definition.array.begin
+#        ^ punctuation.definition.array.begin
+#          ^ constant.numeric.integer
+#           ^ punctuation.separator.array
+#             ^ constant.numeric.integer
+#               ^ punctuation.definition.array.end
+#                ^ punctuation.separator.array
+#                  ^ punctuation.definition.array.begin
+#                   ^ constant.numeric.integer
+#                    ^ punctuation.separator.array
+#                      ^ constant.numeric.integer
+#                       ^ punctuation.separator.array
+#                         ^ constant.numeric.integer
+#                          ^ punctuation.definition.array.end
+#                            ^ punctuation.definition.array.end
+arr4 = [ "all", 'strings', """are the same""", '''type''']
+#        ^^^^^ string.quoted.double.basic
+#               ^^^^^^^^^ string.quoted.single.literal
+#                          ^^^^^^^^^^^^^^^^^^ string.quoted.triple.basic.block
+#                                              ^^^^^^^^^^ string.quoted.triple.literal.block
+#                                                        ^ punctuation.definition.array.end
+arr5 = [ [ 1, 2 ], ["a", "b", "c"] ]
+#      ^ punctuation.definition.array.begin
+#        ^ punctuation.definition.array.begin
+#               ^ punctuation.definition.array.end
+#                ^ punctuation.separator.array
+#                  ^ punctuation.definition.array.begin
+#                                ^ punctuation.definition.array.end
+#                                  ^ punctuation.definition.array.end
+arr7 = [
+#      ^ punctuation.definition.array.begin
+  1, 2, 3
+# ^ constant.numeric.integer
+#  ^ punctuation.separator.array
+]
+#<- punctuation.definition.array.end
+arr8 = [
+  1,
+# ^ constant.numeric.integer
+#  ^ punctuation.separator.array
+  2, # this is ok
+# ^ constant.numeric.integer
+#  ^ punctuation.separator.array
+#    ^^^^^^^^^^^^ comment.line.number-sign
+]
+# <- punctuation.definition.array.end
+
+#-----------------------------------------------------------------------------
+# Invalid array (but accepted)
+#-----------------------------------------------------------------------------
+# Mixed types aren't allowed.
+arr6 = [ 1, 2.0, true, 1999-12-31,
+#      ^ punctuation.definition.array.begin
+#        ^ constant.numeric.integer
+#         ^ punctuation.separator.array
+#           ^^^ constant.numeric.float
+        's', "s", '''s''', """s""",
+#       ^^^ string.quoted.single.literal
+#          ^ punctuation.separator.array
+#            ^^^ string.quoted.double.basic
+#               ^ punctuation.separator.array
+#                 ^^^^^^^ string.quoted.triple.literal.block
+#                        ^ punctuation.separator.array
+#                          ^^^^^^^ string.quoted.triple.basic.block
+#                                 ^ punctuation.separator.array
+        [], {},
+#       ^^ punctuation.definition.array
+#         ^ punctuation.separator.array
+#           ^ punctuation.definition.inline-table.begin
+#            ^ punctuation.definition.inline-table.end
+#             ^ punctuation.separator.array
+]
+# <- punctuation.definition.array.end
+a = ["s" asdf]
+#   ^ punctuation.definition.array.begin
+#    ^^^ string.quoted.double.basic
+#        ^^^^ invalid.illegal.array
+#            ^ punctuation.definition.array.end
+
+#-----------------------------------------------------------------------------
+# Invalid array
+#-----------------------------------------------------------------------------
+a = [,]
+#   ^ punctuation.definition.array.begin
+#    ^ invalid.illegal
+#     ^ punctuation.definition.array.end
+a = [1,,2]
+#     ^ punctuation.separator.array
+#      ^ invalid.illegal.value
+#        ^ punctuation.definition.array.end
+a = [&*^%$*]
+#   ^ punctuation.definition.array.begin
+#    ^ invalid.illegal.value
+a = [1, 2, name]
+#          ^^^^ invalid.illegal.value
+#              ^ punctuation.definition.array.end
+
+
+##############################################################################
+# Inline Table
+##############################################################################
+table = {  } # Comment
+#^^^^ entity.name.tag
+#     ^ punctuation.definition.key-value
+#       ^ punctuation.definition.inline-table.begin
+#          ^ punctuation.definition.inline-table.end
+#            ^^^^^^^^^ comment.line.number-sign
+table = {key = 123} # Comment
+#       ^ punctuation.definition.inline-table.begin
+#        ^^^ entity.name.tag
+#            ^ punctuation.definition.key-value
+#                 ^ punctuation.definition.inline-table.end
+#                   ^^^^^^^^^ comment.line.number-sign
+name = { first = "Tom", last = "Preston-Werner" }
+#^^^ entity.name.tag
+#        ^^^^^ entity.name.tag
+#              ^ punctuation.definition.key-value
+#                ^^^^^ string.quoted.double.basic
+#                     ^ punctuation.separator.inline-table
+#                       ^^^^ entity.name.tag
+#                            ^ punctuation.definition.key-value
+#                              ^^^^^^^^^^^^^^^^ string.quoted.double.basic
+#                                               ^ punctuation.definition.inline-table.end
+point = { x = 1, y = 2 }
+#       ^ punctuation.definition.inline-table.begin
+#         ^ entity.name.tag
+#           ^ punctuation.definition.key-value
+#             ^ constant.numeric.integer
+#              ^ punctuation.separator.inline-table
+#                ^ entity.name.tag
+#                  ^ punctuation.definition.key-value
+#                    ^ constant.numeric.integer
+#                      ^ punctuation.definition.inline-table.end
+t = {b=true, i=1, f=1.0, dt=1979-05-27T07:32:00Z, s1='s', s2="s", s3='''s''', s4="""s""", a=[1], t={k=1}}
+#   ^ punctuation.definition.inline-table.begin
+#    ^ entity.name.tag
+#     ^ punctuation.definition.key-value
+#      ^^^^ constant.language
+#          ^ punctuation.separator.inline-table
+#            ^ entity.name.tag
+#             ^ punctuation.definition.key-value
+#              ^ constant.numeric.integer
+#               ^ punctuation.separator.inline-table
+#                 ^ entity.name.tag
+#                  ^ punctuation.definition.key-value
+#                   ^^^ constant.numeric.float
+#                      ^ punctuation.separator.inline-table
+#                        ^^ entity.name.tag
+#                          ^ punctuation.definition.key-value
+#                           ^^^^^^^^^^^^^^^^^^^^ constant.other.datetime
+#                                               ^ punctuation.separator.inline-table
+#                                                 ^^ entity.name.tag
+#                                                   ^ punctuation.definition.key-value
+#                                                    ^^^ string.quoted.single.literal
+#                                                       ^ punctuation.separator.inline-table
+#                                                         ^^ entity.name.tag
+#                                                           ^ punctuation.definition.key-value
+#                                                            ^^^ string.quoted.double.basic
+#                                                               ^ punctuation.separator.inline-table
+#                                                                 ^^ entity.name.tag
+#                                                                   ^ punctuation.definition.key-value
+#                                                                    ^^^^^^^ string.quoted.triple.literal.block
+#                                                                           ^ punctuation.separator.inline-table
+#                                                                             ^^ entity.name.tag
+#                                                                               ^ punctuation.definition.key-value
+#                                                                                ^^^^^^^ string.quoted.triple.basic.block
+#                                                                                       ^ punctuation.separator.inline-table
+#                                                                                         ^ entity.name.tag
+#                                                                                          ^ punctuation.definition.key-value
+#                                                                                           ^ punctuation.definition.array.begin
+#                                                                                            ^ constant.numeric.integer
+#                                                                                             ^ punctuation.definition.array.end
+#                                                                                              ^ punctuation.separator.inline-table
+#                                                                                                ^ entity.name.tag
+#                                                                                                 ^ punctuation.definition.key-value
+#                                                                                                  ^ punctuation.definition.inline-table.begin
+#                                                                                                   ^ entity.name.tag
+#                                                                                                    ^ punctuation.definition.key-value
+#                                                                                                     ^ constant.numeric.integer
+#                                                                                                      ^^ punctuation.definition.inline-table.end
+
+#-----------------------------------------------------------------------------
+# Invalid inline table
+#-----------------------------------------------------------------------------
+t = {,}
+#    ^^ invalid.illegal
+t = {=}
+#     ^ invalid.illegal
+t = {
+}  # comment to clear scope
+#<- invalid.illegal
+t = {key=1,}
+#          ^ invalid.illegal
+t = {key}
+#       ^ invalid.illegal
+t = {key=1 asdf}
+#          ^^^^^ invalid.illegal
+t = {key=1, asdf}
+#               ^ invalid.illegal
+t = {key=invalid}
+#        ^^^^^^^ invalid.illegal.value
+t = {!=123}
+#    ^ invalid.illegal.key

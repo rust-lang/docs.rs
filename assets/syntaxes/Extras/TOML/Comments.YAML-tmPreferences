@@ -1,0 +1,7 @@
+name: Comments
+scope: source.toml
+settings:
+  shellVariables:
+    - name: TM_COMMENT_START
+      value: "# "
+uuid: 1756cf6c-a968-4b8d-91ce-89478b6ab636
