@@ -128,7 +128,7 @@ pub fn start_daemon<C: Context + Send + Clone + 'static>(
     // instead it will get killed when the process exits.
     webserver_thread
         .join()
-        .map_err(|_| anyhow!("web server panicked"))?
+        .map_err(|err| anyhow!("web server panicked: {:?}", err))?
 }
 
 pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>
