@@ -668,7 +668,7 @@ pub(crate) struct AxumErrorPage {
     /// The title of the page
     pub title: &'static str,
     /// The error message, displayed as a description
-    pub message: Option<Cow<'static, str>>,
+    pub message: Cow<'static, str>,
     #[serde(skip)]
     pub status: StatusCode,
 }

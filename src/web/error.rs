@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     db::PoolError,
     web::{page::WebPage, releases::Search, AxumErrorPage, ErrorPage},
@@ -149,8 +151,8 @@ pub enum AxumNope {
     OwnerNotFound,
     #[error("Requested crate does not have specified version")]
     VersionNotFound,
-    #[error("Search yielded no results")]
-    NoResults,
+    // #[error("Search yielded no results")]
+    // NoResults,
     #[error("Internal server error")]
     InternalServerError,
     #[error("internal error")]
@@ -166,7 +168,7 @@ impl IntoResponse for AxumNope {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
                 AxumErrorPage {
                     title: "Requested resource does not exist",
-                    message: Some("no such resource".into()),
+                    message: "no such resource".into(),
                     status: StatusCode::NOT_FOUND,
                 }
                 .into_response()
@@ -174,7 +176,7 @@ impl IntoResponse for AxumNope {
 
             AxumNope::BuildNotFound => AxumErrorPage {
                 title: "The requested build does not exist",
-                message: Some("no such build".into()),
+                message: "no such build".into(),
                 status: StatusCode::NOT_FOUND,
             }
             .into_response(),
@@ -184,7 +186,7 @@ impl IntoResponse for AxumNope {
                 // TODO: Display the attempted crate and a link to a search for said crate
                 AxumErrorPage {
                     title: "The requested crate does not exist",
-                    message: Some("no such crate".into()),
+                    message: "no such crate".into(),
                     status: StatusCode::NOT_FOUND,
                 }
                 .into_response()
@@ -192,7 +194,7 @@ impl IntoResponse for AxumNope {
 
             AxumNope::OwnerNotFound => AxumErrorPage {
                 title: "The requested owner does not exist",
-                message: Some("no such owner".into()),
+                message: "no such owner".into(),
                 status: StatusCode::NOT_FOUND,
             }
             .into_response(),
@@ -202,19 +204,19 @@ impl IntoResponse for AxumNope {
                 // TODO: Display the attempted crate and version
                 AxumErrorPage {
                     title: "The requested version does not exist",
-                    message: Some("no such version for this crate".into()),
+                    message: "no such version for this crate".into(),
                     status: StatusCode::NOT_FOUND,
                 }
                 .into_response()
             }
-            AxumNope::NoResults => {
-                todo!("to be implemented when search-handler is migrated to axum")
-            }
+            // AxumNope::NoResults => {
+            //     todo!("to be implemented when search-handler is migrated to axum")
+            // }
             AxumNope::InternalServerError => {
                 // something went wrong, details should have been logged
                 AxumErrorPage {
                     title: "Internal server error",
-                    message: Some("internal server error".into()),
+                    message: "internal server error".into(),
                     status: StatusCode::INTERNAL_SERVER_ERROR,
                 }
                 .into_response()
@@ -230,8 +232,8 @@ fn generate_internal_error_page<E: Into<anyhow::Error>>(error: E) -> impl IntoRe
 
     let web_error = crate::web::AxumErrorPage {
         title: "Internal Server Error",
-        message: ::std::option::Option::Some(::std::borrow::Cow::Owned(error.to_string())),
-        status: ::http::StatusCode::INTERNAL_SERVER_ERROR,
+        message: Cow::Owned(error.to_string()),
+        status: StatusCode::INTERNAL_SERVER_ERROR,
     };
 
     // TODO: check: does the sentry tower layer add the request as context?
