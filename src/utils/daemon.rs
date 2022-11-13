@@ -124,7 +124,7 @@ pub fn start_daemon<C: Context + Send + Clone + 'static>(
 
     start_background_repository_stats_updater(&context)?;
 
-    // NOTE: if a anyhow occurred earlier in `start_daemon`, the server will _not_ be joined -
+    // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.
     webserver_thread
         .join()

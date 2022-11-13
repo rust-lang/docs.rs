@@ -575,7 +575,7 @@ impl TestFrontend {
                             axum_app
                                 .fallback(
                                     build_strangler_service(iron_server.socket)
-                                        .expect("cloud not build strangler service"),
+                                        .expect("could not build strangler service"),
                                 )
                                 .into_make_service(),
                         )
@@ -608,7 +608,7 @@ impl TestFrontend {
         trace!("joining axum server thread");
         self.axum_server_thread
             .join()
-            .expect("could not join axum background thread error");
+            .expect("could not join axum background thread");
 
         trace!("forgetting about iron");
         // Iron is bugged, and it never closes the server even when the listener is dropped. To
