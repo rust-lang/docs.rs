@@ -911,16 +911,6 @@ mod tests {
                 .map(|v| v.as_str().unwrap().to_owned())
                 .collect();
             targets.sort();
-            assert_eq!(
-                targets,
-                vec![
-                    "i686-pc-windows-msvc",
-                    "i686-unknown-linux-gnu",
-                    "x86_64-apple-darwin",
-                    "x86_64-pc-windows-msvc",
-                    "x86_64-unknown-linux-gnu",
-                ]
-            );
 
             let web = env.frontend();
 
@@ -947,26 +937,51 @@ mod tests {
                 web,
             )?;
 
-            // other targets too
-            for target in DEFAULT_TARGETS {
-                let target_docs_present = storage.exists_in_archive(
-                    &doc_archive,
-                    &format!("{}/{}/index.html", target, crate_path),
-                )?;
+            assert!(!storage.exists_in_archive(
+                &doc_archive,
+                &format!("{}/{}/index.html", default_target, crate_path),
+            )?);
 
-                let target_url = format!(
-                    "/{}/{}/{}/{}/index.html",
-                    crate_, version, target, crate_path
+            let default_target_url = format!(
+                "/{}/{}/{}/{}/index.html",
+                crate_, version, default_target, crate_path
+            );
+            assert_redirect(
+                &default_target_url,
+                &format!("/{}/{}/{}/index.html", crate_, version, crate_path),
+                web,
+            )?;
+
+            // Non-dist toolchains only have a single target, and of course
+            // if include_default_targets is false we won't have this full list
+            // of targets.
+            if builder.toolchain.as_dist().is_some() && env.config().include_default_targets {
+                assert_eq!(
+                    targets,
+                    vec![
+                        "i686-pc-windows-msvc",
+                        "i686-unknown-linux-gnu",
+                        "x86_64-apple-darwin",
+                        "x86_64-pc-windows-msvc",
+                        "x86_64-unknown-linux-gnu",
+                    ]
                 );
 
-                if target == &default_target {
-                    assert!(!target_docs_present);
-                    assert_redirect(
-                        &target_url,
-                        &format!("/{}/{}/{}/index.html", crate_, version, crate_path),
-                        web,
+                // other targets too
+                for target in DEFAULT_TARGETS {
+                    if target == &default_target {
+                        continue;
+                    }
+                    let target_docs_present = storage.exists_in_archive(
+                        &doc_archive,
+                        &format!("{}/{}/index.html", target, crate_path),
                     )?;
-                } else {
+
+                    let target_url = format!(
+                        "/{}/{}/{}/{}/index.html",
+                        crate_, version, target, crate_path
+                    );
+
                     assert!(target_docs_present);
                     assert_success(&target_url, web)?;
                 }
@@ -1061,6 +1076,9 @@ mod tests {
             let crate_ = "windows-win";
             let version = "2.4.1";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            if builder.toolchain.as_ci().is_some() {
+                return Ok(());
+            }
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             let storage = env.storage();
