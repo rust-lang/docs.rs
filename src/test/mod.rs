@@ -279,6 +279,8 @@ impl TestEnvironment {
         // are actually different.
         config.cache_control_stale_while_revalidate = Some(86400);
 
+        config.include_default_targets = true;
+
         config
     }
 
