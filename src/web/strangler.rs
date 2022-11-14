@@ -92,7 +92,7 @@ async fn forward_call_to_strangled(
     inner: Arc<InnerStranglerService>,
     req: axum::http::Request<axum::body::Body>,
 ) -> Result<axum::response::Response, Infallible> {
-    tracing::info!("handling a request");
+    tracing::debug!("handling a request");
     let mut request_parts = RequestParts::new(req);
     let req: Result<axum::http::Request<axum::body::Body>, _> = request_parts.extract().await;
     let mut req = req.unwrap();
