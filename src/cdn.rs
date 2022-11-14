@@ -144,7 +144,7 @@ pub(crate) struct CrateInvalidation {
 /// Return fake active cloudfront invalidations.
 /// CloudFront invalidations can take up to 15 minutes. Until we have
 /// live queries of the invalidation status we just assume it's fine
-/// latest 20 minutes after the build.
+/// 20 minutes after the build.
 /// TODO: should be replaced be keeping track or querying the active invalidation from CloudFront
 pub(crate) fn active_crate_invalidations(
     conn: &mut postgres::Client,
