@@ -5,6 +5,7 @@ use crate::{
     utils::{get_config, ConfigName},
     web::{error::AxumNope, page::WebPage},
 };
+use anyhow::Context;
 use axum::{
     extract::{Extension, Path},
     response::IntoResponse,
@@ -91,7 +92,8 @@ pub(crate) async fn sitemap_handler(
             })
             .collect())
     })
-    .await??;
+    .await
+    .context("failed to join thread")??;
 
     Ok(SitemapXml { releases })
 }
@@ -115,7 +117,8 @@ pub(crate) async fn about_builds_handler(
         let mut conn = pool.get()?;
         get_config::<String>(&mut conn, ConfigName::RustcVersion)
     })
-    .await??;
+    .await
+    .context("failed to join thread")??;
 
     Ok(AboutBuilds {
         rustc_version,

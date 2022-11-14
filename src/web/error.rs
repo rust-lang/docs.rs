@@ -157,8 +157,6 @@ pub enum AxumNope {
     InternalServerError,
     #[error("internal error")]
     InternalError(#[from] anyhow::Error),
-    #[error("internal threading error")]
-    InternalTokio(#[from] tokio::task::JoinError),
 }
 
 impl IntoResponse for AxumNope {
@@ -221,25 +219,19 @@ impl IntoResponse for AxumNope {
                 }
                 .into_response()
             }
-            AxumNope::InternalError(source) => generate_internal_error_page(source).into_response(),
-            AxumNope::InternalTokio(source) => generate_internal_error_page(source).into_response(),
+            AxumNope::InternalError(source) => {
+                let web_error = crate::web::AxumErrorPage {
+                    title: "Internal Server Error",
+                    message: Cow::Owned(source.to_string()),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                };
+
+                crate::utils::report_error(&source);
+
+                web_error.into_response()
+            }
         }
     }
-}
-
-fn generate_internal_error_page<E: Into<anyhow::Error>>(error: E) -> impl IntoResponse {
-    let error = anyhow::anyhow!(error);
-
-    let web_error = crate::web::AxumErrorPage {
-        title: "Internal Server Error",
-        message: Cow::Owned(error.to_string()),
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-    };
-
-    // TODO: check: does the sentry tower layer add the request as context?
-    crate::utils::report_error(&error);
-
-    web_error
 }
 
 #[cfg(test)]
