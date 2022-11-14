@@ -172,9 +172,9 @@ pub(crate) async fn csp_middleware<B>(mut req: AxumHttpRequest<B>, next: Next<B>
             // actually enforcing them. This is useful to check if the CSP works without
             // impacting production traffic.
             if csp_report_only {
-                "Content-Security-Policy-Report-Only"
+                http::header::CONTENT_SECURITY_POLICY_REPORT_ONLY
             } else {
-                "Content-Security-Policy"
+                http::header::CONTENT_SECURITY_POLICY
             },
             rendered
                 .parse()
