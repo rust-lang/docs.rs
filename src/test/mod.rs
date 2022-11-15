@@ -156,6 +156,20 @@ pub(crate) fn assert_redirect_unchecked(
     assert_redirect_common(path, expected_target, web).map(|_| ())
 }
 
+/// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
+#[context("expected redirect from {path} to {expected_target}")]
+pub(crate) fn assert_redirect_cached_unchecked(
+    path: &str,
+    expected_target: &str,
+    cache_policy: cache::CachePolicy,
+    web: &TestFrontend,
+    config: &Config,
+) -> Result<()> {
+    let redirect_response = assert_redirect_common(path, expected_target, web)?;
+    assert_cache_control(&redirect_response, cache_policy, config);
+    Ok(())
+}
+
 /// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {

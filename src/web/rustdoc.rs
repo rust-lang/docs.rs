@@ -760,10 +760,13 @@ pub fn download_handler(req: &mut Request) -> IronResult<Response> {
         ctry!(req, storage.set_public_access(&archive_path, true));
     }
 
-    Ok(super::redirect(ctry!(
-        req,
-        Url::parse(&format!("{}/{}", config.s3_static_root_path, archive_path))
-    )))
+    Ok(super::cached_redirect(
+        ctry!(
+            req,
+            Url::parse(&format!("{}/{}", config.s3_static_root_path, archive_path))
+        ),
+        CachePolicy::ForeverInCdn,
+    ))
 }
 
 /// Serves shared resources used by rustdoc-generated documentation.
@@ -2342,10 +2345,9 @@ mod test {
         wrapper(|env| {
             let web = env.frontend();
 
-            assert_eq!(
-                web.get("/crate/dummy/0.1.0/download").send()?.status(),
-                StatusCode::NOT_FOUND
-            );
+            let response = web.get("/crate/dummy/0.1.0/download").send()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
@@ -2361,10 +2363,9 @@ mod test {
 
             let web = env.frontend();
 
-            assert_eq!(
-                web.get("/crate/dummy/0.1.0/download").send()?.status(),
-                StatusCode::NOT_FOUND
-            );
+            let response = web.get("/crate/dummy/0.1.0/download").send()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
@@ -2380,10 +2381,12 @@ mod test {
 
             let web = env.frontend();
 
-            assert_redirect_unchecked(
+            assert_redirect_cached_unchecked(
                 "/crate/dummy/0.1/download",
                 "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+                CachePolicy::ForeverInCdn,
                 web,
+                &env.config(),
             )?;
             assert!(env.storage().get_public_access("rustdoc/dummy/0.1.0.zip")?);
             Ok(())
@@ -2405,10 +2408,12 @@ mod test {
             env.storage()
                 .set_public_access("rustdoc/dummy/0.1.0.zip", false)?;
 
-            assert_redirect_unchecked(
+            assert_redirect_cached_unchecked(
                 "/crate/dummy/0.1.0/download",
                 "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+                CachePolicy::ForeverInCdn,
                 web,
+                &env.config(),
             )?;
             assert!(env.storage().get_public_access("rustdoc/dummy/0.1.0.zip")?);
             Ok(())
@@ -2432,10 +2437,12 @@ mod test {
 
             let web = env.frontend();
 
-            assert_redirect_unchecked(
+            assert_redirect_cached_unchecked(
                 "/crate/dummy/latest/download",
                 "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
+                CachePolicy::ForeverInCdn,
                 web,
+                &env.config(),
             )?;
             assert!(env.storage().get_public_access("rustdoc/dummy/0.2.0.zip")?);
             Ok(())
