@@ -3,7 +3,7 @@ use crate::db::types::Feature;
 use crate::{
     db::Pool,
     impl_webpage,
-    web::{page::WebPage, MetaData},
+    web::{cache::CachePolicy, page::WebPage, MetaData},
 };
 use iron::{IronResult, Request, Response, Url};
 use router::Router;
@@ -30,10 +30,10 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
     let req_version = router.find("version");
 
     let mut conn = extension!(req, Pool).get()?;
-    let (version, version_or_latest) =
+    let (version, version_or_latest, is_latest_url) =
         match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
-            MatchSemver::Exact((version, _)) => (version.clone(), version),
-            MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+            MatchSemver::Exact((version, _)) => (version.clone(), version, false),
+            MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
 
             MatchSemver::Semver((version, _)) => {
                 let url = ctry!(
@@ -46,7 +46,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
                     )),
                 );
 
-                return Ok(super::redirect(url));
+                return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
             }
         };
     let rows = ctry!(
@@ -70,7 +70,7 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
         default_len = result.1;
     }
 
-    FeaturesPage {
+    let mut response = FeaturesPage {
         metadata: cexpect!(
             req,
             MetaData::from_crate(&mut conn, name, &version, &version_or_latest)
@@ -79,7 +79,13 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
         default_len,
         canonical_url: format!("https://docs.rs/crate/{}/latest/features", name),
     }
-    .into_response(req)
+    .into_response(req)?;
+    response.extensions.insert::<CachePolicy>(if is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    });
+    Ok(response)
 }
 
 fn order_features_and_count_default_len(raw: Vec<Feature>) -> (Vec<Feature>, usize) {
@@ -121,12 +127,9 @@ fn get_feature_map(raw: Vec<Feature>) -> HashMap<String, Feature> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::db::types::Feature;
-    use crate::test::wrapper;
-    use crate::web::features::{
-        get_feature_map, get_tree_structure_from_default, order_features_and_count_default_len,
-        DEFAULT_NAME,
-    };
+    use crate::test::{assert_cache_control, assert_redirect_cached, wrapper};
     use reqwest::StatusCode;
     use std::collections::HashMap;
 
@@ -247,6 +250,46 @@ mod tests {
     }
 
     #[test]
+    fn semver_redirect() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.2.1")
+                .features(HashMap::new())
+                .create()?;
+
+            assert_redirect_cached(
+                "/crate/foo/~0.2/features",
+                "/crate/foo/0.2.1/features",
+                CachePolicy::ForeverInCdn,
+                env.frontend(),
+                &env.config(),
+            )?;
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn specific_version_correctly_cached() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.2.0")
+                .features(HashMap::new())
+                .create()?;
+
+            let resp = env.frontend().get("/crate/foo/0.2.0/features").send()?;
+            assert!(resp.status().is_success());
+            assert_cache_control(
+                &resp,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
     fn latest_200() {
         wrapper(|env| {
             env.fake_release()
@@ -262,6 +305,8 @@ mod tests {
                 .create()?;
 
             let resp = env.frontend().get("/crate/foo/latest/features").send()?;
+            assert!(resp.status().is_success());
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/crate/foo/latest/features"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
