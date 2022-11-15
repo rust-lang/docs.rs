@@ -5,8 +5,8 @@ use crate::{
     impl_webpage,
     utils::get_correct_docsrs_style_file,
     web::{
-        error::Nope, file::File as DbFile, match_version, page::WebPage, redirect_base,
-        MatchSemver, MetaData, Url,
+        cache::CachePolicy, error::Nope, file::File as DbFile, match_version, page::WebPage,
+        redirect_base, MatchSemver, MetaData, Url,
     },
     Storage,
 };
@@ -190,9 +190,9 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         // use that instead
         crate_name = new_name;
     }
-    let (version, version_or_latest) = match v.version {
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
-        MatchSemver::Exact((version, _)) => (version.clone(), version),
+    let (version, version_or_latest, is_latest_url) = match v.version {
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
+        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Semver((version, _)) => {
             let url = ctry!(
                 req,
@@ -205,7 +205,7 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
                 )),
             );
 
-            return Ok(super::redirect(url));
+            return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
         }
     };
 
@@ -303,19 +303,26 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     )
     .ok_or(Nope::ResourceNotFound)?;
 
-    SourcePage {
+    let mut response = SourcePage {
         file_list,
         show_parent_link: !req_path.is_empty(),
         file,
         file_content,
         canonical_url,
     }
-    .into_response(req)
+    .into_response(req)?;
+    response.extensions.insert::<CachePolicy>(if is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    });
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::test::*;
+    use crate::web::cache::CachePolicy;
     use test_case::test_case;
 
     #[test_case(true)]
@@ -329,11 +336,21 @@ mod tests {
                 .source_file("some_filename.rs", b"some_random_content")
                 .create()?;
             let web = env.frontend();
-            assert_success("/crate/fake/0.1.0/source/", web)?;
+            assert_success_cached(
+                "/crate/fake/0.1.0/source/",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
             let response = web
                 .get("/crate/fake/0.1.0/source/some_filename.rs")
                 .send()?;
             assert!(response.status().is_success());
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
             assert!(response.text()?.contains("some_random_content"));
             Ok(())
         });
@@ -367,6 +384,7 @@ mod tests {
                 .source_file("README.md", b"hello")
                 .create()?;
             let resp = env.frontend().get("/crate/fake/latest/source/").send()?;
+            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/crate/fake/latest/source/"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/fake/latest/builds\""));
@@ -405,10 +423,12 @@ mod tests {
                 .create()?;
             let web = env.frontend();
             assert_success("/crate/mbedtls/0.2.0/source/", web)?;
-            assert_redirect(
+            assert_redirect_cached(
                 "/crate/mbedtls/*/source/",
                 "/crate/mbedtls/0.2.0/source/",
+                CachePolicy::ForeverInCdn,
                 web,
+                &env.config(),
             )?;
             Ok(())
         })
@@ -426,7 +446,12 @@ mod tests {
                 .source_file("fold.rs", b"fn foo() {}")
                 .create()?;
             let web = env.frontend();
-            assert_success("/crate/rustc-ap-syntax/178.0.0/source/fold.rs", web)?;
+            assert_success_cached(
+                "/crate/rustc-ap-syntax/178.0.0/source/fold.rs",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
             Ok(())
         })
     }
