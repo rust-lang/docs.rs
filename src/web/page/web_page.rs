@@ -48,11 +48,11 @@ macro_rules! impl_webpage {
 
 #[macro_export]
 macro_rules! impl_axum_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, cache_control = $cache_control:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
     };
 
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, cache_control = $cache_control:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl axum::response::IntoResponse for $page
         {
             fn into_response(self) -> ::axum::response::Response {
@@ -70,12 +70,6 @@ macro_rules! impl_axum_webpage {
                             let status: fn(&$page) -> ::axum::http::StatusCode = $status;
                             (status)(&self)
                         })
-                    )?
-                    $(
-                        .header(
-                            ::axum::http::header::CACHE_CONTROL,
-                            ::axum::http::HeaderValue::from_str($cache_control).unwrap(),
-                        )
                     )?
                     // this empty body will be replaced in `render_templates_middleware` using
                     // the data from `DelayedTemplateRender` below.
