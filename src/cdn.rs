@@ -2,7 +2,7 @@ use crate::Config;
 use anyhow::{Context, Error, Result};
 use aws_sdk_cloudfront::{
     model::{InvalidationBatch, Paths},
-    Client, RetryConfig,
+    Client, Region, RetryConfig,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -35,7 +35,8 @@ impl CdnBackend {
             CdnKind::CloudFront => {
                 let shared_config = runtime.block_on(aws_config::load_from_env());
                 let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
-                    .retry_config(RetryConfig::standard().with_max_attempts(3));
+                    .retry_config(RetryConfig::standard().with_max_attempts(3))
+                    .region(Region::new(config.s3_region.clone()));
 
                 Self::CloudFront {
                     runtime: runtime.clone(),
