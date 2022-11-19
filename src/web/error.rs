@@ -234,6 +234,8 @@ impl IntoResponse for AxumNope {
     }
 }
 
+pub(crate) type WebResult<T> = Result<T, AxumNope>;
+
 #[cfg(test)]
 mod tests {
     use crate::test::wrapper;

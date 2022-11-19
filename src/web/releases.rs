@@ -4,24 +4,34 @@ use crate::{
     build_queue::QueuedCrate,
     cdn::{self, CrateInvalidation},
     db::{Pool, PoolClient},
-    impl_webpage,
+    impl_axum_webpage, impl_webpage,
     utils::report_error,
-    web::{error::Nope, match_version, page::WebPage, parse_url_with_params, redirect_base},
+    web::{
+        error::{Nope, WebResult},
+        match_version,
+        page::WebPage,
+        parse_url_with_params, redirect_base,
+    },
     BuildQueue, Config,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context as _, Result};
+use axum::{
+    extract::{Extension, Path},
+    response::IntoResponse,
+};
 use chrono::{DateTime, NaiveDate, Utc};
 use iron::{
     headers::{ContentType, Expires, HttpDate},
     mime::{Mime, SubLevel, TopLevel},
     modifiers::Redirect,
-    status, IronError, IronResult, Request, Response, Url,
+    status, IronError, IronResult, Request, Response as IronResponse, Url,
 };
 use postgres::Client;
 use router::Router;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::str;
+use tokio::task::spawn_blocking;
 use tracing::{debug, warn};
 use url::form_urlencoded;
 
@@ -63,7 +73,7 @@ pub(crate) fn get_releases(
     limit: i64,
     order: Order,
     latest_only: bool,
-) -> Vec<Release> {
+) -> Result<Vec<Release>> {
     let offset = (page - 1) * limit;
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
@@ -100,8 +110,8 @@ pub(crate) fn get_releases(
         }
     );
 
-    conn.query(query.as_str(), &[&limit, &offset, &filter_failed])
-        .unwrap()
+    Ok(conn
+        .query(query.as_str(), &[&limit, &offset, &filter_failed])?
         .into_iter()
         .map(|row| Release {
             name: row.get(0),
@@ -112,7 +122,7 @@ pub(crate) fn get_releases(
             build_time: row.get(5),
             stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
         })
-        .collect()
+        .collect())
 }
 
 struct SearchResult {
@@ -255,9 +265,12 @@ impl_webpage! {
     HomePage = "core/home.html",
 }
 
-pub fn home_page(req: &mut Request) -> IronResult<Response> {
+pub fn home_page(req: &mut Request) -> IronResult<IronResponse> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true);
+    let recent_releases = ctry!(
+        req,
+        get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true)
+    );
 
     HomePage { recent_releases }.into_response(req)
 }
@@ -272,9 +285,12 @@ impl_webpage! {
     content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
 }
 
-pub fn releases_feed_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_feed_handler(req: &mut Request) -> IronResult<IronResponse> {
     let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true);
+    let recent_releases = ctry!(
+        req,
+        get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true)
+    );
 
     ReleaseFeed { recent_releases }.into_response(req)
 }
@@ -290,13 +306,13 @@ struct ViewReleases {
     owner: Option<String>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     ViewReleases = "releases/releases.html",
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub(super) enum ReleaseType {
+pub(crate) enum ReleaseType {
     Recent,
     Stars,
     RecentFailures,
@@ -304,11 +320,12 @@ pub(super) enum ReleaseType {
     Search,
 }
 
-fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<Response> {
-    let page_number: i64 = extension!(req, Router)
-        .find("page")
-        .and_then(|page_num| page_num.parse().ok())
-        .unwrap_or(1);
+pub(crate) async fn releases_handler(
+    pool: Pool,
+    page: Option<i64>,
+    release_type: ReleaseType,
+) -> WebResult<impl IntoResponse> {
+    let page_number = page.unwrap_or(1);
 
     let (description, release_order, latest_only) = match release_type {
         ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime, false),
@@ -329,8 +346,8 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         }
     };
 
-    let releases = {
-        let mut conn = extension!(req, Pool).get()?;
+    let releases = spawn_blocking(move || -> Result<_> {
+        let mut conn = pool.get()?;
         get_releases(
             &mut conn,
             page_number,
@@ -338,7 +355,9 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
             release_order,
             latest_only,
         )
-    };
+    })
+    .await
+    .context("failed to join thread")??;
 
     // Show next and previous page buttons
     let (show_next_page, show_previous_page) = (
@@ -346,7 +365,7 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         page_number != 1,
     );
 
-    ViewReleases {
+    Ok(ViewReleases {
         releases,
         description: description.into(),
         release_type,
@@ -354,27 +373,38 @@ fn releases_handler(req: &mut Request, release_type: ReleaseType) -> IronResult<
         show_previous_page,
         page_number,
         owner: None,
-    }
-    .into_response(req)
+    })
 }
 
-pub fn recent_releases_handler(req: &mut Request) -> IronResult<Response> {
-    releases_handler(req, ReleaseType::Recent)
+pub(crate) async fn recent_releases_handler(
+    page: Option<Path<i64>>,
+    Extension(pool): Extension<Pool>,
+) -> WebResult<impl IntoResponse> {
+    releases_handler(pool, page.map(|p| p.0), ReleaseType::Recent).await
 }
 
-pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
-    releases_handler(req, ReleaseType::Stars)
+pub(crate) async fn releases_by_stars_handler(
+    page: Option<Path<i64>>,
+    Extension(pool): Extension<Pool>,
+) -> WebResult<impl IntoResponse> {
+    releases_handler(pool, page.map(|p| p.0), ReleaseType::Stars).await
 }
 
-pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
-    releases_handler(req, ReleaseType::RecentFailures)
+pub(crate) async fn releases_recent_failures_handler(
+    page: Option<Path<i64>>,
+    Extension(pool): Extension<Pool>,
+) -> WebResult<impl IntoResponse> {
+    releases_handler(pool, page.map(|p| p.0), ReleaseType::RecentFailures).await
 }
 
-pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
-    releases_handler(req, ReleaseType::Failures)
+pub(crate) async fn releases_failures_by_stars_handler(
+    page: Option<Path<i64>>,
+    Extension(pool): Extension<Pool>,
+) -> WebResult<impl IntoResponse> {
+    releases_handler(pool, page.map(|p| p.0), ReleaseType::Failures).await
 }
 
-pub fn owner_handler(req: &mut Request) -> IronResult<Response> {
+pub fn owner_handler(req: &mut Request) -> IronResult<IronResponse> {
     let router = extension!(req, Router);
     let mut owner = router.find("owner").unwrap();
     if owner.starts_with('@') {
@@ -414,7 +444,7 @@ impl Default for Search {
     }
 }
 
-fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<Response> {
+fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<IronResponse> {
     // We try to find a random crate and redirect to it.
     //
     // The query is efficient, but relies on a static factor which depends
@@ -480,7 +510,7 @@ impl_webpage! {
     status = |search| search.status,
 }
 
-pub fn search_handler(req: &mut Request) -> IronResult<Response> {
+pub fn search_handler(req: &mut Request) -> IronResult<IronResponse> {
     let url = req.url.as_ref();
     let mut params: HashMap<_, _> = url.query_pairs().collect();
     let query = params
@@ -526,7 +556,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<Response> {
                 ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
             };
 
-            let mut resp = Response::with((status::Found, Redirect(url)));
+            let mut resp = IronResponse::with((status::Found, Redirect(url)));
             resp.headers.set(Expires(HttpDate(time::now())));
 
             return Ok(resp);
@@ -607,7 +637,7 @@ impl_webpage! {
     ReleaseActivity = "releases/activity.html",
 }
 
-pub fn activity_handler(req: &mut Request) -> IronResult<Response> {
+pub fn activity_handler(req: &mut Request) -> IronResult<IronResponse> {
     let mut conn = extension!(req, Pool).get()?;
 
     let data: Vec<(NaiveDate, i64, i64)> = ctry!(
@@ -676,7 +706,7 @@ impl_webpage! {
     BuildQueuePage = "releases/build_queue.html",
 }
 
-pub fn build_queue_handler(req: &mut Request) -> IronResult<Response> {
+pub fn build_queue_handler(req: &mut Request) -> IronResult<IronResponse> {
     let mut queue = ctry!(req, extension!(req, BuildQueue).queued_crates());
     for krate in queue.iter_mut() {
         // The priority here is inverted: in the database if a crate has a higher priority it
@@ -730,7 +760,7 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true);
+            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true).unwrap();
             assert_eq!(
                 vec![
                     "bar", // 20 stars

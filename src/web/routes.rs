@@ -61,6 +61,38 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/about/builds",
             get_internal(super::sitemap::about_builds_handler),
         )
+        .route(
+            "/releases",
+            get_internal(super::releases::recent_releases_handler),
+        )
+        .route(
+            "/releases/recent/:page",
+            get_internal(super::releases::recent_releases_handler),
+        )
+        .route(
+            "/releases/stars",
+            get_internal(super::releases::releases_by_stars_handler),
+        )
+        .route(
+            "/releases/stars/:page",
+            get_internal(super::releases::releases_by_stars_handler),
+        )
+        .route(
+            "/releases/recent-failures",
+            get_internal(super::releases::releases_recent_failures_handler),
+        )
+        .route(
+            "/releases/recent-failures/:page",
+            get_internal(super::releases::releases_recent_failures_handler),
+        )
+        .route(
+            "/releases/failures",
+            get_internal(super::releases::releases_failures_by_stars_handler),
+        )
+        .route(
+            "/releases/failures/:page",
+            get_internal(super::releases::releases_failures_by_stars_handler),
+        )
 }
 
 // REFACTOR: Break this into smaller initialization functions
@@ -105,41 +137,12 @@ pub(super) fn build_routes() -> Routes {
     routes.internal_page("/about/metrics", super::metrics::metrics_handler);
     routes.internal_page("/about/:subpage", super::sitemap::about_handler);
 
-    routes.internal_page("/releases", super::releases::recent_releases_handler);
     routes.static_resource("/releases/feed", super::releases::releases_feed_handler);
     routes.internal_page("/releases/:owner", super::releases::owner_handler);
     routes.internal_page("/releases/:owner/:page", super::releases::owner_handler);
     routes.internal_page("/releases/activity", super::releases::activity_handler);
     routes.internal_page("/releases/search", super::releases::search_handler);
     routes.internal_page("/releases/queue", super::releases::build_queue_handler);
-    routes.internal_page(
-        "/releases/recent/:page",
-        super::releases::recent_releases_handler,
-    );
-    routes.internal_page(
-        "/releases/stars",
-        super::releases::releases_by_stars_handler,
-    );
-    routes.internal_page(
-        "/releases/stars/:page",
-        super::releases::releases_by_stars_handler,
-    );
-    routes.internal_page(
-        "/releases/recent-failures",
-        super::releases::releases_recent_failures_handler,
-    );
-    routes.internal_page(
-        "/releases/recent-failures/:page",
-        super::releases::releases_recent_failures_handler,
-    );
-    routes.internal_page(
-        "/releases/failures",
-        super::releases::releases_failures_by_stars_handler,
-    );
-    routes.internal_page(
-        "/releases/failures/:page",
-        super::releases::releases_failures_by_stars_handler,
-    );
 
     routes.internal_page("/crate/:name", super::crate_details::crate_details_handler);
     routes.internal_page(
