@@ -2,13 +2,12 @@ use crate::{
     db::Pool,
     docbuilder::Limits,
     impl_axum_webpage, impl_webpage,
-    utils::{get_config, ConfigName},
+    utils::{get_config, spawn_blocking, ConfigName},
     web::{
         error::{AxumNope, WebResult},
         page::WebPage,
     },
 };
-use anyhow::Context;
 use axum::{
     extract::{Extension, Path},
     response::IntoResponse,
@@ -16,7 +15,6 @@ use axum::{
 use chrono::{DateTime, TimeZone, Utc};
 use iron::{IronResult, Request as IronRequest, Response as IronResponse};
 use serde::Serialize;
-use tokio::task::spawn_blocking;
 
 /// sitemap index
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -64,7 +62,7 @@ pub(crate) async fn sitemap_handler(
             return Err(AxumNope::ResourceNotFound);
         }
     }
-    let releases = spawn_blocking(move || -> anyhow::Result<_> {
+    let releases = spawn_blocking(move || {
         let mut conn = pool.get()?;
         let query = conn.query(
             "SELECT crates.name,
@@ -95,8 +93,7 @@ pub(crate) async fn sitemap_handler(
             })
             .collect())
     })
-    .await
-    .context("failed to join thread")??;
+    .await?;
 
     Ok(SitemapXml { releases })
 }
@@ -116,12 +113,11 @@ impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 pub(crate) async fn about_builds_handler(
     Extension(pool): Extension<Pool>,
 ) -> WebResult<impl IntoResponse> {
-    let rustc_version = spawn_blocking(move || -> anyhow::Result<_> {
+    let rustc_version = spawn_blocking(move || {
         let mut conn = pool.get()?;
         get_config::<String>(&mut conn, ConfigName::RustcVersion)
     })
-    .await
-    .context("failed to join thread")??;
+    .await?;
 
     Ok(AboutBuilds {
         rustc_version,
