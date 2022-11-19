@@ -37,7 +37,7 @@ impl S3Backend {
     ) -> Result<Self, Error> {
         let shared_config = runtime.block_on(aws_config::load_from_env());
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
-            .retry_config(RetryConfig::standard().with_max_attempts(6))
+            .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
             .region(Region::new(config.s3_region.clone()));
 
         if let Some(ref endpoint) = config.s3_endpoint {

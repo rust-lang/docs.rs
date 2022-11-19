@@ -35,7 +35,9 @@ impl CdnBackend {
             CdnKind::CloudFront => {
                 let shared_config = runtime.block_on(aws_config::load_from_env());
                 let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
-                    .retry_config(RetryConfig::standard().with_max_attempts(3))
+                    .retry_config(
+                        RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries),
+                    )
                     .region(Region::new(config.s3_region.clone()));
 
                 Self::CloudFront {
