@@ -20,6 +20,9 @@ pub struct Config {
     // Storage params
     pub(crate) storage_backend: StorageKind,
 
+    // AWS SDK configuration
+    pub(crate) aws_sdk_max_retries: u32,
+
     // S3 params
     pub(crate) s3_bucket: String,
     pub(crate) s3_region: String,
@@ -122,6 +125,8 @@ impl Config {
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
             storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?,
+
+            aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6)?,
 
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
             s3_region: env("S3_REGION", "us-west-1".to_string())?,
