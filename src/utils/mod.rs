@@ -20,7 +20,7 @@ mod html;
 mod queue;
 pub(crate) mod queue_builder;
 mod rustc_version;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use postgres::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -76,6 +76,40 @@ where
             None => None,
         },
     )
+}
+
+/// a wrapper around tokio's `spawn_blocking` that
+/// enables us to write nicer code when the closure
+/// returns an `anyhow::Result`.
+///
+/// The join-error will also be converted into an `anyhow::Error`.
+///
+/// with standard `tokio::task::spawn_blocking`:
+/// ```ignore
+/// let data = spawn_blocking(move || -> anyhow::Result<_> {
+///     let data = get_the_data()?;
+///     Ok(data)
+/// })
+/// .await
+/// .context("failed to join thread")??;
+/// ```
+///
+/// with this helper function:
+/// ```ignore
+/// let data = spawn_blocking(move || {
+///     let data = get_the_data()?;
+///     Ok(data)
+/// })
+/// .await?
+/// ```
+pub(crate) async fn spawn_blocking<F, R>(f: F) -> Result<R>
+where
+    F: FnOnce() -> Result<R> + Send + 'static,
+    R: Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .context("failed to join thread")?
 }
 
 #[cfg(test)]

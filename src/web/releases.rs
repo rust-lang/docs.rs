@@ -5,7 +5,7 @@ use crate::{
     cdn::{self, CrateInvalidation},
     db::{Pool, PoolClient},
     impl_axum_webpage, impl_webpage,
-    utils::report_error,
+    utils::{report_error, spawn_blocking},
     web::{
         error::{Nope, WebResult},
         match_version,
@@ -14,7 +14,7 @@ use crate::{
     },
     BuildQueue, Config,
 };
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Result};
 use axum::{
     extract::{Extension, Path},
     response::IntoResponse,
@@ -31,7 +31,6 @@ use router::Router;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::str;
-use tokio::task::spawn_blocking;
 use tracing::{debug, warn};
 use url::form_urlencoded;
 
@@ -346,7 +345,7 @@ pub(crate) async fn releases_handler(
         }
     };
 
-    let releases = spawn_blocking(move || -> Result<_> {
+    let releases = spawn_blocking(move || {
         let mut conn = pool.get()?;
         get_releases(
             &mut conn,
@@ -356,8 +355,7 @@ pub(crate) async fn releases_handler(
             latest_only,
         )
     })
-    .await
-    .context("failed to join thread")??;
+    .await?;
 
     // Show next and previous page buttons
     let (show_next_page, show_previous_page) = (
