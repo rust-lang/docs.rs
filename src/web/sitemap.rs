@@ -3,7 +3,10 @@ use crate::{
     docbuilder::Limits,
     impl_axum_webpage, impl_webpage,
     utils::{get_config, ConfigName},
-    web::{error::AxumNope, page::WebPage},
+    web::{
+        error::{AxumNope, WebResult},
+        page::WebPage,
+    },
 };
 use anyhow::Context;
 use axum::{
@@ -53,7 +56,7 @@ impl_axum_webpage! {
 pub(crate) async fn sitemap_handler(
     Path(letter): Path<String>,
     Extension(pool): Extension<Pool>,
-) -> Result<impl IntoResponse, AxumNope> {
+) -> WebResult<impl IntoResponse> {
     if letter.len() != 1 {
         return Err(AxumNope::ResourceNotFound);
     } else if let Some(ch) = letter.chars().next() {
@@ -112,7 +115,7 @@ impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub(crate) async fn about_builds_handler(
     Extension(pool): Extension<Pool>,
-) -> Result<impl IntoResponse, AxumNope> {
+) -> WebResult<impl IntoResponse> {
     let rustc_version = spawn_blocking(move || -> anyhow::Result<_> {
         let mut conn = pool.get()?;
         get_config::<String>(&mut conn, ConfigName::RustcVersion)
