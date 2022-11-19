@@ -95,26 +95,28 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
     Ok(())
 }
 
-pub fn start_daemon<C: Context + Send + Clone + 'static>(
+pub fn start_daemon<C: Context + Send + Sync + 'static>(
     context: C,
     enable_registry_watcher: bool,
 ) -> Result<(), Error> {
+    let context = Arc::new(context);
+
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
     let webserver_thread = thread::spawn({
         let context = context.clone();
-        move || start_web_server(None, &context)
+        move || start_web_server(None, &*context)
     });
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(&context)?;
+        start_registry_watcher(&*context)?;
     }
 
     // build new crates every minute
     let build_queue = context.build_queue()?;
-    let rustwide_builder = RustwideBuilder::init(&context)?;
+    let rustwide_builder = RustwideBuilder::init(&*context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
@@ -122,7 +124,7 @@ pub fn start_daemon<C: Context + Send + Clone + 'static>(
         })
         .unwrap();
 
-    start_background_repository_stats_updater(&context)?;
+    start_background_repository_stats_updater(&*context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.

@@ -537,7 +537,6 @@ enum DeleteSubcommand {
     },
 }
 
-#[derive(Clone)]
 struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
