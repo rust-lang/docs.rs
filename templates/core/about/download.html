@@ -47,9 +47,10 @@
                 subfolder.
             </p>
             <p>
-                Docs.rs is running rustdoc with <code>--static-root-path "/"</code>,
+                Docs.rs is running rustdoc with <code>--static-root-path "/-/rustdoc.static/"</code>,
                 which leads to all references to static assets breaking if they are not
-                available under that path.
+                available under that path. Older builds used <code>--static-root-path "/"</code>, which 
+                means you will have to handle both.
             </p>
             <p>
                 Since we're also adding <code>--emit=invocation-specific</code> to our build
