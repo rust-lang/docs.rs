@@ -1,3 +1,6 @@
+[assign]
+warn_non_default_branch = true
+
 [relabel]
 allow-unauthenticated = [
     "S-waiting-on-review",
