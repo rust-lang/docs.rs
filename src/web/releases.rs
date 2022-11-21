@@ -7,7 +7,7 @@ use crate::{
     impl_axum_webpage, impl_webpage,
     utils::{report_error, spawn_blocking},
     web::{
-        error::{Nope, WebResult},
+        error::{AxumResult, Nope},
         match_version,
         page::WebPage,
         parse_url_with_params, redirect_base,
@@ -323,7 +323,7 @@ pub(crate) async fn releases_handler(
     pool: Pool,
     page: Option<i64>,
     release_type: ReleaseType,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     let page_number = page.unwrap_or(1);
 
     let (description, release_order, latest_only) = match release_type {
@@ -377,28 +377,28 @@ pub(crate) async fn releases_handler(
 pub(crate) async fn recent_releases_handler(
     page: Option<Path<i64>>,
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     releases_handler(pool, page.map(|p| p.0), ReleaseType::Recent).await
 }
 
 pub(crate) async fn releases_by_stars_handler(
     page: Option<Path<i64>>,
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     releases_handler(pool, page.map(|p| p.0), ReleaseType::Stars).await
 }
 
 pub(crate) async fn releases_recent_failures_handler(
     page: Option<Path<i64>>,
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     releases_handler(pool, page.map(|p| p.0), ReleaseType::RecentFailures).await
 }
 
 pub(crate) async fn releases_failures_by_stars_handler(
     page: Option<Path<i64>>,
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     releases_handler(pool, page.map(|p| p.0), ReleaseType::Failures).await
 }
 

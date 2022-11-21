@@ -234,7 +234,7 @@ impl IntoResponse for AxumNope {
     }
 }
 
-pub(crate) type WebResult<T> = Result<T, AxumNope>;
+pub(crate) type AxumResult<T> = Result<T, AxumNope>;
 
 #[cfg(test)]
 mod tests {
