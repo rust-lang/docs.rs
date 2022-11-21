@@ -4,7 +4,7 @@ use crate::{
     impl_axum_webpage, impl_webpage,
     utils::{get_config, spawn_blocking, ConfigName},
     web::{
-        error::{AxumNope, WebResult},
+        error::{AxumNope, AxumResult},
         page::WebPage,
     },
 };
@@ -54,7 +54,7 @@ impl_axum_webpage! {
 pub(crate) async fn sitemap_handler(
     Path(letter): Path<String>,
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     if letter.len() != 1 {
         return Err(AxumNope::ResourceNotFound);
     } else if let Some(ch) = letter.chars().next() {
@@ -112,7 +112,7 @@ impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub(crate) async fn about_builds_handler(
     Extension(pool): Extension<Pool>,
-) -> WebResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse> {
     let rustc_version = spawn_blocking(move || {
         let mut conn = pool.get()?;
         get_config::<String>(&mut conn, ConfigName::RustcVersion)
