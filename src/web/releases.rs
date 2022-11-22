@@ -3,34 +3,27 @@
 use crate::{
     build_queue::QueuedCrate,
     cdn::{self, CrateInvalidation},
-    db::{Pool, PoolClient},
-    impl_axum_webpage, impl_webpage,
+    db::Pool,
+    impl_axum_webpage,
     utils::{report_error, spawn_blocking},
     web::{
-        error::{AxumResult, Nope},
-        match_version,
-        page::WebPage,
-        parse_url_with_params, redirect_base,
+        axum_parse_uri_with_params, axum_redirect,
+        error::{AxumNope, AxumResult},
+        match_version_axum,
     },
-    BuildQueue, Config,
+    BuildQueue, Config, Metrics,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context as _, Result};
 use axum::{
-    extract::{Extension, Path},
-    response::IntoResponse,
+    extract::{Extension, Path, Query},
+    response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, NaiveDate, Utc};
-use iron::{
-    headers::{ContentType, Expires, HttpDate},
-    mime::{Mime, SubLevel, TopLevel},
-    modifiers::Redirect,
-    status, IronError, IronResult, Request, Response as IronResponse, Url,
-};
 use postgres::Client;
-use router::Router;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::str;
+use std::sync::Arc;
 use tracing::{debug, warn};
 use url::form_urlencoded;
 
@@ -134,10 +127,7 @@ struct SearchResult {
 /// Get the search results for a crate search query
 ///
 /// This delegates to the crates.io search API.
-fn get_search_results(
-    conn: &mut Client,
-    query_params: &str,
-) -> Result<SearchResult, anyhow::Error> {
+async fn get_search_results(pool: Pool, query_params: &str) -> Result<SearchResult, anyhow::Error> {
     #[derive(Deserialize)]
     struct CratesIoSearchResult {
         crates: Vec<CratesIoCrate>,
@@ -155,8 +145,8 @@ fn get_search_results(
 
     use crate::utils::APP_USER_AGENT;
     use once_cell::sync::Lazy;
-    use reqwest::blocking::Client as HttpClient;
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
+    use reqwest::Client as HttpClient;
 
     static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| {
         let mut headers = HeaderMap::new();
@@ -187,13 +177,21 @@ fn get_search_results(
         }
     });
 
-    let releases: CratesIoSearchResult = HTTP_CLIENT.get(url).send()?.error_for_status()?.json()?;
+    let releases: CratesIoSearchResult = HTTP_CLIENT
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
 
-    let names: Vec<_> = releases
-        .crates
-        .into_iter()
-        .map(|krate| krate.name)
-        .collect();
+    let names = Arc::new(
+        releases
+            .crates
+            .into_iter()
+            .map(|krate| krate.name)
+            .collect::<Vec<_>>(),
+    );
 
     // now we're trying to get the docs.rs data for the crates
     // returned by the search.
@@ -202,43 +200,50 @@ fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let crates: HashMap<String, Release> = conn
-        .query(
-            "SELECT
-                crates.name,
-                releases.version,
-                releases.description,
-                builds.build_time,
-                releases.target_name,
-                releases.rustdoc_status,
-                repositories.stars
+    let crates: HashMap<String, Release> = spawn_blocking({
+        let names = names.clone();
+        move || {
+            let mut conn = pool.get()?;
+            Ok(conn
+                .query(
+                    "SELECT
+                         crates.name,
+                         releases.version,
+                         releases.description,
+                         builds.build_time,
+                         releases.target_name,
+                         releases.rustdoc_status,
+                         repositories.stars
 
-            FROM crates
-            INNER JOIN releases ON crates.latest_version_id = releases.id
-            INNER JOIN builds ON releases.id = builds.rid
-            LEFT JOIN repositories ON releases.repository_id = repositories.id
+                     FROM crates
+                     INNER JOIN releases ON crates.latest_version_id = releases.id
+                     INNER JOIN builds ON releases.id = builds.rid
+                     LEFT JOIN repositories ON releases.repository_id = repositories.id
 
-            WHERE crates.name = ANY($1)",
-            &[&names],
-        )?
-        .into_iter()
-        .map(|row| {
-            let stars: Option<_> = row.get("stars");
-            let name: String = row.get("name");
-            (
-                name.clone(),
-                Release {
-                    name,
-                    version: row.get("version"),
-                    description: row.get("description"),
-                    build_time: row.get("build_time"),
-                    target_name: row.get("target_name"),
-                    rustdoc_status: row.get("rustdoc_status"),
-                    stars: stars.unwrap_or(0),
-                },
-            )
-        })
-        .collect();
+                     WHERE crates.name = ANY($1)",
+                    &[&*names],
+                )?
+                .into_iter()
+                .map(|row| {
+                    let stars: Option<_> = row.get("stars");
+                    let name: String = row.get("name");
+                    (
+                        name.clone(),
+                        Release {
+                            name,
+                            version: row.get("version"),
+                            description: row.get("description"),
+                            build_time: row.get("build_time"),
+                            target_name: row.get("target_name"),
+                            rustdoc_status: row.get("rustdoc_status"),
+                            stars: stars.unwrap_or(0),
+                        },
+                    )
+                })
+                .collect())
+        }
+    })
+    .await?;
 
     Ok(SearchResult {
         // start with the original names from crates.io to keep the original ranking,
@@ -260,18 +265,18 @@ struct HomePage {
     recent_releases: Vec<Release>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     HomePage = "core/home.html",
 }
 
-pub fn home_page(req: &mut Request) -> IronResult<IronResponse> {
-    let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = ctry!(
-        req,
+pub(crate) async fn home_page(Extension(pool): Extension<Pool>) -> AxumResult<impl IntoResponse> {
+    let recent_releases = spawn_blocking(move || {
+        let mut conn = pool.get()?;
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true)
-    );
+    })
+    .await?;
 
-    HomePage { recent_releases }.into_response(req)
+    Ok(HomePage { recent_releases })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -279,19 +284,21 @@ struct ReleaseFeed {
     recent_releases: Vec<Release>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     ReleaseFeed  = "releases/feed.xml",
-    content_type = ContentType(Mime(TopLevel::Application, SubLevel::Xml, vec![])),
+    content_type = "application/xml",
 }
 
-pub fn releases_feed_handler(req: &mut Request) -> IronResult<IronResponse> {
-    let mut conn = extension!(req, Pool).get()?;
-    let recent_releases = ctry!(
-        req,
+pub(crate) async fn releases_feed_handler(
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let recent_releases = spawn_blocking(move || {
+        let mut conn = pool.get()?;
         get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true)
-    );
+    })
+    .await?;
 
-    ReleaseFeed { recent_releases }.into_response(req)
+    Ok(ReleaseFeed { recent_releases })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -402,16 +409,12 @@ pub(crate) async fn releases_failures_by_stars_handler(
     releases_handler(pool, page.map(|p| p.0), ReleaseType::Failures).await
 }
 
-pub fn owner_handler(req: &mut Request) -> IronResult<IronResponse> {
-    let router = extension!(req, Router);
-    let mut owner = router.find("owner").unwrap();
-    if owner.starts_with('@') {
-        owner = &owner[1..];
-    }
-    match format!("https://crates.io/users/{}", owner).parse() {
-        Ok(url) => Ok(super::redirect(url)),
-        Err(_) => Err(Nope::OwnerNotFound.into()),
-    }
+pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl IntoResponse> {
+    axum_redirect(format!(
+        "https://crates.io/users/{}",
+        owner.strip_prefix('@').unwrap_or(&owner)
+    ))
+    .map_err(|_| AxumNope::OwnerNotFound)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -425,7 +428,7 @@ pub(super) struct Search {
     /// This should always be `ReleaseType::Search`
     pub(super) release_type: ReleaseType,
     #[serde(skip)]
-    pub(super) status: iron::status::Status,
+    pub(super) status: http::StatusCode,
 }
 
 impl Default for Search {
@@ -437,12 +440,16 @@ impl Default for Search {
             previous_page_link: None,
             next_page_link: None,
             release_type: ReleaseType::Search,
-            status: iron::status::Ok,
+            status: http::StatusCode::OK,
         }
     }
 }
 
-fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<IronResponse> {
+async fn redirect_to_random_crate(
+    config: Arc<Config>,
+    metrics: Arc<Metrics>,
+    pool: Pool,
+) -> AxumResult<impl IntoResponse> {
     // We try to find a random crate and redirect to it.
     //
     // The query is efficient, but relies on a static factor which depends
@@ -450,11 +457,11 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
     //
     // If random-crate-searches end up being empty, increase that value.
 
-    let config = extension!(req, Config);
-    let rows = ctry!(
-        req,
-        conn.query(
-            "WITH params AS (
+    let row = spawn_blocking({
+        move || {
+            let mut conn = pool.get()?;
+            Ok(conn.query_opt(
+                "WITH params AS (
                     -- get maximum possible id-value in crates-table
                     SELECT last_value AS max_id FROM crates_id_seq
                 )
@@ -474,56 +481,53 @@ fn redirect_to_random_crate(req: &Request, conn: &mut PoolClient) -> IronResult<
                     releases.rustdoc_status = TRUE AND
                     repositories.stars >= 100
                 LIMIT 1",
-            &[&(config.random_crate_search_view_size as i32)]
-        )
-    );
+                &[&(config.random_crate_search_view_size as i32)],
+            )?)
+        }
+    })
+    .await?;
 
-    if let Some(row) = rows.into_iter().next() {
+    if let Some(row) = row {
         let name: String = row.get("name");
         let version: String = row.get("version");
         let target_name: String = row.get("target_name");
-        let url = ctry!(
-            req,
-            Url::parse(&format!(
-                "{}/{}/{}/{}/",
-                redirect_base(req),
-                name,
-                version,
-                target_name
-            )),
-        );
 
-        let metrics = extension!(req, crate::Metrics).clone();
         metrics.im_feeling_lucky_searches.inc();
 
-        Ok(super::redirect(url))
+        Ok(axum_redirect(format!(
+            "/{}/{}/{}/",
+            name, version, target_name
+        ))?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
-        Err(Nope::NoResults.into())
+        Err(AxumNope::NoResults)
     }
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     Search = "releases/search_results.html",
     status = |search| search.status,
 }
 
-pub fn search_handler(req: &mut Request) -> IronResult<IronResponse> {
-    let url = req.url.as_ref();
-    let mut params: HashMap<_, _> = url.query_pairs().collect();
+pub(crate) async fn search_handler(
+    Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+    Query(mut params): Query<HashMap<String, String>>,
+) -> AxumResult<AxumResponse> {
     let query = params
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-
-    let mut conn = extension!(req, Pool).get()?;
 
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
     if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
-            return redirect_to_random_crate(req, &mut conn);
+            return Ok(redirect_to_random_crate(config, metrics, pool)
+                .await?
+                .into_response());
         }
 
         let mut queries = BTreeMap::new();
@@ -531,74 +535,68 @@ pub fn search_handler(req: &mut Request) -> IronResult<IronResponse> {
         let krate = match query.split_once("::") {
             Some((krate, query)) => {
                 queries.insert("search".into(), query.into());
-                krate.to_string()
+                krate
             }
-            None => query.clone(),
+            None => &query,
         };
 
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
-        if let Ok(matchver) = match_version(&mut conn, &krate, None) {
+        if let Ok(matchver) = match_version_axum(&pool, krate, None).await {
             params.remove("query");
             queries.extend(params);
             let (version, _) = matchver.version.into_parts();
-            let krate = matchver.corrected_name.unwrap_or(krate);
+            let krate = matchver.corrected_name.unwrap_or_else(|| krate.to_string());
 
-            let base = redirect_base(req);
-            let url = if matchver.rustdoc_status {
+            let uri = if matchver.rustdoc_status {
                 let target_name = matchver.target_name;
-                let path = format!("{base}/{krate}/{version}/{target_name}/");
-                ctry!(req, parse_url_with_params(&path, queries))
+                axum_parse_uri_with_params(&format!("/{krate}/{version}/{target_name}/"), queries)?
             } else {
-                ctry!(req, Url::parse(&format!("{base}/crate/{krate}/{version}")))
+                format!("/crate/{krate}/{version}")
+                    .parse::<http::Uri>()
+                    .context("could not parse redirect URI")?
             };
 
-            let mut resp = IronResponse::with((status::Found, Redirect(url)));
-            resp.headers.set(Expires(HttpDate(time::now())));
-
-            return Ok(resp);
+            return Ok(super::axum_redirect(uri)?.into_response());
         }
     }
 
-    let search_result = ctry!(
-        req,
-        if let Some(paginate) = params.get("paginate") {
-            let decoded = base64::decode(paginate.as_bytes()).map_err(|e| -> IronError {
-                warn!(
-                    "error when decoding pagination base64 string \"{}\": {:?}",
-                    paginate, e
-                );
-                Nope::NoResults.into()
-            })?;
-            let query_params = String::from_utf8_lossy(&decoded);
+    let search_result = if let Some(paginate) = params.get("paginate") {
+        let decoded = base64::decode(paginate.as_bytes()).map_err(|e| {
+            warn!(
+                "error when decoding pagination base64 string \"{}\": {:?}",
+                paginate, e
+            );
+            AxumNope::NoResults
+        })?;
+        let query_params = String::from_utf8_lossy(&decoded);
 
-            if !query_params.starts_with('?') {
-                // sometimes we see plain bytes being passed to `paginate`.
-                // In these cases we just return `NoResults` and don't call
-                // the crates.io API.
-                // The whole point of the `paginate` design is that we don't
-                // know anything about the pagination args and crates.io can
-                // change them as they wish, so we cannot do any more checks here.
-                warn!(
-                    "didn't get query args in `paginate` arguments for search: \"{}\"",
-                    query_params
-                );
-                return Err(Nope::NoResults.into());
-            }
-
-            get_search_results(&mut conn, &query_params)
-        } else if !query.is_empty() {
-            let query_params: String = form_urlencoded::Serializer::new(String::new())
-                .append_pair("q", &query)
-                .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
-                .finish();
-
-            get_search_results(&mut conn, &format!("?{}", &query_params))
-        } else {
-            return Err(Nope::NoResults.into());
+        if !query_params.starts_with('?') {
+            // sometimes we see plain bytes being passed to `paginate`.
+            // In these cases we just return `NoResults` and don't call
+            // the crates.io API.
+            // The whole point of the `paginate` design is that we don't
+            // know anything about the pagination args and crates.io can
+            // change them as they wish, so we cannot do any more checks here.
+            warn!(
+                "didn't get query args in `paginate` arguments for search: \"{}\"",
+                query_params
+            );
+            return Err(AxumNope::NoResults);
         }
-    );
+
+        get_search_results(pool, &query_params).await?
+    } else if !query.is_empty() {
+        let query_params: String = form_urlencoded::Serializer::new(String::new())
+            .append_pair("q", &query)
+            .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
+            .finish();
+
+        get_search_results(pool, &format!("?{}", &query_params)).await?
+    } else {
+        return Err(AxumNope::NoResults);
+    };
 
     let executed_query = search_result.executed_query.unwrap_or_default();
 
@@ -608,7 +606,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<IronResponse> {
         format!("Search results for '{}'", executed_query)
     };
 
-    Search {
+    Ok(Search {
         title,
         results: search_result.results,
         search_query: Some(executed_query),
@@ -620,7 +618,7 @@ pub fn search_handler(req: &mut Request) -> IronResult<IronResponse> {
             .map(|params| format!("/releases/search?paginate={}", base64::encode(params))),
         ..Default::default()
     }
-    .into_response(req)
+    .into_response())
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -631,16 +629,16 @@ struct ReleaseActivity {
     failures: Vec<i64>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     ReleaseActivity = "releases/activity.html",
 }
 
-pub fn activity_handler(req: &mut Request) -> IronResult<IronResponse> {
-    let mut conn = extension!(req, Pool).get()?;
-
-    let data: Vec<(NaiveDate, i64, i64)> = ctry!(
-        req,
-        conn.query(
+pub(crate) async fn activity_handler(
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let data = spawn_blocking(move ||  {
+        let mut conn = pool.get()?;
+        Ok(conn.query(
             "
             WITH dates AS (
                 -- we need this series so that days in the statistic that don't have any releases are included
@@ -675,13 +673,13 @@ pub fn activity_handler(req: &mut Request) -> IronResult<IronResponse> {
                 dates.date_
             ",
             &[],
-        )
-    )
-    .into_iter()
-    .map(|row| (row.get(0), row.get(1), row.get(2)))
-    .collect();
+        )?.into_iter()
+            .map(|row| (row.get(0), row.get(1), row.get(2)))
+            .collect::<Vec<(NaiveDate, i64, i64)>>()
+            )
+    }).await?;
 
-    ReleaseActivity {
+    Ok(ReleaseActivity {
         description: "Monthly release activity",
         dates: data
             .iter()
@@ -689,8 +687,7 @@ pub fn activity_handler(req: &mut Request) -> IronResult<IronResponse> {
             .collect(),
         counts: data.iter().map(|&d| d.1).collect(),
         failures: data.iter().map(|&d| d.2).collect(),
-    }
-    .into_response(req)
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -700,27 +697,33 @@ struct BuildQueuePage {
     active_deployments: Vec<CrateInvalidation>,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     BuildQueuePage = "releases/build_queue.html",
 }
 
-pub fn build_queue_handler(req: &mut Request) -> IronResult<IronResponse> {
-    let mut queue = ctry!(req, extension!(req, BuildQueue).queued_crates());
-    for krate in queue.iter_mut() {
-        // The priority here is inverted: in the database if a crate has a higher priority it
-        // will be built after everything else, which is counter-intuitive for people not
-        // familiar with docs.rs's inner workings.
-        krate.priority = -krate.priority;
-    }
+pub(crate) async fn build_queue_handler(
+    Extension(build_queue): Extension<Arc<BuildQueue>>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let (queue, active_deployments) = spawn_blocking(move || {
+        let mut queue = build_queue.queued_crates()?;
+        for krate in queue.iter_mut() {
+            // The priority here is inverted: in the database if a crate has a higher priority it
+            // will be built after everything else, which is counter-intuitive for people not
+            // familiar with docs.rs's inner workings.
+            krate.priority = -krate.priority;
+        }
 
-    let mut conn = extension!(req, Pool).get()?;
+        let mut conn = pool.get()?;
+        Ok((queue, cdn::active_crate_invalidations(&mut conn)?))
+    })
+    .await?;
 
-    BuildQueuePage {
+    Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
         queue,
-        active_deployments: ctry!(req, cdn::active_crate_invalidations(&mut conn)),
-    }
-    .into_response(req)
+        active_deployments,
+    })
 }
 
 #[cfg(test)]

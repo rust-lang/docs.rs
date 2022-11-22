@@ -3,8 +3,8 @@
 pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
-use crate::utils::report_error;
-use anyhow::anyhow;
+use crate::utils::{report_error, spawn_blocking};
+use anyhow::{anyhow, bail, Context as _};
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -92,7 +92,7 @@ mod source;
 mod statics;
 mod strangler;
 
-use crate::{impl_axum_webpage, impl_webpage, Context};
+use crate::{db::Pool, impl_axum_webpage, impl_webpage, Context};
 use anyhow::Error;
 use axum::{
     extract::Extension,
@@ -123,6 +123,7 @@ use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 use strangler::StranglerService;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
+use url::form_urlencoded;
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
@@ -428,6 +429,26 @@ fn match_version(
     Err(Nope::VersionNotFound)
 }
 
+// temporary wrapper around `match_version` for axum handlers.
+//
+// FIXME: this can go when we fully migrated to axum / async in web
+async fn match_version_axum(
+    pool: &Pool,
+    name: &str,
+    input_version: Option<&str>,
+) -> Result<MatchVersion, Error> {
+    spawn_blocking({
+        let name = name.to_owned();
+        let input_version = input_version.map(str::to_owned);
+        let pool = pool.clone();
+        move || {
+            let mut conn = pool.get()?;
+            Ok(match_version(&mut conn, &name, input_version.as_deref())?)
+        }
+    })
+    .await
+}
+
 #[instrument(skip_all)]
 pub(crate) fn build_axum_app(
     context: &dyn Context,
@@ -539,15 +560,29 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
-fn axum_redirect(url: &str) -> Result<impl IntoResponse, Error> {
-    if !url.starts_with('/') || url.starts_with("//") {
-        return Err(anyhow!("invalid redirect URL: {}", url));
+fn axum_redirect<U>(uri: U) -> Result<impl IntoResponse, Error>
+where
+    U: TryInto<http::Uri>,
+    <U as TryInto<http::Uri>>::Error: std::fmt::Debug,
+{
+    let uri: http::Uri = uri
+        .try_into()
+        .map_err(|err| anyhow!("invalid URI: {:?}", err))?;
+
+    if let Some(path_and_query) = uri.path_and_query() {
+        if path_and_query.as_str().starts_with("//") {
+            bail!("protocol relative redirects are forbidden");
+        }
+    } else {
+        // we always want a path to redirect to, even when it's just `/`
+        bail!("missing path in URI");
     }
+
     Ok((
         StatusCode::FOUND,
         [(
             http::header::LOCATION,
-            http::HeaderValue::try_from(url).expect("invalid url for redirect"),
+            http::HeaderValue::try_from(uri.to_string()).context("invalid uri for redirect")?,
         )],
     ))
 }
@@ -602,6 +637,29 @@ where
             .map_err(|msg| anyhow!(msg))
     } else {
         Url::parse(url).map_err(|msg| anyhow!(msg))
+    }
+}
+
+/// Parse an URI into a http::Uri struct.
+/// When `queries` are given these are added to the URL,
+/// with empty `queries` the `?` will be omitted.
+pub(crate) fn axum_parse_uri_with_params<I, K, V>(uri: &str, queries: I) -> Result<http::Uri, Error>
+where
+    I: IntoIterator,
+    I::Item: Borrow<(K, V)>,
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
+    let mut queries = queries.into_iter().peekable();
+    if queries.peek().is_some() {
+        let query_params: String = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(queries)
+            .finish();
+        format!("{uri}?{}", query_params)
+            .parse::<http::Uri>()
+            .context("error parsing URL")
+    } else {
+        uri.parse::<http::Uri>().context("error parsing URL")
     }
 }
 
