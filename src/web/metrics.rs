@@ -1,12 +1,17 @@
-use crate::db::Pool;
-use crate::BuildQueue;
-use crate::Metrics;
+use crate::{db::Pool, utils::spawn_blocking, web::error::AxumResult, BuildQueue, Metrics};
+use anyhow::Context as _;
 use axum::{
-    extract::MatchedPath, http::Request as AxumRequest, middleware::Next, response::IntoResponse,
+    body::Body,
+    extract::{Extension, MatchedPath},
+    http::Request as AxumRequest,
+    http::{
+        header::{CONTENT_LENGTH, CONTENT_TYPE},
+        Response as AxumHttpResponse, StatusCode,
+    },
+    middleware::Next,
+    response::IntoResponse,
 };
-use iron::headers::ContentType;
 use iron::prelude::*;
-use iron::status::Status;
 use prometheus::{Encoder, HistogramVec, TextEncoder};
 use std::{
     borrow::Cow,
@@ -16,20 +21,24 @@ use std::{
 #[cfg(test)]
 use tracing::debug;
 
-pub(super) fn metrics_handler(req: &mut Request) -> IronResult<Response> {
-    let metrics = extension!(req, Metrics);
-    let pool = extension!(req, Pool);
-    let queue = extension!(req, BuildQueue);
+pub(super) async fn metrics_handler(
+    Extension(pool): Extension<Pool>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(queue): Extension<Arc<BuildQueue>>,
+) -> AxumResult<impl IntoResponse> {
+    let families = spawn_blocking(move || metrics.gather(&pool, &queue)).await?;
 
     let mut buffer = Vec::new();
-    let families = ctry!(req, metrics.gather(pool, queue));
-    ctry!(req, TextEncoder::new().encode(&families, &mut buffer));
+    TextEncoder::new()
+        .encode(&families, &mut buffer)
+        .context("error encoding metrics")?;
 
-    let mut resp = Response::with(buffer);
-    resp.status = Some(Status::Ok);
-    resp.headers.set(ContentType::plaintext());
-
-    Ok(resp)
+    Ok(AxumHttpResponse::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, mime::TEXT_PLAIN.as_ref())
+        .header(CONTENT_LENGTH, buffer.len())
+        .body(Body::from(buffer))
+        .context("error generating response")?)
 }
 
 /// Converts a `Duration` to seconds, used by prometheus internally
