@@ -1,19 +1,19 @@
 use crate::{
     db::Pool,
     docbuilder::Limits,
-    impl_axum_webpage, impl_webpage,
+    impl_axum_webpage,
     utils::{get_config, spawn_blocking, ConfigName},
     web::{
         error::{AxumNope, AxumResult},
-        page::WebPage,
+        AxumErrorPage,
     },
 };
 use axum::{
     extract::{Extension, Path},
+    http::StatusCode,
     response::IntoResponse,
 };
 use chrono::{DateTime, TimeZone, Utc};
-use iron::{IronResult, Request as IronRequest, Response as IronResponse};
 use serde::Serialize;
 
 /// sitemap index
@@ -133,32 +133,34 @@ struct AboutPage<'a> {
     active_tab: &'a str,
 }
 
-impl_webpage!(AboutPage<'_> = |this: &AboutPage| this.template.clone().into());
+impl_axum_webpage!(AboutPage<'_> = |this: &AboutPage| this.template.clone().into());
 
-pub fn about_handler(req: &mut IronRequest) -> IronResult<IronResponse> {
-    use super::ErrorPage;
-    use iron::status::Status;
+pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<impl IntoResponse> {
+    let subpage = match subpage {
+        Some(subpage) => subpage.0,
+        None => "index".to_string(),
+    };
 
-    let name = match *req.url.path().last().expect("iron is broken") {
+    let name = match &subpage[..] {
         "about" | "index" => "index",
         x @ "badges" | x @ "metadata" | x @ "redirections" | x @ "download" => x,
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";
-            let page = ErrorPage {
+            let page = AxumErrorPage {
                 title: "The requested page does not exist",
-                message: Some(msg.into()),
-                status: Status::NotFound,
+                message: msg.into(),
+                status: StatusCode::NOT_FOUND,
             };
-            return page.into_response(req);
+            return Ok(page.into_response());
         }
     };
     let template = format!("core/about/{}.html", name);
-    AboutPage {
+    Ok(AboutPage {
         template,
         active_tab: name,
     }
-    .into_response(req)
+    .into_response())
 }
 
 #[cfg(test)]

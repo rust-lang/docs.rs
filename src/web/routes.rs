@@ -62,6 +62,15 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::sitemap::about_builds_handler),
         )
         .route(
+            "/about/metrics",
+            get_internal(super::metrics::metrics_handler),
+        )
+        .route("/about", get_internal(super::sitemap::about_handler))
+        .route(
+            "/about/:subpage",
+            get_internal(super::sitemap::about_handler),
+        )
+        .route(
             "/releases",
             get_internal(super::releases::recent_releases_handler),
         )
@@ -132,10 +141,6 @@ pub(super) fn build_routes() -> Routes {
     });
 
     routes.internal_page("/", super::releases::home_page);
-
-    routes.internal_page("/about", super::sitemap::about_handler);
-    routes.internal_page("/about/metrics", super::metrics::metrics_handler);
-    routes.internal_page("/about/:subpage", super::sitemap::about_handler);
 
     routes.static_resource("/releases/feed", super::releases::releases_feed_handler);
     routes.internal_page("/releases/:owner", super::releases::owner_handler);
