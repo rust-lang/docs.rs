@@ -54,6 +54,10 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_static(super::statics::static_handler),
         )
         .route(
+            "/opensearch.xml",
+            get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
+        )
+        .route(
             "/sitemap.xml",
             get_internal(super::sitemap::sitemapindex_handler),
         )
@@ -119,13 +123,6 @@ pub(super) fn build_axum_routes() -> AxumRouter {
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
-
-    // This should not need to be served from the root as we reference the inner path in links,
-    // but clients might have cached the url and need to update it.
-    routes.static_resource(
-        "/opensearch.xml",
-        PermanentRedirect("/-/static/opensearch.xml"),
-    );
 
     routes.internal_page(
         "/-/rustdoc.static/:single",
