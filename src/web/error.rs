@@ -22,8 +22,6 @@ pub enum Nope {
     OwnerNotFound,
     #[error("Requested crate does not have specified version")]
     VersionNotFound,
-    #[error("Search yielded no results")]
-    NoResults,
     #[error("Internal server error")]
     InternalServerError,
 }
@@ -37,8 +35,7 @@ impl From<Nope> for IronError {
             | Nope::BuildNotFound
             | Nope::CrateNotFound
             | Nope::OwnerNotFound
-            | Nope::VersionNotFound
-            | Nope::NoResults => status::NotFound,
+            | Nope::VersionNotFound => status::NotFound,
             Nope::InternalServerError => status::InternalServerError,
         };
 
@@ -96,29 +93,6 @@ impl Handler for Nope {
                 .into_response(req)
             }
 
-            Nope::NoResults => {
-                let mut params = req.url.as_ref().query_pairs();
-
-                if let Some((_, query)) = params.find(|(key, _)| key == "query") {
-                    // this used to be a search
-                    Search {
-                        title: format!("No crates found matching '{}'", query),
-                        search_query: Some(query.into_owned()),
-                        status: Status::NotFound,
-                        ..Default::default()
-                    }
-                    .into_response(req)
-                } else {
-                    // user did a search with no search terms
-                    Search {
-                        title: "No results given for empty search query".to_owned(),
-                        status: Status::NotFound,
-                        ..Default::default()
-                    }
-                    .into_response(req)
-                }
-            }
-
             Nope::InternalServerError => {
                 // something went wrong, details should have been logged
                 ErrorPage {
@@ -151,8 +125,8 @@ pub enum AxumNope {
     OwnerNotFound,
     #[error("Requested crate does not have specified version")]
     VersionNotFound,
-    // #[error("Search yielded no results")]
-    // NoResults,
+    #[error("Search yielded no results")]
+    NoResults,
     #[error("Internal server error")]
     InternalServerError,
     #[error("internal error")]
@@ -207,9 +181,15 @@ impl IntoResponse for AxumNope {
                 }
                 .into_response()
             }
-            // AxumNope::NoResults => {
-            //     todo!("to be implemented when search-handler is migrated to axum")
-            // }
+            AxumNope::NoResults => {
+                // user did a search with no search terms
+                Search {
+                    title: "No results given for empty search query".to_owned(),
+                    status: StatusCode::NOT_FOUND,
+                    ..Default::default()
+                }
+                .into_response()
+            }
             AxumNope::InternalServerError => {
                 // something went wrong, details should have been logged
                 AxumErrorPage {
@@ -254,7 +234,6 @@ impl From<Nope> for AxumNope {
             Nope::CrateNotFound => AxumNope::CrateNotFound,
             Nope::OwnerNotFound => AxumNope::OwnerNotFound,
             Nope::VersionNotFound => AxumNope::VersionNotFound,
-            Nope::NoResults => todo!(),
             Nope::InternalServerError => AxumNope::InternalServerError,
         }
     }

@@ -78,6 +78,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/about/:subpage",
             get_internal(super::sitemap::about_handler),
         )
+        .route("/", get_internal(super::releases::home_page))
         .route(
             "/releases",
             get_internal(super::releases::recent_releases_handler),
@@ -118,6 +119,30 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/crate/:name/:version",
             get_internal(super::crate_details::crate_details_handler),
         )
+        .route(
+            "/releases/feed",
+            get_static(super::releases::releases_feed_handler),
+        )
+        .route(
+            "/releases/:owner",
+            get_internal(super::releases::owner_handler),
+        )
+        .route(
+            "/releases/:owner/:page",
+            get_internal(super::releases::owner_handler),
+        )
+        .route(
+            "/releases/activity",
+            get_internal(super::releases::activity_handler),
+        )
+        .route(
+            "/releases/search",
+            get_internal(super::releases::search_handler),
+        )
+        .route(
+            "/releases/queue",
+            get_internal(super::releases::build_queue_handler),
+        )
 }
 
 // REFACTOR: Break this into smaller initialization functions
@@ -146,15 +171,6 @@ pub(super) fn build_routes() -> Routes {
         }
         storage_change_detection
     });
-
-    routes.internal_page("/", super::releases::home_page);
-
-    routes.static_resource("/releases/feed", super::releases::releases_feed_handler);
-    routes.internal_page("/releases/:owner", super::releases::owner_handler);
-    routes.internal_page("/releases/:owner/:page", super::releases::owner_handler);
-    routes.internal_page("/releases/activity", super::releases::activity_handler);
-    routes.internal_page("/releases/search", super::releases::search_handler);
-    routes.internal_page("/releases/queue", super::releases::build_queue_handler);
 
     routes.internal_page(
         "/crate/:name/:version/builds",
