@@ -102,6 +102,14 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/releases/failures/:page",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
+        .route(
+            "/crate/:name",
+            get_internal(super::crate_details::crate_details_handler),
+        )
+        .route(
+            "/crate/:name/:version",
+            get_internal(super::crate_details::crate_details_handler),
+        )
 }
 
 // REFACTOR: Break this into smaller initialization functions
@@ -149,11 +157,6 @@ pub(super) fn build_routes() -> Routes {
     routes.internal_page("/releases/search", super::releases::search_handler);
     routes.internal_page("/releases/queue", super::releases::build_queue_handler);
 
-    routes.internal_page("/crate/:name", super::crate_details::crate_details_handler);
-    routes.internal_page(
-        "/crate/:name/:version",
-        super::crate_details::crate_details_handler,
-    );
     routes.internal_page(
         "/crate/:name/:version/builds",
         super::builds::build_list_handler,

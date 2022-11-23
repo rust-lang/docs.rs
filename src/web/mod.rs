@@ -77,7 +77,7 @@ mod builds;
 pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
-mod error;
+pub(crate) mod error;
 mod extensions;
 mod features;
 mod file;
@@ -97,7 +97,9 @@ use anyhow::Error;
 use axum::{
     extract::Extension,
     http::{uri::Authority, StatusCode},
-    middleware, Router as AxumRouter,
+    middleware,
+    response::IntoResponse,
+    Router as AxumRouter,
 };
 use chrono::{DateTime, Utc};
 use csp::CspMiddleware;
@@ -327,7 +329,7 @@ fn match_version(
                  WHERE normalize_crate_name(name) = normalize_crate_name($1)",
                 &[&name],
             )
-            .unwrap();
+            .unwrap(); // FIXME: remove this unwrap when all handlers using it are migrated to axum
 
         let row = rows.get(0).ok_or(Nope::CrateNotFound)?;
 
@@ -443,6 +445,7 @@ pub(crate) fn build_axum_app(
             .layer(Extension(context.metrics()?))
             .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
+            .layer(Extension(context.repository_stats_updater()?))
             .layer(Extension(template_data))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(middleware::from_fn(
@@ -530,9 +533,25 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
+fn axum_redirect(url: &str) -> impl IntoResponse {
+    (
+        StatusCode::FOUND,
+        [(
+            http::header::LOCATION,
+            http::HeaderValue::try_from(url).expect("invalid url for redirect"),
+        )],
+    )
+}
+
 fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
     let mut resp = Response::with((status::Found, Redirect(url)));
     resp.extensions.insert::<cache::CachePolicy>(cache_policy);
+    resp
+}
+
+fn axum_cached_redirect(url: &str, cache_policy: cache::CachePolicy) -> impl IntoResponse {
+    let mut resp = axum_redirect(url).into_response();
+    resp.extensions_mut().insert(cache_policy);
     resp
 }
 
