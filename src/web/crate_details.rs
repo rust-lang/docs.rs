@@ -302,6 +302,7 @@ struct CrateDetailsPage {
 
 impl_axum_webpage! {
     CrateDetailsPage = "crate/details.html",
+    cpu_intensive_rendering = true,
 }
 
 #[derive(Deserialize, Clone, Debug)]

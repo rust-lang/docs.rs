@@ -14,7 +14,8 @@ use http::header::CONTENT_LENGTH;
 use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
 use serde::Serialize;
 use std::{borrow::Cow, sync::Arc};
-use tera::{Context, Tera};
+use tera::Context;
+use tokio::task::spawn_blocking;
 
 /// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
 #[macro_export]
@@ -48,11 +49,28 @@ macro_rules! impl_webpage {
 
 #[macro_export]
 macro_rules! impl_axum_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
-        $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
+    (
+        $page:ty = $template:literal
+        $(, status = $status:expr)?
+        $(, content_type = $content_type:expr)?
+        $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
+        $(,)?
+    ) => {
+        $crate::impl_axum_webpage!(
+            $page = |_| ::std::borrow::Cow::Borrowed($template)
+            $(, status = $status)?
+            $(, content_type = $content_type)?
+            $(, cpu_intensive_rendering = $cpu_intensive_rendering )?
+         );
     };
 
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+    (
+        $page:ty = $template:expr
+        $(, status = $status:expr)?
+        $(, content_type = $content_type:expr)?
+        $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
+        $(,)?
+    ) => {
         impl axum::response::IntoResponse for $page
         {
             fn into_response(self) -> ::axum::response::Response {
@@ -61,6 +79,12 @@ macro_rules! impl_axum_webpage {
                 let mut ct: &'static str = ::mime::TEXT_HTML_UTF_8.as_ref();
                 $(
                     ct = $content_type;
+                )?
+
+                #[allow(unused_mut, unused_assignments)]
+                let mut cpu_intensive_rendering = false;
+                $(
+                    cpu_intensive_rendering = $cpu_intensive_rendering;
                 )?
 
                 let mut response = ::axum::http::Response::builder()
@@ -83,6 +107,7 @@ macro_rules! impl_axum_webpage {
                         let template: fn(&Self) -> ::std::borrow::Cow<'static, str> = $template;
                         template(&self).to_string()
                     },
+                    cpu_intensive_rendering,
                 });
                 response
             }
@@ -164,14 +189,20 @@ pub trait WebPage: Serialize + Sized {
 pub(crate) struct DelayedTemplateRender {
     pub template: String,
     pub context: Context,
+    pub cpu_intensive_rendering: bool,
 }
 
-fn render_response(mut response: AxumResponse, templates: &Tera, csp_nonce: &str) -> AxumResponse {
+fn render_response(
+    mut response: AxumResponse,
+    templates: Arc<TemplateData>,
+    csp_nonce: String,
+) -> AxumResponse {
     if let Some(render) = response.extensions().get::<DelayedTemplateRender>() {
+        let tera = &templates.templates;
         let mut context = render.context.clone();
         context.insert("csp_nonce", &csp_nonce);
 
-        let rendered = match templates.render(&render.template, &context) {
+        let rendered = match tera.render(&render.template, &context) {
             Ok(content) => content,
             Err(err) => {
                 if response.status().is_server_error() {
@@ -214,5 +245,19 @@ pub(crate) async fn render_templates_middleware<B>(
         .nonce()
         .to_owned();
 
-    render_response(next.run(req).await, &templates.templates, &csp_nonce)
+    let response = next.run(req).await;
+
+    let cpu_intensive_rendering: bool = response
+        .extensions()
+        .get::<DelayedTemplateRender>()
+        .map(|render| render.cpu_intensive_rendering)
+        .unwrap_or(false);
+
+    if cpu_intensive_rendering {
+        spawn_blocking(|| render_response(response, templates, csp_nonce))
+            .await
+            .expect("tokio task join error when rendering templates")
+    } else {
+        render_response(response, templates, csp_nonce)
+    }
 }
