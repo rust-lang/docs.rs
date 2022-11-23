@@ -1,19 +1,26 @@
-use super::{markdown, match_version, redirect_base, MatchSemver, MetaData};
-use crate::utils::{get_correct_docsrs_style_file, report_error};
+use super::error::spawn_blocking_web;
+use super::{markdown, match_version, MatchSemver, MetaData};
+use crate::utils::{get_correct_docsrs_style_file, report_error, spawn_blocking};
 use crate::{
     db::Pool,
-    impl_webpage,
+    impl_axum_webpage,
     repositories::RepositoryStatsUpdater,
-    web::{cache::CachePolicy, page::WebPage},
+    web::{
+        cache::CachePolicy,
+        error::{AxumNope, AxumResult},
+    },
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
+use axum::{
+    extract::{Extension, Path},
+    response::{IntoResponse, Response as AxumResponse},
+};
 use chrono::{DateTime, Utc};
-use iron::prelude::*;
-use iron::Url;
 use postgres::GenericClient;
-use router::Router;
+use serde::Deserialize;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 
 // TODO: Add target name and versions
 
@@ -293,75 +300,85 @@ struct CrateDetailsPage {
     details: CrateDetails,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     CrateDetailsPage = "crate/details.html",
 }
 
-pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    // this handler must always called with a crate name
-    let name = cexpect!(req, router.find("name"));
-    let req_version = router.find("version");
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct CrateDetailHandlerParams {
+    name: String,
+    version: Option<String>,
+}
 
-    if req_version.is_none() {
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/crate/{}/latest", redirect_base(req), name,)),
-        );
-        return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
+#[tracing::instrument]
+pub(crate) async fn crate_details_handler(
+    Path(params): Path<CrateDetailHandlerParams>,
+    Extension(pool): Extension<Pool>,
+    Extension(repository_stats_updater): Extension<Arc<RepositoryStatsUpdater>>,
+) -> AxumResult<AxumResponse> {
+    // this handler must always called with a crate name
+    if params.version.is_none() {
+        return Ok(super::axum_cached_redirect(
+            &format!("/crate/{}/latest", params.name),
+            CachePolicy::ForeverInCdn,
+        )
+        .into_response());
     }
 
-    let mut conn = extension!(req, Pool).get()?;
+    let found_version = spawn_blocking_web({
+        let pool = pool.clone();
+        let params = params.clone();
+        move || {
+            let mut conn = pool.get().context("could not get connection from pool")?;
+            match_version(&mut conn, &params.name, params.version.as_deref())
+                .and_then(|m| m.assume_exact())
+                .map_err(Into::<AxumNope>::into)
+        }
+    })
+    .await?;
 
-    let found_version =
-        match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())?;
     let (version, version_or_latest, is_latest_url) = match found_version {
         MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         MatchSemver::Semver((version, _)) => {
-            let url = ctry!(
-                req,
-                Url::parse(&format!(
-                    "{}/crate/{}/{}",
-                    redirect_base(req),
-                    name,
-                    version
-                )),
-            );
-
-            return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
+            return Ok(super::axum_cached_redirect(
+                &format!("/crate/{}/{}", &params.name, version),
+                CachePolicy::ForeverInCdn,
+            )
+            .into_response());
         }
     };
 
-    let updater = extension!(req, RepositoryStatsUpdater);
-    let details = cexpect!(
-        req,
-        ctry!(
-            req,
-            CrateDetails::new(
-                &mut *conn,
-                name,
-                &version,
-                &version_or_latest,
-                Some(updater)
-            )
+    let details = spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        CrateDetails::new(
+            &mut *conn,
+            &params.name,
+            &version,
+            &version_or_latest,
+            Some(&repository_stats_updater),
         )
-    );
+    })
+    .await?
+    .ok_or(AxumNope::VersionNotFound)?;
 
-    let mut res = CrateDetailsPage { details }.into_response(req)?;
-    res.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverInCdn
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser
-    });
-    Ok(res)
+    let mut res = CrateDetailsPage { details }.into_response();
+    res.extensions_mut()
+        .insert::<CachePolicy>(if is_latest_url {
+            CachePolicy::ForeverInCdn
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        });
+    Ok(res.into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
-    use crate::test::{assert_cache_control, assert_redirect_cached, wrapper, TestDatabase};
+    use crate::test::{
+        assert_cache_control, assert_redirect, assert_redirect_cached, wrapper, TestDatabase,
+    };
     use anyhow::{Context, Error};
     use kuchiki::traits::TendrilSink;
     use std::collections::HashMap;
@@ -1035,13 +1052,7 @@ mod tests {
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
 
-            assert_redirect_cached(
-                "/crate/dummy/latest/",
-                "/crate/dummy/latest",
-                CachePolicy::NoCaching,
-                web,
-                &env.config(),
-            )?;
+            assert_redirect("/crate/dummy/latest/", "/crate/dummy/latest", web)?;
             assert_redirect_cached(
                 "/crate/dummy",
                 "/crate/dummy/latest",
