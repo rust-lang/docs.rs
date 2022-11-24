@@ -1,15 +1,17 @@
 use super::TemplateData;
 use crate::{
     ctry,
+    utils::spawn_blocking,
     web::{cache::CachePolicy, csp::Csp, error::AxumNope},
 };
-use anyhow::anyhow;
+use anyhow::Error;
 use axum::{
     body::{boxed, Body},
     http::Request as AxumRequest,
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
 };
+use futures_util::future::{BoxFuture, FutureExt};
 use http::header::CONTENT_LENGTH;
 use iron::{
     headers::{ContentType, Link, LinkValue, RelationType},
@@ -20,7 +22,6 @@ use iron::{
 use serde::Serialize;
 use std::{borrow::Cow, sync::Arc};
 use tera::Context;
-use tokio::task::spawn_blocking;
 
 /// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
 #[macro_export]
@@ -221,36 +222,56 @@ fn render_response(
     mut response: AxumResponse,
     templates: Arc<TemplateData>,
     csp_nonce: String,
-) -> AxumResponse {
-    if let Some(render) = response.extensions().get::<DelayedTemplateRender>() {
-        let tera = &templates.templates;
-        let mut context = render.context.clone();
-        context.insert("csp_nonce", &csp_nonce);
+) -> BoxFuture<'static, AxumResponse> {
+    async move {
+        if let Some(render) = response.extensions_mut().remove::<DelayedTemplateRender>() {
+            let DelayedTemplateRender {
+                template,
+                mut context,
+                cpu_intensive_rendering,
+            } = render;
+            context.insert("csp_nonce", &csp_nonce);
 
-        let rendered = match tera.render(&render.template, &context) {
-            Ok(content) => content,
-            Err(err) => {
-                if response.status().is_server_error() {
-                    // avoid infinite loop if error.html somehow fails to load
-                    panic!("error while serving error page: {:?}", err);
-                } else {
-                    return render_response(
-                        AxumNope::InternalError(anyhow!(err)).into_response(),
-                        templates,
-                        csp_nonce,
-                    );
+            let rendered = if cpu_intensive_rendering {
+                spawn_blocking({
+                    let templates = templates.clone();
+                    move || Ok(templates.templates.render(&template, &context)?)
+                })
+                .await
+            } else {
+                templates
+                    .templates
+                    .render(&template, &context)
+                    .map_err(Error::new)
+            };
+
+            let rendered = match rendered {
+                Ok(content) => content,
+                Err(err) => {
+                    if response.status().is_server_error() {
+                        // avoid infinite loop if error.html somehow fails to load
+                        panic!("error while serving error page: {:?}", err);
+                    } else {
+                        return render_response(
+                            AxumNope::InternalError(err).into_response(),
+                            templates,
+                            csp_nonce,
+                        )
+                        .await;
+                    }
                 }
-            }
-        };
-        let content_length = rendered.len();
-        *response.body_mut() = boxed(Body::from(rendered));
-        response
-            .headers_mut()
-            .insert(CONTENT_LENGTH, content_length.into());
-        response
-    } else {
-        response
+            };
+            let content_length = rendered.len();
+            *response.body_mut() = boxed(Body::from(rendered));
+            response
+                .headers_mut()
+                .insert(CONTENT_LENGTH, content_length.into());
+            response
+        } else {
+            response
+        }
     }
+    .boxed()
 }
 
 pub(crate) async fn render_templates_middleware<B>(
@@ -272,17 +293,5 @@ pub(crate) async fn render_templates_middleware<B>(
 
     let response = next.run(req).await;
 
-    let cpu_intensive_rendering: bool = response
-        .extensions()
-        .get::<DelayedTemplateRender>()
-        .map(|render| render.cpu_intensive_rendering)
-        .unwrap_or(false);
-
-    if cpu_intensive_rendering {
-        spawn_blocking(|| render_response(response, templates, csp_nonce))
-            .await
-            .expect("tokio task join error when rendering templates")
-    } else {
-        render_response(response, templates, csp_nonce)
-    }
+    render_response(response, templates, csp_nonce).await
 }
