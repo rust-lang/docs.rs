@@ -171,6 +171,7 @@ struct SourcePage {
 
 impl_webpage! {
     SourcePage = "crate/source.html",
+    canonical_url = |page| Some(page.canonical_url.clone()),
 }
 
 pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
