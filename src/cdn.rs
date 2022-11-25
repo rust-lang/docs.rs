@@ -1,8 +1,9 @@
 use crate::Config;
 use anyhow::{Context, Error, Result};
 use aws_sdk_cloudfront::{
+    config::retry::RetryConfig,
     model::{InvalidationBatch, Paths},
-    Client, Region, RetryConfig,
+    Client, Region,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
