@@ -6,17 +6,19 @@ use axum::{
     handler::Handler as AxumHandler, middleware, response::Redirect, routing::get,
     routing::MethodRouter, Router as AxumRouter,
 };
+use axum_extra::routing::RouterExt;
 use iron::middleware::Handler;
 use router::Router as IronRouter;
 use std::{borrow::Cow, collections::HashSet, convert::Infallible};
 use tracing::instrument;
 
 #[instrument(skip_all)]
-fn get_static<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
+fn get_static<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
 where
-    H: AxumHandler<T, B>,
+    H: AxumHandler<T, S, B>,
     B: Send + 'static + hyper::body::HttpBody,
     T: 'static,
+    S: Clone + Send + Sync + 'static,
 {
     get(handler).route_layer(middleware::from_fn(|request, next| async {
         request_recorder(request, next, Some("static resource")).await
@@ -24,11 +26,12 @@ where
 }
 
 #[instrument(skip_all)]
-fn get_internal<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
+fn get_internal<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
 where
-    H: AxumHandler<T, B>,
+    H: AxumHandler<T, S, B>,
     B: Send + 'static + hyper::body::HttpBody,
     T: 'static,
+    S: Clone + Send + Sync + 'static,
 {
     get(handler).route_layer(middleware::from_fn(|request, next| async {
         request_recorder(request, next, None).await
@@ -57,89 +60,89 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/opensearch.xml",
             get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
         )
-        .route(
+        .route_with_tsr(
             "/sitemap.xml",
             get_internal(super::sitemap::sitemapindex_handler),
         )
-        .route(
+        .route_with_tsr(
             "/-/sitemap/:letter/sitemap.xml",
             get_internal(super::sitemap::sitemap_handler),
         )
-        .route(
+        .route_with_tsr(
             "/about/builds",
             get_internal(super::sitemap::about_builds_handler),
         )
-        .route(
+        .route_with_tsr(
             "/about/metrics",
             get_internal(super::metrics::metrics_handler),
         )
-        .route("/about", get_internal(super::sitemap::about_handler))
-        .route(
+        .route_with_tsr("/about", get_internal(super::sitemap::about_handler))
+        .route_with_tsr(
             "/about/:subpage",
             get_internal(super::sitemap::about_handler),
         )
         .route("/", get_internal(super::releases::home_page))
-        .route(
+        .route_with_tsr(
             "/releases",
             get_internal(super::releases::recent_releases_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/recent/:page",
             get_internal(super::releases::recent_releases_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/stars",
             get_internal(super::releases::releases_by_stars_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/stars/:page",
             get_internal(super::releases::releases_by_stars_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/recent-failures",
             get_internal(super::releases::releases_recent_failures_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/recent-failures/:page",
             get_internal(super::releases::releases_recent_failures_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/failures",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/failures/:page",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
-        .route(
+        .route_with_tsr(
             "/crate/:name",
             get_internal(super::crate_details::crate_details_handler),
         )
-        .route(
+        .route_with_tsr(
             "/crate/:name/:version",
             get_internal(super::crate_details::crate_details_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/feed",
             get_static(super::releases::releases_feed_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/:owner",
             get_internal(super::releases::owner_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/:owner/:page",
             get_internal(super::releases::owner_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/activity",
             get_internal(super::releases::activity_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/search",
             get_internal(super::releases::search_handler),
         )
-        .route(
+        .route_with_tsr(
             "/releases/queue",
             get_internal(super::releases::build_queue_handler),
         )

@@ -30,11 +30,11 @@ pub(crate) async fn static_handler(Path(path): Path<String>) -> AxumResult<impl 
     let text_css: Mime = "text/css".parse().unwrap();
 
     Ok(match path.as_str() {
-        "/vendored.css" => build_response(VENDORED_CSS, text_css),
-        "/style.css" => build_response(STYLE_CSS, text_css),
-        "/rustdoc.css" => build_response(RUSTDOC_CSS, text_css),
-        "/rustdoc-2021-12-05.css" => build_response(RUSTDOC_2021_12_05_CSS, text_css),
-        file => match serve_file(&file[1..]).await {
+        "vendored.css" => build_response(VENDORED_CSS, text_css),
+        "style.css" => build_response(STYLE_CSS, text_css),
+        "rustdoc.css" => build_response(RUSTDOC_CSS, text_css),
+        "rustdoc-2021-12-05.css" => build_response(RUSTDOC_2021_12_05_CSS, text_css),
+        file => match serve_file(file).await {
             Ok(response) => response.into_response(),
             Err(err) => return Err(err),
         },
