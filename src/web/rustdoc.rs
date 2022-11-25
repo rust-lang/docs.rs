@@ -14,8 +14,11 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use iron::{
-    modifiers::Redirect, status, url::percent_encoding::percent_decode, Handler, IronResult,
-    Request, Response, Url,
+    headers::{Link, LinkValue, RelationType},
+    modifiers::Redirect,
+    status,
+    url::percent_encoding::percent_decode,
+    Handler, IronResult, Request, Response, Url,
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
@@ -243,6 +246,8 @@ impl RustdocPage {
             .expect("missing Metrics from the request extensions");
 
         let is_latest_url = self.is_latest_url;
+        let canonical_url = self.canonical_url.clone();
+
         // Build the page of documentation
         let ctx = ctry!(req, tera::Context::from_serialize(self));
         let config = extension!(req, Config);
@@ -264,6 +269,11 @@ impl RustdocPage {
 
         let mut response = Response::with((Status::Ok, html));
         response.headers.set(ContentType::html());
+        let link_value = LinkValue::new(canonical_url)
+            .push_rel(RelationType::ExtRelType("canonical".to_string()));
+
+        response.headers.set(Link::new(vec![link_value]));
+
         response.extensions.insert::<CachePolicy>(if is_latest_url {
             CachePolicy::ForeverInCdn
         } else {
@@ -2307,31 +2317,45 @@ mod test {
             assert!(web
                 .get("/dummy-dash/0.1.0/dummy_dash/")
                 .send()?
-                .text()?
+                .headers()
+                .get("link")
+                .unwrap()
+                .to_str()
+                .unwrap()
                 .contains("rel=\"canonical\""),);
 
             assert!(web
                 .get("/dummy-docs/0.1.0/dummy_docs/")
                 .send()?
-                .text()?
-                .contains(
-                "<link rel=\"canonical\" href=\"https://docs.rs/dummy-docs/latest/dummy_docs/\" />"
-            ),);
+                .headers()
+                .get("link")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("<https://docs.rs/dummy-docs/latest/dummy_docs/>; rel=\"canonical\""),);
 
-            assert!(
-                web
-                    .get("/dummy-nodocs/0.1.0/dummy_nodocs/")
-                    .send()?
-                    .text()?
-                    .contains("<link rel=\"canonical\" href=\"https://docs.rs/dummy-nodocs/latest/dummy_nodocs/\" />"),
-            );
+            assert!(web
+                .get("/dummy-nodocs/0.1.0/dummy_nodocs/")
+                .send()?
+                .headers()
+                .get("link")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains(
+                    "<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/>; rel=\"canonical\""
+                ),);
 
             assert!(
                 web
                     .get("/dummy-nodocs/0.1.0/dummy_nodocs/struct.Foo.html")
                     .send()?
-                    .text()?
-                    .contains("<link rel=\"canonical\" href=\"https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html\" />"),
+              .headers()
+                .get("link")
+                .unwrap()
+                .to_str()
+            .unwrap()
+            .contains("<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html>; rel=\"canonical\""),
             );
             Ok(())
         })
