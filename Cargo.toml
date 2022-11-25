@@ -97,6 +97,7 @@ tower = "0.4.11"
 tower-service = "0.3.2"
 tower-http = { version = "0.3.4", features = ["trace"] }
 mime = "0.3.16"
+httpdate = "1.0.2"
 
 # NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
 tempfile = "3.1.0"

@@ -1,14 +1,23 @@
-use super::{cache::CachePolicy, error::Nope, redirect, redirect_base};
+use super::{
+    cache::CachePolicy,
+    error::{AxumNope, AxumResult},
+};
 use crate::utils::report_error;
 use anyhow::Context;
-use chrono::prelude::*;
-use iron::{
-    headers::{ContentLength, ContentType, LastModified},
-    status::Status,
-    IronResult, Request, Response, Url,
+use axum::{
+    extract::{Extension, Path},
+    http::{
+        header::{CONTENT_LENGTH, CONTENT_TYPE, LAST_MODIFIED},
+        StatusCode,
+    },
+    response::{IntoResponse, Response},
 };
+use chrono::prelude::*;
+use httpdate::fmt_http_date;
+use mime::Mime;
 use mime_guess::MimeGuess;
-use std::{ffi::OsStr, fs, path::Path};
+use std::{ffi::OsStr, path, time::SystemTime};
+use tokio::fs;
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
@@ -17,29 +26,27 @@ const RUSTDOC_2021_12_05_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2021-12-05.css"));
 const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
-pub(crate) fn static_handler(req: &mut Request) -> IronResult<Response> {
-    let mut file = req.url.path();
-    file.drain(..2).for_each(std::mem::drop);
-    let file = file.join("/");
+pub(crate) async fn static_handler(Path(path): Path<String>) -> AxumResult<impl IntoResponse> {
+    let text_css: Mime = "text/css".parse().unwrap();
 
-    Ok(match file.as_str() {
-        "vendored.css" => serve_resource(VENDORED_CSS, ContentType("text/css".parse().unwrap())),
-        "style.css" => serve_resource(STYLE_CSS, ContentType("text/css".parse().unwrap())),
-        "rustdoc.css" => serve_resource(RUSTDOC_CSS, ContentType("text/css".parse().unwrap())),
-        "rustdoc-2021-12-05.css" => serve_resource(
-            RUSTDOC_2021_12_05_CSS,
-            ContentType("text/css".parse().unwrap()),
-        ),
-        file => serve_file(file)?,
+    Ok(match path.as_str() {
+        "/vendored.css" => build_response(VENDORED_CSS, text_css),
+        "/style.css" => build_response(STYLE_CSS, text_css),
+        "/rustdoc.css" => build_response(RUSTDOC_CSS, text_css),
+        "/rustdoc-2021-12-05.css" => build_response(RUSTDOC_2021_12_05_CSS, text_css),
+        file => match serve_file(&file[1..]).await {
+            Ok(response) => response.into_response(),
+            Err(err) => return Err(err),
+        },
     })
 }
 
-fn serve_file(file: &str) -> IronResult<Response> {
+async fn serve_file(file: &str) -> AxumResult<impl IntoResponse> {
     // Find the first path that actually exists
     let path = STATIC_SEARCH_PATHS
         .iter()
         .find_map(|root| {
-            let path = Path::new(root).join(file);
+            let path = path::Path::new(root).join(file);
             if !path.exists() {
                 return None;
             }
@@ -55,96 +62,59 @@ fn serve_file(file: &str) -> IronResult<Response> {
                 None
             }
         })
-        .ok_or(Nope::ResourceNotFound)?;
+        .ok_or(AxumNope::ResourceNotFound)?;
 
     let contents = fs::read(&path)
+        .await
         .with_context(|| format!("failed to read static file {}", path.display()))
         .map_err(|e| {
             report_error(&e);
-            Nope::InternalServerError
+            AxumNope::InternalServerError
         })?;
 
     // If we can detect the file's mime type, set it
     // MimeGuess misses a lot of the file types we need, so there's a small wrapper
     // around it
-    let mut content_type = path
-        .extension()
-        .and_then(OsStr::to_str)
-        .and_then(|ext| match ext {
-            "eot" => Some(ContentType(
-                "application/vnd.ms-fontobject".parse().unwrap(),
-            )),
-            "woff2" => Some(ContentType("application/font-woff2".parse().unwrap())),
-            "ttf" => Some(ContentType("application/x-font-ttf".parse().unwrap())),
+    let content_type: Mime = if file == "opensearch.xml" {
+        "application/opensearchdescription+xml".parse().unwrap()
+    } else {
+        path.extension()
+            .and_then(OsStr::to_str)
+            .and_then(|ext| match ext {
+                "eot" => Some("application/vnd.ms-fontobject".parse().unwrap()),
+                "woff2" => Some("application/font-woff2".parse().unwrap()),
+                "ttf" => Some("application/x-font-ttf".parse().unwrap()),
+                _ => MimeGuess::from_path(&path).first(),
+            })
+            .unwrap_or(mime::APPLICATION_OCTET_STREAM)
+    };
 
-            _ => MimeGuess::from_path(&path)
-                .first()
-                .map(|mime| ContentType(mime.as_ref().parse().unwrap())),
-        });
-
-    if file == "opensearch.xml" {
-        content_type = Some(ContentType(
-            "application/opensearchdescription+xml".parse().unwrap(),
-        ));
-    }
-
-    Ok(serve_resource(contents, content_type))
+    Ok(build_response(contents, content_type))
 }
 
-fn serve_resource<R, C>(resource: R, content_type: C) -> Response
+fn build_response<R>(resource: R, content_type: Mime) -> Response
 where
     R: AsRef<[u8]>,
-    C: Into<Option<ContentType>>,
 {
-    let mut response = Response::with((Status::Ok, resource.as_ref()));
-
-    response
-        .extensions
-        .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
-
-    response
-        .headers
-        .set(ContentLength(resource.as_ref().len() as u64));
-    response.headers.set(LastModified(
-        Utc::now()
-            .format("%a, %d %b %Y %T %Z")
-            .to_string()
-            .parse()
-            .unwrap(),
-    ));
-
-    if let Some(content_type) = content_type.into() {
-        response.headers.set(content_type);
-    }
-
-    response
-}
-
-pub(super) fn ico_handler(req: &mut Request) -> IronResult<Response> {
-    if let Some(&"favicon.ico") = req.url.path().last() {
-        // if we're looking for exactly "favicon.ico", we need to defer to the handler that
-        // actually serves it, so return a 404 here to make the main handler carry on
-        Err(Nope::ResourceNotFound.into())
-    } else {
-        // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
-        // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/favicon.ico", redirect_base(req))),
-        );
-
-        Ok(redirect(url))
-    }
+    (
+        StatusCode::OK,
+        Extension(CachePolicy::ForeverInCdnAndBrowser),
+        [
+            (CONTENT_LENGTH, resource.as_ref().len().to_string()),
+            (CONTENT_TYPE, content_type.to_string()),
+            (LAST_MODIFIED, fmt_http_date(SystemTime::from(Utc::now()))),
+        ],
+        resource.as_ref().to_vec(),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
 mod tests {
-    use iron::status::Status;
-
     use super::{serve_file, STATIC_SEARCH_PATHS, STYLE_CSS, VENDORED_CSS};
     use crate::{
         test::{assert_cache_control, wrapper},
-        web::cache::CachePolicy,
+        web::{cache::CachePolicy, error::AxumNope},
     };
     use reqwest::StatusCode;
     use std::fs;
@@ -276,8 +246,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn directory_traversal() {
+    #[tokio::test]
+    async fn directory_traversal() {
         const PATHS: &[&str] = &[
             "../LICENSE",
             "%2e%2e%2fLICENSE",
@@ -293,9 +263,8 @@ mod tests {
             // Still, the test ensures the underlying function called by the request handler to
             // serve the file also includes protection for path traversal, in the event we switch
             // to a framework that doesn't include builtin protection in the future.
-            assert_eq!(
-                Some(Status::NotFound),
-                serve_file(path).unwrap_err().response.status,
+            assert!(
+                matches!(serve_file(path).await, Err(AxumNope::ResourceNotFound)),
                 "{} did not return a 404",
                 path
             );

@@ -7,8 +7,8 @@ use crate::{
     utils,
     web::{
         cache::CachePolicy, crate_details::CrateDetails, csp::Csp, error::Nope, file::File,
-        match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect_base,
-        report_error, MatchSemver, MetaData,
+        match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect,
+        redirect_base, report_error, MatchSemver, MetaData,
     },
     Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
@@ -43,6 +43,23 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         ("rustdoc", "nightly/nightly-rustc/rustdoc"),
     ])
 });
+
+fn ico_handler(req: &mut Request) -> IronResult<Response> {
+    if let Some(&"favicon.ico") = req.url.path().last() {
+        // if we're looking for exactly "favicon.ico", we need to defer to the handler that
+        // actually serves it, so return a 404 here to make the main handler carry on
+        Err(Nope::ResourceNotFound.into())
+    } else {
+        // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
+        // redirect to the plain one so that the above branch can trigger with the correct filename
+        let url = ctry!(
+            req,
+            Url::parse(&format!("{}/favicon.ico", redirect_base(req))),
+        );
+
+        Ok(redirect(url))
+    }
+}
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
@@ -119,7 +136,7 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
         // route .ico files into their dedicated handler so that docs.rs's favicon is always
         // displayed
         rendering_time.step("serve ICO");
-        return super::statics::ico_handler(req);
+        return ico_handler(req);
     }
 
     let router = extension!(req, Router);
