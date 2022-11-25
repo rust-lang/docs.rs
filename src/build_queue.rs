@@ -1,4 +1,4 @@
-use crate::cdn::{self, CdnBackend};
+use crate::cdn;
 use crate::db::{delete_crate, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
@@ -27,7 +27,6 @@ pub(crate) struct QueuedCrate {
 #[derive(Debug)]
 pub struct BuildQueue {
     config: Arc<Config>,
-    cdn: Arc<CdnBackend>,
     storage: Arc<Storage>,
     pub(crate) db: Pool,
     metrics: Arc<Metrics>,
@@ -39,13 +38,11 @@ impl BuildQueue {
         db: Pool,
         metrics: Arc<Metrics>,
         config: Arc<Config>,
-        cdn: Arc<CdnBackend>,
         storage: Arc<Storage>,
     ) -> Self {
         BuildQueue {
             max_attempts: config.build_attempts.into(),
             config,
-            cdn,
             db,
             metrics,
             storage,
@@ -191,7 +188,9 @@ impl BuildQueue {
             )
         });
         self.metrics.total_builds.inc();
-        if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, &to_process.name) {
+        if let Err(err) =
+            cdn::queue_crate_invalidation(&mut transaction, &self.config, &to_process.name)
+        {
             report_error(&err);
         }
 
@@ -321,7 +320,7 @@ impl BuildQueue {
                     ),
                     Err(err) => report_error(&err),
                 }
-                if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, krate) {
+                if let Err(err) = cdn::queue_crate_invalidation(&mut *conn, &self.config, krate) {
                     report_error(&err);
                 }
                 continue;
@@ -366,7 +365,9 @@ impl BuildQueue {
                     yanked.is_some(),
                 );
 
-                if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, &release.name) {
+                if let Err(err) =
+                    cdn::queue_crate_invalidation(&mut *conn, &self.config, &release.name)
+                {
                     report_error(&err);
                 }
             }
@@ -570,11 +571,7 @@ mod tests {
             assert_eq!(metrics.failed_builds.get(), 1);
 
             // no invalidations were run since we don't have a distribution id configured
-            assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert!(ir.is_empty());
-            }
+            assert!(cdn::queued_or_active_crate_invalidations(&mut *env.db().conn())?.is_empty());
 
             Ok(())
         })
@@ -593,55 +590,31 @@ mod tests {
             queue.add_crate("will_succeed", "1.0.0", -1, None)?;
             queue.add_crate("will_fail", "1.0.0", 0, None)?;
 
-            assert!(matches!(*env.cdn(), CdnBackend::Dummy(_)));
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert!(ir.is_empty());
-            }
+            let mut conn = env.db().conn();
+            cdn::queued_or_active_crate_invalidations(&mut *conn)?.is_empty();
 
             queue.process_next_crate(|krate| {
                 assert_eq!("will_succeed", krate.name);
                 Ok(())
             })?;
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert_eq!(
-                    *ir,
-                    [
-                        ("distribution_id_web".into(), "/will_succeed*".into()),
-                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
-                        (
-                            "distribution_id_static".into(),
-                            "/rustdoc/will_succeed*".into()
-                        ),
-                    ]
-                );
-            }
+
+            let queued_invalidations = cdn::queued_or_active_crate_invalidations(&mut *conn)?;
+            assert_eq!(queued_invalidations.len(), 3);
+            assert!(queued_invalidations
+                .iter()
+                .all(|i| i.krate == "will_succeed"));
 
             queue.process_next_crate(|krate| {
                 assert_eq!("will_fail", krate.name);
                 anyhow::bail!("simulate a failure");
             })?;
-            if let CdnBackend::Dummy(ref invalidation_requests) = *env.cdn() {
-                let ir = invalidation_requests.lock().unwrap();
-                assert_eq!(
-                    *ir,
-                    [
-                        ("distribution_id_web".into(), "/will_succeed*".into()),
-                        ("distribution_id_web".into(), "/crate/will_succeed*".into()),
-                        (
-                            "distribution_id_static".into(),
-                            "/rustdoc/will_succeed*".into()
-                        ),
-                        ("distribution_id_web".into(), "/will_fail*".into()),
-                        ("distribution_id_web".into(), "/crate/will_fail*".into()),
-                        (
-                            "distribution_id_static".into(),
-                            "/rustdoc/will_fail*".into()
-                        ),
-                    ]
-                );
-            }
+
+            let queued_invalidations = cdn::queued_or_active_crate_invalidations(&mut *conn)?;
+            assert_eq!(queued_invalidations.len(), 6);
+            assert!(queued_invalidations
+                .iter()
+                .skip(3)
+                .all(|i| i.krate == "will_fail"));
 
             Ok(())
         })

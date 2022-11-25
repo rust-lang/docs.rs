@@ -18,10 +18,10 @@
                 <div class = "pure-g">
                     <div class="pure-u-1-2">
                         <ol class="queue-list">
-                            {% for invalidation in active_deployments -%}
+                            {% for krate in active_deployments -%}
                                 <li>
-                                    <a href="https://docs.rs/{{ invalidation.name }}">
-                                        {{ invalidation.name }}
+                                    <a href="https://docs.rs/{{ krate }}">
+                                        {{ krate }}
                                     </a>
                                 </li>
                             {%- endfor %}

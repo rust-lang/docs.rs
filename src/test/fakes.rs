@@ -38,7 +38,6 @@ pub(crate) struct FakeRelease<'a> {
 pub(crate) struct FakeBuild {
     s3_build_log: Option<String>,
     db_build_log: Option<String>,
-    build_time: Option<DateTime<Utc>>,
     result: BuildResult,
 }
 
@@ -459,12 +458,6 @@ impl FakeGithubStats {
 }
 
 impl FakeBuild {
-    pub(crate) fn build_time(self, build_time: impl Into<DateTime<Utc>>) -> Self {
-        Self {
-            build_time: Some(build_time.into()),
-            ..self
-        }
-    }
     pub(crate) fn rustc_version(self, rustc_version: impl Into<String>) -> Self {
         Self {
             result: BuildResult {
@@ -532,13 +525,6 @@ impl FakeBuild {
             )?;
         }
 
-        if let Some(build_time) = self.build_time.as_ref() {
-            conn.query(
-                "UPDATE builds SET build_time = $2 WHERE id = $1",
-                &[&build_id, &build_time],
-            )?;
-        }
-
         if let Some(s3_build_log) = self.s3_build_log.as_deref() {
             let path = format!("build-logs/{}/{}.txt", build_id, default_target);
             storage.store_one(path, s3_build_log)?;
@@ -553,7 +539,6 @@ impl Default for FakeBuild {
         Self {
             s3_build_log: Some("It works!".into()),
             db_build_log: None,
-            build_time: None,
             result: BuildResult {
                 rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),

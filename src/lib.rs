@@ -20,7 +20,7 @@ pub mod db;
 mod docbuilder;
 mod error;
 pub mod index;
-mod metrics;
+pub mod metrics;
 pub mod repositories;
 pub mod storage;
 #[cfg(test)]

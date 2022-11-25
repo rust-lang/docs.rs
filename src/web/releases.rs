@@ -2,7 +2,7 @@
 
 use crate::{
     build_queue::QueuedCrate,
-    cdn::{self, CrateInvalidation},
+    cdn,
     db::Pool,
     impl_axum_webpage,
     utils::{report_error, spawn_blocking},
@@ -21,7 +21,7 @@ use axum::{
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str;
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -694,7 +694,7 @@ pub(crate) async fn activity_handler(
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
-    active_deployments: Vec<CrateInvalidation>,
+    active_deployments: Vec<String>,
 }
 
 impl_axum_webpage! {
@@ -715,7 +715,19 @@ pub(crate) async fn build_queue_handler(
         }
 
         let mut conn = pool.get()?;
-        Ok((queue, cdn::active_crate_invalidations(&mut conn)?))
+        let mut active_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut *conn)?
+            .into_iter()
+            .map(|i| i.krate)
+            .collect();
+
+        // deduplicate the list of crates while keeping their order
+        let mut set = HashSet::new();
+        active_deployments.retain(|k| set.insert(k.clone()));
+
+        // reverse the list, so the oldest comes first
+        active_deployments.reverse();
+
+        Ok((queue, active_deployments))
     })
     .await?;
 
@@ -731,8 +743,7 @@ mod tests {
     use super::*;
     use crate::index::api::CrateOwner;
     use crate::test::{
-        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, FakeBuild,
-        TestFrontend,
+        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -1366,15 +1377,13 @@ mod tests {
     #[test]
     fn test_deployment_queue() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
+            });
+
             let web = env.frontend();
 
-            env.fake_release()
-                .name("krate_2")
-                .version("0.0.1")
-                .builds(vec![
-                    FakeBuild::default().build_time(Utc::now() - Duration::minutes(10))
-                ])
-                .create()?;
+            cdn::queue_crate_invalidation(&mut *env.db().conn(), &env.config(), "krate_2")?;
 
             let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
