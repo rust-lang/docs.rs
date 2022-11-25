@@ -539,14 +539,17 @@ fn redirect(url: Url) -> Response {
     resp
 }
 
-fn axum_redirect(url: &str) -> impl IntoResponse {
-    (
+fn axum_redirect(url: &str) -> Result<impl IntoResponse, Error> {
+    if !url.starts_with('/') || url.starts_with("//") {
+        return Err(anyhow!("invalid redirect URL: {}", url));
+    }
+    Ok((
         StatusCode::FOUND,
         [(
             http::header::LOCATION,
             http::HeaderValue::try_from(url).expect("invalid url for redirect"),
         )],
-    )
+    ))
 }
 
 fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
@@ -555,10 +558,13 @@ fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
     resp
 }
 
-fn axum_cached_redirect(url: &str, cache_policy: cache::CachePolicy) -> impl IntoResponse {
-    let mut resp = axum_redirect(url).into_response();
+fn axum_cached_redirect(
+    url: &str,
+    cache_policy: cache::CachePolicy,
+) -> Result<impl IntoResponse, Error> {
+    let mut resp = axum_redirect(url)?.into_response();
     resp.extensions_mut().insert(cache_policy);
-    resp
+    Ok(resp)
 }
 
 fn redirect_base(req: &Request) -> String {
@@ -707,8 +713,10 @@ impl_axum_webpage! {
 mod test {
     use super::*;
     use crate::{docbuilder::DocCoverage, test::*, web::match_version};
+    use axum::http::StatusCode;
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
+    use test_case::test_case;
 
     fn release(version: &str, env: &TestEnvironment) -> i32 {
         env.fake_release()
@@ -1157,5 +1165,43 @@ mod test {
             assert_eq!(tabindex, 1);
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_axum_redirect() {
+        let response = axum_redirect("/something").unwrap().into_response();
+        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(
+            response.headers().get(http::header::LOCATION).unwrap(),
+            "/something"
+        );
+        assert!(response
+            .headers()
+            .get(http::header::CACHE_CONTROL)
+            .is_none());
+        assert!(response.extensions().get::<cache::CachePolicy>().is_none());
+    }
+
+    #[test]
+    fn test_axum_redirect_cached() {
+        let response = axum_cached_redirect("/something", cache::CachePolicy::NoCaching)
+            .unwrap()
+            .into_response();
+        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(
+            response.headers().get(http::header::LOCATION).unwrap(),
+            "/something"
+        );
+        assert!(matches!(
+            response.extensions().get::<cache::CachePolicy>().unwrap(),
+            cache::CachePolicy::NoCaching,
+        ))
+    }
+
+    #[test_case("without_leading_slash")]
+    #[test_case("//with_double_leading_slash")]
+    fn test_axum_redirect_failure(path: &str) {
+        assert!(axum_redirect(path).is_err());
+        assert!(axum_cached_redirect(path, cache::CachePolicy::NoCaching).is_err());
     }
 }

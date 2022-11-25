@@ -322,7 +322,7 @@ pub(crate) async fn crate_details_handler(
         return Ok(super::axum_cached_redirect(
             &format!("/crate/{}/latest", params.name),
             CachePolicy::ForeverInCdn,
-        )
+        )?
         .into_response());
     }
 
@@ -345,7 +345,7 @@ pub(crate) async fn crate_details_handler(
             return Ok(super::axum_cached_redirect(
                 &format!("/crate/{}/{}", &params.name, version),
                 CachePolicy::ForeverInCdn,
-            )
+            )?
             .into_response());
         }
     };
