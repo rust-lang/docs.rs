@@ -8,7 +8,7 @@ use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
 use crates_index_diff::Change;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -266,6 +266,34 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
     unreachable!()
 }
 
+#[instrument(skip(conn))]
+fn set_yanked(conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
+    let activity = if yanked { "yanked" } else { "unyanked" };
+
+    match conn
+        .execute(
+            "UPDATE releases
+                 SET yanked = $3
+             FROM crates
+             WHERE crates.id = releases.crate_id
+                 AND name = $1
+                 AND version = $2
+            ",
+            &[&name, &version, &yanked],
+        )
+        .with_context(|| format!("error while setting {}-{} to {}", name, version, activity))
+    {
+        Ok(rows) => {
+            if rows != 1 {
+                error!("tried to yank or unyank non-existing release");
+            } else {
+                debug!("{}-{} {}", name, version, activity);
+            }
+        }
+        Err(err) => report_error(&err),
+    }
+}
+
 /// Index methods.
 impl BuildQueue {
     /// Updates registry index repository and adds new crates into build queue.
@@ -282,29 +310,24 @@ impl BuildQueue {
 
         for change in &changes {
             match change {
-                Change::Yanked(release) => {
-                    let res = conn
-                        .execute(
-                            "
-                            UPDATE releases
-                                SET yanked = TRUE
-                            FROM crates
-                            WHERE crates.id = releases.crate_id
-                                AND name = $1
-                                AND version = $2
-                            ",
-                            &[&release.name, &release.version],
-                        )
-                        .with_context(|| {
-                            format!(
-                                "error while setting {}-{} to yanked",
-                                release.name, release.version
-                            )
-                        });
-                    match res {
-                        Ok(_) => debug!("{}-{} yanked", release.name, release.version),
-                        Err(err) => report_error(&err),
-                    }
+                Change::Yanked(release)
+                | Change::Unyanked(release)
+                // FIXME: the correct handling of `AddedAndYanked` is probably 
+                // running the build and direcctly yanking the release. 
+                // looking at 
+                // https://github.com/Byron/crates-index-diff-rs/commit/8256cbbd3651073394d6aa9de38c734618df9102
+                // The same change previously lead to a simple `Yanked` change, which would 
+                // be ignored by us because we don't find the release.
+                // This is best fixed together with other edge-cases like 
+                // a release being yanked while the build is still queued or running. 
+                | Change::AddedAndYanked(release) => {
+                    set_yanked(
+                        &mut conn,
+                        release.name.as_str(),
+                        release.version.as_str(),
+                        !matches!(change, Change::Unyanked(_)),
+                    );
+
                     if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, &release.name)
                     {
                         report_error(&err);
@@ -338,7 +361,7 @@ impl BuildQueue {
                     }
                 }
 
-                Change::Deleted { name: krate } => {
+                Change::Deleted { name: krate, .. } => {
                     match delete_crate(&mut conn, &self.storage, &self.config, krate)
                         .with_context(|| format!("failed to delete crate {}", krate)) {
                             Ok(_) => info!("crate {} was deleted from the index and will be deleted from the database", krate), 
