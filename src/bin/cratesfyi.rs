@@ -108,6 +108,8 @@ enum CommandLine {
             value_enum
         )]
         repository_stats_updater: Toggle,
+        #[arg(long = "cdn-invalidator", default_value = "enabled", value_enum)]
+        cdn_invalidator: Toggle,
     },
 
     StartBuildServer,
@@ -143,9 +145,13 @@ impl CommandLine {
             } => subcommand.handle_args(ctx, skip_if_exists)?,
             Self::StartRegistryWatcher {
                 repository_stats_updater,
+                cdn_invalidator,
             } => {
                 if repository_stats_updater == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
+                }
+                if cdn_invalidator == Toggle::Enabled {
+                    docs_rs::utils::daemon::start_background_cdn_invalidator(&ctx)?;
                 }
 
                 docs_rs::utils::watch_registry(ctx.build_queue()?, ctx.config()?, ctx.index()?)?;
@@ -586,7 +592,6 @@ impl Context for BinContext {
             self.pool()?,
             self.metrics()?,
             self.config()?,
-            self.cdn()?,
             self.storage()?,
         );
         fn storage(self) -> Storage = Storage::new(
@@ -595,7 +600,10 @@ impl Context for BinContext {
             self.config()?,
             self.runtime()?,
         )?;
-        fn cdn(self) -> CdnBackend = CdnBackend::new(&self.config()?, &self.runtime()?);
+        fn cdn(self) -> CdnBackend = CdnBackend::new(
+            &self.config()?,
+            &self.runtime()?,
+        );
         fn config(self) -> Config = Config::from_env()?;
         fn metrics(self) -> Metrics = Metrics::new()?;
         fn runtime(self) -> Runtime = {

@@ -3,6 +3,7 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
+    cdn,
     utils::{queue_builder, report_error},
     web::start_web_server,
     BuildQueue, Config, Context, Index, RustwideBuilder,
@@ -95,6 +96,33 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
     Ok(())
 }
 
+pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Error> {
+    let cdn = context.cdn()?;
+    let config = context.config()?;
+    let pool = context.pool()?;
+
+    if config.cloudfront_distribution_id_web.is_none()
+        && config.cloudfront_distribution_id_static.is_none()
+    {
+        info!("no cloudfront distribution IDs found, skipping background cdn invalidation");
+        return Ok(());
+    }
+
+    cron("cdn invalidator", Duration::from_secs(60), move || {
+        let mut conn = pool.get()?;
+        if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
+            cdn::handle_queued_invalidation_requests(&cdn, &mut *conn, distribution_id)
+                .context("error handling queued invalidations for web CDN invalidation")?;
+        }
+        if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
+            cdn::handle_queued_invalidation_requests(&cdn, &mut *conn, distribution_id)
+                .context("error handling queued invalidations for static CDN invalidation")?;
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn start_daemon<C: Context + Send + Sync + 'static>(
     context: C,
     enable_registry_watcher: bool,
@@ -125,6 +153,7 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
         .unwrap();
 
     start_background_repository_stats_updater(&*context)?;
+    start_background_cdn_invalidator(&*context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.

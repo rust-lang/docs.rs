@@ -859,7 +859,29 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             ALTER TABLE owners ADD COLUMN name VARCHAR(255);
             ",
         ),
-
+        sql_migration!(
+            context, 37, "add cdn-invalidation-queue table",
+            " 
+            CREATE TABLE cdn_invalidation_queue (
+                id BIGSERIAL,
+                crate VARCHAR(255) NOT NULL,
+                cdn_distribution_id VARCHAR(255) NOT NULL,
+                path_pattern text NOT NULL,
+                queued TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_in_cdn TIMESTAMP WITH TIME ZONE,
+                cdn_reference VARCHAR(255)
+            );
+            CREATE INDEX cdn_invalidation_queue_crate_idx ON cdn_invalidation_queue (crate);
+            CREATE INDEX cdn_invalidation_queue_cdn_reference_idx ON cdn_invalidation_queue (cdn_reference);
+            CREATE INDEX cdn_invalidation_queue_created_in_cdn_idx ON cdn_invalidation_queue (created_in_cdn);
+            ",
+            "
+            DROP INDEX cdn_invalidation_queue_crate_idx;
+            DROP INDEX cdn_invalidation_queue_cdn_reference_idx;
+            DROP INDEX cdn_invalidation_queue_created_in_cdn_idx;
+            DROP TABLE cdn_invalidation_queue;
+            "
+        ),
     ];
 
     for migration in migrations {
