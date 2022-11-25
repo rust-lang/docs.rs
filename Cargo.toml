@@ -91,7 +91,8 @@ iron = "0.6"
 router = "0.6"
 
 # axum dependencies
-axum = "0.5.17"
+axum = "0.6.1"
+axum-extra = "0.4.2"
 hyper = { version = "0.14.15", default-features = false }
 tower = "0.4.11"
 tower-service = "0.3.2"

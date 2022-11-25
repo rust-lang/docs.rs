@@ -20,10 +20,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use axum::{
-    extract::RequestParts,
-    http::{uri::Authority, Uri},
-};
+use axum::http::{uri::Authority, Uri};
 use tower_service::Service;
 
 /// Service that forwards all requests to another service
@@ -33,7 +30,7 @@ use tower_service::Service;
 ///     let strangler_svc = StranglerService::new(
 ///         axum::http::uri::Authority::from_static("127.0.0.1:3333"),
 ///     );
-///     let router = axum::Router::new().fallback(strangler_svc);
+///     let router = axum::Router::new().fallback_service(strangler_svc);
 ///     axum::Server::bind(&"127.0.0.1:0".parse()?)
 ///         .serve(router.into_make_service())
 ///         # .with_graceful_shutdown(async {
@@ -90,13 +87,9 @@ impl Service<axum::http::Request<axum::body::Body>> for StranglerService {
 async fn forward_call_to_strangled(
     http_client: hyper::Client<hyper::client::HttpConnector>,
     inner: Arc<InnerStranglerService>,
-    req: axum::http::Request<axum::body::Body>,
+    mut req: axum::http::Request<axum::body::Body>,
 ) -> Result<axum::response::Response, Infallible> {
     tracing::debug!("handling a request");
-    let mut request_parts = RequestParts::new(req);
-    let req: Result<axum::http::Request<axum::body::Body>, _> = request_parts.extract().await;
-    let mut req = req.unwrap();
-
     let uri: Uri = {
         // Not really anything to do, because this could just not be a websocket
         // request.
@@ -145,13 +138,13 @@ mod tests {
 
     #[tokio::test]
     async fn can_be_used_as_fallback() {
-        let router = Router::new().fallback(make_svc());
+        let router = Router::new().fallback_service(make_svc());
         axum::Server::bind(&"0.0.0.0:0".parse().unwrap()).serve(router.into_make_service());
     }
 
     #[tokio::test]
     async fn can_be_used_for_a_route() {
-        let router = Router::new().route("/api", make_svc());
+        let router = Router::new().route_service("/api", make_svc());
         axum::Server::bind(&"0.0.0.0:0".parse().unwrap()).serve(router.into_make_service());
     }
 
@@ -204,7 +197,7 @@ mod tests {
         });
 
         let background_strangler_handle = tokio::spawn(async move {
-            let router = Router::new().fallback(strangler_svc);
+            let router = Router::new().fallback_service(strangler_svc);
             axum::Server::from_tcp(strangler_tcp)
                 .unwrap()
                 .serve(router.into_make_service())
