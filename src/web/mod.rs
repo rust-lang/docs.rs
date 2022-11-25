@@ -490,7 +490,7 @@ pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(),
         axum::Server::bind(&axum_addr)
             .serve(
                 build_axum_app(context, template_data)?
-                    .fallback(build_strangler_service(iron_server.socket)?)
+                    .fallback_service(build_strangler_service(iron_server.socket)?)
                     .into_make_service(),
             )
             .await?;
