@@ -1135,19 +1135,19 @@ mod tests {
                 .name("crate_that_succeeded_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 66, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 16, 4, 33, 50).unwrap())
                 .create()?;
 
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .version("0.2.0")
                 .github_stats("some/repo", 66, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 20).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 20, 4, 33, 50).unwrap())
                 .create()?;
 
             env.fake_release()
                 .name("crate_that_succeeded_without_github")
-                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 5, 16, 4, 33, 50).unwrap())
                 .version("0.2.0")
                 .create()?;
 
@@ -1155,7 +1155,7 @@ mod tests {
                 .name("crate_that_failed_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 6, 16, 4, 33, 50).unwrap())
                 .build_result_failed()
                 .create()?;
 
@@ -1180,19 +1180,19 @@ mod tests {
                 .name("crate_that_succeeded_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 66, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 16, 4, 33, 50).unwrap())
                 .create()?;
 
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .version("0.2.0")
                 .github_stats("some/repo", 66, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 20).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 20, 4, 33, 50).unwrap())
                 .create()?;
 
             env.fake_release()
                 .name("crate_that_succeeded_without_github")
-                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 5, 16, 4, 33, 50).unwrap())
                 .version("0.2.0")
                 .create()?;
 
@@ -1200,7 +1200,7 @@ mod tests {
                 .name("crate_that_failed_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 6, 16, 4, 33, 50).unwrap())
                 .build_result_failed()
                 .create()?;
 
@@ -1221,19 +1221,19 @@ mod tests {
                 .name("crate_that_succeeded_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 16, 4, 33, 50).unwrap())
                 .create()?;
             // make sure that crates get at most one release shown, so they don't crowd the page
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 5, 16, 4, 33, 50).unwrap())
                 .version("0.2.0")
                 .create()?;
             env.fake_release()
                 .name("crate_that_failed")
                 .version("0.1.0")
-                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 6, 16, 4, 33, 50).unwrap())
                 .build_result_failed()
                 .create()?;
 
@@ -1253,25 +1253,25 @@ mod tests {
                 .name("crate_that_succeeded_with_github")
                 .version("0.1.0")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 16, 4, 33, 50).unwrap())
                 .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .version("0.2.0-rc")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 4, 16).and_hms(8, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 4, 16, 8, 33, 50).unwrap())
                 .build_result_failed()
                 .create()?;
             env.fake_release()
                 .name("crate_that_succeeded_with_github")
                 .github_stats("some/repo", 33, 22, 11)
-                .release_time(Utc.ymd(2020, 5, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 5, 16, 4, 33, 50).unwrap())
                 .version("0.2.0")
                 .create()?;
             env.fake_release()
                 .name("crate_that_failed")
                 .version("0.1.0")
-                .release_time(Utc.ymd(2020, 6, 16).and_hms(4, 33, 50))
+                .release_time(Utc.with_ymd_and_hms(2020, 6, 16, 4, 33, 50).unwrap())
                 .build_result_failed()
                 .create()?;
 
