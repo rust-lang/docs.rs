@@ -2,10 +2,11 @@ use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
 use anyhow::{Context, Error};
 use aws_sdk_s3::{
+    config::retry::RetryConfig,
     error as s3_error,
     model::{Delete, ObjectIdentifier, Tag, Tagging},
     types::SdkError,
-    Client, Endpoint, Region, RetryConfig,
+    Client, Endpoint, Region,
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;
