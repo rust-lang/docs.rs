@@ -61,11 +61,11 @@ macro_rules! impl_webpage {
 
 #[macro_export]
 macro_rules! impl_axum_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
-        $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?  $(, canonical_url = $canonical_url:expr)?);
+    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+        $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
     };
 
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
+    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
         impl axum::response::IntoResponse for $page
         {
             fn into_response(self) -> ::axum::response::Response {
