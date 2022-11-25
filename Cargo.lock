@@ -1422,6 +1422,7 @@ dependencies = [
  "grass",
  "hostname",
  "http",
+ "httpdate",
  "hyper 0.14.23",
  "indoc",
  "iron",

@@ -50,6 +50,10 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
         )
         .route(
+            "/-/static/*path",
+            get_static(super::statics::static_handler),
+        )
+        .route(
             "/sitemap.xml",
             get_internal(super::sitemap::sitemapindex_handler),
         )
@@ -123,8 +127,6 @@ pub(super) fn build_routes() -> Routes {
         PermanentRedirect("/-/static/opensearch.xml"),
     );
 
-    routes.static_resource("/-/static/:single", super::statics::static_handler);
-    routes.static_resource("/-/static/*", super::statics::static_handler);
     routes.internal_page(
         "/-/rustdoc.static/:single",
         super::rustdoc::static_asset_handler,
