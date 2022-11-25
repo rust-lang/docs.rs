@@ -87,7 +87,7 @@ pub(crate) async fn sitemap_handler(
                     .get::<_, DateTime<Utc>>("release_time")
                     // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
                     // so they should all get recrawled if they haven't been since then.
-                    .max(Utc.ymd(2022, 8, 28).and_hms(0, 0, 0))
+                    .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
                     .format("%+")
                     .to_string(),
             })
@@ -241,7 +241,7 @@ mod tests {
             use chrono::{TimeZone, Utc};
             env.fake_release()
                 .name("some_random_crate")
-                .release_time(Utc.ymd(2020, 1, 1).and_hms(0, 0, 0))
+                .release_time(Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap())
                 .create()?;
 
             let response = web.get("/-/sitemap/s/sitemap.xml").send()?;

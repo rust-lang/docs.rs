@@ -21,7 +21,7 @@ pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
     ))
 }
 
-fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<Date<Utc>> {
+fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<NaiveDate> {
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r" (\d+)-(\d+)-(\d+)\)$").unwrap());
 
     let cap = RE
@@ -32,11 +32,12 @@ fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<Date<Utc>> {
     let month = cap.get(2).unwrap().as_str();
     let day = cap.get(3).unwrap().as_str();
 
-    Ok(Utc.ymd(
+    NaiveDate::from_ymd_opt(
         year.parse::<i32>().unwrap(),
         month.parse::<u32>().unwrap(),
         day.parse::<u32>().unwrap(),
-    ))
+    )
+    .ok_or_else(|| anyhow!("date out of range"))
 }
 
 /// Picks the correct "rustdoc.css" static file depending on which rustdoc version was used to
@@ -44,7 +45,7 @@ fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<Date<Utc>> {
 pub fn get_correct_docsrs_style_file(version: &str) -> Result<String> {
     let date = parse_rustc_date(version)?;
     // This is the date where https://github.com/rust-lang/rust/pull/91356 was merged.
-    if Utc.ymd(2021, 12, 5) < date {
+    if NaiveDate::from_ymd_opt(2021, 12, 5).unwrap() < date {
         // If this is the new rustdoc layout, we need the newer docs.rs CSS file.
         Ok("rustdoc-2021-12-05.css".to_owned())
     } else {
