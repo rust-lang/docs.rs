@@ -11,7 +11,12 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use http::header::CONTENT_LENGTH;
-use iron::{headers::ContentType, response::Response, status::Status, IronResult, Request};
+use iron::{
+    headers::{ContentType, Link, LinkValue, RelationType},
+    response::Response,
+    status::Status,
+    IronResult, Request,
+};
 use serde::Serialize;
 use std::{borrow::Cow, sync::Arc};
 use tera::{Context, Tera};
@@ -19,11 +24,11 @@ use tera::{Context, Tera};
 /// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
 #[macro_export]
 macro_rules! impl_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
-        $crate::impl_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
+    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)?  $(, canonical_url = $canonical_url:expr)? $(,)?) => {
+        $crate::impl_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?  $(, canonical_url = $canonical_url)?);
     };
 
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
         impl $crate::web::page::WebPage for $page {
             fn template(&self) -> ::std::borrow::Cow<'static, str> {
                 let template: fn(&Self) -> ::std::borrow::Cow<'static, str> = $template;
@@ -34,6 +39,14 @@ macro_rules! impl_webpage {
                 fn get_status(&self) -> ::iron::status::Status {
                     let status: fn(&Self) -> ::iron::status::Status = $status;
                     (status)(self)
+                }
+            )?
+
+
+            $(
+                fn canonical_url(&self) -> Option<String> {
+                    let canonical_url: fn(&Self) -> Option<String> = $canonical_url;
+                    (canonical_url)(self)
                 }
             )?
 
@@ -48,11 +61,11 @@ macro_rules! impl_webpage {
 
 #[macro_export]
 macro_rules! impl_axum_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
-        $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?);
+    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
+        $crate::impl_axum_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?  $(, canonical_url = $canonical_url:expr)?);
     };
 
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(,)?) => {
+    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
         impl axum::response::IntoResponse for $page
         {
             fn into_response(self) -> ::axum::response::Response {
@@ -134,11 +147,23 @@ pub trait WebPage: Serialize + Sized {
             response.extensions.insert::<CachePolicy>(cache);
         }
 
+        if let Some(canonical_url) = self.canonical_url() {
+            let link_value = LinkValue::new(canonical_url)
+                .push_rel(RelationType::ExtRelType("canonical".to_string()));
+
+            response.headers.set(Link::new(vec![link_value]));
+        }
+
         Ok(response)
     }
 
     /// The name of the template to be rendered
     fn template(&self) -> Cow<'static, str>;
+
+    /// The canonical URL to set in response headers
+    fn canonical_url(&self) -> Option<String> {
+        None
+    }
 
     /// Gets the status of the request, defaults to `Ok`
     fn get_status(&self) -> Status {
