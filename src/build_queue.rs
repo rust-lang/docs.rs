@@ -302,7 +302,7 @@ impl BuildQueue {
     pub fn get_new_crates(&self, index: &Index) -> Result<usize> {
         let mut conn = self.db.get()?;
         let diff = index.diff()?;
-        let (mut changes, oid) = diff.peek_changes()?;
+        let (mut changes, oid) = diff.peek_changes_ordered()?;
         let mut crates_added = 0;
 
         // I believe this will fix ordering of queue if we get more than one crate from changes
