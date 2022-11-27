@@ -7,7 +7,6 @@ use crate::utils::{get_config, get_crate_priority, report_error, set_config, Con
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
-use crates_index_diff::Change;
 use tracing::{debug, error, info, instrument, warn};
 
 use std::collections::HashMap;
@@ -309,67 +308,63 @@ impl BuildQueue {
         changes.reverse();
 
         for change in &changes {
-            match change {
-                Change::Yanked(release)
-                | Change::Unyanked(release)
-                // FIXME: the correct handling of `AddedAndYanked` is probably 
-                // running the build and direcctly yanking the release. 
-                // looking at 
-                // https://github.com/Byron/crates-index-diff-rs/commit/8256cbbd3651073394d6aa9de38c734618df9102
-                // The same change previously lead to a simple `Yanked` change, which would 
-                // be ignored by us because we don't find the release.
-                // This is best fixed together with other edge-cases like 
-                // a release being yanked while the build is still queued or running. 
-                | Change::AddedAndYanked(release) => {
-                    set_yanked(
-                        &mut conn,
-                        release.name.as_str(),
-                        release.version.as_str(),
-                        !matches!(change, Change::Unyanked(_)),
-                    );
-
-                    if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, &release.name)
-                    {
-                        report_error(&err);
-                    }
+            if let Some((ref krate, ..)) = change.deleted() {
+                match delete_crate(&mut conn, &self.storage, &self.config, krate)
+                    .with_context(|| format!("failed to delete crate {}", krate))
+                {
+                    Ok(_) => info!(
+                        "crate {} was deleted from the index and will be deleted from the database",
+                        krate
+                    ),
+                    Err(err) => report_error(&err),
                 }
+                if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, krate) {
+                    report_error(&err);
+                }
+                continue;
+            }
 
-                Change::Added(release) => {
-                    let priority = get_crate_priority(&mut conn, &release.name)?;
+            if let Some(release) = change.added() {
+                let priority = get_crate_priority(&mut conn, &release.name)?;
 
-                    match self
-                        .add_crate(
-                            &release.name,
-                            &release.version,
-                            priority,
-                            index.repository_url(),
+                match self
+                    .add_crate(
+                        &release.name,
+                        &release.version,
+                        priority,
+                        index.repository_url(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "failed adding {}-{} into build queue",
+                            release.name, release.version
                         )
-                        .with_context(|| {
-                            format!(
-                                "failed adding {}-{} into build queue",
-                                release.name, release.version
-                            )
-                        }) {
-                        Ok(()) => {
-                            debug!(
-                                "{}-{} added into build queue",
-                                release.name, release.version
-                            );
-                            crates_added += 1;
-                        }
-                        Err(err) => report_error(&err),
+                    }) {
+                    Ok(()) => {
+                        debug!(
+                            "{}-{} added into build queue",
+                            release.name, release.version
+                        );
+                        crates_added += 1;
                     }
+                    Err(err) => report_error(&err),
                 }
+            }
 
-                Change::Deleted { name: krate, .. } => {
-                    match delete_crate(&mut conn, &self.storage, &self.config, krate)
-                        .with_context(|| format!("failed to delete crate {}", krate)) {
-                            Ok(_) => info!("crate {} was deleted from the index and will be deleted from the database", krate), 
-                            Err(err) => report_error(&err),
-                        }
-                    if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, krate) {
-                        report_error(&err);
-                    }
+            let yanked = change.yanked();
+            let unyanked = change.unyanked();
+            if let Some(release) = yanked.or(unyanked) {
+                // FIXME: delay yanks of crates that have not yet finished building
+                // https://github.com/rust-lang/docs.rs/issues/1934
+                set_yanked(
+                    &mut conn,
+                    release.name.as_str(),
+                    release.version.as_str(),
+                    yanked.is_some(),
+                );
+
+                if let Err(err) = cdn::invalidate_crate(&self.config, &self.cdn, &release.name) {
+                    report_error(&err);
                 }
             }
         }
