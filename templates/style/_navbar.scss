@@ -34,25 +34,9 @@ div.nav-container {
         height: 100%;
     }
 
-    li {
-        border-left: 1px solid var(--color-border);
-    }
-
-    .pure-menu-has-children > .pure-menu-link {
-        background-color: var(--color-background);
-
-        &:hover {
-            background-color: var(--color-background);
-        }
-        &:after {
-            font-size: 12.8px;
-            content: "\25BC"
-        }
-    }
-
-    .pure-menu-has-children.pure-menu-active > .pure-menu-link {
-        &:after {
-            content:"\25B2";
+    .landing-search-form-nav {
+        > .pure-menu-item, li {
+            border-left: 1px solid var(--color-border);
         }
     }
 
@@ -156,6 +140,35 @@ div.nav-container {
 
         li {
             border-left: none;
+        }
+    }
+
+    details.pure-menu-item {
+        > summary::-webkit-details-marker,
+        > .dropdown > summary::marker {
+           display: none;
+        }
+
+        > summary {
+            padding: 6.4px 16px 6.4px 16px;
+            margin: 0;
+            font-size: 12.8px;
+            display: inline-block;
+            vertical-align: middle;
+            cursor: pointer;
+        }
+
+        > summary::after {
+            content: "▼";
+            padding-left: .5em;
+        }
+
+        &[open] > summary::after {
+            content: "▲";
+        }
+
+        .pure-menu-children {
+            display: block;
         }
     }
 
