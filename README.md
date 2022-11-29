@@ -67,6 +67,9 @@ cargo build
 docker-compose up -d db s3
 # anything that doesn't run via docker-compose needs the settings defined in
 # .env. Either via `. ./.env` as below, or via any dotenv shell integration.
+# If using bash, you need to run instead:
+# `set -o allexport && . ./env && set +o allexport` otherwise they won't be
+# saved in your environment.
 . ./.env
 # Setup the database you just created
 cargo run -- database migrate
