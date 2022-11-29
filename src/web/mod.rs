@@ -480,6 +480,12 @@ pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(),
 
     let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
 
+    tracing::info!(
+        "Starting web server on `{}:{}`",
+        axum_addr.ip(),
+        axum_addr.port()
+    );
+
     context.runtime()?.block_on(async {
         axum::Server::bind(&axum_addr)
             .serve(
