@@ -107,27 +107,9 @@ where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
 {
-    let result = tokio::task::spawn_blocking(f)
+    tokio::task::spawn_blocking(f)
         .await
-        .context("failed to join thread")?;
-
-    if cfg!(debug_assertions) {
-        // Since `AxumNope` can also be silently converted into
-        // `anyhow::Error`, someone accidentally using this method
-        // instead of `web::error::spawn_blocking_web` can lead to
-        // a more specific AxumNope error with a specific status code
-        // being silently converted into an anyhow::Error, so a server
-        // error with status 500.
-        if let Err(ref err) = result {
-            use crate::web::error::AxumNope;
-            assert!(
-                err.downcast_ref::<AxumNope>().is_none(),
-                "AxumNope found inside anyhow::Error, this is likely a problem."
-            );
-        }
-    }
-
-    result
+        .context("failed to join thread")?
 }
 
 #[cfg(test)]

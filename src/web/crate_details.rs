@@ -1,4 +1,3 @@
-use super::error::spawn_blocking_web;
 use super::{markdown, match_version, MatchSemver, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error, spawn_blocking};
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
         error::{AxumNope, AxumResult},
     },
 };
-use anyhow::{anyhow, Context as _};
+use anyhow::anyhow;
 use axum::{
     extract::{Extension, Path},
     response::{IntoResponse, Response as AxumResponse},
@@ -326,14 +325,15 @@ pub(crate) async fn crate_details_handler(
         .into_response());
     }
 
-    let found_version = spawn_blocking_web({
+    let found_version = spawn_blocking({
         let pool = pool.clone();
         let params = params.clone();
         move || {
-            let mut conn = pool.get().context("could not get connection from pool")?;
-            match_version(&mut conn, &params.name, params.version.as_deref())
-                .and_then(|m| m.assume_exact())
-                .map_err(Into::<AxumNope>::into)
+            let mut conn = pool.get()?;
+            Ok(
+                match_version(&mut conn, &params.name, params.version.as_deref())
+                    .and_then(|m| m.assume_exact())?,
+            )
         }
     })
     .await?;
