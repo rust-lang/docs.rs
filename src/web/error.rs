@@ -4,7 +4,6 @@ use crate::{
     db::PoolError,
     web::{page::WebPage, releases::Search, AxumErrorPage, ErrorPage},
 };
-use anyhow::Context as _;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
@@ -157,7 +156,7 @@ pub enum AxumNope {
     #[error("Internal server error")]
     InternalServerError,
     #[error("internal error")]
-    InternalError(#[from] anyhow::Error),
+    InternalError(anyhow::Error),
 }
 
 impl IntoResponse for AxumNope {
@@ -235,6 +234,18 @@ impl IntoResponse for AxumNope {
     }
 }
 
+impl From<anyhow::Error> for AxumNope {
+    fn from(err: anyhow::Error) -> Self {
+        match err.downcast::<AxumNope>() {
+            Ok(axum_nope) => axum_nope,
+            Err(err) => match err.downcast::<Nope>() {
+                Ok(iron_nope) => AxumNope::from(iron_nope),
+                Err(err) => AxumNope::InternalError(err),
+            },
+        }
+    }
+}
+
 impl From<Nope> for AxumNope {
     fn from(err: Nope) -> Self {
         match err {
@@ -250,44 +261,6 @@ impl From<Nope> for AxumNope {
 }
 
 pub(crate) type AxumResult<T> = Result<T, AxumNope>;
-
-/// spawn-blocking helper for usage in axum requests.
-///
-/// Should be used when spawning tasks from inside web-handlers
-/// that return AxumNope as error. The join-error will also be
-/// converted into an `anyhow::Error`. Any standard AxumNope
-/// will be left intact so the error-handling can generate the
-/// correct status-page with the correct status code.
-///
-/// Examples:
-///
-/// with standard `tokio::task::spawn_blocking`:
-/// ```ignore
-/// let data = spawn_blocking(move || -> Result<_, AxumNope> {
-///     let data = get_the_data()?;
-///     Ok(data)
-/// })
-/// .await
-/// .context("failed to join thread")??;
-/// ```
-///
-/// with this helper function:
-/// ```ignore
-/// let data = spawn_blocking(move || {
-///     let data = get_the_data()?;
-///     Ok(data)
-/// })
-/// .await?
-/// ```
-pub(crate) async fn spawn_blocking_web<F, R>(f: F) -> AxumResult<R>
-where
-    F: FnOnce() -> AxumResult<R> + Send + 'static,
-    R: Send + 'static,
-{
-    tokio::task::spawn_blocking(f)
-        .await
-        .context("failed to join thread")?
-}
 
 #[cfg(test)]
 mod tests {
