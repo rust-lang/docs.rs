@@ -284,7 +284,10 @@ fn set_yanked(conn: &mut postgres::Client, name: &str, version: &str, yanked: bo
     {
         Ok(rows) => {
             if rows != 1 {
-                error!("tried to yank or unyank non-existing release");
+                error!(
+                    "tried to yank or unyank non-existing release: {} {}",
+                    name, version
+                );
             } else {
                 debug!("{}-{} {}", name, version, activity);
             }
