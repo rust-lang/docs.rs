@@ -545,9 +545,9 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.6.0"
+version = "0.5.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "744864363a200a5e724a7e61bc8c11b6628cf2e3ec519c8a1a48e609a8156b40"
+checksum = "acee9fd5073ab6b045a275b3e709c163dd36c90685219cb21804a147b58dba43"
 dependencies = [
  "async-trait",
  "axum-core",
@@ -563,10 +563,8 @@ dependencies = [
  "mime 0.3.16",
  "percent-encoding 2.2.0",
  "pin-project-lite",
- "rustversion",
  "serde",
  "serde_json",
- "serde_path_to_error",
  "serde_urlencoded",
  "sync_wrapper",
  "tokio",
@@ -578,9 +576,9 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.3.0"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79b8558f5a0581152dc94dcd289132a1d377494bdeafcd41869b3258e3e2ad92"
+checksum = "37e5939e02c56fecd5c017c37df4238c0a839fa76b7f97acdd7efb804fd181cc"
 dependencies = [
  "async-trait",
  "bytes",
@@ -588,26 +586,6 @@ dependencies = [
  "http",
  "http-body",
  "mime 0.3.16",
- "rustversion",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
-name = "axum-extra"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1933e5206aa0a213ae64bbd53b3006f4dc171f02314fb5efaf4d2212d2705b8"
-dependencies = [
- "axum",
- "bytes",
- "futures-util",
- "http",
- "mime 0.3.16",
- "pin-project-lite",
- "tokio",
- "tower",
- "tower-http",
  "tower-layer",
  "tower-service",
 ]
@@ -1424,7 +1402,6 @@ dependencies = [
  "aws-smithy-http",
  "aws-smithy-types-convert",
  "axum",
- "axum-extra",
  "backtrace",
  "base64 0.13.1",
  "bzip2",
@@ -3105,9 +3082,9 @@ checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "matchit"
-version = "0.6.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dfc802da7b1cf80aefffa0c7b2f77247c8b32206cc83c270b61264f5b360a80"
+checksum = "73cbba799671b762df5a175adf59ce145165747bb891505c43d09aefbbf38beb"
 
 [[package]]
 name = "maybe-async"
@@ -4831,15 +4808,6 @@ checksum = "020ff22c755c2ed3f8cf162dbb41a7268d934702f3ed3631656ea597e08fc3db"
 dependencies = [
  "itoa 1.0.4",
  "ryu",
- "serde",
-]
-
-[[package]]
-name = "serde_path_to_error"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "184c643044780f7ceb59104cef98a5a6f12cb2288a7bc701ab93a362b49fd47d"
-dependencies = [
  "serde",
 ]
 
