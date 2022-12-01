@@ -47,7 +47,7 @@ backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
 comrak = { version = "0.14.0", default-features = false }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-fancy"] }
+syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.5"
 schemamama = "0.3"
 schemamama_postgres = "0.3"
@@ -140,7 +140,7 @@ walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.11.0", default-features = false }
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-fancy"] }
+syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
 
 [[bench]]
 name = "compression"
