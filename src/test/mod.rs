@@ -587,7 +587,7 @@ impl TestFrontend {
                         .unwrap()
                         .serve(
                             axum_app
-                                .fallback_service(
+                                .fallback(
                                     build_strangler_service(iron_server.socket)
                                         .expect("could not build strangler service"),
                                 )
