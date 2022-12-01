@@ -212,6 +212,11 @@ fn compile_syntax(out_dir: &Path) -> Result<()> {
     toml.file_extensions.push("Cargo.toml.orig".into());
     builder.add(toml);
 
+    tracked_add_from_folder(
+        &mut builder,
+        "assets/syntaxes/Extras/JavaScript (Babel).sublime-syntax",
+    )?;
+
     dump_to_uncompressed_file(&builder.build(), out_dir.join("syntect.packdump"))?;
 
     Ok(())
