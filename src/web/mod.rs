@@ -4,7 +4,7 @@ pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::{report_error, spawn_blocking};
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{anyhow, bail, Context as _, Result};
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -689,10 +689,9 @@ impl MetaData {
         name: &str,
         version: &str,
         version_or_latest: &str,
-    ) -> Option<MetaData> {
-        let rows = conn
-            .query(
-                "SELECT crates.name,
+    ) -> Result<MetaData> {
+        conn.query_opt(
+            "SELECT crates.name,
                        releases.version,
                        releases.description,
                        releases.target_name,
@@ -704,13 +703,9 @@ impl MetaData {
                 FROM releases
                 INNER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
-                &[&name, &version],
-            )
-            .unwrap();
-
-        let row = rows.get(0)?;
-
-        Some(MetaData {
+            &[&name, &version],
+        )?
+        .map(|row| MetaData {
             name: row.get(0),
             version: row.get(1),
             version_or_latest: version_or_latest.to_string(),
@@ -722,6 +717,7 @@ impl MetaData {
             yanked: row.get(7),
             rustdoc_css_file: get_correct_docsrs_style_file(row.get(8)).unwrap(),
         })
+        .ok_or_else(|| anyhow!("missing metadata for {} {}", name, version))
     }
 
     fn parse_doc_targets(targets: Value) -> Vec<String> {

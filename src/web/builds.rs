@@ -1,16 +1,19 @@
-use super::{cache::CachePolicy, match_version, redirect_base, MatchSemver};
+use super::{cache::CachePolicy, MatchSemver};
 use crate::{
     db::Pool,
     docbuilder::Limits,
-    impl_webpage,
-    web::{page::WebPage, MetaData},
+    impl_axum_webpage,
+    utils::spawn_blocking,
+    web::{error::AxumResult, match_version_axum, MetaData},
+};
+use anyhow::Result;
+use axum::{
+    extract::{Extension, Path},
+    http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+    response::IntoResponse,
+    Json,
 };
 use chrono::{DateTime, Utc};
-use iron::{
-    headers::{AccessControlAllowOrigin, ContentType},
-    status, IronResult, Request, Response, Url,
-};
-use router::Router;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -30,49 +33,89 @@ struct BuildsPage {
     canonical_url: String,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     BuildsPage = "crate/builds.html",
 }
 
-pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let name = cexpect!(req, router.find("name"));
-    let req_version = router.find("version");
+pub(crate) async fn build_list_handler(
+    Path((name, req_version)): Path<(String, String)>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let (version, version_or_latest) = match match_version_axum(&pool, &name, Some(&req_version))
+        .await?
+        .assume_exact()?
+    {
+        MatchSemver::Exact((version, _)) => (version.clone(), version),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
 
-    let mut conn = extension!(req, Pool).get()?;
-    let limits = ctry!(req, Limits::for_crate(&mut conn, name));
+        MatchSemver::Semver((version, _)) => {
+            return Ok(super::axum_cached_redirect(
+                &format!("/crate/{}/{}/builds", name, version),
+                CachePolicy::ForeverInCdn,
+            )?
+            .into_response());
+        }
+    };
 
-    let is_json = req
-        .url
-        .path()
-        .last()
-        .map_or(false, |segment| segment.ends_with(".json"));
+    let (limits, builds, metadata) = spawn_blocking({
+        let name = name.clone();
+        move || {
+            let mut conn = pool.get()?;
+            Ok((
+                Limits::for_crate(&mut conn, &name)?,
+                get_builds(&mut conn, &name, &version)?,
+                MetaData::from_crate(&mut conn, &name, &version, &version_or_latest)?,
+            ))
+        }
+    })
+    .await?;
 
-    let (version, version_or_latest) =
-        match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
-            MatchSemver::Exact((version, _)) => (version.clone(), version),
-            MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+    Ok(BuildsPage {
+        metadata,
+        builds,
+        limits,
+        canonical_url: format!("https://docs.rs/crate/{}/latest/builds", name),
+    }
+    .into_response())
+}
 
-            MatchSemver::Semver((version, _)) => {
-                let ext = if is_json { ".json" } else { "" };
-                let url = ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/crate/{}/{}/builds{}",
-                        redirect_base(req),
-                        name,
-                        version,
-                        ext,
-                    )),
-                );
+pub(crate) async fn build_list_json_handler(
+    Path((name, req_version)): Path<(String, String)>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let version = match match_version_axum(&pool, &name, Some(&req_version))
+        .await?
+        .assume_exact()?
+    {
+        MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
+        MatchSemver::Semver((version, _)) => {
+            return Ok(super::axum_cached_redirect(
+                &format!("/crate/{}/{}/builds.json", name, version),
+                CachePolicy::ForeverInCdn,
+            )?
+            .into_response());
+        }
+    };
 
-                return Ok(super::redirect(url));
-            }
-        };
+    let builds = spawn_blocking({
+        move || {
+            let mut conn = pool.get()?;
+            get_builds(&mut conn, &name, &version)
+        }
+    })
+    .await?;
 
-    let query = ctry!(
-        req,
-        conn.query(
+    Ok((
+        Extension(CachePolicy::NoStoreMustRevalidate),
+        [(ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
+        Json(builds),
+    )
+        .into_response())
+}
+
+fn get_builds(conn: &mut postgres::Client, name: &str, version: &str) -> Result<Vec<Build>> {
+    Ok(conn
+        .query(
             "SELECT crates.name,
                 releases.version,
                 releases.description,
@@ -88,12 +131,9 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
              INNER JOIN crates ON releases.crate_id = crates.id
              WHERE crates.name = $1 AND releases.version = $2
              ORDER BY id DESC",
-            &[&name, &version]
-        )
-    );
-
-    let builds: Vec<_> = query
-        .into_iter()
+            &[&name, &version],
+        )?
+        .iter()
         .map(|row| Build {
             id: row.get("id"),
             rustc_version: row.get("rustc_version"),
@@ -101,28 +141,7 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             build_status: row.get("build_status"),
             build_time: row.get("build_time"),
         })
-        .collect();
-
-    if is_json {
-        let mut resp = Response::with((status::Ok, serde_json::to_string(&builds).unwrap()));
-        resp.headers.set(ContentType::json());
-        resp.extensions
-            .insert::<CachePolicy>(CachePolicy::NoStoreMustRevalidate);
-        resp.headers.set(AccessControlAllowOrigin::Any);
-
-        Ok(resp)
-    } else {
-        BuildsPage {
-            metadata: cexpect!(
-                req,
-                MetaData::from_crate(&mut conn, name, &version, &version_or_latest)
-            ),
-            builds,
-            limits,
-            canonical_url: format!("https://docs.rs/crate/{}/latest/builds", name),
-        }
-        .into_response(req)
-    }
+        .collect())
 }
 
 #[cfg(test)]

@@ -146,6 +146,22 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/releases/queue",
             get_internal(super::releases::build_queue_handler),
         )
+        .route(
+            "/crate/:name/:version/builds",
+            get_internal(super::builds::build_list_handler),
+        )
+        .route(
+            "/crate/:name/:version/builds.json",
+            get_static(super::builds::build_list_json_handler),
+        )
+        .route(
+            "/crate/:name/:version/builds/:id",
+            get_internal(super::build_details::build_details_handler),
+        )
+        .route(
+            "/crate/:name/:version/features",
+            get_internal(super::features::build_features_handler),
+        )
 }
 
 // REFACTOR: Break this into smaller initialization functions
@@ -176,24 +192,8 @@ pub(super) fn build_routes() -> Routes {
     });
 
     routes.internal_page(
-        "/crate/:name/:version/builds",
-        super::builds::build_list_handler,
-    );
-    routes.internal_page(
         "/crate/:name/:version/download",
         super::rustdoc::download_handler,
-    );
-    routes.static_resource(
-        "/crate/:name/:version/builds.json",
-        super::builds::build_list_handler,
-    );
-    routes.internal_page(
-        "/crate/:name/:version/builds/:id",
-        super::build_details::build_details_handler,
-    );
-    routes.internal_page(
-        "/crate/:name/:version/features",
-        super::features::build_features_handler,
     );
     routes.internal_page(
         "/crate/:name/:version/source",
@@ -292,14 +292,6 @@ impl Routes {
         }
 
         router
-    }
-
-    /// A static resource is a normal page without any special behavior on the router side.
-    fn static_resource(&mut self, pattern: &str, handler: impl Handler) {
-        self.get.push((
-            pattern.to_string(),
-            Box::new(RequestRecorder::new(handler, "static resource")),
-        ));
     }
 
     /// Internal pages are docs.rs's own pages, instead of the documentation of a crate uploaded by

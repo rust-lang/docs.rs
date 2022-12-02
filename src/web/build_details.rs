@@ -1,13 +1,21 @@
 use crate::{
     db::Pool,
-    impl_webpage,
-    web::{file::File, page::WebPage, MetaData, Nope},
+    impl_axum_webpage,
+    utils::spawn_blocking,
+    web::{
+        error::{AxumNope, AxumResult},
+        file::File,
+        MetaData,
+    },
     Config, Storage,
 };
+use axum::{
+    extract::{Extension, Path},
+    response::IntoResponse,
+};
 use chrono::{DateTime, Utc};
-use iron::{IronError, IronResult, Request, Response};
-use router::Router;
 use serde::Serialize;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct BuildDetails {
@@ -25,66 +33,66 @@ struct BuildDetailsPage {
     build_details: BuildDetails,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     BuildDetailsPage = "crate/build_details.html",
 }
 
-pub fn build_details_handler(req: &mut Request) -> IronResult<Response> {
-    let storage = extension!(req, Storage);
-    let config = extension!(req, Config);
-    let router = extension!(req, Router);
-    let name = cexpect!(req, router.find("name"));
-    let version = cexpect!(req, router.find("version"));
-    let id: i32 = cexpect!(req, router.find("id"))
-        .parse()
-        .map_err(|_| -> IronError { Nope::BuildNotFound.into() })?;
+pub(crate) async fn build_details_handler(
+    Path((name, version, id)): Path<(String, String, String)>,
+    Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(storage): Extension<Arc<Storage>>,
+) -> AxumResult<impl IntoResponse> {
+    let id: i32 = id.parse().map_err(|_| AxumNope::BuildNotFound)?;
 
-    let mut conn = extension!(req, Pool).get()?;
+    let (row, output, metadata) = spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        let row = conn
+            .query_opt(
+                "SELECT
+                     builds.rustc_version,
+                     builds.docsrs_version,
+                     builds.build_status,
+                     builds.build_time,
+                     builds.output,
+                     releases.default_target
+                 FROM builds
+                 INNER JOIN releases ON releases.id = builds.rid
+                 INNER JOIN crates ON releases.crate_id = crates.id
+                 WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+                &[&id, &name, &version],
+            )?
+            .ok_or(AxumNope::BuildNotFound)?;
 
-    let row = ctry!(
-        req,
-        conn.query_opt(
-            "SELECT
-                builds.rustc_version,
-                builds.docsrs_version,
-                builds.build_status,
-                builds.build_time,
-                builds.output,
-                releases.default_target
-             FROM builds
-             INNER JOIN releases ON releases.id = builds.rid
-             INNER JOIN crates ON releases.crate_id = crates.id
-             WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
-            &[&id, &name, &version]
-        )
-    );
-
-    let build_details = if let Some(row) = row {
         let output = if let Some(output) = row.get("output") {
             output
         } else {
             let target: String = row.get("default_target");
             let path = format!("build-logs/{}/{}.txt", id, target);
-            let file = ctry!(req, File::from_path(storage, &path, config));
-            ctry!(req, String::from_utf8(file.0.content))
+            let file = File::from_path(&storage, &path, &config)?;
+            String::from_utf8(file.0.content)?
         };
-        BuildDetails {
+
+        Ok((
+            row,
+            output,
+            MetaData::from_crate(&mut conn, &name, &version, &version)?,
+        ))
+    })
+    .await?;
+
+    Ok(BuildDetailsPage {
+        metadata,
+        build_details: BuildDetails {
             id,
             rustc_version: row.get("rustc_version"),
             docsrs_version: row.get("docsrs_version"),
             build_status: row.get("build_status"),
             build_time: row.get("build_time"),
             output,
-        }
-    } else {
-        return Err(Nope::BuildNotFound.into());
-    };
-
-    BuildDetailsPage {
-        metadata: cexpect!(req, MetaData::from_crate(&mut conn, name, version, version)),
-        build_details,
+        },
     }
-    .into_response(req)
+    .into_response())
 }
 
 #[cfg(test)]
