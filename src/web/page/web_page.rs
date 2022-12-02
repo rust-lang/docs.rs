@@ -67,6 +67,7 @@ macro_rules! impl_axum_webpage {
         $page:ty = $template:literal
         $(, status = $status:expr)?
         $(, content_type = $content_type:expr)?
+        $(, cache_policy  = $cache_policy:expr)?
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
     ) => {
@@ -74,6 +75,7 @@ macro_rules! impl_axum_webpage {
             $page = |_| ::std::borrow::Cow::Borrowed($template)
             $(, status = $status)?
             $(, content_type = $content_type)?
+            $(, cache_policy = $cache_policy)?
             $(, cpu_intensive_rendering = $cpu_intensive_rendering )?
          );
     };
@@ -82,6 +84,7 @@ macro_rules! impl_axum_webpage {
         $page:ty = $template:expr
         $(, status = $status:expr)?
         $(, content_type = $content_type:expr)?
+        $(, cache_policy  = $cache_policy:expr)?
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
     ) => {
@@ -113,6 +116,14 @@ macro_rules! impl_axum_webpage {
                     // the data from `DelayedTemplateRender` below.
                     .body(::axum::body::boxed(::axum::body::Body::empty()))
                     .unwrap();
+
+                $(
+                    response.extensions_mut().insert({
+                        let cache_policy: fn(&$page) -> $crate::web::cache::CachePolicy = $cache_policy;
+                        (cache_policy)(&self)
+                    });
+                )?
+
 
                 response.extensions_mut().insert($crate::web::page::web_page::DelayedTemplateRender {
                     context: ::tera::Context::from_serialize(&self)

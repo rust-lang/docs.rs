@@ -1,12 +1,16 @@
-use super::{match_version, redirect_base, MatchSemver};
+use super::MatchSemver;
 use crate::db::types::Feature;
 use crate::{
     db::Pool,
-    impl_webpage,
-    web::{cache::CachePolicy, page::WebPage, MetaData},
+    impl_axum_webpage,
+    utils::spawn_blocking,
+    web::{cache::CachePolicy, error::AxumResult, match_version_axum, MetaData},
 };
-use iron::{IronResult, Request, Response, Url};
-use router::Router;
+use anyhow::anyhow;
+use axum::{
+    extract::{Extension, Path},
+    response::IntoResponse,
+};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 
@@ -18,48 +22,56 @@ struct FeaturesPage {
     features: Option<Vec<Feature>>,
     default_len: usize,
     canonical_url: String,
+    is_latest_url: bool,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     FeaturesPage = "crate/features.html",
+    cache_policy = |page| if page.is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    },
 }
 
-pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let name = cexpect!(req, router.find("name"));
-    let req_version = router.find("version");
-
-    let mut conn = extension!(req, Pool).get()?;
+pub(crate) async fn build_features_handler(
+    Path((name, req_version)): Path<(String, String)>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
     let (version, version_or_latest, is_latest_url) =
-        match match_version(&mut conn, name, req_version).and_then(|m| m.assume_exact())? {
+        match match_version_axum(&pool, &name, Some(&req_version))
+            .await?
+            .assume_exact()?
+        {
             MatchSemver::Exact((version, _)) => (version.clone(), version, false),
             MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
 
             MatchSemver::Semver((version, _)) => {
-                let url = ctry!(
-                    req,
-                    Url::parse(&format!(
-                        "{}/crate/{}/{}/features",
-                        redirect_base(req),
-                        name,
-                        version
-                    )),
-                );
-
-                return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
+                return Ok(super::axum_cached_redirect(
+                    &format!("/crate/{}/{}/features", &name, version),
+                    CachePolicy::ForeverInCdn,
+                )?
+                .into_response());
             }
         };
-    let rows = ctry!(
-        req,
-        conn.query(
-            "SELECT releases.features FROM releases
-            INNER JOIN crates ON crates.id = releases.crate_id
-            WHERE crates.name = $1 AND releases.version = $2",
-            &[&name, &version]
-        )
-    );
 
-    let row = cexpect!(req, rows.get(0));
+    let (row, metadata) = spawn_blocking({
+        let name = name.clone();
+        move || {
+            let mut conn = pool.get()?;
+            Ok((
+                conn.query_opt(
+                    "SELECT releases.features FROM releases
+                     INNER JOIN crates ON crates.id = releases.crate_id
+                     WHERE crates.name = $1 AND releases.version = $2",
+                    &[&name, &version],
+                )?
+                .ok_or_else(|| anyhow!("missing release"))?,
+                MetaData::from_crate(&mut conn, &name, &version, &version_or_latest)?,
+            ))
+        }
+    })
+    .await?;
 
     let mut features = None;
     let mut default_len = 0;
@@ -70,22 +82,14 @@ pub fn build_features_handler(req: &mut Request) -> IronResult<Response> {
         default_len = result.1;
     }
 
-    let mut response = FeaturesPage {
-        metadata: cexpect!(
-            req,
-            MetaData::from_crate(&mut conn, name, &version, &version_or_latest)
-        ),
+    Ok(FeaturesPage {
+        metadata,
         features,
         default_len,
-        canonical_url: format!("https://docs.rs/crate/{}/latest/features", name),
+        is_latest_url,
+        canonical_url: format!("https://docs.rs/crate/{}/latest/features", &name),
     }
-    .into_response(req)?;
-    response.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverInCdn
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser
-    });
-    Ok(response)
+    .into_response())
 }
 
 fn order_features_and_count_default_len(raw: Vec<Feature>) -> (Vec<Feature>, usize) {
