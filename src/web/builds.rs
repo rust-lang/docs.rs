@@ -333,7 +333,7 @@ mod tests {
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/features\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/aquarelle/latest/source/\""));
+            assert!(body.contains("<a href=\"https://sourcegraph.com/crates/aquarelle@v0.2.0\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest\""));
 
             let resp_json = env
