@@ -67,6 +67,7 @@ macro_rules! impl_axum_webpage {
         $page:ty = $template:literal
         $(, status = $status:expr)?
         $(, content_type = $content_type:expr)?
+        $(, canonical_url = $canonical_url:expr)?
         $(, cache_policy  = $cache_policy:expr)?
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
@@ -75,6 +76,7 @@ macro_rules! impl_axum_webpage {
             $page = |_| ::std::borrow::Cow::Borrowed($template)
             $(, status = $status)?
             $(, content_type = $content_type)?
+            $(, canonical_url = $canonical_url)?
             $(, cache_policy = $cache_policy)?
             $(, cpu_intensive_rendering = $cpu_intensive_rendering )?
          );
@@ -84,6 +86,7 @@ macro_rules! impl_axum_webpage {
         $page:ty = $template:expr
         $(, status = $status:expr)?
         $(, content_type = $content_type:expr)?
+        $(, canonical_url = $canonical_url:expr)?
         $(, cache_policy  = $cache_policy:expr)?
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
@@ -122,6 +125,19 @@ macro_rules! impl_axum_webpage {
                         let cache_policy: fn(&$page) -> $crate::web::cache::CachePolicy = $cache_policy;
                         (cache_policy)(&self)
                     });
+                )?
+
+                $(
+                    let canonical_url = {
+                        let canonical_url: fn(&Self) -> Option<String> = $canonical_url;
+                        (canonical_url)(&self)
+                    };
+                    if let Some(canonical_url) = canonical_url {
+                        response.headers_mut().insert(
+                            axum::http::header::LINK,
+                            format!(r#"<{}>; rel="canonical"#, canonical_url).parse().unwrap(),
+                        );
+                    }
                 )?
 
 

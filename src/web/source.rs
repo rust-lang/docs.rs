@@ -1,21 +1,20 @@
 //! Source code browser
 
+use super::{error::AxumResult, match_version_axum};
 use crate::{
     db::Pool,
-    impl_webpage,
-    utils::get_correct_docsrs_style_file,
-    web::{
-        cache::CachePolicy, error::Nope, file::File as DbFile, match_version, page::WebPage,
-        redirect_base, MatchSemver, MetaData, Url,
-    },
+    impl_axum_webpage,
+    utils::{get_correct_docsrs_style_file, spawn_blocking},
+    web::{cache::CachePolicy, error::AxumNope, file::File as DbFile, MatchSemver, MetaData},
     Storage,
 };
-use iron::{IronResult, Request, Response};
+use anyhow::Result;
+use axum::{extract::Path, response::IntoResponse, Extension};
 use postgres::Client;
-use router::Router;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
+use tracing::instrument;
 
 /// A source file's name and mime type
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize)]
@@ -66,16 +65,16 @@ impl FileList {
     /// This function is only returning FileList for requested directory. If is empty,
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
+    #[instrument(skip(conn))]
     fn from_path(
         conn: &mut Client,
         name: &str,
         version: &str,
         version_or_latest: &str,
-        req_path: &str,
-    ) -> Option<FileList> {
-        let rows = conn
-            .query(
-                "SELECT crates.name,
+        folder: &str,
+    ) -> Result<Option<FileList>> {
+        let row = match conn.query_opt(
+            "SELECT crates.name,
                         releases.version,
                         releases.description,
                         releases.target_name,
@@ -88,15 +87,13 @@ impl FileList {
                 FROM releases
                 LEFT OUTER JOIN crates ON crates.id = releases.crate_id
                 WHERE crates.name = $1 AND releases.version = $2",
-                &[&name, &version],
-            )
-            .unwrap();
+            &[&name, &version],
+        )? {
+            Some(row) => row,
+            None => return Ok(None),
+        };
 
-        if rows.is_empty() {
-            return None;
-        }
-
-        let files: Value = rows[0].try_get(5).ok()?;
+        let files: Value = row.try_get(5)?;
 
         let mut file_list = Vec::new();
         if let Some(files) = files.as_array() {
@@ -113,7 +110,7 @@ impl FileList {
                     }
 
                     // look only files for req_path
-                    if let Some(path) = path.strip_prefix(req_path) {
+                    if let Some(path) = path.strip_prefix(folder) {
                         let file = File::from_path_and_mime(path, mime);
 
                         // avoid adding duplicates, a directory may occur more than once
@@ -125,7 +122,7 @@ impl FileList {
             }
 
             if file_list.is_empty() {
-                return None;
+                return Ok(None);
             }
 
             file_list.sort_by(|a, b| {
@@ -139,23 +136,23 @@ impl FileList {
                 }
             });
 
-            Some(FileList {
+            Ok(Some(FileList {
                 metadata: MetaData {
-                    name: rows[0].get(0),
-                    version: rows[0].get(1),
+                    name: row.get(0),
+                    version: row.get(1),
                     version_or_latest: version_or_latest.to_string(),
-                    description: rows[0].get(2),
-                    target_name: rows[0].get(3),
-                    rustdoc_status: rows[0].get(4),
-                    default_target: rows[0].get(6),
-                    doc_targets: MetaData::parse_doc_targets(rows[0].get(7)),
-                    yanked: rows[0].get(8),
-                    rustdoc_css_file: get_correct_docsrs_style_file(rows[0].get(9)).unwrap(),
+                    description: row.get(2),
+                    target_name: row.get(3),
+                    rustdoc_status: row.get(4),
+                    default_target: row.get(6),
+                    doc_targets: MetaData::parse_doc_targets(row.get(7)),
+                    yanked: row.get(8),
+                    rustdoc_css_file: get_correct_docsrs_style_file(row.get(9))?,
                 },
                 files: file_list,
-            })
+            }))
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -167,117 +164,94 @@ struct SourcePage {
     file: Option<File>,
     file_content: Option<String>,
     canonical_url: String,
+    is_latest_url: bool,
 }
 
-impl_webpage! {
+impl_axum_webpage! {
     SourcePage = "crate/source.html",
     canonical_url = |page| Some(page.canonical_url.clone()),
+    cache_policy = |page| if page.is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    },
+    cpu_intensive_rendering = true,
 }
 
-pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let mut crate_name = cexpect!(req, router.find("name"));
-    let req_version = cexpect!(req, router.find("version"));
-    let pool = extension!(req, Pool);
-    let mut conn = pool.get()?;
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct SourceBrowserHandlerParams {
+    name: String,
+    version: String,
+    #[serde(default)]
+    path: String,
+}
 
-    let mut req_path = req.url.path();
-    // remove first elements from path which is /crate/:name/:version/source
-    req_path.drain(0..4);
+#[instrument(skip(pool, storage))]
+pub(crate) async fn source_browser_handler(
+    Path(SourceBrowserHandlerParams {
+        mut name,
+        version,
+        path,
+    }): Path<SourceBrowserHandlerParams>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<impl IntoResponse> {
+    let v = match_version_axum(&pool, &name, Some(&version)).await?;
 
-    let v = match_version(&mut conn, crate_name, Some(req_version))?;
     if let Some(new_name) = &v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should
         // use that instead
-        crate_name = new_name;
+        name = new_name.to_string();
     }
     let (version, version_or_latest, is_latest_url) = match v.version {
         MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Semver((version, _)) => {
-            let url = ctry!(
-                req,
-                Url::parse(&format!(
-                    "{}/crate/{}/{}/source/{}",
-                    redirect_base(req),
-                    crate_name,
-                    version,
-                    req_path.join("/"),
-                )),
-            );
-
-            return Ok(super::cached_redirect(url, CachePolicy::ForeverInCdn));
+            return Ok(super::axum_cached_redirect(
+                &format!("/crate/{}/{}/source/{}", name, version, path),
+                CachePolicy::ForeverInCdn,
+            )?
+            .into_response());
         }
     };
 
-    // get path (req_path) for FileList::from_path and actual path for super::file::File::from_path
-    let (req_path, file_path) = {
-        let mut req_path = req.url.path();
-        // remove first elements from path which is /crate/:name/:version/source
-        for _ in 0..4 {
-            req_path.remove(0);
+    let blob = spawn_blocking({
+        let pool = pool.clone();
+        let path = path.clone();
+        let name = name.clone();
+        let version = version.clone();
+        move || {
+            let mut conn = pool.get()?;
+            let archive_storage: bool = conn
+                .query_one(
+                    "SELECT archive_storage
+                     FROM releases
+                     INNER JOIN crates ON releases.crate_id = crates.id
+                     WHERE
+                         name = $1 AND
+                         version = $2",
+                    &[&name, &version],
+                )?
+                .get::<_, bool>(0);
+
+            // try to get actual file first
+            // skip if request is a directory
+            Ok(if !path.ends_with('/') {
+                storage
+                    .fetch_source_file(&name, &version, &path, archive_storage)
+                    .ok()
+            } else {
+                None
+            })
         }
-        let file_path = req_path.join("/");
-
-        // FileList::from_path is only working for directories
-        // remove file name if it's not a directory
-        if let Some(last) = req_path.last_mut() {
-            if !last.is_empty() {
-                *last = "";
-            }
-        }
-
-        // remove crate name and version from req_path
-        let path = req_path
-            .join("/")
-            .replace(&format!("{}/{}/", crate_name, version), "");
-
-        (path, file_path)
-    };
-
-    let canonical_url = format!(
-        "https://docs.rs/crate/{}/latest/source/{}",
-        crate_name, file_path
-    );
-
-    let storage = extension!(req, Storage);
-    let archive_storage: bool = {
-        let rows = ctry!(
-            req,
-            conn.query(
-                "
-                SELECT archive_storage
-                FROM releases
-                INNER JOIN crates ON releases.crate_id = crates.id
-                WHERE
-                    name = $1 AND
-                    version = $2
-                ",
-                &[&crate_name, &version]
-            )
-        );
-        // this unwrap is safe because `match_version` guarantees that the `crate_name`/`version`
-        // combination exists.
-        let row = rows.get(0).unwrap();
-
-        row.get::<_, bool>(0)
-    };
-
-    // try to get actual file first
-    // skip if request is a directory
-    let blob = if !file_path.ends_with('/') {
-        storage
-            .fetch_source_file(crate_name, &version, &file_path, archive_storage)
-            .ok()
-    } else {
-        None
-    };
+    })
+    .await?;
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !is_text && !blob.is_empty() {
-            return Ok(DbFile(blob).serve());
+            return Ok(DbFile(blob).into_response());
         } else if is_text && !blob.is_empty() {
             let path = blob
                 .path
@@ -295,29 +269,31 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
         (None, None)
     };
 
-    let file_list = FileList::from_path(
-        &mut conn,
-        crate_name,
-        &version,
-        &version_or_latest,
-        &req_path,
-    )
-    .ok_or(Nope::ResourceNotFound)?;
+    let file_list = spawn_blocking({
+        let name = name.clone();
+        let path = path.clone();
+        move || {
+            let folder = if let Some(last_slash_pos) = path.rfind('/') {
+                &path[..last_slash_pos + 1]
+            } else {
+                ""
+            };
+            let mut conn = pool.get()?;
+            FileList::from_path(&mut conn, &name, &version, &version_or_latest, folder)
+        }
+    })
+    .await?
+    .ok_or(AxumNope::ResourceNotFound)?;
 
-    let mut response = SourcePage {
+    Ok(SourcePage {
         file_list,
-        show_parent_link: !req_path.is_empty(),
+        show_parent_link: !path.is_empty(),
         file,
         file_content,
-        canonical_url,
+        canonical_url: format!("https://docs.rs/crate/{}/latest/source/{}", name, path),
+        is_latest_url,
     }
-    .into_response(req)?;
-    response.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverInCdn
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser
-    });
-    Ok(response)
+    .into_response())
 }
 
 #[cfg(test)]

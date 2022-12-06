@@ -146,7 +146,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/releases/queue",
             get_internal(super::releases::build_queue_handler),
         )
-        .route(
+        .route_with_tsr(
             "/crate/:name/:version/builds",
             get_internal(super::builds::build_list_handler),
         )
@@ -154,13 +154,21 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/crate/:name/:version/builds.json",
             get_static(super::builds::build_list_json_handler),
         )
-        .route(
+        .route_with_tsr(
             "/crate/:name/:version/builds/:id",
             get_internal(super::build_details::build_details_handler),
         )
-        .route(
+        .route_with_tsr(
             "/crate/:name/:version/features",
             get_internal(super::features::build_features_handler),
+        )
+        .route_with_tsr(
+            "/crate/:name/:version/source/",
+            get_internal(super::source::source_browser_handler),
+        )
+        .route(
+            "/crate/:name/:version/source/*path",
+            get_internal(super::source::source_browser_handler),
         )
 }
 
@@ -194,18 +202,6 @@ pub(super) fn build_routes() -> Routes {
     routes.internal_page(
         "/crate/:name/:version/download",
         super::rustdoc::download_handler,
-    );
-    routes.internal_page(
-        "/crate/:name/:version/source",
-        SimpleRedirect::new(|url| url.set_path(&format!("{}/", url.path()))),
-    );
-    routes.internal_page(
-        "/crate/:name/:version/source/",
-        super::source::source_browser_handler,
-    );
-    routes.internal_page(
-        "/crate/:name/:version/source/*",
-        super::source::source_browser_handler,
     );
     routes.internal_page(
         "/crate/:name/:version/target-redirect/*",
