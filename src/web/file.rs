@@ -1,9 +1,22 @@
 //! Database based file handler
 
 use super::cache::CachePolicy;
-use crate::storage::{Blob, Storage};
-use crate::{error::Result, Config};
+use crate::{
+    error::Result,
+    storage::{Blob, Storage},
+    utils::report_error,
+    Config,
+};
+use anyhow::anyhow;
+use axum::{
+    http::{
+        header::{CONTENT_TYPE, LAST_MODIFIED},
+        StatusCode,
+    },
+    response::{IntoResponse, Response as AxumResponse},
+};
 use iron::{status, Response};
+use mime::Mime;
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
@@ -41,6 +54,28 @@ impl File {
             .extensions
             .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
         response
+    }
+}
+
+impl IntoResponse for File {
+    fn into_response(self) -> AxumResponse {
+        let content_type: Mime = self.0.mime.parse::<Mime>().unwrap_or_else(|e| {
+            report_error(&anyhow!(e).context("could not parse mime from storage object"));
+            mime::APPLICATION_OCTET_STREAM
+        });
+
+        (
+            StatusCode::OK,
+            [
+                (CONTENT_TYPE, content_type.as_ref()),
+                (
+                    LAST_MODIFIED,
+                    &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
+                ),
+            ],
+            self.0.content,
+        )
+            .into_response()
     }
 }
 
