@@ -850,32 +850,6 @@ mod test {
     }
 
     #[test]
-    fn test_show_clipboard_for_crate_pages() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("fake_crate")
-                .version("0.0.1")
-                .source_file("test.rs", &[])
-                .create()
-                .unwrap();
-            let web = env.frontend();
-            assert!(clipboard_is_present_for_path(
-                "/crate/fake_crate/0.0.1",
-                web
-            ));
-            assert!(clipboard_is_present_for_path(
-                "/crate/fake_crate/0.0.1/source/",
-                web
-            ));
-            assert!(clipboard_is_present_for_path(
-                "/fake_crate/0.0.1/fake_crate",
-                web
-            ));
-            Ok(())
-        });
-    }
-
-    #[test]
     fn test_hide_clipboard_for_non_crate_pages() {
         wrapper(|env| {
             env.fake_release()
@@ -960,25 +934,6 @@ mod test {
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/i686-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
             */
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn can_view_source() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("regex")
-                .version("0.3.0")
-                .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-                .create()
-                .unwrap();
-
-            let web = env.frontend();
-            assert_success("/crate/regex/0.3.0/source/src/main.rs", web)?;
-            assert_success("/crate/regex/0.3.0/source", web)?;
-            assert_success("/crate/regex/0.3.0/source/src", web)?;
-            assert_success("/regex/0.3.0/src/regex/main.rs.html", web)?;
             Ok(())
         })
     }

@@ -1050,7 +1050,7 @@ mod tests {
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
+            assert!(body.contains("<a href=\"https://sourcegraph.com/crates/dummy@v0.4.0\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
 
             assert_redirect("/crate/dummy/latest/", "/crate/dummy/latest", web)?;

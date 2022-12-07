@@ -49,9 +49,9 @@
                             </a>
                         </li>
 
-                        {# The source view tab #}
+                        {# The view tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/source/"
+                            <a href="https://sourcegraph.com/crates/{{ metadata.name }}@v{{ metadata.version }}"
                                 class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
                                 {{ "folder-open" | far(fw=true) }}
                                 <span class="title"> Source</span>

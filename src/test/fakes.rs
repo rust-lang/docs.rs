@@ -99,11 +99,6 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
-    pub(crate) fn description(mut self, new: impl Into<String>) -> Self {
-        self.package.description = Some(new.into());
-        self
-    }
-
     pub(crate) fn release_time(mut self, new: DateTime<Utc>) -> Self {
         self.registry_release_data.release_time = new;
         self

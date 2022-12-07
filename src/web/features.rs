@@ -314,7 +314,7 @@ mod tests {
             assert!(resp.url().as_str().ends_with("/crate/foo/latest/features"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
             assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/foo/latest/source/\""));
+            assert!(body.contains("<a href=\"https://sourcegraph.com/crates/foo@v0.2.0\""));
             assert!(body.contains("<a href=\"/crate/foo/latest\""));
             Ok(())
         });
