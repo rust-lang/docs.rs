@@ -1,5 +1,3 @@
-//! Source code browser
-
 use super::{error::AxumResult, match_version_axum};
 use crate::{
     db::Pool,
@@ -307,7 +305,20 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::test::*;
     use crate::web::cache::CachePolicy;
+    use kuchiki::traits::TendrilSink;
     use test_case::test_case;
+
+    fn get_file_list_links(body: &str) -> Vec<String> {
+        let dom = kuchiki::parse_html().one(body);
+
+        dom.select(".package-menu > ul > li > a")
+            .expect("invalid selector")
+            .map(|el| {
+                let attributes = el.attributes.borrow();
+                attributes.get("href").unwrap().to_string()
+            })
+            .collect()
+    }
 
     #[test_case(true)]
     #[test_case(false)]
@@ -508,8 +519,72 @@ mod tests {
                 .to_str()
                 .unwrap()
                 .starts_with("text/html"));
-            assert!(response.text()?.starts_with(r#"<!DOCTYPE html>"#));
 
+            let text = response.text()?;
+            assert!(text.starts_with(r#"<!DOCTYPE html>"#));
+
+            // file list doesn't show "../"
+            assert_eq!(get_file_list_links(&text), vec!["./config.json"]);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn root_file_list() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file("folder1/some_filename.rs", b"some_random_content")
+                .source_file("folder2/another_filename.rs", b"some_random_content")
+                .source_file("root_filename.rs", b"some_random_content")
+                .create()?;
+
+            let web = env.frontend();
+            let response = web.get("/crate/fake/0.1.0/source/").send()?;
+            assert!(response.status().is_success());
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
+
+            assert_eq!(
+                get_file_list_links(&response.text()?),
+                vec!["./folder1/", "./folder2/", "./root_filename.rs"]
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn child_file_list() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file("folder1/some_filename.rs", b"some_random_content")
+                .source_file("folder1/more_filenames.rs", b"some_random_content")
+                .source_file("folder2/another_filename.rs", b"some_random_content")
+                .source_file("root_filename.rs", b"some_random_content")
+                .create()?;
+
+            let web = env.frontend();
+            let response = web
+                .get("/crate/fake/0.1.0/source/folder1/some_filename.rs")
+                .send()?;
+            assert!(response.status().is_success());
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
+
+            assert_eq!(
+                get_file_list_links(&response.text()?),
+                vec!["../", "./more_filenames.rs", "./some_filename.rs"],
+            );
             Ok(())
         });
     }
