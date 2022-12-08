@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use axum::{
+    extract::Extension,
     http::{
         header::{CONTENT_TYPE, LAST_MODIFIED},
         StatusCode,
@@ -73,6 +74,7 @@ impl IntoResponse for File {
                     &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
                 ),
             ],
+            Extension(CachePolicy::ForeverInCdnAndBrowser),
             self.0.content,
         )
             .into_response()
@@ -84,6 +86,7 @@ mod tests {
     use super::*;
     use crate::{test::wrapper, web::cache::CachePolicy};
     use chrono::Utc;
+    use http::header::CACHE_CONTROL;
     use iron::headers::CacheControl;
 
     #[test]
@@ -111,6 +114,37 @@ mod tests {
             assert_eq!(
                 resp.headers.get_raw("Last-Modified").unwrap(),
                 [now.format("%a, %d %b %Y %T GMT").to_string().into_bytes()].as_ref(),
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn file_roundtrip_axum() {
+        wrapper(|env| {
+            let now = Utc::now();
+
+            env.fake_release().create()?;
+
+            let mut file = File::from_path(
+                &env.storage(),
+                "rustdoc/fake-package/1.0.0/fake-package/index.html",
+                &env.config(),
+            )
+            .unwrap();
+            file.0.date_updated = now;
+
+            let resp = file.into_response();
+            assert!(resp.headers().get(CACHE_CONTROL).is_none());
+            let cache = resp
+                .extensions()
+                .get::<CachePolicy>()
+                .expect("missing cache response extension");
+            assert!(matches!(cache, CachePolicy::ForeverInCdnAndBrowser));
+            assert_eq!(
+                resp.headers().get(LAST_MODIFIED).unwrap(),
+                &now.format("%a, %d %b %Y %T UTC").to_string(),
             );
 
             Ok(())
