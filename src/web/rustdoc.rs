@@ -4,15 +4,26 @@ use crate::{
     db::Pool,
     repositories::RepositoryStatsUpdater,
     storage::{rustdoc_archive_path, PathNotFoundError},
-    utils,
+    utils::{self, spawn_blocking},
     web::{
-        cache::CachePolicy, crate_details::CrateDetails, csp::Csp, error::Nope, file::File,
-        match_version, metrics::RenderingTimesRecorder, parse_url_with_params, redirect,
-        redirect_base, report_error, MatchSemver, MetaData,
+        axum_cached_redirect,
+        cache::CachePolicy,
+        crate_details::CrateDetails,
+        csp::Csp,
+        error::{AxumNope, AxumResult, Nope},
+        file::File,
+        match_version, match_version_axum,
+        metrics::RenderingTimesRecorder,
+        parse_url_with_params, redirect, redirect_base, MatchSemver, MetaData,
     },
     Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context as _};
+use axum::{
+    extract::{Extension, Path, Query},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use iron::{
     headers::{Link, LinkValue, RelationType},
     modifiers::Redirect,
@@ -23,13 +34,14 @@ use iron::{
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
 use router::Router;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Write,
-    path::Path,
+    path,
+    sync::Arc,
 };
-use tracing::debug;
+use tracing::{debug, instrument};
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -649,173 +661,184 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
     result
 }
 
-pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let name = cexpect!(req, router.find("name"));
-    let version = cexpect!(req, router.find("version"));
-
-    let pool = extension!(req, Pool);
-    let mut conn = pool.get()?;
-    let storage = extension!(req, Storage);
-    let base = redirect_base(req);
-    let updater = extension!(req, RepositoryStatsUpdater);
-
-    let release_found = match_version(&mut conn, name, Some(version))?;
-
+pub(crate) async fn target_redirect_handler(
+    Path((name, version, req_path)): Path<(String, String, String)>,
+    Extension(pool): Extension<Pool>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
+) -> AxumResult<impl IntoResponse> {
+    let release_found = match_version_axum(&pool, &name, Some(&version)).await?;
     let (version, version_or_latest, is_latest_url) = match release_found.version {
         MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         // semver matching not supported here
-        MatchSemver::Semver(_) => return Err(Nope::VersionNotFound.into()),
+        MatchSemver::Semver(_) => return Err(AxumNope::VersionNotFound),
     };
 
-    let crate_details = match ctry!(
-        req,
-        CrateDetails::new(
-            &mut *conn,
-            name,
-            &version,
-            &version_or_latest,
-            Some(updater)
-        )
-    ) {
-        Some(krate) => krate,
-        None => return Err(Nope::VersionNotFound.into()),
-    };
-
-    //   [crate, :name, :version, target-redirect, :target, *path]
-    // is transformed to
-    //   [:target?, *path]
-    // path might be empty, but target is guaranteed to be there because of the route used
-    let file_path = {
-        let mut path = req.url.path();
-        path.drain(0..4); // crate, name, version, target-redirect
-
-        if path[0] == crate_details.metadata.default_target {
-            path.remove(0);
+    let crate_details = spawn_blocking({
+        let name = name.clone();
+        let version = version.clone();
+        let version_or_latest = version_or_latest.clone();
+        move || {
+            let mut conn = pool.get()?;
+            CrateDetails::new(
+                &mut *conn,
+                &name,
+                &version,
+                &version_or_latest,
+                Some(&updater),
+            )
         }
-        // if it ends with a `/`, we add `index.html`.
-        if let Some(last @ &mut "") = path.last_mut() {
-            *last = "index.html";
-        }
-        path
-    };
+    })
+    .await?
+    .ok_or(AxumNope::VersionNotFound)?;
 
-    let path = if ctry!(
-        req,
-        storage.rustdoc_file_exists(
-            name,
-            &version,
-            &file_path.join("/"),
-            crate_details.archive_storage
-        )
-    ) {
-        // Simple case: page exists in the other target & version, so just change these
-        file_path.join("/")
-    } else {
-        path_for_version(&file_path, &crate_details)
-    };
+    // We're trying to find the storage location
+    // for the requested path in the target-redirect.
+    // *path always contains the target,
+    // here we are dropping it when it's the
+    // default target,
+    // and add `/index.html` if we request
+    // a folder.
+    let storage_location_for_path = {
+        let mut pieces: Vec<_> = req_path.split('/').map(str::to_owned).collect();
 
-    let url = format!("{base}/{name}/{version_or_latest}/{path}");
-
-    let url = ctry!(req, Url::parse(&url));
-    let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.extensions.insert::<CachePolicy>(if is_latest_url {
-        CachePolicy::ForeverInCdn
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser
-    });
-    Ok(resp)
-}
-
-pub fn badge_handler(req: &mut Request) -> IronResult<Response> {
-    let version = req
-        .url
-        .as_ref()
-        .query_pairs()
-        .find(|(key, _)| key == "version");
-    let version = version
-        .as_ref()
-        .map(|(_, version)| version.as_ref())
-        .unwrap_or("latest");
-    let name = cexpect!(req, extension!(req, Router).find("crate"));
-    let url = format!("https://img.shields.io/docsrs/{}/{}", name, version);
-    let url = ctry!(req, Url::parse(&url));
-    let mut res = Response::with((status::MovedPermanently, Redirect(url)));
-    res.extensions
-        .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
-    Ok(res)
-}
-
-pub fn download_handler(req: &mut Request) -> IronResult<Response> {
-    let router = extension!(req, Router);
-    let name = cexpect!(req, router.find("name"));
-    let req_version = cexpect!(req, router.find("version"));
-
-    let mut conn = extension!(req, Pool).get()?;
-
-    let version =
-        match match_version(&mut conn, name, Some(req_version)).and_then(|m| m.assume_exact())? {
-            MatchSemver::Exact((version, _))
-            | MatchSemver::Latest((version, _))
-            | MatchSemver::Semver((version, _)) => version,
-        };
-
-    let storage = extension!(req, Storage);
-    let config = extension!(req, Config);
-    let archive_path = rustdoc_archive_path(name, &version);
-
-    // not all archives are set for public access yet, so we check if
-    // the access is set and fix it if needed.
-
-    let archive_is_public = match storage
-        .get_public_access(&archive_path)
-        .context("reading public access for archive")
-    {
-        Ok(is_public) => is_public,
-        Err(err) => {
-            if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
-                return Err(Nope::ResourceNotFound.into());
-            } else {
-                report_error(&err);
-                return Err(Nope::InternalServerError.into());
+        if let Some(target) = pieces.first() {
+            if target == &crate_details.metadata.default_target {
+                pieces.remove(0);
             }
         }
+
+        if let Some(last) = pieces.last_mut() {
+            if last.is_empty() {
+                *last = "index.html".to_string();
+            }
+        }
+
+        pieces.join("/")
     };
 
-    if !archive_is_public {
-        ctry!(req, storage.set_public_access(&archive_path, true));
-    }
+    let redirect_path = if spawn_blocking({
+        let name = name.clone();
+        let file_path = storage_location_for_path.clone();
+        move || {
+            storage.rustdoc_file_exists(&name, &version, &file_path, crate_details.archive_storage)
+        }
+    })
+    .await?
+    {
+        // Simple case: page exists in the other target & version, so just change these
+        storage_location_for_path
+    } else {
+        let pieces: Vec<_> = storage_location_for_path.split('/').collect();
+        path_for_version(&pieces, &crate_details)
+    };
 
-    Ok(super::cached_redirect(
-        ctry!(
-            req,
-            Url::parse(&format!("{}/{}", config.s3_static_root_path, archive_path))
-        ),
-        CachePolicy::ForeverInCdn,
+    Ok(axum_cached_redirect(
+        &format!("/{name}/{version_or_latest}/{redirect_path}"),
+        if is_latest_url {
+            CachePolicy::ForeverInCdn
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        },
+    )?)
+}
+
+#[derive(Deserialize, Debug)]
+pub(crate) struct BadgeQueryParams {
+    version: Option<String>,
+}
+
+#[instrument]
+pub(crate) async fn badge_handler(
+    Path(name): Path<String>,
+    Query(query): Query<BadgeQueryParams>,
+) -> AxumResult<impl IntoResponse> {
+    let version = query.version.unwrap_or_else(|| "latest".to_string());
+
+    let url = url::Url::parse(&format!(
+        "https://img.shields.io/docsrs/{}/{}",
+        name, version
     ))
+    .context("could not parse URL")?;
+
+    Ok((
+        StatusCode::MOVED_PERMANENTLY,
+        [(http::header::LOCATION, url.to_string())],
+        Extension(CachePolicy::ForeverInCdnAndBrowser),
+    ))
+}
+
+pub(crate) async fn download_handler(
+    Path((name, req_version)): Path<(String, String)>,
+    Extension(pool): Extension<Pool>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(config): Extension<Arc<Config>>,
+) -> AxumResult<impl IntoResponse> {
+    let version = match match_version_axum(&pool, &name, Some(&req_version))
+        .await?
+        .assume_exact()?
+    {
+        MatchSemver::Exact((version, _))
+        | MatchSemver::Latest((version, _))
+        | MatchSemver::Semver((version, _)) => version,
+    };
+
+    let archive_path = rustdoc_archive_path(&name, &version);
+
+    spawn_blocking({
+        let archive_path = archive_path.clone();
+        move || {
+            // not all archives are set for public access yet, so we check if
+            // the access is set and fix it if needed.
+            let archive_is_public = match storage
+                .get_public_access(&archive_path)
+                .context("reading public access for archive")
+            {
+                Ok(is_public) => is_public,
+                Err(err) => {
+                    if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
+                        return Err(AxumNope::ResourceNotFound.into());
+                    } else {
+                        return Err(AxumNope::InternalError(err).into());
+                    }
+                }
+            };
+
+            if !archive_is_public {
+                storage.set_public_access(&archive_path, true)?;
+            }
+            Ok(())
+        }
+    })
+    .await?;
+
+    Ok(super::axum_cached_redirect(
+        &format!("{}/{}", config.s3_static_root_path, archive_path),
+        CachePolicy::ForeverInCdn,
+    )?)
 }
 
 /// Serves shared resources used by rustdoc-generated documentation.
 ///
 /// This serves files from S3, and is pointed to by the `--static-root-path` flag to rustdoc.
-pub fn static_asset_handler(req: &mut Request) -> IronResult<Response> {
-    let storage = extension!(req, Storage);
-    let config = extension!(req, Config);
+pub(crate) async fn static_asset_handler(
+    Path(path): Path<String>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(config): Extension<Arc<Config>>,
+) -> AxumResult<impl IntoResponse> {
+    let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, path);
 
-    let filename = req.url.path()[2..].join("/");
-    let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, filename);
-
-    match File::from_path(storage, &storage_path, config) {
-        Ok(file) => Ok(file.serve()),
-        Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
-            Err(Nope::ResourceNotFound.into())
-        }
-        Err(err) => {
-            utils::report_error(&err);
-            Err(Nope::InternalServerError.into())
-        }
-    }
+    Ok(spawn_blocking(
+        move || match File::from_path(&storage, &storage_path, &config) {
+            Ok(file) => Ok(file),
+            Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
+                Err(AxumNope::ResourceNotFound.into())
+            }
+            Err(err) => Err(AxumNope::InternalError(err).into()),
+        },
+    )
+    .await?)
 }
 
 /// Serves shared web resources used by rustdoc-generated documentation.
@@ -832,7 +855,7 @@ impl Handler for LegacySharedResourceHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let path = req.url.path();
         let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
-        if let Some(extension) = Path::new(filename).extension() {
+        if let Some(extension) = path::Path::new(filename).extension() {
             if ["js", "css", "woff", "woff2", "svg", "png"]
                 .iter()
                 .any(|s| *s == extension)

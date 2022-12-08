@@ -1,16 +1,22 @@
-use crate::web::page::WebPage;
-
-use super::metrics::request_recorder;
-use super::{cache::CachePolicy, metrics::RequestRecorder};
+use super::{
+    cache::CachePolicy, error::AxumNope, metrics::request_recorder, metrics::RequestRecorder,
+};
 use axum::{
-    handler::Handler as AxumHandler, middleware, response::Redirect, routing::get,
-    routing::MethodRouter, Router as AxumRouter,
+    handler::Handler as AxumHandler,
+    http::Request as AxumHttpRequest,
+    middleware::{self, Next},
+    response::{IntoResponse, Redirect},
+    routing::get,
+    routing::MethodRouter,
+    Router as AxumRouter,
 };
 use axum_extra::routing::RouterExt;
 use iron::middleware::Handler;
 use router::Router as IronRouter;
-use std::{borrow::Cow, collections::HashSet, convert::Infallible};
-use tracing::instrument;
+use std::{collections::HashSet, convert::Infallible};
+use tracing::{debug, instrument};
+
+const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
 
 #[instrument(skip_all)]
 fn get_static<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
@@ -36,6 +42,41 @@ where
     get(handler).route_layer(middleware::from_fn(|request, next| async {
         request_recorder(request, next, None).await
     }))
+}
+
+#[instrument(skip_all)]
+fn get_rustdoc<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
+where
+    H: AxumHandler<T, S, B>,
+    B: Send + 'static + hyper::body::HttpBody,
+    T: 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    get(handler)
+        .route_layer(middleware::from_fn(|request, next| async {
+            request_recorder(request, next, Some("rustdoc page")).await
+        }))
+        .layer(middleware::from_fn(block_blacklisted_prefixes_middleware))
+}
+
+#[instrument(skip_all)]
+async fn block_blacklisted_prefixes_middleware<B>(
+    request: AxumHttpRequest<B>,
+    next: Next<B>,
+) -> impl IntoResponse {
+    if let Some(first_component) = request.uri().path().trim_matches('/').split('/').next() {
+        if !first_component.is_empty()
+            && (INTERNAL_PREFIXES.binary_search(&first_component).is_ok())
+        {
+            debug!(
+                first_component = first_component,
+                "blocking blacklisted prefix"
+            );
+            return AxumNope::CrateNotFound.into_response();
+        }
+    }
+
+    next.run(request).await
 }
 
 pub(super) fn build_axum_routes() -> AxumRouter {
@@ -170,47 +211,42 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/crate/:name/:version/source/*path",
             get_internal(super::source::source_browser_handler),
         )
+        .route(
+            "/-/rustdoc.static/*path",
+            get_internal(super::rustdoc::static_asset_handler),
+        )
+        .route(
+            "/-/storage-change-detection.html",
+            get_internal(|| async {
+                #[derive(Debug, Clone, serde::Serialize)]
+                struct StorageChangeDetection {}
+                crate::impl_axum_webpage!(
+                    StorageChangeDetection = "storage-change-detection.html",
+                    cache_policy = |_| CachePolicy::ForeverInCdnAndBrowser,
+                );
+                StorageChangeDetection {}
+            }),
+        )
+        .route_with_tsr(
+            "/crate/:name/:version/download",
+            get_internal(super::rustdoc::download_handler),
+        )
+        .route(
+            "/crate/:name/:version/target-redirect/*path",
+            get_internal(super::rustdoc::target_redirect_handler),
+        )
+        .route(
+            "/:crate/badge.svg",
+            get_rustdoc(super::rustdoc::badge_handler),
+        )
 }
 
 // REFACTOR: Break this into smaller initialization functions
 pub(super) fn build_routes() -> Routes {
     let mut routes = Routes::new();
 
-    routes.internal_page(
-        "/-/rustdoc.static/:single",
-        super::rustdoc::static_asset_handler,
-    );
-    routes.internal_page("/-/rustdoc.static/*", super::rustdoc::static_asset_handler);
-    routes.internal_page("/-/storage-change-detection.html", {
-        #[derive(Debug, serde::Serialize)]
-        struct StorageChangeDetection {}
-
-        impl WebPage for StorageChangeDetection {
-            fn template(&self) -> Cow<'static, str> {
-                "storage-change-detection.html".into()
-            }
-            fn cache_policy() -> Option<CachePolicy> {
-                Some(CachePolicy::ForeverInCdnAndBrowser)
-            }
-        }
-        fn storage_change_detection(req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-            crate::web::page::WebPage::into_response(StorageChangeDetection {}, req)
-        }
-        storage_change_detection
-    });
-
-    routes.internal_page(
-        "/crate/:name/:version/download",
-        super::rustdoc::download_handler,
-    );
-    routes.internal_page(
-        "/crate/:name/:version/target-redirect/*",
-        super::rustdoc::target_redirect_handler,
-    );
-
     routes.rustdoc_page("/:crate", super::rustdoc::rustdoc_redirector_handler);
     routes.rustdoc_page("/:crate/", super::rustdoc::rustdoc_redirector_handler);
-    routes.rustdoc_page("/:crate/badge.svg", super::rustdoc::badge_handler);
     routes.rustdoc_page(
         "/:crate/:version",
         super::rustdoc::rustdoc_redirector_handler,
@@ -239,6 +275,10 @@ pub(super) fn build_routes() -> Routes {
         "/:crate/:version/:target/*.html",
         super::rustdoc::rustdoc_html_server_handler,
     );
+
+    for prefix in INTERNAL_PREFIXES {
+        routes.add_internal_page_prefix(prefix);
+    }
 
     routes
 }
@@ -270,6 +310,10 @@ impl Routes {
         self.page_prefixes.clone()
     }
 
+    pub(super) fn add_internal_page_prefix<P: AsRef<str>>(&mut self, prefix: P) {
+        self.page_prefixes.insert(prefix.as_ref().to_string());
+    }
+
     pub(super) fn iron_router(mut self) -> IronRouter {
         let mut router = IronRouter::new();
         for (pattern, handler) in self.get.drain(..) {
@@ -290,47 +334,6 @@ impl Routes {
         router
     }
 
-    /// Internal pages are docs.rs's own pages, instead of the documentation of a crate uploaded by
-    /// an user. The router adds these extra things when adding a new internal page:
-    ///
-    /// - The first component of the page's URL will be registered as a "page prefix". Page
-    /// prefixes are blacklisted by rustdoc pages, to prevent a crate named the same as a prefix
-    /// from hijacking docs.rs's own URLs.
-    ///
-    /// - If the page URL doesn't end with a slash, a redirect from the URL with the trailing slash
-    /// to the one without is automatically added.
-    fn internal_page(&mut self, pattern: &str, handler: impl Handler) {
-        self.get.push((
-            pattern.to_string(),
-            Box::new(RequestRecorder::new(handler, pattern)),
-        ));
-
-        // Automatically add another route ending with / that redirects to the slash-less route.
-        if !pattern.ends_with('/') {
-            let pattern = format!("{}/", pattern);
-            self.get.push((
-                pattern.to_string(),
-                Box::new(RequestRecorder::new(
-                    SimpleRedirect::new(|url| {
-                        #[allow(clippy::unnecessary_to_owned)]
-                        url.set_path(&url.path().trim_end_matches('/').to_string())
-                    }),
-                    pattern,
-                )),
-            ));
-        }
-
-        // Register the prefix if it's not the home page and the first path component is not a
-        // pattern or a wildcard.
-        if pattern != "/" {
-            if let Some(first_component) = pattern.trim_matches('/').split('/').next() {
-                if !first_component.contains('*') && !first_component.starts_with(':') {
-                    self.page_prefixes.insert(first_component.to_string());
-                }
-            }
-        }
-    }
-
     /// A rustdoc page is a page serving generated documentation. It's similar to a static
     /// resource, but path prefixes are automatically blacklisted (see internal pages to learn more
     /// about page prefixes).
@@ -339,28 +342,6 @@ impl Routes {
             pattern.to_string(),
             Box::new(RequestRecorder::new(handler, "rustdoc page")),
         ));
-    }
-}
-
-#[derive(Copy, Clone)]
-struct SimpleRedirect {
-    url_mangler: fn(&mut iron::url::Url),
-}
-
-impl SimpleRedirect {
-    fn new(url_mangler: fn(&mut iron::url::Url)) -> Self {
-        Self { url_mangler }
-    }
-}
-
-impl Handler for SimpleRedirect {
-    fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-        let mut url: iron::url::Url = req.url.clone().into();
-        (self.url_mangler)(&mut url);
-        Ok(iron::Response::with((
-            iron::status::Found,
-            iron::modifiers::Redirect(iron::Url::from_generic_url(url).unwrap()),
-        )))
     }
 }
 
