@@ -269,17 +269,24 @@ pub(crate) async fn source_browser_handler(
         (None, None)
     };
 
+    let current_folder = if let Some(last_slash_pos) = path.rfind('/') {
+        &path[..last_slash_pos + 1]
+    } else {
+        ""
+    };
+
     let file_list = spawn_blocking({
         let name = name.clone();
-        let path = path.clone();
+        let current_folder = current_folder.to_string();
         move || {
-            let folder = if let Some(last_slash_pos) = path.rfind('/') {
-                &path[..last_slash_pos + 1]
-            } else {
-                ""
-            };
             let mut conn = pool.get()?;
-            FileList::from_path(&mut conn, &name, &version, &version_or_latest, folder)
+            FileList::from_path(
+                &mut conn,
+                &name,
+                &version,
+                &version_or_latest,
+                &current_folder,
+            )
         }
     })
     .await?
@@ -287,7 +294,7 @@ pub(crate) async fn source_browser_handler(
 
     Ok(SourcePage {
         file_list,
-        show_parent_link: !path.is_empty(),
+        show_parent_link: !current_folder.is_empty(),
         file,
         file_content,
         canonical_url: format!("https://docs.rs/crate/{}/latest/source/{}", name, path),
