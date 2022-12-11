@@ -736,6 +736,9 @@ impl RustwideBuilder {
                 r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{}""#,
                 target
             ),
+            // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
+            // docs.rs, but once it's stable we can remove this flag.
+            "-Zrustdoc-scrape-examples".into(),
         ];
         if let Some(cpu_limit) = self.config.build_cpu_limit {
             cargo_args.push(format!("-j{}", cpu_limit));
