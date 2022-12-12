@@ -91,7 +91,11 @@ impl FileList {
             None => return Ok(None),
         };
 
-        let files: Value = row.try_get(5)?;
+        let files = if let Some(files) = row.try_get::<_, Option<Value>>(5)? {
+            files
+        } else {
+            return Ok(None);
+        };
 
         let mut file_list = Vec::new();
         if let Some(files) = files.as_array() {
@@ -306,6 +310,7 @@ mod tests {
     use crate::test::*;
     use crate::web::cache::CachePolicy;
     use kuchiki::traits::TendrilSink;
+    use reqwest::StatusCode;
     use test_case::test_case;
 
     fn get_file_list_links(body: &str) -> Vec<String> {
@@ -364,6 +369,35 @@ mod tests {
                 .create()?;
             let web = env.frontend();
             assert_success("/crate/fake/0.1.0/source/", web)?;
+            Ok(())
+        });
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn empty_file_list_dont_break_the_view(archive_storage: bool) {
+        wrapper(|env| {
+            let release_id = env
+                .fake_release()
+                .archive_storage(archive_storage)
+                .name("fake")
+                .version("0.1.0")
+                .source_file("README.md", b"hello")
+                .create()?;
+
+            let path = "/crate/fake/0.1.0/source/README.md";
+            let web = env.frontend();
+            assert_success(path, web)?;
+
+            env.db().conn().execute(
+                "UPDATE releases
+                     SET files = NULL
+                     WHERE id = $1",
+                &[&release_id],
+            )?;
+
+            assert_eq!(web.get(path).send()?.status(), StatusCode::NOT_FOUND);
+
             Ok(())
         });
     }
