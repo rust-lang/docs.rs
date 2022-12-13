@@ -46,7 +46,7 @@ anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
-comrak = { version = "0.14.0", default-features = false }
+comrak = { version = "0.15.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.5"
 schemamama = "0.3"
@@ -55,11 +55,11 @@ systemstat = "0.2.0"
 prometheus = { version = "0.13.0", default-features = false }
 rustwide = { version = "0.15.0", features = ["unstable-toolchain-ci"] }
 mime_guess = "2"
-zstd = "0.11.0"
+zstd = "0.12.0"
 hostname = "0.3.1"
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
-base64 = "0.13"
+base64 = "0.20"
 strum = { version = "0.24.0", features = ["derive"] }
 lol_html = "0.3"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
