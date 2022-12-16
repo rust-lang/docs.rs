@@ -272,7 +272,7 @@ mod tests {
                         .response_time
                         .with_label_values(&[*label])
                         .get_sample_count(),
-                    *count as u64,
+                    *count,
                     "response_time metrics for {} are incorrect",
                     label,
                 );

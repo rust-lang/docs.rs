@@ -239,7 +239,7 @@ impl RustwideBuilder {
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
                 (|| -> Result<()> {
-                    let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
+                    let metadata = Metadata::from_crate_root(build.host_source_dir())?;
 
                     let res =
                         self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
@@ -383,7 +383,7 @@ impl RustwideBuilder {
 
                     let mut has_docs = false;
                     let mut successful_targets = Vec::new();
-                    let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
+                    let metadata = Metadata::from_crate_root(build.host_source_dir())?;
                     let BuildTargets {
                         default_target,
                         other_targets,

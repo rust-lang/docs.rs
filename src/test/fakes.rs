@@ -343,7 +343,7 @@ impl<'a> FakeRelease<'a> {
                 };
                 crate::db::add_path_into_database(
                     &storage,
-                    &format!("{}/{}/{}/", prefix, package.name, package.version),
+                    format!("{}/{}/{}/", prefix, package.name, package.version),
                     source_directory,
                 )
             }

@@ -172,7 +172,7 @@ impl GitLab {
 
         let res = self
             .client
-            .post(&host)
+            .post(host)
             .json(&serde_json::json!({
                 "query": query,
                 "variables": variables,

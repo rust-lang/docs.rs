@@ -78,7 +78,7 @@ pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()
         storage.delete_prefix(&archive_filename)?;
 
         // delete eventually existing local indexes
-        let local_index_file = local_archive_cache.join(&format!("{}.index", archive_filename));
+        let local_index_file = local_archive_cache.join(format!("{}.index", archive_filename));
         if local_index_file.exists() {
             fs::remove_file(&local_index_file).with_context(|| {
                 format!(

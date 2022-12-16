@@ -12,7 +12,7 @@ fn main() {
 
 fn write_fontawesome_sprite() {
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("fontawesome.rs");
-    let mut dest_file = File::create(&dest_path).unwrap();
+    let mut dest_file = File::create(dest_path).unwrap();
     dest_file
         .write_all(b"const fn fontawesome_svg(dir:&str,file:&str)->&'static str{match(dir.as_bytes(),file.as_bytes()){")
         .expect("fontawesome fn write");
