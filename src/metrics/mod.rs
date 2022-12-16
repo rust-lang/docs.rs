@@ -192,6 +192,6 @@ impl Metrics {
         self.open_file_descriptors
             .set(process.fd_count().unwrap() as i64);
         self.running_threads
-            .set(process.stat().unwrap().num_threads as i64);
+            .set(process.stat().unwrap().num_threads);
     }
 }
