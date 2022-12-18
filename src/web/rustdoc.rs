@@ -933,6 +933,7 @@ mod test {
                 .version("0.1.0")
                 .archive_storage(archive_storage)
                 .rustdoc_file("settings.html")
+                .rustdoc_file("scrape-examples-help.html")
                 .rustdoc_file("directory_1/index.html")
                 .rustdoc_file("directory_2.html/index.html")
                 .rustdoc_file("all.html")
@@ -973,6 +974,12 @@ mod test {
             )?;
             assert_success_cached(
                 "/buggy/0.1.0/settings.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            assert_success_cached(
+                "/buggy/0.1.0/scrape-examples-help.html",
                 web,
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
                 &env.config(),
