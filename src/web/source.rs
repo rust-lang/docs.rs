@@ -3,11 +3,15 @@ use crate::{
     db::Pool,
     impl_axum_webpage,
     utils::{get_correct_docsrs_style_file, spawn_blocking},
-    web::{cache::CachePolicy, error::AxumNope, file::File as DbFile, MatchSemver, MetaData},
+    web::{
+        cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
+        MatchSemver, MetaData,
+    },
     Storage,
 };
-use anyhow::Result;
-use axum::{extract::Path, response::IntoResponse, Extension};
+use anyhow::{Context as _, Result};
+use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
+
 use postgres::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -249,11 +253,20 @@ pub(crate) async fn source_browser_handler(
     })
     .await?;
 
+    let canonical_url = format!("https://docs.rs/crate/{}/latest/source/{}", name, path);
+
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !is_text && !blob.is_empty() {
-            return Ok(DbFile(blob).into_response());
+            let mut response = DbFile(blob).into_response();
+            response.headers_mut().typed_insert(CanonicalUrl(
+                canonical_url.parse().context("invalid canonical url")?,
+            ));
+            response
+                .extensions_mut()
+                .insert(CachePolicy::ForeverInCdnAndStaleInBrowser);
+            return Ok(response);
         } else if is_text && !blob.is_empty() {
             let path = blob
                 .path
@@ -299,7 +312,7 @@ pub(crate) async fn source_browser_handler(
         show_parent_link: !current_folder.is_empty(),
         file,
         file_content,
-        canonical_url: format!("https://docs.rs/crate/{}/latest/source/{}", name, path),
+        canonical_url,
         is_latest_url,
     }
     .into_response())
@@ -346,6 +359,47 @@ mod tests {
                 .get("/crate/fake/0.1.0/source/some_filename.rs")
                 .send()?;
             assert!(response.status().is_success());
+            assert_eq!(
+                response.headers().get("link").unwrap(),
+                "<https://docs.rs/crate/fake/latest/source/some_filename.rs>; rel=\"canonical\""
+            );
+            assert_cache_control(
+                &response,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            );
+            assert!(response.text()?.contains("some_random_content"));
+            Ok(())
+        });
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn fetch_binary(archive_storage: bool) {
+        wrapper(|env| {
+            env.fake_release()
+                .archive_storage(archive_storage)
+                .name("fake")
+                .version("0.1.0")
+                .source_file("some_file.pdf", b"some_random_content")
+                .create()?;
+            let web = env.frontend();
+            let response = web.get("/crate/fake/0.1.0/source/some_file.pdf").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(
+                response.headers().get("link").unwrap(),
+                "<https://docs.rs/crate/fake/latest/source/some_file.pdf>; rel=\"canonical\""
+            );
+            assert_eq!(
+                response
+                    .headers()
+                    .get("content-type")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                "application/pdf"
+            );
+
             assert_cache_control(
                 &response,
                 CachePolicy::ForeverInCdnAndStaleInBrowser,

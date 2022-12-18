@@ -81,6 +81,7 @@ pub(crate) mod error;
 mod extensions;
 mod features;
 mod file;
+mod headers;
 mod highlight;
 mod markdown;
 pub(crate) mod metrics;
