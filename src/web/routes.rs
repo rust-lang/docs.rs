@@ -260,6 +260,10 @@ pub(super) fn build_routes() -> Routes {
         super::rustdoc::rustdoc_html_server_handler,
     );
     routes.rustdoc_page(
+        "/:crate/:version/scrape-examples-help.html",
+        super::rustdoc::rustdoc_html_server_handler,
+    );
+    routes.rustdoc_page(
         "/:crate/:version/all.html",
         super::rustdoc::rustdoc_html_server_handler,
     );
