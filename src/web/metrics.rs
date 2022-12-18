@@ -11,7 +11,6 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
-use iron::prelude::*;
 use prometheus::{Encoder, HistogramVec, TextEncoder};
 use std::{
     borrow::Cow,
@@ -92,40 +91,6 @@ pub(crate) async fn request_recorder<B>(
         .observe(resp_time);
 
     result
-}
-
-pub(super) struct RequestRecorder {
-    handler: Box<dyn iron::Handler>,
-    route_name: String,
-}
-
-impl RequestRecorder {
-    pub fn new(handler: impl iron::Handler, route: impl Into<String>) -> Self {
-        Self {
-            handler: Box::new(handler),
-            route_name: route.into(),
-        }
-    }
-}
-
-impl iron::Handler for RequestRecorder {
-    fn handle(&self, request: &mut Request) -> IronResult<Response> {
-        let start = Instant::now();
-        let result = self.handler.handle(request);
-        let resp_time = duration_to_seconds(start.elapsed());
-
-        let metrics = extension!(request, Metrics);
-        metrics
-            .routes_visited
-            .with_label_values(&[&self.route_name])
-            .inc();
-        metrics
-            .response_time
-            .with_label_values(&[&self.route_name])
-            .observe(resp_time);
-
-        result
-    }
 }
 
 struct RenderingTime {

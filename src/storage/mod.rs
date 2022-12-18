@@ -22,6 +22,7 @@ use std::{
     sync::Arc,
 };
 use tokio::runtime::Runtime;
+use tracing::{instrument, trace};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -162,23 +163,27 @@ impl Storage {
         }
     }
 
+    #[instrument(skip(fetch_time))]
     pub(crate) fn fetch_rustdoc_file(
         &self,
         name: &str,
         version: &str,
         path: &str,
         archive_storage: bool,
-        fetch_time: &mut RenderingTimesRecorder,
+        fetch_time: Option<&mut RenderingTimesRecorder>,
     ) -> Result<Blob> {
+        trace!("fetch rustdoc file");
         Ok(if archive_storage {
             self.get_from_archive(
                 &rustdoc_archive_path(name, version),
                 path,
                 self.max_file_size_for(path),
-                Some(fetch_time),
+                fetch_time,
             )?
         } else {
-            fetch_time.step("fetch from storage");
+            if let Some(fetch_time) = fetch_time {
+                fetch_time.step("fetch from storage");
+            }
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
             let remote_path = format!("rustdoc/{}/{}/{}", name, version, path);
             self.get(&remote_path, self.max_file_size_for(path))?

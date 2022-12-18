@@ -16,7 +16,6 @@ use axum::{
     },
     response::{IntoResponse, Response as AxumResponse},
 };
-use iron::{status, Response};
 use mime::Mime;
 
 #[derive(Debug)]
@@ -32,29 +31,6 @@ impl File {
         };
 
         Ok(File(storage.get(path, max_size)?))
-    }
-
-    /// Consumes File and creates a iron response
-    pub(super) fn serve(self) -> Response {
-        use iron::headers::{ContentType, HttpDate, LastModified};
-
-        let mut response = Response::with((status::Ok, self.0.content));
-        response
-            .headers
-            .set(ContentType(self.0.mime.parse().unwrap()));
-
-        // FIXME: This is so horrible
-        response.headers.set(LastModified(HttpDate(
-            time::strptime(
-                &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
-                "%a, %d %b %Y %T %Z",
-            )
-            .unwrap(),
-        )));
-        response
-            .extensions
-            .insert::<CachePolicy>(CachePolicy::ForeverInCdnAndBrowser);
-        response
     }
 }
 
@@ -87,38 +63,6 @@ mod tests {
     use crate::{test::wrapper, web::cache::CachePolicy};
     use chrono::Utc;
     use http::header::CACHE_CONTROL;
-    use iron::headers::CacheControl;
-
-    #[test]
-    fn file_roundtrip() {
-        wrapper(|env| {
-            let now = Utc::now();
-
-            env.fake_release().create()?;
-
-            let mut file = File::from_path(
-                &env.storage(),
-                "rustdoc/fake-package/1.0.0/fake-package/index.html",
-                &env.config(),
-            )
-            .unwrap();
-            file.0.date_updated = now;
-
-            let resp = file.serve();
-            assert!(resp.headers.get::<CacheControl>().is_none());
-            let cache = resp
-                .extensions
-                .get::<CachePolicy>()
-                .expect("missing cache response extension");
-            assert!(matches!(cache, CachePolicy::ForeverInCdnAndBrowser));
-            assert_eq!(
-                resp.headers.get_raw("Last-Modified").unwrap(),
-                [now.format("%a, %d %b %Y %T GMT").to_string().into_bytes()].as_ref(),
-            );
-
-            Ok(())
-        });
-    }
 
     #[test]
     fn file_roundtrip_axum() {

@@ -1,19 +1,19 @@
-use super::STATIC_FILE_CACHE_DURATION;
 use crate::config::Config;
 use axum::{
     http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
-use http::header::CACHE_CONTROL;
-use iron::{
-    headers::{CacheControl, CacheDirective},
-    AfterMiddleware, IronResult, Request, Response,
-};
+use http::{header::CACHE_CONTROL, HeaderValue};
 use std::sync::Arc;
 
-#[cfg(test)]
-pub const NO_CACHE: &str = "max-age=0";
+pub static NO_CACHING: HeaderValue = HeaderValue::from_static("max-age=0");
+
+pub static NO_STORE_MUST_REVALIDATE: HeaderValue =
+    HeaderValue::from_static("no-cache, no-store, must-revalidate, max-age=0");
+
+pub static FOREVER_IN_CDN_AND_BROWSER: HeaderValue = HeaderValue::from_static("max-age=31104000");
 
 /// defines the wanted caching behaviour for a web response.
+#[derive(Debug)]
 pub enum CachePolicy {
     /// no browser or CDN caching.
     /// In some cases the browser might still use cached content,
@@ -42,78 +42,23 @@ pub enum CachePolicy {
 }
 
 impl CachePolicy {
-    pub fn render(&self, config: &Config) -> Vec<CacheDirective> {
+    pub fn render(&self, config: &Config) -> Option<HeaderValue> {
         match *self {
-            CachePolicy::NoCaching => {
-                vec![CacheDirective::MaxAge(0)]
-            }
-            CachePolicy::NoStoreMustRevalidate => {
-                vec![
-                    CacheDirective::NoCache,
-                    CacheDirective::NoStore,
-                    CacheDirective::MustRevalidate,
-                    CacheDirective::MaxAge(0),
-                ]
-            }
-            CachePolicy::ForeverInCdnAndBrowser => {
-                vec![CacheDirective::MaxAge(STATIC_FILE_CACHE_DURATION as u32)]
-            }
+            CachePolicy::NoCaching => Some(NO_CACHING.clone()),
+            CachePolicy::NoStoreMustRevalidate => Some(NO_STORE_MUST_REVALIDATE.clone()),
+            CachePolicy::ForeverInCdnAndBrowser => Some(FOREVER_IN_CDN_AND_BROWSER.clone()),
             CachePolicy::ForeverInCdn => {
                 // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
                 // CloudFront using the default TTL, while the browser not seeing any caching header.
                 // This means we can have the CDN caching the documentation while just
                 // issuing a purge after a build.
                 // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
-                vec![]
+                None
             }
-            CachePolicy::ForeverInCdnAndStaleInBrowser => {
-                let mut directives = CachePolicy::ForeverInCdn.render(config);
-                if let Some(seconds) = config.cache_control_stale_while_revalidate {
-                    directives.push(CacheDirective::Extension(
-                        "stale-while-revalidate".to_string(),
-                        Some(seconds.to_string()),
-                    ));
-                }
-                directives
-            }
+            CachePolicy::ForeverInCdnAndStaleInBrowser => config
+                .cache_control_stale_while_revalidate
+                .map(|seconds| format!("stale-while-revalidate={seconds}").parse().unwrap()),
         }
-    }
-}
-
-impl iron::typemap::Key for CachePolicy {
-    type Value = CachePolicy;
-}
-
-/// Middleware to ensure a correct cache-control header.
-/// The default is an explicit "never cache" header, which
-/// can be adapted via:
-/// ```ignore
-///  resp.extensions.insert::<CachePolicy>(CachePolicy::ForeverInCdn);
-///  # change Cache::ForeverInCdn into the cache polity you want to have
-/// ```
-/// in a handler function.
-pub(super) struct CacheMiddleware;
-
-impl AfterMiddleware for CacheMiddleware {
-    fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
-        let config = req.extensions.get::<Config>().expect("missing config");
-        let cache = res
-            .extensions
-            .get::<CachePolicy>()
-            .unwrap_or(&CachePolicy::NoCaching);
-
-        if cfg!(test) {
-            assert!(
-                !res.headers.has::<CacheControl>(),
-                "handlers should never set their own caching headers and only use CachePolicy to control caching."
-            );
-        }
-
-        let directives = cache.render(config);
-        if !directives.is_empty() {
-            res.headers.set(CacheControl(directives))
-        }
-        Ok(res)
     }
 }
 
@@ -138,15 +83,10 @@ pub(crate) async fn cache_middleware<B>(req: AxumHttpRequest<B>, next: Next<B>) 
         );
     }
 
-    let directives = cache.render(&config);
-    if !directives.is_empty() {
-        response.headers_mut().insert(
-            CACHE_CONTROL,
-            CacheControl(directives)
-                .to_string()
-                .parse()
-                .expect("cache-control header could not be parsed"),
-        );
+    if let Some(cache_directive) = cache.render(&config) {
+        response
+            .headers_mut()
+            .insert(CACHE_CONTROL, cache_directive);
     }
     response
 }
@@ -155,25 +95,24 @@ pub(crate) async fn cache_middleware<B>(req: AxumHttpRequest<B>, next: Next<B>) 
 mod tests {
     use super::*;
     use crate::test::wrapper;
-    use iron::headers::CacheControl;
     use test_case::test_case;
 
-    #[test_case(CachePolicy::NoCaching, "max-age=0")]
+    #[test_case(CachePolicy::NoCaching, Some("max-age=0"))]
     #[test_case(
         CachePolicy::NoStoreMustRevalidate,
-        "no-cache, no-store, must-revalidate, max-age=0"
+        Some("no-cache, no-store, must-revalidate, max-age=0")
     )]
-    #[test_case(CachePolicy::ForeverInCdnAndBrowser, "max-age=31104000")]
-    #[test_case(CachePolicy::ForeverInCdn, "")]
+    #[test_case(CachePolicy::ForeverInCdnAndBrowser, Some("max-age=31104000"))]
+    #[test_case(CachePolicy::ForeverInCdn, None)]
     #[test_case(
         CachePolicy::ForeverInCdnAndStaleInBrowser,
-        "stale-while-revalidate=86400"
+        Some("stale-while-revalidate=86400")
     )]
-    fn render(cache: CachePolicy, expected: &str) {
+    fn render(cache: CachePolicy, expected: Option<&str>) {
         wrapper(|env| {
             assert_eq!(
-                CacheControl(cache.render(&env.config())).to_string(),
-                expected
+                cache.render(&env.config()),
+                expected.map(|s| HeaderValue::from_str(s).unwrap())
             );
             Ok(())
         });
@@ -184,11 +123,9 @@ mod tests {
         wrapper(|env| {
             env.override_config(|config| config.cache_control_stale_while_revalidate = None);
 
-            assert_eq!(
-                CacheControl(CachePolicy::ForeverInCdnAndStaleInBrowser.render(&env.config()))
-                    .to_string(),
-                ""
-            );
+            assert!(CachePolicy::ForeverInCdnAndStaleInBrowser
+                .render(&env.config())
+                .is_none());
             Ok(())
         });
     }
@@ -200,8 +137,9 @@ mod tests {
             });
 
             assert_eq!(
-                CacheControl(CachePolicy::ForeverInCdnAndStaleInBrowser.render(&env.config()))
-                    .to_string(),
+                CachePolicy::ForeverInCdnAndStaleInBrowser
+                    .render(&env.config())
+                    .unwrap(),
                 "stale-while-revalidate=666"
             );
             Ok(())

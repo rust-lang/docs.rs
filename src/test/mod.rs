@@ -6,13 +6,10 @@ use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
-use crate::web::{
-    build_axum_app, build_strangler_service, cache, page::TemplateData, start_iron_server,
-};
+use crate::web::{build_axum_app, cache, page::TemplateData};
 use crate::{BuildQueue, Config, Context, Index, Metrics};
 use anyhow::Context as _;
 use fn_error_context::context;
-use iron::{headers::CacheControl, Listening};
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
@@ -61,7 +58,7 @@ pub(crate) fn assert_no_cache(res: &Response) {
         res.headers()
             .get("Cache-Control")
             .expect("missing cache-control header"),
-        cache::NO_CACHE,
+        cache::NO_CACHING,
     );
 }
 
@@ -74,14 +71,13 @@ pub(crate) fn assert_cache_control(
     assert!(config.cache_control_stale_while_revalidate.is_some());
     let cache_control = res.headers().get("Cache-Control");
 
-    let expected_directives = cache_policy.render(config);
-    if expected_directives.is_empty() {
-        assert!(cache_control.is_none());
-    } else {
+    if let Some(expected_directives) = cache_policy.render(config) {
         assert_eq!(
             cache_control.expect("missing cache-control header"),
-            &CacheControl(expected_directives).to_string()
+            expected_directives,
         );
+    } else {
+        assert!(cache_control.is_none());
     }
 }
 
@@ -101,9 +97,9 @@ pub(crate) fn assert_success_cached(
     config: &Config,
 ) -> Result<()> {
     let response = web.get(path).send()?;
-    assert_cache_control(&response, cache_policy, config);
     let status = response.status();
     assert!(status.is_success(), "failed to GET {}: {}", path, status);
+    assert_cache_control(&response, cache_policy, config);
     Ok(())
 }
 
@@ -538,7 +534,6 @@ impl Drop for TestDatabase {
 }
 
 pub(crate) struct TestFrontend {
-    iron_server: Listening,
     axum_server_thread: JoinHandle<()>,
     axum_server_shutdown_signal: Sender<()>,
     axum_server_address: SocketAddr,
@@ -563,10 +558,6 @@ impl TestFrontend {
         let template_data =
             Arc::new(TemplateData::new(&mut context.pool().unwrap().get().unwrap()).unwrap());
 
-        debug!("starting iron server");
-        let iron_server = start_iron_server(context, template_data.clone(), Some(1))
-            .expect("could not start iron server");
-
         debug!("binding local TCP port for axum");
         let axum_listener =
             TcpListener::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
@@ -585,14 +576,7 @@ impl TestFrontend {
                 runtime.block_on(async {
                     axum::Server::from_tcp(axum_listener)
                         .unwrap()
-                        .serve(
-                            axum_app
-                                .fallback_service(
-                                    build_strangler_service(iron_server.socket)
-                                        .expect("could not build strangler service"),
-                                )
-                                .into_make_service(),
-                        )
+                        .serve(axum_app.into_make_service())
                         .with_graceful_shutdown(async {
                             rx.await.ok();
                         })
@@ -603,7 +587,6 @@ impl TestFrontend {
         });
 
         Self {
-            iron_server,
             axum_server_address: axum_addr,
             axum_server_thread: handle,
             axum_server_shutdown_signal: tx,
@@ -623,16 +606,6 @@ impl TestFrontend {
         self.axum_server_thread
             .join()
             .expect("could not join axum background thread");
-
-        trace!("forgetting about iron");
-        // Iron is bugged, and it never closes the server even when the listener is dropped. To
-        // avoid never-ending tests this method forgets about the server, leaking it and allowing the
-        // program to end.
-        //
-        // The OS will then close all the dangling servers once the process exits.
-        //
-        // https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
-        std::mem::forget(self.iron_server);
     }
 
     fn build_url(&self, url: &str) -> String {

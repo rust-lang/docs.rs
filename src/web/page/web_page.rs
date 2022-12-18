@@ -1,8 +1,7 @@
 use super::TemplateData;
 use crate::{
-    ctry,
     utils::spawn_blocking,
-    web::{cache::CachePolicy, csp::Csp, error::AxumNope},
+    web::{csp::Csp, error::AxumNope},
 };
 use anyhow::Error;
 use axum::{
@@ -13,53 +12,9 @@ use axum::{
 };
 use futures_util::future::{BoxFuture, FutureExt};
 use http::header::CONTENT_LENGTH;
-use iron::{
-    headers::{ContentType, Link, LinkValue, RelationType},
-    response::Response,
-    status::Status,
-    IronResult, Request,
-};
 use serde::Serialize;
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 use tera::Context;
-
-/// When making using a custom status, use a closure that coerces to a `fn(&Self) -> Status`
-#[macro_export]
-macro_rules! impl_webpage {
-    ($page:ty = $template:literal $(, status = $status:expr)? $(, content_type = $content_type:expr)?  $(, canonical_url = $canonical_url:expr)? $(,)?) => {
-        $crate::impl_webpage!($page = |_| ::std::borrow::Cow::Borrowed($template) $(, status = $status)? $(, content_type = $content_type)?  $(, canonical_url = $canonical_url)?);
-    };
-
-    ($page:ty = $template:expr $(, status = $status:expr)? $(, content_type = $content_type:expr)? $(, canonical_url = $canonical_url:expr)? $(,)?) => {
-        impl $crate::web::page::WebPage for $page {
-            fn template(&self) -> ::std::borrow::Cow<'static, str> {
-                let template: fn(&Self) -> ::std::borrow::Cow<'static, str> = $template;
-                template(self)
-            }
-
-            $(
-                fn get_status(&self) -> ::iron::status::Status {
-                    let status: fn(&Self) -> ::iron::status::Status = $status;
-                    (status)(self)
-                }
-            )?
-
-
-            $(
-                fn canonical_url(&self) -> Option<String> {
-                    let canonical_url: fn(&Self) -> Option<String> = $canonical_url;
-                    (canonical_url)(self)
-                }
-            )?
-
-            $(
-                fn content_type() -> ::iron::headers::ContentType {
-                    $content_type
-                }
-            )?
-        }
-    };
-}
 
 #[macro_export]
 macro_rules! impl_axum_webpage {
@@ -164,79 +119,6 @@ struct TemplateContext<'a, T> {
     csp_nonce: &'a str,
     #[serde(flatten)]
     page: &'a T,
-}
-
-/// The central trait that rendering pages revolves around, it handles selecting and rendering the template
-pub trait WebPage: Serialize + Sized {
-    /// Turn the current instance into a `Response`, ready to be served
-    // TODO: We could cache similar pages using the `&Context`
-    fn into_response(self, req: &Request) -> IronResult<Response> {
-        let csp_nonce = req
-            .extensions
-            .get::<Csp>()
-            .expect("missing CSP from the request extensions")
-            .nonce();
-
-        let ctx = Context::from_serialize(&TemplateContext {
-            csp_nonce,
-            page: &self,
-        })
-        .unwrap();
-        let status = self.get_status();
-        let result = req
-            .extensions
-            .get::<TemplateData>()
-            .expect("missing TemplateData from the request extensions")
-            .templates
-            .render(&self.template(), &ctx);
-
-        let rendered = if status.is_server_error() {
-            // avoid infinite loop if error.html somehow fails to load
-            result.expect("error while serving error page")
-        } else {
-            ctry!(req, result)
-        };
-
-        let mut response = Response::with((status, rendered));
-        response.headers.set(Self::content_type());
-        if let Some(cache) = Self::cache_policy() {
-            response.extensions.insert::<CachePolicy>(cache);
-        }
-
-        if let Some(canonical_url) = self.canonical_url() {
-            let link_value = LinkValue::new(canonical_url)
-                .push_rel(RelationType::ExtRelType("canonical".to_string()));
-
-            response.headers.set(Link::new(vec![link_value]));
-        }
-
-        Ok(response)
-    }
-
-    /// The name of the template to be rendered
-    fn template(&self) -> Cow<'static, str>;
-
-    /// The canonical URL to set in response headers
-    fn canonical_url(&self) -> Option<String> {
-        None
-    }
-
-    /// Gets the status of the request, defaults to `Ok`
-    fn get_status(&self) -> Status {
-        Status::Ok
-    }
-
-    /// The content type that the template should be served with, defaults to html
-    fn content_type() -> ContentType {
-        ContentType::html()
-    }
-
-    /// caching for this page.
-    /// `None` leads to the default from the `CacheMiddleware`
-    /// being used.
-    fn cache_policy() -> Option<CachePolicy> {
-        None
-    }
 }
 
 /// adding this to the axum response extensions will lead

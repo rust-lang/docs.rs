@@ -1,6 +1,4 @@
-use super::{
-    cache::CachePolicy, error::AxumNope, metrics::request_recorder, metrics::RequestRecorder,
-};
+use super::{cache::CachePolicy, error::AxumNope, metrics::request_recorder};
 use axum::{
     handler::Handler as AxumHandler,
     http::Request as AxumHttpRequest,
@@ -11,9 +9,7 @@ use axum::{
     Router as AxumRouter,
 };
 use axum_extra::routing::RouterExt;
-use iron::middleware::Handler;
-use router::Router as IronRouter;
-use std::{collections::HashSet, convert::Infallible};
+use std::convert::Infallible;
 use tracing::{debug, instrument};
 
 const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
@@ -59,7 +55,6 @@ where
         .layer(middleware::from_fn(block_blacklisted_prefixes_middleware))
 }
 
-#[instrument(skip_all)]
 async fn block_blacklisted_prefixes_middleware<B>(
     request: AxumHttpRequest<B>,
     next: Next<B>,
@@ -70,6 +65,7 @@ async fn block_blacklisted_prefixes_middleware<B>(
         {
             debug!(
                 first_component = first_component,
+                uri = ?request.uri(),
                 "blocking blacklisted prefix"
             );
             return AxumNope::CrateNotFound.into_response();
@@ -80,6 +76,19 @@ async fn block_blacklisted_prefixes_middleware<B>(
 }
 
 pub(super) fn build_axum_routes() -> AxumRouter {
+    // hint for naming axum routes:
+    // when routes overlap, the route parameters at the same position
+    // have to use the same name:
+    //
+    // These routes work together:
+    // - `/:name/:version/settings.html`
+    // - `/:name/:version/:target`
+    // and axum can prioritize the more specific route.
+    //
+    // This panics because of conflicting routes:
+    // - `/:name/:version/settings.html`
+    // - `/:crate/:version/:target`
+    //
     AxumRouter::new()
         // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
         // must live at the site root:
@@ -236,172 +245,54 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::rustdoc::target_redirect_handler),
         )
         .route(
-            "/:crate/badge.svg",
+            "/:name/badge.svg",
             get_rustdoc(super::rustdoc::badge_handler),
         )
+        .route(
+            "/:name",
+            get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/:name/",
+            get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/:name/:version",
+            get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/:name/:version/",
+            get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/:name/:version/all.html",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .route(
+            "/:name/:version/settings.html",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .route(
+            "/:name/:version/scrape-examples-help.html",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .route(
+            "/:name/:version/:target",
+            get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/:name/:version/:target/",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .route(
+            "/:name/:version/:target/*path",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .fallback(fallback)
 }
 
-// REFACTOR: Break this into smaller initialization functions
-pub(super) fn build_routes() -> Routes {
-    let mut routes = Routes::new();
-
-    routes.rustdoc_page("/:crate", super::rustdoc::rustdoc_redirector_handler);
-    routes.rustdoc_page("/:crate/", super::rustdoc::rustdoc_redirector_handler);
-    routes.rustdoc_page(
-        "/:crate/:version",
-        super::rustdoc::rustdoc_redirector_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/",
-        super::rustdoc::rustdoc_redirector_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/settings.html",
-        super::rustdoc::rustdoc_html_server_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/scrape-examples-help.html",
-        super::rustdoc::rustdoc_html_server_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/all.html",
-        super::rustdoc::rustdoc_html_server_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/:target",
-        super::rustdoc::rustdoc_redirector_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/:target/",
-        super::rustdoc::rustdoc_html_server_handler,
-    );
-    routes.rustdoc_page(
-        "/:crate/:version/:target/*.html",
-        super::rustdoc::rustdoc_html_server_handler,
-    );
-
-    for prefix in INTERNAL_PREFIXES {
-        routes.add_internal_page_prefix(prefix);
-    }
-
-    routes
-}
-
-/// This wrapper class aids the construction of iron's Router, with docs.rs-specific additions to
-/// it. Routes are supposed to be added by the build_routes function, which calls methods in this
-/// struct depending on the type of route being added.
-pub(super) struct Routes {
-    /// Normal GET routes.
-    get: Vec<(String, Box<dyn Handler>)>,
-    /// GET routes serving rustdoc content. The BlockBlacklistedPrefixes middleware is added
-    /// automatically to all of them.
-    rustdoc_get: Vec<(String, Box<dyn Handler>)>,
-    /// Prefixes of all the internal routes. This data is used to power the
-    /// BlockBlacklistedPrefixes middleware.
-    page_prefixes: HashSet<String>,
-}
-
-impl Routes {
-    fn new() -> Self {
-        Self {
-            get: Vec::new(),
-            rustdoc_get: Vec::new(),
-            page_prefixes: HashSet::new(),
-        }
-    }
-
-    pub(super) fn page_prefixes(&self) -> HashSet<String> {
-        self.page_prefixes.clone()
-    }
-
-    pub(super) fn add_internal_page_prefix<P: AsRef<str>>(&mut self, prefix: P) {
-        self.page_prefixes.insert(prefix.as_ref().to_string());
-    }
-
-    pub(super) fn iron_router(mut self) -> IronRouter {
-        let mut router = IronRouter::new();
-        for (pattern, handler) in self.get.drain(..) {
-            router.get(&pattern, handler, calculate_id(&pattern));
-        }
-
-        // All rustdoc pages have the prefixes of other docs.rs pages blacklisted. This prevents,
-        // for example, a crate named "about" from hijacking /about/0.1.0/index.html.
-        let blacklist = self.page_prefixes();
-        for (pattern, handler) in self.rustdoc_get.drain(..) {
-            router.get(
-                &pattern,
-                BlockBlacklistedPrefixes::new(blacklist.clone(), handler),
-                calculate_id(&pattern),
-            );
-        }
-
-        router
-    }
-
-    /// A rustdoc page is a page serving generated documentation. It's similar to a static
-    /// resource, but path prefixes are automatically blacklisted (see internal pages to learn more
-    /// about page prefixes).
-    fn rustdoc_page(&mut self, pattern: &str, handler: impl Handler) {
-        self.get.push((
-            pattern.to_string(),
-            Box::new(RequestRecorder::new(handler, "rustdoc page")),
-        ));
-    }
-}
-
-#[derive(Copy, Clone)]
-struct PermanentRedirect(&'static str);
-
-impl Handler for PermanentRedirect {
-    fn handle(&self, _req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-        Ok(iron::Response::with((
-            iron::status::MovedPermanently,
-            iron::modifiers::RedirectRaw(self.0.to_owned()),
-        )))
-    }
-}
-
-/// Iron Middleware that prevents requests to blacklisted prefixes.
-///
-/// In our application, a prefix is blacklisted if a docs.rs page exists below it. For example,
-/// since /releases/queue is a docs.rs page, /releases is a blacklisted prefix.
-///
-/// The middleware must be used for all the pages serving crates at the top level, to prevent a
-/// crate from putting their own content in an URL that's supposed to be used by docs.rs.
-pub(super) struct BlockBlacklistedPrefixes {
-    blacklist: HashSet<String>,
-    handler: Box<dyn Handler>,
-}
-
-impl BlockBlacklistedPrefixes {
-    pub(super) fn new(blacklist: HashSet<String>, handler: Box<dyn Handler>) -> Self {
-        Self { blacklist, handler }
-    }
-}
-
-impl Handler for BlockBlacklistedPrefixes {
-    fn handle(&self, req: &mut iron::Request) -> iron::IronResult<iron::Response> {
-        if let Some(prefix) = req.url.path().first() {
-            if self.blacklist.contains(*prefix) {
-                return Err(super::error::Nope::CrateNotFound.into());
-            }
-        }
-        self.handler.handle(req)
-    }
-}
-
-/// Automatically generate a Route ID from a pattern. Every non-alphanumeric character is replaced
-/// with `_`.
-fn calculate_id(pattern: &str) -> String {
-    let calculate_char = |c: char| {
-        if c.is_alphanumeric() || c == '-' {
-            c
-        } else {
-            '_'
-        }
-    };
-
-    pattern.chars().map(calculate_char).collect()
+async fn fallback() -> impl IntoResponse {
+    AxumNope::ResourceNotFound
 }
 
 #[cfg(test)]
