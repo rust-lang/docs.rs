@@ -2,12 +2,17 @@ use crate::config::Config;
 use axum::{
     http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
-use iron::{AfterMiddleware, BeforeMiddleware, IronResult, Request, Response};
-use std::{fmt::Write, sync::Arc};
+use std::{
+    fmt::Write,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
-pub(super) struct Csp {
+pub(crate) struct Csp {
     nonce: String,
-    suppress: bool,
+    suppress: AtomicBool,
 }
 
 impl Csp {
@@ -19,12 +24,12 @@ impl Csp {
 
         Self {
             nonce: base64::encode(random),
-            suppress: false,
+            suppress: AtomicBool::new(false),
         }
     }
 
-    pub(super) fn suppress(&mut self, suppress: bool) {
-        self.suppress = suppress;
+    pub(super) fn suppress(&self, suppress: bool) {
+        self.suppress.store(suppress, Ordering::Relaxed);
     }
 
     pub(super) fn nonce(&self) -> &str {
@@ -32,7 +37,7 @@ impl Csp {
     }
 
     fn render(&self, content_type: ContentType) -> Option<String> {
-        if self.suppress {
+        if self.suppress.load(Ordering::Relaxed) {
             return None;
         }
         let mut result = String::new();
@@ -83,61 +88,10 @@ impl Csp {
     }
 }
 
-impl iron::typemap::Key for Csp {
-    type Value = Csp;
-}
-
 enum ContentType {
     Html,
     Svg,
     Other,
-}
-
-pub(super) struct CspMiddleware;
-
-impl BeforeMiddleware for CspMiddleware {
-    fn before(&self, req: &mut Request) -> IronResult<()> {
-        req.extensions.insert::<Csp>(Csp::new());
-        Ok(())
-    }
-}
-
-impl AfterMiddleware for CspMiddleware {
-    fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
-        let config = req
-            .extensions
-            .get::<Config>()
-            .expect("missing Config")
-            .clone();
-        let csp = req.extensions.get_mut::<Csp>().expect("missing CSP");
-
-        let content_type = res
-            .headers
-            .get_raw("Content-Type")
-            .and_then(|headers| headers.get(0))
-            .map(|header| header.as_slice());
-
-        let preset = match content_type {
-            Some(b"text/html; charset=utf-8") => ContentType::Html,
-            Some(b"text/svg+xml") => ContentType::Svg,
-            _ => ContentType::Other,
-        };
-
-        if let Some(rendered) = csp.render(preset) {
-            res.headers.set_raw(
-                // The Report-Only header tells the browser to just log CSP failures instead of
-                // actually enforcing them. This is useful to check if the CSP works without
-                // impacting production traffic.
-                if config.csp_report_only {
-                    "Content-Security-Policy-Report-Only"
-                } else {
-                    "Content-Security-Policy"
-                },
-                vec![rendered.as_bytes().to_vec()],
-            );
-        }
-        Ok(res)
-    }
 }
 
 pub(crate) async fn csp_middleware<B>(mut req: AxumHttpRequest<B>, next: Next<B>) -> AxumResponse {
@@ -199,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_csp_suppressed() {
-        let mut csp = Csp::new();
+        let csp = Csp::new();
         csp.suppress(true);
 
         assert!(csp.render(ContentType::Other).is_none());

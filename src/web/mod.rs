@@ -3,74 +3,10 @@
 pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
-use crate::utils::{report_error, spawn_blocking};
+use crate::utils::spawn_blocking;
 use anyhow::{anyhow, bail, Context as _, Result};
 use serde_json::Value;
 use tracing::{info, instrument};
-
-/// ctry! (cratesfyitry) is extremely similar to try! and itry!
-/// except it returns an error page response instead of plain Err.
-#[macro_export]
-macro_rules! ctry {
-    ($req:expr, $result:expr $(,)?) => {
-        match $result {
-            Ok(success) => success,
-            Err(error) => {
-                let request: &::iron::Request = $req;
-
-                // This is very ugly, but it makes it impossible to get a type inference error
-                // from this macro
-                let web_error = $crate::web::ErrorPage {
-                    title: "Internal Server Error",
-                    message: ::std::option::Option::Some(::std::borrow::Cow::Owned(error.to_string())),
-                    status: ::iron::status::InternalServerError,
-                };
-
-                let error = anyhow::anyhow!(error)
-                    .context(format!("called `ctry!()` on an `Err` value while attempting to fetch the route {:?}", request.url));
-                $crate::utils::report_error(&error);
-
-                return $crate::web::page::WebPage::into_response(web_error, request);
-            }
-        }
-    };
-}
-
-/// cexpect will check an option and if it's not Some
-/// it will return an error page response
-macro_rules! cexpect {
-    ($req:expr, $option:expr $(,)?) => {
-        match $option {
-            Some(success) => success,
-            None => {
-                let request: &::iron::Request = $req;
-
-                // This is very ugly, but it makes it impossible to get a type inference error
-                // from this macro
-                let web_error = $crate::web::ErrorPage {
-                    title: "Internal Server Error",
-                    message: None,
-                    status: ::iron::status::InternalServerError,
-                };
-
-                let error = anyhow::anyhow!("called `cexpect!()` on a `None` value while attempting to fetch the route {:?}", request.url);
-                $crate::utils::report_error(&error);
-
-                return $crate::web::page::WebPage::into_response(web_error, request);
-            }
-        }
-    };
-}
-
-/// Gets an extension from Request
-macro_rules! extension {
-    ($req:expr, $ext:ty) => {{
-        // Bind $req so we can have good type errors and avoid re-evaluation
-        let request: &::iron::Request = $req;
-
-        cexpect!(request, request.extensions.get::<$ext>())
-    }};
-}
 
 mod build_details;
 mod builds;
@@ -78,7 +14,6 @@ pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
-mod extensions;
 mod features;
 mod file;
 mod headers;
@@ -91,38 +26,21 @@ mod rustdoc;
 mod sitemap;
 mod source;
 mod statics;
-mod strangler;
 
-use crate::{db::Pool, impl_axum_webpage, impl_webpage, Context};
+use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    extract::Extension,
-    http::{uri::Authority, StatusCode},
-    middleware,
-    response::IntoResponse,
-    Router as AxumRouter,
+    extract::Extension, http::StatusCode, middleware, response::IntoResponse, Router as AxumRouter,
 };
 use chrono::{DateTime, Utc};
-use csp::CspMiddleware;
-use error::Nope;
-use extensions::InjectExtensions;
-use iron::{
-    self,
-    headers::{Expires, HttpDate},
-    modifiers::Redirect,
-    status,
-    status::Status,
-    Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
-};
+use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use postgres::Client;
-use router::{NoRoute, TrailingSlash};
 use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::borrow::Borrow;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
-use strangler::StranglerService;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use url::form_urlencoded;
@@ -136,139 +54,7 @@ pub(crate) fn encode_url_path(path: &str) -> String {
     utf8_percent_encode(path, PATH).to_string()
 }
 
-/// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
-const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months
-
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
-
-pub(crate) struct MainHandler {
-    shared_resource_handler: Box<dyn Handler>,
-    router_handler: Box<dyn Handler>,
-    inject_extensions: InjectExtensions,
-}
-
-impl MainHandler {
-    fn chain<H: Handler>(inject_extensions: InjectExtensions, base: H) -> Chain {
-        let mut chain = Chain::new(base);
-        chain.link_before(inject_extensions);
-
-        chain.link_before(CspMiddleware);
-        chain.link_after(CspMiddleware);
-        chain.link_after(cache::CacheMiddleware);
-
-        chain
-    }
-
-    pub(crate) fn new(
-        template_data: Arc<TemplateData>,
-        context: &dyn Context,
-    ) -> Result<MainHandler, Error> {
-        let inject_extensions = InjectExtensions::new(context, template_data)?;
-
-        let routes = routes::build_routes();
-        let shared_resources = Self::chain(
-            inject_extensions.clone(),
-            rustdoc::LegacySharedResourceHandler,
-        );
-        let router_chain = Self::chain(inject_extensions.clone(), routes.iron_router());
-
-        Ok(MainHandler {
-            shared_resource_handler: Box::new(shared_resources),
-            router_handler: Box::new(router_chain),
-            inject_extensions,
-        })
-    }
-}
-
-impl Handler for MainHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        fn if_404(
-            e: IronError,
-            handle: impl FnOnce() -> IronResult<Response>,
-        ) -> IronResult<Response> {
-            if e.response.status == Some(status::NotFound) {
-                // the routes are ordered from least specific to most; give precedence to the
-                // new error message.
-                handle()
-            } else {
-                Err(e)
-            }
-        }
-
-        // This is kind of a mess.
-        //
-        // Some versions of rustdoc in 2018 did not respect the shared static root
-        // (--static-root-path) and so emitted HTML that linked to shared static files via a local
-        // path. For instance, `<script src="../main-20181217-1.33.0-nightly-adbfec229.js">` instead
-        // of (correct) `<script src="/main-20181217-1.33.0-nightly-adbfec229.js">`. Since docs.rs
-        // removes the shared static files from individual builds to save space, the "../mainXXX.js"
-        // path doesn't really exist in storage for any particular build. The appropriate main file
-        // *does* exist in the storage root, which is where the shared static files are put for each
-        // new rustdoc version. So here we give LegacySharedResourceHandler a chance to handle all URLs
-        // before they go to the router. LegacySharedResourceHandler looks at the last component of the
-        // request path ("main-20181217-1.33.0-nightly-adbfec229.js") and tries to fetch it from
-        // the storage root (if it's JS, CSS, etc). If the file doesn't exist, we fall through to
-        // the normal router, which may wind up serving an invocation-specific file from the crate
-        // itself. For instance, a request for "/crate/foo/search-index-XYZ.js" will get a 404 from
-        // the LegacySharedResourceHandler because "search-index-XYZ.js" doesn't exist in the storage root
-        // (it's not a shared static file), but it will get a 200 from rustdoc_html_server_handler
-        // because it exists in a specific crate.
-        //
-        // See #1181.
-        //
-        // Note that this causes a counterintuitive and arguably buggy behavior: files that exist in
-        // the storage root can be requested with any path. For instance:
-        //
-        // https://docs.rs/this.path.does.not.exist/main-20181217-1.33.0-nightly-adbfec229.js
-        //
-        // If those 2018 crates get rebuilt, we won't have this problem anymore, and
-        // LegacySharedResourceHandler can receive dispatch from the router, as other handlers do. That
-        // will also allow LegacySharedResourceHandler to look up full paths in storage rather than just
-        // the last component of the requested path.
-        //
-        // Also note: this approach means that a request for a given JS/CSS may serve from two
-        // different places in storage: the storage root, or the full requested path. If the same
-        // filename exists in both places, we serve that filename from the storage root, because
-        // shared_resource_handler is called before the router. This works around a different bug
-        // that existed in certain versions of rustdoc around 2021, where an invocation specific
-        // file (cratesXXX.js) was referenced using the --static-root-path rather than the crate
-        // root. See #1340 and https://github.com/rust-lang/rust/pull/83094.
-        self.shared_resource_handler
-            .handle(req)
-            .or_else(|e| if_404(e, || self.router_handler.handle(req)))
-            .or_else(|e| {
-                // in some cases the iron router will return a redirect as an `IronError`.
-                // Here we convert these into an `Ok(Response)`.
-                if e.error.downcast_ref::<TrailingSlash>().is_some()
-                    || e.response.status == Some(status::MovedPermanently)
-                {
-                    Ok(e.response)
-                } else {
-                    Err(e)
-                }
-            })
-            .or_else(|e| {
-                let err = if let Some(err) = e.error.downcast_ref::<error::Nope>() {
-                    *err
-                } else if e.error.is::<NoRoute>() || e.response.status == Some(status::NotFound) {
-                    error::Nope::ResourceNotFound
-                } else if e.response.status == Some(status::InternalServerError) {
-                    report_error(&anyhow!("internal server error: {}", e.error));
-                    error::Nope::InternalServerError
-                } else {
-                    report_error(&anyhow!(
-                        "No error page for status {:?}; {}",
-                        e.response.status,
-                        e.error
-                    ));
-                    // TODO: add in support for other errors that are actually used
-                    error::Nope::InternalServerError
-                };
-
-                Self::chain(self.inject_extensions.clone(), err).handle(req)
-            })
-    }
-}
 
 #[derive(Debug)]
 struct MatchVersion {
@@ -286,11 +72,11 @@ impl MatchVersion {
     /// If the matched version was an exact match to the requested crate name, returns the
     /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
     /// `CrateNotFound`.
-    fn assume_exact(self) -> Result<MatchSemver, Nope> {
+    fn assume_exact(self) -> Result<MatchSemver, AxumNope> {
         if self.corrected_name.is_none() {
             Ok(self.version)
         } else {
-            Err(Nope::CrateNotFound)
+            Err(AxumNope::CrateNotFound)
         }
     }
 }
@@ -332,7 +118,7 @@ fn match_version(
     conn: &mut Client,
     name: &str,
     input_version: Option<&str>,
-) -> Result<MatchVersion, Nope> {
+) -> Result<MatchVersion, AxumNope> {
     let (crate_id, corrected_name) = {
         let rows = conn
             .query(
@@ -343,7 +129,7 @@ fn match_version(
             )
             .unwrap(); // FIXME: remove this unwrap when all handlers using it are migrated to axum
 
-        let row = rows.get(0).ok_or(Nope::CrateNotFound)?;
+        let row = rows.get(0).ok_or(AxumNope::CrateNotFound)?;
 
         let id: i32 = row.get(0);
         let db_name = row.get(1);
@@ -361,18 +147,15 @@ fn match_version(
         .expect("error fetching releases for crate");
 
     if releases.is_empty() {
-        return Err(Nope::CrateNotFound);
+        return Err(AxumNope::CrateNotFound);
     }
 
     // version is an Option<&str> from router::Router::get, need to decode first.
     // Any encoding errors we treat as _any version_.
-    use iron::url::percent_encoding::percent_decode;
-    let req_version = input_version
-        .and_then(|v| percent_decode(v.as_bytes()).decode_utf8().ok())
-        .unwrap_or_else(|| "*".into());
+    let req_version = input_version.unwrap_or("*");
 
     // first check for exact match, we can't expect users to use semver in query
-    if let Ok(parsed_req_version) = Version::parse(&req_version) {
+    if let Ok(parsed_req_version) = Version::parse(req_version) {
         if let Some(release) = releases
             .iter()
             .find(|release| release.version == parsed_req_version)
@@ -390,12 +173,12 @@ fn match_version(
     let req_semver = if req_version == "newest" || req_version == "latest" {
         VersionReq::STAR
     } else {
-        VersionReq::parse(&req_version).map_err(|err| {
+        VersionReq::parse(req_version).map_err(|err| {
             info!(
                 "could not parse version requirement \"{}\": {:?}",
                 req_version, err
             );
-            Nope::VersionNotFound
+            AxumNope::VersionNotFound
         })?
     };
 
@@ -431,13 +214,13 @@ fn match_version(
                 rustdoc_status: release.rustdoc_status,
                 target_name: release.target_name.clone(),
             })
-            .ok_or(Nope::VersionNotFound);
+            .ok_or(AxumNope::VersionNotFound);
     }
 
     // Since we return with a CrateNotFound earlier if the db reply is empty,
     // we know that versions were returned but none satisfied the version requirement.
     // This can only happen when all versions are yanked.
-    Err(Nope::VersionNotFound)
+    Err(AxumNope::VersionNotFound)
 }
 
 // temporary wrapper around `match_version` for axum handlers.
@@ -488,30 +271,8 @@ pub(crate) fn build_axum_app(
 }
 
 #[instrument(skip_all)]
-pub(crate) fn build_strangler_service(addr: SocketAddr) -> Result<StranglerService, Error> {
-    Ok(StranglerService::new(Authority::try_from(
-        addr.to_string(),
-    )?))
-}
-
-#[instrument(skip_all)]
-pub(crate) fn start_iron_server(
-    context: &dyn Context,
-    template_data: Arc<TemplateData>,
-    threads: Option<usize>,
-) -> Result<Listening, Error> {
-    let mut iron = Iron::new(MainHandler::new(template_data, context)?);
-    if let Some(threads) = threads {
-        iron.threads = threads;
-    }
-    Ok(iron.http("127.0.0.1:0")?)
-}
-
-#[instrument(skip_all)]
 pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(), Error> {
     let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
-
-    let iron_server = start_iron_server(context, template_data.clone(), None)?;
 
     let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
 
@@ -521,18 +282,47 @@ pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(),
         axum_addr.port()
     );
 
+    // initialize the storage and the repo-updater in sync context
+    // so it can stay sync for now and doesn't fail when they would
+    // be initialized while starting the server below.
+    context.storage()?;
+    context.repository_stats_updater()?;
+
     context.runtime()?.block_on(async {
         axum::Server::bind(&axum_addr)
-            .serve(
-                build_axum_app(context, template_data)?
-                    .fallback_service(build_strangler_service(iron_server.socket)?)
-                    .into_make_service(),
-            )
+            .serve(build_axum_app(context, template_data)?.into_make_service())
+            .with_graceful_shutdown(shutdown_signal())
             .await?;
         Ok::<(), Error>(())
     })?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    info!("signal received, starting graceful shutdown");
 }
 
 /// Converts Timespec to nice readable relative time string
@@ -563,17 +353,10 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
     }
 }
 
-/// Creates a `Response` which redirects to the given path on the scheme/host/port from the given
-/// `Request`.
-fn redirect(url: Url) -> Response {
-    let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.headers.set(Expires(HttpDate(time::now())));
-    resp
-}
-
+#[instrument]
 fn axum_redirect<U>(uri: U) -> Result<impl IntoResponse, Error>
 where
-    U: TryInto<http::Uri>,
+    U: TryInto<http::Uri> + std::fmt::Debug,
     <U as TryInto<http::Uri>>::Error: std::fmt::Debug,
 {
     let uri: http::Uri = uri
@@ -598,57 +381,18 @@ where
     ))
 }
 
-fn cached_redirect(url: Url, cache_policy: cache::CachePolicy) -> Response {
-    let mut resp = Response::with((status::Found, Redirect(url)));
-    resp.extensions.insert::<cache::CachePolicy>(cache_policy);
-    resp
-}
-
-fn axum_cached_redirect(
-    url: &str,
+#[instrument]
+fn axum_cached_redirect<U>(
+    uri: U,
     cache_policy: cache::CachePolicy,
-) -> Result<impl IntoResponse, Error> {
-    let mut resp = axum_redirect(url)?.into_response();
+) -> Result<impl IntoResponse, Error>
+where
+    U: TryInto<http::Uri> + std::fmt::Debug,
+    <U as TryInto<http::Uri>>::Error: std::fmt::Debug,
+{
+    let mut resp = axum_redirect(uri)?.into_response();
     resp.extensions_mut().insert(cache_policy);
     Ok(resp)
-}
-
-fn redirect_base(req: &Request) -> String {
-    // Try to get the scheme from CloudFront first, and then from iron
-    let scheme = req
-        .headers
-        .get_raw("cloudfront-forwarded-proto")
-        .and_then(|values| values.get(0))
-        .and_then(|value| std::str::from_utf8(value).ok())
-        .filter(|proto| *proto == "http" || *proto == "https")
-        .unwrap_or_else(|| req.url.scheme());
-
-    // Only include the port if it's needed
-    let port = req.url.port();
-    if port == 80 {
-        format!("{}://{}", scheme, req.url.host())
-    } else {
-        format!("{}://{}:{}", scheme, req.url.host(), port)
-    }
-}
-
-/// Parse and URL into a iron::Url struct.
-/// When `queries` are given these are added to the URL,
-/// with empty `queries` the `?` will be omitted.
-pub(crate) fn parse_url_with_params<I, K, V>(url: &str, queries: I) -> Result<Url, Error>
-where
-    I: IntoIterator,
-    I::Item: Borrow<(K, V)>,
-    K: AsRef<str>,
-    V: AsRef<str>,
-{
-    let mut queries = queries.into_iter().peekable();
-    if queries.peek().is_some() {
-        Url::from_generic_url(iron::url::Url::parse_with_params(url, queries)?)
-            .map_err(|msg| anyhow!(msg))
-    } else {
-        Url::parse(url).map_err(|msg| anyhow!(msg))
-    }
 }
 
 /// Parse an URI into a http::Uri struct.
@@ -742,21 +486,6 @@ impl MetaData {
             })
             .unwrap_or_else(Vec::new)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) struct ErrorPage {
-    /// The title of the page
-    pub title: &'static str,
-    /// The error message, displayed as a description
-    pub message: Option<Cow<'static, str>>,
-    #[serde(skip)]
-    pub status: Status,
-}
-
-impl_webpage! {
-    ErrorPage = "error.html",
-    status = |err| err.status,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -937,20 +666,6 @@ mod test {
                 web,
             )?;
 
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn double_slash_does_redirect_and_remove_slash() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("bat")
-                .version("0.2.0")
-                .create()
-                .unwrap();
-            let web = env.frontend();
-            assert_redirect_unchecked("/bat//", "/bat/", web)?;
             Ok(())
         })
     }

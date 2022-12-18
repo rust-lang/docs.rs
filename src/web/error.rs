@@ -1,116 +1,10 @@
 use std::borrow::Cow;
 
-use crate::{
-    db::PoolError,
-    web::{page::WebPage, releases::Search, AxumErrorPage, ErrorPage},
-};
+use crate::web::{releases::Search, AxumErrorPage};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
-use iron::{status::Status, Handler, IronError, IronResult, Request, Response};
-
-#[derive(Debug, Copy, Clone, thiserror::Error)]
-pub enum Nope {
-    #[error("Requested resource not found")]
-    ResourceNotFound,
-    #[error("Requested build not found")]
-    BuildNotFound,
-    #[error("Requested crate not found")]
-    CrateNotFound,
-    #[error("Requested owner not found")]
-    OwnerNotFound,
-    #[error("Requested crate does not have specified version")]
-    VersionNotFound,
-    #[error("Internal server error")]
-    InternalServerError,
-}
-
-impl From<Nope> for IronError {
-    fn from(err: Nope) -> IronError {
-        use iron::status;
-
-        let status = match err {
-            Nope::ResourceNotFound
-            | Nope::BuildNotFound
-            | Nope::CrateNotFound
-            | Nope::OwnerNotFound
-            | Nope::VersionNotFound => status::NotFound,
-            Nope::InternalServerError => status::InternalServerError,
-        };
-
-        IronError::new(err, status)
-    }
-}
-
-impl Handler for Nope {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        match self {
-            Nope::ResourceNotFound => {
-                // user tried to navigate to a resource (doc page/file) that doesn't exist
-                // TODO: Display the attempted page
-                ErrorPage {
-                    title: "The requested resource does not exist",
-                    message: Some("no such resource".into()),
-                    status: Status::NotFound,
-                }
-                .into_response(req)
-            }
-
-            Nope::BuildNotFound => ErrorPage {
-                title: "The requested build does not exist",
-                message: Some("no such build".into()),
-                status: Status::NotFound,
-            }
-            .into_response(req),
-
-            Nope::CrateNotFound => {
-                // user tried to navigate to a crate that doesn't exist
-                // TODO: Display the attempted crate and a link to a search for said crate
-                ErrorPage {
-                    title: "The requested crate does not exist",
-                    message: Some("no such crate".into()),
-                    status: Status::NotFound,
-                }
-                .into_response(req)
-            }
-
-            Nope::OwnerNotFound => ErrorPage {
-                title: "The requested owner does not exist",
-                message: Some("no such owner".into()),
-                status: Status::NotFound,
-            }
-            .into_response(req),
-
-            Nope::VersionNotFound => {
-                // user tried to navigate to a crate with a version that does not exist
-                // TODO: Display the attempted crate and version
-                ErrorPage {
-                    title: "The requested version does not exist",
-                    message: Some("no such version for this crate".into()),
-                    status: Status::NotFound,
-                }
-                .into_response(req)
-            }
-
-            Nope::InternalServerError => {
-                // something went wrong, details should have been logged
-                ErrorPage {
-                    title: "Internal server error",
-                    message: Some("internal server error".into()),
-                    status: Status::InternalServerError,
-                }
-                .into_response(req)
-            }
-        }
-    }
-}
-
-impl From<PoolError> for IronError {
-    fn from(err: PoolError) -> IronError {
-        IronError::new(err, Status::InternalServerError)
-    }
-}
 
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)] // FIXME: remove after iron is gone
@@ -131,6 +25,8 @@ pub enum AxumNope {
     InternalServerError,
     #[error("internal error")]
     InternalError(anyhow::Error),
+    #[error("bad request")]
+    BadRequest,
 }
 
 impl IntoResponse for AxumNope {
@@ -139,7 +35,7 @@ impl IntoResponse for AxumNope {
             AxumNope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
                 AxumErrorPage {
-                    title: "Requested resource does not exist",
+                    title: "The requested resource does not exist",
                     message: "no such resource".into(),
                     status: StatusCode::NOT_FOUND,
                 }
@@ -190,6 +86,12 @@ impl IntoResponse for AxumNope {
                 }
                 .into_response()
             }
+            AxumNope::BadRequest => AxumErrorPage {
+                title: "Bad request",
+                message: "Bad request".into(),
+                status: StatusCode::BAD_REQUEST,
+            }
+            .into_response(),
             AxumNope::InternalServerError => {
                 // something went wrong, details should have been logged
                 AxumErrorPage {
@@ -218,23 +120,7 @@ impl From<anyhow::Error> for AxumNope {
     fn from(err: anyhow::Error) -> Self {
         match err.downcast::<AxumNope>() {
             Ok(axum_nope) => axum_nope,
-            Err(err) => match err.downcast::<Nope>() {
-                Ok(iron_nope) => AxumNope::from(iron_nope),
-                Err(err) => AxumNope::InternalError(err),
-            },
-        }
-    }
-}
-
-impl From<Nope> for AxumNope {
-    fn from(err: Nope) -> Self {
-        match err {
-            Nope::ResourceNotFound => AxumNope::ResourceNotFound,
-            Nope::BuildNotFound => AxumNope::BuildNotFound,
-            Nope::CrateNotFound => AxumNope::CrateNotFound,
-            Nope::OwnerNotFound => AxumNope::OwnerNotFound,
-            Nope::VersionNotFound => AxumNope::VersionNotFound,
-            Nope::InternalServerError => AxumNope::InternalServerError,
+            Err(err) => AxumNope::InternalError(err),
         }
     }
 }

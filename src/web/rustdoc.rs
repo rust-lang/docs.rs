@@ -6,43 +6,37 @@ use crate::{
     storage::{rustdoc_archive_path, PathNotFoundError},
     utils::{self, spawn_blocking},
     web::{
-        axum_cached_redirect,
+        axum_cached_redirect, axum_parse_uri_with_params,
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
         encode_url_path,
-        error::{AxumNope, AxumResult, Nope},
+        error::{AxumNope, AxumResult},
         file::File,
-        match_version, match_version_axum,
+        headers::CanonicalUrl,
+        match_version_axum,
         metrics::RenderingTimesRecorder,
-        parse_url_with_params, redirect, redirect_base, MatchSemver, MetaData,
+        page::TemplateData,
+        MatchSemver, MetaData,
     },
     Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
 use anyhow::{anyhow, Context as _};
 use axum::{
     extract::{Extension, Path, Query},
-    http::StatusCode,
-    response::IntoResponse,
-};
-use iron::{
-    headers::{Link, LinkValue, RelationType},
-    modifiers::Redirect,
-    status,
-    url::percent_encoding::percent_decode,
-    Handler, IronResult, Request, Response, Url,
+    http::{StatusCode, Uri},
+    response::{Html, IntoResponse, Response as AxumResponse},
+    TypedHeader,
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
-use router::Router;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Write,
-    path,
     sync::Arc,
 };
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -57,131 +51,119 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     ])
 });
 
-fn ico_handler(req: &mut Request) -> IronResult<Response> {
-    if let Some(&"favicon.ico") = req.url.path().last() {
-        // if we're looking for exactly "favicon.ico", we need to defer to the handler that
-        // actually serves it, so return a 404 here to make the main handler carry on
-        Err(Nope::ResourceNotFound.into())
-    } else {
-        // if we're looking for something like "favicon-20190317-1.35.0-nightly-c82834e2b.ico",
-        // redirect to the plain one so that the above branch can trigger with the correct filename
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/favicon.ico", redirect_base(req))),
-        );
-
-        Ok(redirect(url))
-    }
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RustdocRedirectorParams {
+    name: String,
+    version: Option<String>,
+    target: Option<String>,
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
-pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
+#[instrument(skip_all)]
+pub(crate) async fn rustdoc_redirector_handler(
+    Path(params): Path<RustdocRedirectorParams>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(pool): Extension<Pool>,
+    Query(query_pairs): Query<HashMap<String, String>>,
+    uri: Uri,
+) -> AxumResult<impl IntoResponse> {
+    #[instrument]
     fn redirect_to_doc(
-        req: &Request,
+        query_pairs: &HashMap<String, String>,
         url_str: String,
         cache_policy: CachePolicy,
         path_in_crate: Option<&str>,
-    ) -> IronResult<Response> {
-        let mut queries = BTreeMap::new();
+    ) -> AxumResult<impl IntoResponse> {
+        let mut queries: BTreeMap<String, String> = BTreeMap::new();
         if let Some(path) = path_in_crate {
             queries.insert("search".into(), path.into());
         }
-        queries.extend(req.url.as_ref().query_pairs());
-        let url = ctry!(req, parse_url_with_params(&url_str, queries));
-        let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.extensions.insert::<CachePolicy>(cache_policy);
-        Ok(resp)
+        queries.extend(query_pairs.to_owned());
+        trace!("redirect to doc");
+        Ok(axum_cached_redirect(
+            axum_parse_uri_with_params(&url_str, queries)?,
+            cache_policy,
+        )?)
     }
 
-    fn redirect_to_crate(req: &Request, name: &str, vers: &str) -> IronResult<Response> {
-        let url = ctry!(
-            req,
-            Url::parse(&format!("{}/crate/{}/{}", redirect_base(req), name, vers)),
-        );
-
-        let mut resp = Response::with((status::Found, Redirect(url)));
-        resp.extensions
-            .insert::<CachePolicy>(CachePolicy::ForeverInCdn);
-        Ok(resp)
-    }
-
-    let metrics = extension!(req, Metrics).clone();
     let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
 
-    // this unwrap is safe because iron urls are always able to use `path_segments`
-    // i'm using this instead of `req.url.path()` to avoid allocating the Vec, and also to avoid
-    // keeping the borrow alive into the return statement
-    if req
-        .url
-        .as_ref()
-        .path_segments()
-        .unwrap()
-        .last()
-        .map_or(false, |s| s.ends_with(".js"))
-    {
-        // javascript files should be handled by the file server instead of erroneously
-        // redirecting to the crate root page
-        if req.url.as_ref().path_segments().unwrap().count() > 2 {
-            // this URL is actually from a crate-internal path, serve it there instead
-            rendering_time.step("serve JS for crate");
-            return rustdoc_html_server_handler(req);
-        } else {
-            rendering_time.step("serve JS");
-            let storage = extension!(req, Storage);
-            let config = extension!(req, Config);
-
-            let path = req.url.path();
-            let path = path.join("/");
-            return match File::from_path(storage, &path, config) {
-                Ok(f) => Ok(f.serve()),
-                Err(..) => Err(Nope::ResourceNotFound.into()),
+    // global static assets for older builds are served from the root, which ends up
+    // in this handler as `params.name`.
+    // Newer builds use a different static-root, and the static assets are served via
+    // `static_asset_handler`
+    if let Some((_, extension)) = params.name.rsplit_once('.') {
+        if ["css", "js", "png", "svg", "woff", "woff2"]
+            .binary_search(&extension)
+            .is_ok()
+        {
+            rendering_time.step("serve static asset");
+            // FIXME: this could be optimized: when a path doesn't exist
+            // in storage, we don't need to recheck on every request.
+            // Existing files are returned with caching headers, so
+            // are cached by the CDN.
+            // If cached, it doesn't need to be invalidated,
+            // since new nightly versions will always put their
+            // toolchain specific resources into the new folder,
+            // which is reached via the new handler.
+            return match spawn_blocking({
+                let storage = storage.clone();
+                let name = params.name.clone();
+                let config = config.clone();
+                move || File::from_path(&storage, &name, &config)
+            })
+            .await
+            {
+                Ok(file) => Ok(file.into_response()),
+                Err(err) => {
+                    if matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
+                        || matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+                    {
+                        Err(AxumNope::ResourceNotFound)
+                    } else {
+                        Err(AxumNope::InternalError(err))
+                    }
+                }
             };
         }
-    } else if req
-        .url
-        .as_ref()
-        .path_segments()
-        .unwrap()
-        .last()
-        .map_or(false, |s| s.ends_with(".ico"))
-    {
-        // route .ico files into their dedicated handler so that docs.rs's favicon is always
-        // displayed
-        rendering_time.step("serve ICO");
-        return ico_handler(req);
     }
 
-    let router = extension!(req, Router);
-    let mut conn = extension!(req, Pool).get()?;
+    if let Some((_, extension)) = uri.path().rsplit_once('.') {
+        if extension == "ico" {
+            // redirect all ico requests
+            // originally from:
+            // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
+            return Ok(axum_cached_redirect(
+                "/-/static/favicon.ico",
+                CachePolicy::ForeverInCdnAndBrowser,
+            )?
+            .into_response());
+        }
+    }
 
-    // this handler should never called without crate pattern
-    let crate_name = cexpect!(req, router.find("crate"));
-    let crate_name = percent_decode(crate_name.as_bytes())
-        .decode_utf8()
-        .unwrap_or_else(|_| crate_name.into());
-    let (mut crate_name, path_in_crate) = match crate_name.split_once("::") {
+    let (mut crate_name, path_in_crate) = match params.name.split_once("::") {
         Some((krate, path)) => (krate.to_string(), Some(path.to_string())),
-        None => (crate_name.to_string(), None),
+        None => (params.name.to_string(), None),
     };
 
     if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
-        let url = format!("https://doc.rust-lang.org/{inner_path}/");
-        return redirect_to_doc(
-            req,
-            url,
+        return Ok(redirect_to_doc(
+            &query_pairs,
+            format!("https://doc.rust-lang.org/{inner_path}/"),
             CachePolicy::ForeverInCdnAndStaleInBrowser,
             path_in_crate.as_deref(),
-        );
+        )?
+        .into_response());
     }
-
-    let req_version = router.find("version");
-    let mut target = router.find("target");
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     rendering_time.step("match version");
-    let v = match_version(&mut conn, &crate_name, req_version)?;
+    let v = match_version_axum(&pool, &crate_name, params.version.as_deref()).await?;
+    trace!(?v, "matched version");
     if let Some(new_name) = v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should
         // use that instead
@@ -189,27 +171,74 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     }
     let (mut version, id) = v.version.into_parts();
 
-    if let None | Some("latest") = req_version {
+    // we might get requests to crate-specific JS files here.
+    if let Some(ref target) = params.target {
+        if target.ends_with(".js") {
+            // this URL is actually from a crate-internal path, serve it there instead
+            rendering_time.step("serve JS for crate");
+            let krate = spawn_blocking({
+                let crate_name = crate_name.clone();
+                let version = version.clone();
+                move || {
+                    let mut conn = pool.get()?;
+                    CrateDetails::new(&mut *conn, &crate_name, &version, &version, None)
+                }
+            })
+            .await?
+            .ok_or(AxumNope::ResourceNotFound)?;
+
+            match spawn_blocking({
+                let version = version.clone();
+                let storage = storage.clone();
+                let target = target.clone();
+                move || {
+                    storage.fetch_rustdoc_file(
+                        &crate_name,
+                        &version,
+                        &target,
+                        krate.archive_storage,
+                        None, // FIXME: &mut rendering_time, re-add this when storage is async
+                    )
+                }
+            })
+            .await
+            {
+                Ok(blob) => return Ok(File(blob).into_response()),
+                Err(err) => {
+                    if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
+                        && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+                    {
+                        debug!(?target, ?err, "got error serving file");
+                    }
+                    return Err(AxumNope::ResourceNotFound);
+                }
+            }
+        }
+    }
+
+    if let None | Some("latest") = params.version.as_deref() {
         version = "latest".to_string()
     }
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
     rendering_time.step("fetch release doc status");
-    let (target_name, has_docs): (String, bool) = {
-        let rows = ctry!(
-            req,
-            conn.query(
+    let (target_name, has_docs): (String, bool) = spawn_blocking({
+        move || {
+            let mut conn = pool.get()?;
+            let row = conn.query_one(
                 "SELECT target_name, rustdoc_status
                  FROM releases
                  WHERE releases.id = $1",
-                &[&id]
-            ),
-        );
+                &[&id],
+            )?;
 
-        (rows[0].get(0), rows[0].get(1))
-    };
+            Ok((row.get(0), row.get(1)))
+        }
+    })
+    .await?;
 
+    let mut target = params.target.as_deref();
     if target == Some("index.html") || target == Some(&target_name) {
         target = None;
     }
@@ -217,11 +246,10 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
     if has_docs {
         rendering_time.step("redirect to doc");
 
-        let base = redirect_base(req);
         let url_str = if let Some(target) = target {
-            format!("{base}/{crate_name}/{version}/{target}/{target_name}/")
+            format!("/{crate_name}/{version}/{target}/{target_name}/")
         } else {
-            format!("{base}/{crate_name}/{version}/{target_name}/")
+            format!("/{crate_name}/{version}/{target_name}/")
         };
 
         let cache = if version == "latest" {
@@ -230,17 +258,24 @@ pub fn rustdoc_redirector_handler(req: &mut Request) -> IronResult<Response> {
             CachePolicy::ForeverInCdnAndStaleInBrowser
         };
 
-        redirect_to_doc(req, url_str, cache, path_in_crate.as_deref())
+        Ok(
+            redirect_to_doc(&query_pairs, url_str, cache, path_in_crate.as_deref())?
+                .into_response(),
+        )
     } else {
         rendering_time.step("redirect to crate");
-        redirect_to_crate(req, &crate_name, &version)
+        Ok(axum_cached_redirect(
+            format!("/crate/{}/{}", crate_name, version),
+            CachePolicy::ForeverInCdn,
+        )?
+        .into_response())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct RustdocPage {
     latest_path: String,
-    canonical_url: String,
+    canonical_path: String,
     permalink_path: String,
     latest_version: String,
     target: String,
@@ -260,110 +295,117 @@ impl RustdocPage {
         self,
         rustdoc_html: &[u8],
         max_parse_memory: usize,
-        req: &mut Request,
+        templates: &TemplateData,
+        metrics: &Metrics,
+        config: &Config,
         file_path: &str,
-    ) -> IronResult<Response> {
-        use iron::{headers::ContentType, status::Status};
-
-        let templates = req
-            .extensions
-            .get::<super::TemplateData>()
-            .expect("missing TemplateData from the request extensions");
-
-        let metrics = req
-            .extensions
-            .get::<crate::Metrics>()
-            .expect("missing Metrics from the request extensions");
-
+    ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
-        let canonical_url = self.canonical_url.clone();
+        let canonical_path = self.canonical_path.clone();
 
         // Build the page of documentation
-        let ctx = ctry!(req, tera::Context::from_serialize(self));
-        let config = extension!(req, Config);
+        let ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
+
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting
         let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
                 metrics.html_rewrite_ooms.inc();
 
-                let err = anyhow!(
-                    "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
-                    file_path, config.max_parse_memory,
-                );
-
-                ctry!(req, Err(err))
+                return Err(AxumNope::InternalError(
+                    anyhow!(
+                        "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
+                        file_path, config.max_parse_memory,
+                    )
+                ));
             }
-            result => ctry!(req, result),
+            result => result.context("error rewriting HTML")?,
         };
 
-        let mut response = Response::with((Status::Ok, html));
-        response.headers.set(ContentType::html());
-        let link_value = LinkValue::new(canonical_url)
-            .push_rel(RelationType::ExtRelType("canonical".to_string()));
-
-        response.headers.set(Link::new(vec![link_value]));
-
-        response.extensions.insert::<CachePolicy>(if is_latest_url {
-            CachePolicy::ForeverInCdn
-        } else {
-            CachePolicy::ForeverInCdnAndStaleInBrowser
-        });
-        Ok(response)
+        Ok((
+            StatusCode::OK,
+            TypedHeader(CanonicalUrl(
+                Uri::builder()
+                    .scheme("https")
+                    .authority("docs.rs")
+                    .path_and_query(canonical_path)
+                    .build()
+                    .context("can't build canonical URL")?,
+            )),
+            Extension(if is_latest_url {
+                CachePolicy::ForeverInCdn
+            } else {
+                CachePolicy::ForeverInCdnAndStaleInBrowser
+            }),
+            Html(html),
+        )
+            .into_response())
     }
+}
+
+#[derive(Clone, Deserialize)]
+pub(crate) struct RustdocHtmlParams {
+    name: String,
+    version: String,
+    // both target and path are only used for matching the route.
+    // The actual path is read from the request `Uri` because
+    // we have some static filenames directly in the routes.
+    #[allow(dead_code)]
+    target: Option<String>,
+    #[allow(dead_code)]
+    path: Option<String>,
 }
 
 /// Serves documentation generated by rustdoc.
 ///
 /// This includes all HTML files for an individual crate, as well as the `search-index.js`, which is
 /// also crate-specific.
-pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
-    let metrics = extension!(req, Metrics).clone();
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
+pub(crate) async fn rustdoc_html_server_handler(
+    Path(params): Path<RustdocHtmlParams>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(templates): Extension<Arc<TemplateData>>,
+    Extension(pool): Extension<Pool>,
+    Extension(storage): Extension<Arc<Storage>>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(csp): Extension<Arc<Csp>>,
+    Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
+    uri: Uri,
+) -> AxumResult<AxumResponse> {
     let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_rendering_times);
 
+    // since we directly use the Uri-path and not the extracted params from the router,
+    // we have to percent-decode the string here.
+    let original_path = percent_encoding::percent_decode(uri.path().as_bytes())
+        .decode_utf8()
+        .map_err(|_| AxumNope::BadRequest)?;
+
+    let mut req_path: Vec<&str> = original_path.split('/').collect();
+    // Remove the empty start, the name and the version from the path
+    req_path.drain(..3).for_each(drop);
+
     // Pages generated by Rustdoc are not ready to be served with a CSP yet.
-    req.extensions
-        .get_mut::<Csp>()
-        .expect("missing CSP")
-        .suppress(true);
+    csp.suppress(true);
 
-    // Get the request parameters
-    let router = extension!(req, Router);
-
-    // Get the crate name and version from the request
-    let (name, url_version) = (
-        router.find("crate").unwrap_or("").to_string(),
-        router.find("version"),
-    );
-
-    let pool = extension!(req, Pool);
-    let mut conn = pool.get()?;
-    let config = extension!(req, Config);
-    let storage = extension!(req, Storage);
-    let mut req_path = req.url.path();
-
-    // Remove the name and version from the path
-    req_path.drain(..2).for_each(drop);
-
-    // Convenience closure to allow for easy redirection
-    let redirect = |name: &str,
-                    vers: &str,
-                    path: &[&str],
-                    cache_policy: CachePolicy|
-     -> IronResult<Response> {
+    // Convenience function to allow for easy redirection
+    #[instrument]
+    fn redirect(
+        name: &str,
+        vers: &str,
+        path: &[&str],
+        cache_policy: CachePolicy,
+    ) -> AxumResult<AxumResponse> {
+        trace!("redirect");
         // Format and parse the redirect url
-        let redirect_path = format!(
-            "{}/{}/{}/{}",
-            redirect_base(req),
-            name,
-            vers,
-            path.join("/")
-        );
-        let url = ctry!(req, Url::parse(&redirect_path));
+        Ok(axum_cached_redirect(
+            format!("/{}/{}/{}", name, vers, path.join("/")),
+            cache_policy,
+        )?
+        .into_response())
+    }
 
-        Ok(super::cached_redirect(url, cache_policy))
-    };
-
+    trace!("match version");
     rendering_time.step("match version");
 
     // Check the database for releases with the requested version while doing the following:
@@ -372,7 +414,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
-    let release_found = match_version(&mut conn, &name, url_version)?;
+    let release_found = match_version_axum(&pool, &params.name, Some(&params.version)).await?;
+    trace!(?release_found, "found release");
 
     let (version, version_or_latest, is_latest_url) = match release_found.version {
         MatchSemver::Exact((version, _)) => {
@@ -398,35 +441,38 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
             // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
             // versions, redirect the browser to the returned version instead of loading it
             // immediately
-            return redirect(&name, &v, &req_path, CachePolicy::ForeverInCdn);
+            return redirect(&params.name, &v, &req_path, CachePolicy::ForeverInCdn);
         }
     };
 
-    let updater = extension!(req, RepositoryStatsUpdater);
-
+    trace!("crate details");
     rendering_time.step("crate details");
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = cexpect!(
-        req,
-        ctry!(
-            req,
+    let krate = spawn_blocking({
+        let params = params.clone();
+        let version = version.clone();
+        let version_or_latest = version_or_latest.clone();
+        move || {
+            let mut conn = pool.get()?;
             CrateDetails::new(
                 &mut *conn,
-                &name,
+                &params.name,
                 &version,
                 &version_or_latest,
-                Some(updater)
+                Some(&updater),
             )
-        )
-    );
+        }
+    })
+    .await?
+    .ok_or(AxumNope::ResourceNotFound)?;
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
     if req_path.first().copied() == Some(&krate.metadata.default_target) {
         return redirect(
-            &name,
+            &params.name,
             &version_or_latest,
             &req_path[1..],
             CachePolicy::ForeverInCdn,
@@ -434,39 +480,61 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     // Create the path to access the file from
-    let mut path = req_path.join("/");
-    if path.ends_with('/') {
+    let mut storage_path = req_path.join("/");
+    if storage_path.ends_with('/') {
         req_path.pop(); // get rid of empty string
-        path.push_str("index.html");
+        storage_path.push_str("index.html");
         req_path.push("index.html");
     }
-    let mut path = ctry!(req, percent_decode(path.as_bytes()).decode_utf8());
+
+    trace!(?storage_path, ?req_path, "try fetching from storage");
 
     // Attempt to load the file from the database
-    let blob = match storage.fetch_rustdoc_file(
-        &name,
-        &version,
-        &path,
-        krate.archive_storage,
-        &mut rendering_time,
-    ) {
+    let blob = match spawn_blocking({
+        let params = params.clone();
+        let version = version.clone();
+        let storage = storage.clone();
+        let storage_path = storage_path.clone();
+        move || {
+            storage.fetch_rustdoc_file(
+                &params.name,
+                &version,
+                &storage_path,
+                krate.archive_storage,
+                None, // FIXME: &mut rendering_time, re-add this when storage is async
+            )
+        }
+    })
+    .await
+    {
         Ok(file) => file,
         Err(err) => {
-            if !matches!(err.downcast_ref(), Some(Nope::ResourceNotFound))
+            if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
                 && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
             {
-                debug!("got error serving {}: {}", path, err);
+                debug!("got error serving {}: {}", storage_path, err);
             }
             // If it fails, we try again with /index.html at the end
-            path.to_mut().push_str("/index.html");
+            storage_path.push_str("/index.html");
             req_path.push("index.html");
 
-            return if ctry!(
-                req,
-                storage.rustdoc_file_exists(&name, &version, &path, krate.archive_storage)
-            ) {
+            return if spawn_blocking({
+                let params = params.clone();
+                let version = version.clone();
+                let storage = storage.clone();
+                move || {
+                    storage.rustdoc_file_exists(
+                        &params.name,
+                        &version,
+                        &storage_path,
+                        krate.archive_storage,
+                    )
+                }
+            })
+            .await?
+            {
                 redirect(
-                    &name,
+                    &params.name,
                     &version_or_latest,
                     &req_path,
                     CachePolicy::ForeverInCdn,
@@ -475,25 +543,26 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
                 redirect(
-                    &format!("/crate/{}", name),
+                    &format!("/crate/{}", params.name),
                     &format!("{}/target-redirect", version),
                     &req_path,
                     CachePolicy::ForeverInCdn,
                 )
             } else {
-                Err(Nope::ResourceNotFound.into())
+                Err(AxumNope::ResourceNotFound)
             };
         }
     };
 
     // Serve non-html files directly
-    if !path.ends_with(".html") {
+    if !storage_path.ends_with(".html") {
+        trace!(?storage_path, "serve asset");
         rendering_time.step("serve asset");
 
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
-        return Ok(File(blob).serve());
+        return Ok(File(blob).into_response());
     }
 
     rendering_time.step("find latest path");
@@ -507,14 +576,8 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         .with_context(|| {
             format!(
                 "invalid semver in database for crate {}: {}",
-                name, &version
+                params.name, &version
             )
-        })
-        // should be impossible unless there is a semver incompatible version in the db
-        // Note that there is a redirect earlier for semver matches to the exact version
-        .map_err(|err| {
-            utils::report_error(&err);
-            Nope::InternalServerError
         })?
         .pre
         .is_empty());
@@ -550,7 +613,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         "".to_string()
     };
 
-    let query_string = if let Some(query) = req.url.query() {
+    let query_string = if let Some(query) = uri.query() {
         format!("?{}", query)
     } else {
         "".to_string()
@@ -558,10 +621,13 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     let permalink_path = format!(
         "/{}/{}/{}{}",
-        name, latest_version, inner_path, query_string
+        params.name, latest_version, inner_path, query_string
     );
 
-    let latest_path = format!("/crate/{}/latest{}{}", name, target_redirect, query_string);
+    let latest_path = format!(
+        "/crate/{}/latest{}{}",
+        params.name, target_redirect, query_string
+    );
 
     // Set the canonical URL for search engines to the `/latest/` page on docs.rs.
     // Note: The URL this points to may not exist. For instance, if we're rendering
@@ -569,9 +635,9 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
     // the target and will not canonicalize to a URL that doesn't exist.
     // Don't include index.html in the canonical URL.
-    let canonical_url = format!(
-        "https://docs.rs/{}/latest/{}",
-        name,
+    let canonical_path = format!(
+        "/{}/latest/{}",
+        params.name,
         encode_url_path(&inner_path.replace("index.html", ""))
     );
 
@@ -586,20 +652,36 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     rendering_time.step("rewrite html");
-    RustdocPage {
-        latest_path,
-        canonical_url,
-        permalink_path,
-        latest_version,
-        target,
-        inner_path,
-        is_latest_version,
-        is_latest_url,
-        is_prerelease,
-        metadata: krate.metadata.clone(),
-        krate,
-    }
-    .into_response(&blob.content, config.max_parse_memory, req, &path)
+
+    // Build the page of documentation,
+    // inside `spawn_blocking` since it's CPU intensive.
+    spawn_blocking({
+        let metrics = metrics.clone();
+        move || {
+            Ok(RustdocPage {
+                latest_path,
+                canonical_path,
+                permalink_path,
+                latest_version,
+                target,
+                inner_path,
+                is_latest_version,
+                is_latest_url,
+                is_prerelease,
+                metadata: krate.metadata.clone(),
+                krate: krate.clone(),
+            }
+            .into_response(
+                &blob.content,
+                config.max_parse_memory,
+                &templates,
+                &metrics,
+                &config,
+                &storage_path,
+            ))
+        }
+    })
+    .await?
 }
 
 /// Checks whether the given path exists.
@@ -736,7 +818,7 @@ pub(crate) async fn target_redirect_handler(
     };
 
     Ok(axum_cached_redirect(
-        &format!("/{name}/{version_or_latest}/{redirect_path}"),
+        format!("/{name}/{version_or_latest}/{redirect_path}"),
         if is_latest_url {
             CachePolicy::ForeverInCdn
         } else {
@@ -776,14 +858,10 @@ pub(crate) async fn download_handler(
     Extension(storage): Extension<Arc<Storage>>,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match match_version_axum(&pool, &name, Some(&req_version))
+    let (version, _) = match_version_axum(&pool, &name, Some(&req_version))
         .await?
         .assume_exact()?
-    {
-        MatchSemver::Exact((version, _))
-        | MatchSemver::Latest((version, _))
-        | MatchSemver::Semver((version, _)) => version,
-    };
+        .into_parts();
 
     let archive_path = rustdoc_archive_path(&name, &version);
 
@@ -815,7 +893,7 @@ pub(crate) async fn download_handler(
     .await?;
 
     Ok(super::axum_cached_redirect(
-        &format!("{}/{}", config.s3_static_root_path, archive_path),
+        format!("{}/{}", config.s3_static_root_path, archive_path),
         CachePolicy::ForeverInCdn,
     )?)
 }
@@ -840,39 +918,6 @@ pub(crate) async fn static_asset_handler(
         },
     )
     .await?)
-}
-
-/// Serves shared web resources used by rustdoc-generated documentation.
-///
-/// This includes common `css` and `js` files that only change when the compiler is updated, but are
-/// otherwise the same for all crates documented with that compiler. Those have a custom handler to
-/// deduplicate them and save space.
-///
-/// This handler considers only the last component of the request path, and looks for a matching file
-/// in the Storage root.
-pub struct LegacySharedResourceHandler;
-
-impl Handler for LegacySharedResourceHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let path = req.url.path();
-        let filename = path.last().unwrap(); // unwrap is fine: vector is non-empty
-        if let Some(extension) = path::Path::new(filename).extension() {
-            if ["js", "css", "woff", "woff2", "svg", "png"]
-                .iter()
-                .any(|s| *s == extension)
-            {
-                let storage = extension!(req, Storage);
-                let config = extension!(req, Config);
-
-                if let Ok(file) = File::from_path(storage, filename, config) {
-                    return Ok(file.serve());
-                }
-            }
-        }
-
-        // Just always return a 404 here - the main handler will then try the other handlers
-        Err(Nope::ResourceNotFound.into())
-    }
 }
 
 #[cfg(test)]
@@ -2381,15 +2426,16 @@ mod test {
                 .unwrap()
                 .contains("rel=\"canonical\""),);
 
-            assert!(web
-                .get("/dummy-docs/0.1.0/dummy_docs/")
-                .send()?
-                .headers()
-                .get("link")
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .contains("<https://docs.rs/dummy-docs/latest/dummy_docs/>; rel=\"canonical\""),);
+            assert_eq!(
+                web.get("/dummy-docs/0.1.0/dummy_docs/")
+                    .send()?
+                    .headers()
+                    .get("link")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                "<https://docs.rs/dummy-docs/latest/dummy_docs/>; rel=\"canonical\""
+            );
 
             assert_eq!(
                 web.get(&format!("/dummy-docs/0.1.0/dummy_docs/{utf8_filename}"))
@@ -2417,7 +2463,7 @@ mod test {
                     "<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/>; rel=\"canonical\""
                 ),);
 
-            assert!(
+            assert_eq!(
                 web
                     .get("/dummy-nodocs/0.1.0/dummy_nodocs/struct.Foo.html")
                     .send()?
@@ -2425,8 +2471,8 @@ mod test {
                 .get("link")
                 .unwrap()
                 .to_str()
-            .unwrap()
-            .contains("<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html>; rel=\"canonical\""),
+            .unwrap(),
+            "<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html>; rel=\"canonical\"",
             );
 
             Ok(())
