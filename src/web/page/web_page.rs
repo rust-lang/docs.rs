@@ -133,9 +133,12 @@ macro_rules! impl_axum_webpage {
                         (canonical_url)(&self)
                     };
                     if let Some(canonical_url) = canonical_url {
-                        response.headers_mut().insert(
-                            axum::http::header::LINK,
-                            format!(r#"<{}>; rel="canonical"#, canonical_url).parse().unwrap(),
+                        use axum::headers::HeaderMapExt;
+
+                        response.headers_mut().typed_insert(
+                            $crate::web::headers::CanonicalUrl(
+                                canonical_url.parse().expect("invalid URL for canonical link")
+                            ),
                         );
                     }
                 )?
