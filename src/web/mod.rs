@@ -115,6 +115,7 @@ use iron::{
     Chain, Handler, Iron, IronError, IronResult, Listening, Request, Response, Url,
 };
 use page::TemplateData;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use postgres::Client;
 use router::{NoRoute, TrailingSlash};
 use semver::{Version, VersionReq};
@@ -125,6 +126,15 @@ use strangler::StranglerService;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use url::form_urlencoded;
+
+// from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
+// and https://github.com/tokio-rs/axum/blob/main/axum-extra/src/lib.rs
+const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
+const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
+
+pub(crate) fn encode_url_path(path: &str) -> String {
+    utf8_percent_encode(path, PATH).to_string()
+}
 
 /// Duration of static files for staticfile and DatabaseFileHandler (in seconds)
 const STATIC_FILE_CACHE_DURATION: u64 = 60 * 60 * 24 * 30 * 12; // 12 months

@@ -4,8 +4,8 @@ use crate::{
     impl_axum_webpage,
     utils::{get_correct_docsrs_style_file, spawn_blocking},
     web::{
-        cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
-        MatchSemver, MetaData,
+        cache::CachePolicy, encode_url_path, error::AxumNope, file::File as DbFile,
+        headers::CanonicalUrl, MatchSemver, MetaData,
     },
     Storage,
 };
@@ -253,7 +253,11 @@ pub(crate) async fn source_browser_handler(
     })
     .await?;
 
-    let canonical_url = format!("https://docs.rs/crate/{}/latest/source/{}", name, path);
+    let canonical_url = format!(
+        "https://docs.rs/crate/{}/latest/source/{}",
+        name,
+        encode_url_path(&path),
+    );
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
@@ -321,7 +325,7 @@ pub(crate) async fn source_browser_handler(
 #[cfg(test)]
 mod tests {
     use crate::test::*;
-    use crate::web::cache::CachePolicy;
+    use crate::web::{cache::CachePolicy, encode_url_path};
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use test_case::test_case;
@@ -336,6 +340,36 @@ mod tests {
                 attributes.get("href").unwrap().to_string()
             })
             .collect()
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn fetch_source_file_utf8_path(archive_storage: bool) {
+        wrapper(|env| {
+            let filename = "序列化工具简单测试结果.pdf";
+
+            env.fake_release()
+                .archive_storage(archive_storage)
+                .name("fake")
+                .version("0.1.0")
+                .source_file(filename, b"some_random_content")
+                .create()?;
+
+            let web = env.frontend();
+            let response = web
+                .get(&format!("/crate/fake/0.1.0/source/{filename}"))
+                .send()?;
+            assert!(response.status().is_success());
+            assert_eq!(
+                response.headers().get("link").unwrap(),
+                &format!(
+                    "<https://docs.rs/crate/fake/latest/source/{}>; rel=\"canonical\"",
+                    encode_url_path(filename),
+                )
+            );
+            assert!(response.text()?.contains("some_random_content"));
+            Ok(())
+        });
     }
 
     #[test_case(true)]
