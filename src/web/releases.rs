@@ -1455,8 +1455,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
-                    name: "Foo Bar".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .create()?;
 

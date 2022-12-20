@@ -776,8 +776,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
-                    name: "Foo Bar".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .create()?;
 
@@ -796,14 +794,10 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobarv2".into(),
-                    name: "Foo Bar".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
-                    name: "Bar Foo".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .create()?;
 
@@ -827,8 +821,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
-                    name: "Bar Foo".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .create()?;
 
@@ -847,8 +839,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoov2".into(),
-                    name: "Bar Foo".into(),
-                    email: "foobar@example.org".into(),
                 })
                 .create()?;
 
