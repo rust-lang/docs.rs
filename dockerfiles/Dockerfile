@@ -17,7 +17,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libssl-dev zlib1g-dev ca-certificates
 
 # Install the stable toolchain with rustup
-RUN curl https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init >/tmp/rustup-init && \
+RUN curl https://sh.rustup.rs >/tmp/rustup-init && \
     chmod +x /tmp/rustup-init && \
     /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
 ENV PATH=/root/.cargo/bin:$PATH
