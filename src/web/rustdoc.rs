@@ -10,6 +10,7 @@ use crate::{
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
+        encode_url_path,
         error::{AxumNope, AxumResult, Nope},
         file::File,
         match_version, match_version_axum,
@@ -571,7 +572,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
     let canonical_url = format!(
         "https://docs.rs/{}/latest/{}",
         name,
-        inner_path.replace("index.html", "")
+        encode_url_path(&inner_path.replace("index.html", ""))
     );
 
     metrics
@@ -876,7 +877,11 @@ impl Handler for LegacySharedResourceHandler {
 
 #[cfg(test)]
 mod test {
-    use crate::{test::*, web::cache::CachePolicy, Config};
+    use crate::{
+        test::*,
+        web::{cache::CachePolicy, encode_url_path},
+        Config,
+    };
     use anyhow::Context;
     use kuchiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -2347,11 +2352,13 @@ mod test {
                 .rustdoc_file("dummy_dash/index.html")
                 .create()?;
 
+            let utf8_filename = "序列化工具简单测试结果.html";
             env.fake_release()
                 .name("dummy-docs")
                 .version("0.1.0")
                 .documentation_url(Some("https://docs.rs/foo".to_string()))
                 .rustdoc_file("dummy_docs/index.html")
+                .rustdoc_file(&format!("dummy_docs/{utf8_filename}"))
                 .create()?;
 
             env.fake_release()
@@ -2384,6 +2391,20 @@ mod test {
                 .unwrap()
                 .contains("<https://docs.rs/dummy-docs/latest/dummy_docs/>; rel=\"canonical\""),);
 
+            assert_eq!(
+                web.get(&format!("/dummy-docs/0.1.0/dummy_docs/{utf8_filename}"))
+                    .send()?
+                    .headers()
+                    .get("link")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                format!(
+                    "<https://docs.rs/dummy-docs/latest/dummy_docs/{}>; rel=\"canonical\"",
+                    encode_url_path(utf8_filename)
+                )
+            );
+
             assert!(web
                 .get("/dummy-nodocs/0.1.0/dummy_nodocs/")
                 .send()?
@@ -2407,6 +2428,7 @@ mod test {
             .unwrap()
             .contains("<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html>; rel=\"canonical\""),
             );
+
             Ok(())
         })
     }
