@@ -298,7 +298,7 @@ mod tests {
             fn owners(conn: &mut Client, crate_id: i32) -> Result<Vec<String>> {
                 Ok(conn
                     .query(
-                        "SELECT name FROM owners
+                        "SELECT login FROM owners
                         INNER JOIN owner_rels ON owners.id = owner_rels.oid
                         WHERE owner_rels.cid = $1",
                         &[&crate_id],
@@ -317,8 +317,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "malicious actor".into(),
                     avatar: "https://example.org/malicious".into(),
-                    name: "malicious actor".into(),
-                    email: "malicious@example.org".into(),
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
@@ -348,8 +346,6 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "Peter Rabbit".into(),
                     avatar: "https://example.org/peter".into(),
-                    name: "Peter Rabbit".into(),
-                    email: "peter@example.org".into(),
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v2)?);

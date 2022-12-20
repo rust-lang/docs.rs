@@ -44,9 +44,7 @@ impl Default for ReleaseData {
 #[derive(Debug, Clone)]
 pub struct CrateOwner {
     pub(crate) avatar: String,
-    pub(crate) email: String,
     pub(crate) login: String,
-    pub(crate) name: String,
 }
 
 impl Api {
@@ -153,11 +151,7 @@ impl Api {
             #[serde(default)]
             avatar: Option<String>,
             #[serde(default)]
-            email: Option<String>,
-            #[serde(default)]
             login: Option<String>,
-            #[serde(default)]
-            name: Option<String>,
         }
 
         let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
@@ -174,9 +168,7 @@ impl Api {
             })
             .map(|data| CrateOwner {
                 avatar: data.avatar.unwrap_or_default(),
-                email: data.email.unwrap_or_default(),
                 login: data.login.unwrap_or_default(),
-                name: data.name.unwrap_or_default(),
             })
             .collect();
 

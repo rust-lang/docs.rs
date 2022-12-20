@@ -393,13 +393,11 @@ fn update_owners_in_database(
     // Update any existing owner data since it is mutable and could have changed since last
     // time we pulled it
     let owner_upsert = conn.prepare(
-        "INSERT INTO owners (login, avatar, name, email)
-        VALUES ($1, $2, $3, $4)
+        "INSERT INTO owners (login, avatar)
+        VALUES ($1, $2)
         ON CONFLICT (login) DO UPDATE
             SET
-                avatar = EXCLUDED.avatar,
-                name = EXCLUDED.name,
-                email = EXCLUDED.email
+                avatar = EXCLUDED.avatar
         RETURNING id",
     )?;
 
@@ -407,10 +405,7 @@ fn update_owners_in_database(
         .iter()
         .map(|owner| -> Result<_> {
             Ok(conn
-                .query_one(
-                    &owner_upsert,
-                    &[&owner.login, &owner.avatar, &owner.name, &owner.email],
-                )?
+                .query_one(&owner_upsert, &[&owner.login, &owner.avatar])?
                 .get(0))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -584,22 +579,18 @@ mod test {
 
             let owner1 = CrateOwner {
                 avatar: "avatar".into(),
-                email: "email".into(),
                 login: "login".into(),
-                name: "name".into(),
             };
 
             update_owners_in_database(&mut conn, &[owner1.clone()], crate_id)?;
 
             let owner_def = conn.query_one(
-                "SELECT login, name, email, avatar 
+                "SELECT login, avatar 
                 FROM owners",
                 &[],
             )?;
             assert_eq!(owner_def.get::<_, String>(0), owner1.login);
-            assert_eq!(owner_def.get::<_, String>(1), owner1.name);
-            assert_eq!(owner_def.get::<_, String>(2), owner1.email);
-            assert_eq!(owner_def.get::<_, String>(3), owner1.avatar);
+            assert_eq!(owner_def.get::<_, String>(1), owner1.avatar);
 
             let owner_rel = conn.query_one(
                 "SELECT o.login 
@@ -627,8 +618,6 @@ mod test {
                 &[CrateOwner {
                     login: "login".into(),
                     avatar: "avatar".into(),
-                    email: "email".into(),
-                    name: "name".into(),
                 }],
                 crate_id,
             )?;
@@ -636,20 +625,12 @@ mod test {
             let updated_owner = CrateOwner {
                 login: "login".into(),
                 avatar: "avatar2".into(),
-                email: "email2".into(),
-                name: "name2".into(),
             };
             update_owners_in_database(&mut conn, &[updated_owner.clone()], crate_id)?;
 
-            let owner_def = conn.query_one(
-                "SELECT login, name, email, avatar 
-                FROM owners",
-                &[],
-            )?;
+            let owner_def = conn.query_one("SELECT login, avatar FROM owners", &[])?;
             assert_eq!(owner_def.get::<_, String>(0), updated_owner.login);
-            assert_eq!(owner_def.get::<_, String>(1), updated_owner.name);
-            assert_eq!(owner_def.get::<_, String>(2), updated_owner.email);
-            assert_eq!(owner_def.get::<_, String>(3), updated_owner.avatar);
+            assert_eq!(owner_def.get::<_, String>(1), updated_owner.avatar);
 
             let owner_rel = conn.query_one(
                 "SELECT o.login 
@@ -682,8 +663,6 @@ mod test {
                 &[CrateOwner {
                     login: "login".into(),
                     avatar: "avatar".into(),
-                    email: "email".into(),
-                    name: "name".into(),
                 }],
                 crate_id,
             )?;
@@ -692,8 +671,6 @@ mod test {
                 .map(|i| CrateOwner {
                     login: format!("login{}", i),
                     avatar: format!("avatar{}", i),
-                    email: format!("email{}", i),
-                    name: format!("name{}", i),
                 })
                 .collect();
 

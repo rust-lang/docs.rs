@@ -848,6 +848,17 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TABLE files ADD COLUMN public BOOL NOT NULL DEFAULT FALSE;",
             "ALTER TABLE files DROP COLUMN public;"
         ),
+        sql_migration!(
+            context, 36, "remove email & name columns from owner table",
+            "
+            ALTER TABLE owners DROP COLUMN email;
+            ALTER TABLE owners DROP COLUMN name;
+            ",
+            "
+            ALTER TABLE owners ADD COLUMN email VARCHAR(255);
+            ALTER TABLE owners ADD COLUMN name VARCHAR(255);
+            ",
+        ),
 
     ];
 
