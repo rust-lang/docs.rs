@@ -181,7 +181,9 @@ mod tests {
     use crate::test::{wrapper, FakeBuild};
 
     use aws_sdk_cloudfront::{Client, Config, Credentials, Region};
-    use aws_smithy_client::{erase::DynConnector, test_connection::TestConnection};
+    use aws_smithy_client::{
+        erase::DynConnector, http_connector::HttpConnector, test_connection::TestConnection,
+    };
     use aws_smithy_http::body::SdkBody;
     use chrono::{Duration, Timelike};
 
@@ -240,7 +242,9 @@ mod tests {
         });
     }
 
-    async fn get_mock_config() -> aws_sdk_cloudfront::Config {
+    async fn get_mock_config(
+        http_connector: impl Into<HttpConnector>,
+    ) -> aws_sdk_cloudfront::Config {
         let cfg = aws_config::from_env()
             .region(Region::new("eu-central-1"))
             .credentials_provider(Credentials::new(
@@ -250,6 +254,7 @@ mod tests {
                 None,
                 "dummy",
             ))
+            .http_connector(http_connector)
             .load()
             .await;
 
@@ -341,8 +346,7 @@ mod tests {
                 ))
                 .unwrap(),
         )]);
-        let client =
-            Client::from_conf_conn(get_mock_config().await, DynConnector::new(conn.clone()));
+        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
 
         CdnBackend::cloudfront_invalidation(
             &client,

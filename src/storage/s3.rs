@@ -1,6 +1,6 @@
 use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
-use anyhow::{Context, Error};
+use anyhow::Error;
 use aws_sdk_s3::{
     config::retry::RetryConfig,
     error as s3_error,
@@ -42,11 +42,7 @@ impl S3Backend {
             .region(Region::new(config.s3_region.clone()));
 
         if let Some(ref endpoint) = config.s3_endpoint {
-            config_builder = config_builder.endpoint_resolver(Endpoint::immutable(
-                endpoint
-                    .parse::<http::Uri>()
-                    .context("got invalid URI as S3 endpoint")?,
-            ));
+            config_builder = config_builder.endpoint_resolver(Endpoint::immutable(endpoint)?);
         }
 
         let client = Client::from_conf(config_builder.build());
@@ -84,9 +80,9 @@ impl S3Backend {
                 .await
             {
                 Ok(_) => Ok(true),
-                Err(SdkError::ServiceError { err, raw })
-                    if (matches!(err.kind, s3_error::HeadObjectErrorKind::NotFound(_))
-                        || raw.http().status() == http::StatusCode::NOT_FOUND) =>
+                Err(SdkError::ServiceError(err))
+                    if (matches!(err.err().kind, s3_error::HeadObjectErrorKind::NotFound(_))
+                        || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
                 }
@@ -113,11 +109,11 @@ impl S3Backend {
                             .any(|tag| tag.value() == Some(PUBLIC_ACCESS_VALUE))
                     })
                     .unwrap_or(false)),
-                Err(SdkError::ServiceError { err, raw }) => {
-                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                Err(SdkError::ServiceError(err)) => {
+                    if err.raw().http().status() == http::StatusCode::NOT_FOUND {
                         Err(super::PathNotFoundError.into())
                     } else {
-                        Err(err.into())
+                        Err(err.into_err().into())
                     }
                 }
                 Err(other) => Err(other.into()),
@@ -148,11 +144,11 @@ impl S3Backend {
                 .await
             {
                 Ok(_) => Ok(()),
-                Err(SdkError::ServiceError { err, raw }) => {
-                    if raw.http().status() == http::StatusCode::NOT_FOUND {
+                Err(SdkError::ServiceError(err)) => {
+                    if err.raw().http().status() == http::StatusCode::NOT_FOUND {
                         Err(super::PathNotFoundError.into())
                     } else {
-                        Err(err.into())
+                        Err(err.into_err().into())
                     }
                 }
                 Err(other) => Err(other.into()),
@@ -175,9 +171,11 @@ impl S3Backend {
                 .set_range(range.map(|r| format!("bytes={}-{}", r.start(), r.end())))
                 .send()
                 .map_err(|err| match err {
-                    SdkError::ServiceError { err, raw }
-                        if (matches!(err.kind, s3_error::GetObjectErrorKind::NoSuchKey(_))
-                            || raw.http().status() == http::StatusCode::NOT_FOUND) =>
+                    SdkError::ServiceError(err)
+                        if (matches!(
+                            err.err().kind,
+                            s3_error::GetObjectErrorKind::NoSuchKey(_)
+                        ) || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
                     {
                         super::PathNotFoundError.into()
                     }
@@ -198,7 +196,7 @@ impl S3Backend {
                 .last_modified
                 // This is a bug from AWS, it should always have a modified date of when it was created if nothing else.
                 // Workaround it by passing now as the modification time, since the exact time doesn't really matter.
-                .map(|dt| dt.to_chrono_utc())
+                .and_then(|dt| dt.to_chrono_utc().ok())
                 .unwrap_or_else(Utc::now);
 
             let compression = res.content_encoding.and_then(|s| s.parse().ok());
