@@ -108,7 +108,7 @@ tera = { version = "1.5.0", features = ["builtins"] }
 walkdir = "2"
 
 # Date and Time utilities
-chrono = { version = "0.4.11", features = ["serde"] }
+chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 time = "0.1" # TODO: Remove once `iron` is removed
 
 # Transitive dependencies we don't use directly but need to have specific versions of
