@@ -475,7 +475,7 @@ impl DatabaseSubcommand {
 
             #[cfg(feature = "consistency_check")]
             Self::Synchronize { dry_run } => {
-                docs_rs::utils::consistency::run_check(&mut *ctx.conn()?, &*ctx.index()?, dry_run)?;
+                docs_rs::utils::consistency::run_check(&ctx, dry_run)?;
             }
         }
         Ok(())

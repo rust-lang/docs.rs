@@ -11,7 +11,7 @@ pub use self::pool::{Pool, PoolClient, PoolError};
 
 mod add_package;
 pub mod blacklist;
-mod delete;
+pub mod delete;
 pub(crate) mod file;
 mod migrate;
 mod pool;
