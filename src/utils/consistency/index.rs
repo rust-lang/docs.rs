@@ -1,22 +1,33 @@
-use super::data::{Crate, CrateName, Data, Release, Version};
+use super::data::{Crate, Crates, Release, Releases};
 use crate::Index;
+use anyhow::Result;
 use rayon::iter::ParallelIterator;
 
-pub(crate) fn load(index: &Index) -> Result<Data, anyhow::Error> {
-    let crates = index
+pub(super) fn load(index: &Index) -> Result<Crates> {
+    let mut result: Crates = index
         .crates()?
         .crates_parallel()
         .map(|krate| {
             krate.map(|krate| {
-                let releases = krate
+                let mut releases: Releases = krate
                     .versions()
                     .iter()
-                    .map(|version| (Version(version.version().into()), Release::default()))
+                    .map(|version| Release {
+                        version: version.version().into(),
+                        yanked: Some(version.is_yanked()),
+                    })
                     .collect();
-                (CrateName(krate.name().into()), Crate { releases })
+                releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
+
+                Crate {
+                    name: krate.name().into(),
+                    releases,
+                }
             })
         })
         .collect::<Result<_, _>>()?;
 
-    Ok(Data { crates })
+    result.sort_by(|lhs, rhs| lhs.name.cmp(&rhs.name));
+
+    Ok(result)
 }

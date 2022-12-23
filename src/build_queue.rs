@@ -372,7 +372,7 @@ impl BuildQueue {
         Ok(crates_added)
     }
 
-    fn set_yanked(&self, conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
+    pub fn set_yanked(&self, conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
         let activity = if yanked { "yanked" } else { "unyanked" };
 
         match conn

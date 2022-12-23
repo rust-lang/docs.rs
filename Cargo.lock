@@ -1444,6 +1444,7 @@ dependencies = [
  "httpdate",
  "hyper",
  "indoc",
+ "itertools",
  "kuchiki",
  "log",
  "lol_html",

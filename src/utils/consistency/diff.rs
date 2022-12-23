@@ -1,108 +1,211 @@
-use super::data::{Crate, CrateName, Data, Release, Version};
-use std::{
-    cmp::Ordering,
-    collections::{btree_map::IntoIter, BTreeMap},
-    fmt::Debug,
-    iter::Peekable,
+use std::fmt::Display;
+
+use super::data::Crate;
+use itertools::{
+    EitherOrBoth::{Both, Left, Right},
+    Itertools,
 };
 
-#[derive(Debug)]
-pub(crate) struct DataDiff {
-    pub(crate) crates: DiffMap<CrateName, Crate>,
+#[derive(Debug, PartialEq)]
+pub(super) enum Difference {
+    CrateNotInIndex(String),
+    CrateNotInDb(String, Vec<String>),
+    ReleaseNotInIndex(String, String),
+    ReleaseNotInDb(String, String),
+    ReleaseYank(String, String, bool),
 }
 
-#[derive(Debug)]
-pub(crate) struct CrateDiff {
-    pub(crate) releases: DiffMap<Version, Release>,
-}
-
-#[derive(Debug)]
-pub(crate) struct ReleaseDiff {}
-
-pub(crate) enum Diff<Key, Value: Diffable> {
-    Both(Key, Value::Diff),
-    Left(Key, Value),
-    Right(Key, Value),
-}
-
-pub(crate) trait Diffable {
-    type Diff;
-
-    fn diff(self, other: Self) -> Self::Diff;
-}
-
-#[derive(Debug)]
-pub(crate) struct DiffMap<Key, Value> {
-    left: Peekable<std::collections::btree_map::IntoIter<Key, Value>>,
-    right: Peekable<IntoIter<Key, Value>>,
-}
-
-impl<Key, Value> DiffMap<Key, Value> {
-    fn new(left: BTreeMap<Key, Value>, right: BTreeMap<Key, Value>) -> Self {
-        Self {
-            left: left.into_iter().peekable(),
-            right: right.into_iter().peekable(),
-        }
-    }
-}
-
-impl<Key: Ord, Value: Diffable> Iterator for DiffMap<Key, Value> {
-    type Item = Diff<Key, Value>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match (self.left.peek(), self.right.peek()) {
-            (Some((left, _)), Some((right, _))) => match left.cmp(right) {
-                Ordering::Less => {
-                    let (key, value) = self.left.next().unwrap();
-                    Some(Diff::Left(key, value))
-                }
-                Ordering::Equal => {
-                    let (key, left) = self.left.next().unwrap();
-                    let (_, right) = self.right.next().unwrap();
-                    Some(Diff::Both(key, left.diff(right)))
-                }
-                Ordering::Greater => {
-                    let (key, value) = self.right.next().unwrap();
-                    Some(Diff::Right(key, value))
-                }
-            },
-            (Some((_, _)), None) => {
-                let (key, value) = self.left.next().unwrap();
-                Some(Diff::Left(key, value))
+impl Display for Difference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Difference::CrateNotInIndex(name) => {
+                write!(f, "Crate in db not in index: {name}")?;
             }
-            (None, Some((_, _))) => {
-                let (key, value) = self.right.next().unwrap();
-                Some(Diff::Right(key, value))
+            Difference::CrateNotInDb(name, _versions) => {
+                write!(f, "Crate in index not in db: {name}")?;
             }
-            (None, None) => None,
+            Difference::ReleaseNotInIndex(name, version) => {
+                write!(f, "Release in db not in index: {name} {version}")?;
+            }
+            Difference::ReleaseNotInDb(name, version) => {
+                write!(f, "Release in index not in db: {name} {version}")?;
+            }
+            Difference::ReleaseYank(name, version, yanked) => {
+                write!(
+                    f,
+                    "release yanked difference, index yanked:{yanked}, release: {name} {version}",
+                )?;
+            }
         }
+        Ok(())
     }
 }
 
-impl Diffable for Data {
-    type Diff = DataDiff;
+pub(super) fn calculcate_diff<'a, I>(db_data: I, index_data: I) -> Vec<Difference>
+where
+    I: Iterator<Item = &'a Crate>,
+{
+    let mut result = Vec::new();
 
-    fn diff(self, other: Self) -> Self::Diff {
-        DataDiff {
-            crates: DiffMap::new(self.crates, other.crates),
-        }
+    for crates_diff in db_data.merge_join_by(index_data, |db, index| db.name.cmp(&index.name)) {
+        match crates_diff {
+            Both(db_crate, index_crate) => {
+                for release_diff in db_crate
+                    .releases
+                    .iter()
+                    .merge_join_by(index_crate.releases.iter(), |db_release, index_release| {
+                        db_release.version.cmp(&index_release.version)
+                    })
+                {
+                    match release_diff {
+                        Both(db_release, index_release) => {
+                            let index_yanked =
+                                index_release.yanked.expect("index always has yanked-state");
+                            // if `db_release.yanked` is `None`, the record
+                            // is coming from the build queue, not the `releases`
+                            // table.
+                            // In this case, we skip this check.
+                            if let Some(db_yanked) = db_release.yanked {
+                                if db_yanked != index_yanked {
+                                    result.push(Difference::ReleaseYank(
+                                        db_crate.name.clone(),
+                                        db_release.version.clone(),
+                                        index_yanked,
+                                    ));
+                                }
+                            }
+                        }
+                        Left(db_release) => result.push(Difference::ReleaseNotInIndex(
+                            db_crate.name.clone(),
+                            db_release.version.clone(),
+                        )),
+                        Right(index_release) => result.push(Difference::ReleaseNotInDb(
+                            index_crate.name.clone(),
+                            index_release.version.clone(),
+                        )),
+                    }
+                }
+            }
+            Left(db_crate) => result.push(Difference::CrateNotInIndex(db_crate.name.clone())),
+            Right(index_crate) => result.push(Difference::CrateNotInDb(
+                index_crate.name.clone(),
+                index_crate
+                    .releases
+                    .iter()
+                    .map(|r| r.version.clone())
+                    .collect(),
+            )),
+        };
     }
+
+    result
 }
 
-impl Diffable for Crate {
-    type Diff = CrateDiff;
+#[cfg(test)]
+mod tests {
+    use super::super::data::Release;
+    use super::*;
+    use std::iter;
 
-    fn diff(self, other: Self) -> Self::Diff {
-        CrateDiff {
-            releases: DiffMap::new(self.releases, other.releases),
-        }
+    #[test]
+    fn test_empty() {
+        assert!(calculcate_diff(iter::empty(), iter::empty()).is_empty());
     }
-}
 
-impl Diffable for Release {
-    type Diff = ReleaseDiff;
+    #[test]
+    fn test_crate_not_in_index() {
+        let db_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![],
+        }];
 
-    fn diff(self, _other: Self) -> Self::Diff {
-        ReleaseDiff {}
+        assert_eq!(
+            calculcate_diff(db_releases.iter(), vec![].iter()),
+            vec![Difference::CrateNotInIndex("krate".into())]
+        );
+    }
+
+    #[test]
+    fn test_crate_not_in_db() {
+        let index_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![
+                Release {
+                    version: "0.0.2".into(),
+                    yanked: Some(false),
+                },
+                Release {
+                    version: "0.0.3".into(),
+                    yanked: Some(true),
+                },
+            ],
+        }];
+
+        assert_eq!(
+            calculcate_diff(vec![].iter(), index_releases.iter()),
+            vec![Difference::CrateNotInDb(
+                "krate".into(),
+                vec!["0.0.2".into(), "0.0.3".into()]
+            )]
+        );
+    }
+
+    #[test]
+    fn test_yank_diff() {
+        let db_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![
+                Release {
+                    version: "0.0.2".into(),
+                    yanked: Some(true),
+                },
+                Release {
+                    version: "0.0.3".into(),
+                    yanked: Some(true),
+                },
+            ],
+        }];
+        let index_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![
+                Release {
+                    version: "0.0.2".into(),
+                    yanked: Some(false),
+                },
+                Release {
+                    version: "0.0.3".into(),
+                    yanked: Some(true),
+                },
+            ],
+        }];
+
+        assert_eq!(
+            calculcate_diff(db_releases.iter(), index_releases.iter()),
+            vec![Difference::ReleaseYank(
+                "krate".into(),
+                "0.0.2".into(),
+                false,
+            )]
+        );
+    }
+
+    #[test]
+    fn test_yank_diff_without_db_data() {
+        let db_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![Release {
+                version: "0.0.2".into(),
+                yanked: None,
+            }],
+        }];
+        let index_releases = vec![Crate {
+            name: "krate".into(),
+            releases: vec![Release {
+                version: "0.0.2".into(),
+                yanked: Some(false),
+            }],
+        }];
+
+        assert!(calculcate_diff(db_releases.iter(), index_releases.iter()).is_empty());
     }
 }
