@@ -671,6 +671,21 @@ mod test {
     }
 
     #[test]
+    fn double_slash_does_redirect_and_remove_slash() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("bat")
+                .version("0.2.0")
+                .create()
+                .unwrap();
+            let web = env.frontend();
+            let response = web.get("/bat//").send()?;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        })
+    }
+
+    #[test]
     fn binary_docs_redirect_to_crate() {
         wrapper(|env| {
             env.fake_release()
