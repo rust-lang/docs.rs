@@ -3,12 +3,6 @@ ignore = [
     "RUSTSEC-2020-0036", # failure is officially deprecated/unmaintained
     # https://github.com/rust-lang/docs.rs/issues/1014
 
-    "RUSTSEC-2020-0071", # `time` localtime_r segfault
-    # https://github.com/rust-lang/docs.rs/issues/1523
-
-    "RUSTSEC-2020-0159", # `chrono` localtime_r segfault
-    # https://github.com/rust-lang/docs.rs/issues/1525
-
     "RUSTSEC-2021-0127", # serde_cbor is unmaintained
     # https://github.com/rust-lang/docs.rs/issues/1568
 ]
