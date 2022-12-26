@@ -1,3 +1,4 @@
+use super::headers::CanonicalUrl;
 use super::MatchSemver;
 use crate::db::types::Feature;
 use crate::{
@@ -16,12 +17,12 @@ use std::collections::{HashMap, VecDeque};
 
 const DEFAULT_NAME: &str = "default";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct FeaturesPage {
     metadata: MetaData,
     features: Option<Vec<Feature>>,
     default_len: usize,
-    canonical_url: String,
+    canonical_url: CanonicalUrl,
     is_latest_url: bool,
 }
 
@@ -47,8 +48,8 @@ pub(crate) async fn build_features_handler(
             MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
 
             MatchSemver::Semver((version, _)) => {
-                return Ok(super::axum_cached_redirect(
-                    &format!("/crate/{}/{}/features", &name, version),
+                return Ok(super::internal_redirect(
+                    format!("/crate/{}/{}/features", &name, version),
                     CachePolicy::ForeverInCdn,
                 )?
                 .into_response());
@@ -87,7 +88,7 @@ pub(crate) async fn build_features_handler(
         features,
         default_len,
         is_latest_url,
-        canonical_url: format!("https://docs.rs/crate/{}/latest/features", &name),
+        canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name))?,
     }
     .into_response())
 }

@@ -1,4 +1,4 @@
-use super::{cache::CachePolicy, MatchSemver};
+use super::{cache::CachePolicy, headers::CanonicalUrl, MatchSemver};
 use crate::{
     db::Pool,
     docbuilder::Limits,
@@ -25,12 +25,12 @@ pub(crate) struct Build {
     build_time: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
     limits: Limits,
-    canonical_url: String,
+    canonical_url: CanonicalUrl,
 }
 
 impl_axum_webpage! {
@@ -49,8 +49,8 @@ pub(crate) async fn build_list_handler(
         MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
 
         MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}/builds", name, version),
+            return Ok(super::internal_redirect(
+                format!("/crate/{}/{}/builds", name, version),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());
@@ -74,7 +74,7 @@ pub(crate) async fn build_list_handler(
         metadata,
         builds,
         limits,
-        canonical_url: format!("https://docs.rs/crate/{}/latest/builds", name),
+        canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/builds", name))?,
     }
     .into_response())
 }
@@ -89,8 +89,8 @@ pub(crate) async fn build_list_json_handler(
     {
         MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
         MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}/builds.json", name, version),
+            return Ok(super::internal_redirect(
+                format!("/crate/{}/{}/builds.json", name, version),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());

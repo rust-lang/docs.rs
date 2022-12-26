@@ -318,8 +318,8 @@ pub(crate) async fn crate_details_handler(
 ) -> AxumResult<AxumResponse> {
     // this handler must always called with a crate name
     if params.version.is_none() {
-        return Ok(super::axum_cached_redirect(
-            &format!("/crate/{}/latest", params.name),
+        return Ok(super::internal_redirect(
+            format!("/crate/{}/latest", params.name),
             CachePolicy::ForeverInCdn,
         )?
         .into_response());
@@ -342,8 +342,8 @@ pub(crate) async fn crate_details_handler(
         MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
         MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}", &params.name, version),
+            return Ok(super::internal_redirect(
+                format!("/crate/{}/{}", &params.name, version),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());

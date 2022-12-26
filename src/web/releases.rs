@@ -7,15 +7,17 @@ use crate::{
     impl_axum_webpage,
     utils::{report_error, spawn_blocking},
     web::{
-        axum_parse_uri_with_params, axum_redirect,
+        cache::CachePolicy,
+        encode_path_for_uri,
         error::{AxumNope, AxumResult},
-        match_version_axum,
+        internal_redirect, match_version_axum, redirect,
     },
     BuildQueue, Config, Metrics,
 };
 use anyhow::{anyhow, Context as _, Result};
 use axum::{
     extract::{Extension, Path, Query},
+    http::Uri,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -410,10 +412,22 @@ pub(crate) async fn releases_failures_by_stars_handler(
 }
 
 pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl IntoResponse> {
-    axum_redirect(format!(
-        "https://crates.io/users/{}",
-        owner.strip_prefix('@').unwrap_or(&owner)
-    ))
+    redirect(
+        Uri::builder()
+            .scheme("https")
+            .authority("crates.io")
+            .path_and_query(
+                encode_path_for_uri(format!(
+                    "/users/{}",
+                    owner.strip_prefix('@').unwrap_or(&owner)
+                ))
+                .context("could encode path for URI")?,
+            )
+            .build()
+            // this unwrap is safe since we safely encode the path above
+            .unwrap(),
+        CachePolicy::NoCaching,
+    )
     .map_err(|_| AxumNope::OwnerNotFound)
 }
 
@@ -494,10 +508,10 @@ async fn redirect_to_random_crate(
 
         metrics.im_feeling_lucky_searches.inc();
 
-        Ok(axum_redirect(format!(
-            "/{}/{}/{}/",
-            name, version, target_name
-        ))?)
+        Ok(internal_redirect(
+            format!("/{}/{}/{}/", name, version, target_name),
+            CachePolicy::NoCaching,
+        )?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
         Err(AxumNope::NoResults)
@@ -549,16 +563,22 @@ pub(crate) async fn search_handler(
             let (version, _) = matchver.version.into_parts();
             let krate = matchver.corrected_name.unwrap_or_else(|| krate.to_string());
 
-            let uri = if matchver.rustdoc_status {
+            if matchver.rustdoc_status {
                 let target_name = matchver.target_name;
-                axum_parse_uri_with_params(&format!("/{krate}/{version}/{target_name}/"), queries)?
-            } else {
-                format!("/crate/{krate}/{version}")
-                    .parse::<http::Uri>()
-                    .context("could not parse redirect URI")?
-            };
 
-            return Ok(super::axum_redirect(uri)?.into_response());
+                return Ok(super::internal_redirect_with_queries(
+                    format!("/{krate}/{version}/{target_name}/"),
+                    queries,
+                    CachePolicy::NoCaching,
+                )?
+                .into_response());
+            } else {
+                return Ok(super::internal_redirect(
+                    format!("/crate/{krate}/{version}"),
+                    CachePolicy::NoCaching,
+                )?
+                .into_response());
+            };
         }
     }
 

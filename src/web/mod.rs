@@ -30,7 +30,11 @@ mod statics;
 use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    extract::Extension, http::StatusCode, middleware, response::IntoResponse, Router as AxumRouter,
+    extract::Extension,
+    http::{uri, StatusCode, Uri},
+    middleware,
+    response::IntoResponse,
+    Router as AxumRouter,
 };
 use chrono::{DateTime, Utc};
 use error::AxumNope;
@@ -50,8 +54,12 @@ use url::form_urlencoded;
 const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
 const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
 
-pub(crate) fn encode_url_path(path: &str) -> String {
-    utf8_percent_encode(path, PATH).to_string()
+/// encode a path & parse it for usage in an Uri or CanonicalUrl
+pub(crate) fn encode_path_for_uri<P: AsRef<str>>(path: P) -> Result<uri::PathAndQuery, Error> {
+    utf8_percent_encode(path.as_ref(), PATH)
+        .to_string()
+        .try_into()
+        .context("error parsing URI PathAndQuery from path")
 }
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
@@ -353,15 +361,35 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
     }
 }
 
-#[instrument]
-fn axum_redirect<U>(uri: U) -> Result<impl IntoResponse, Error>
+fn internal_redirect(
+    path: impl AsRef<str>,
+    cache_policy: cache::CachePolicy,
+) -> Result<impl IntoResponse, Error> {
+    redirect(encode_path_for_uri(path)?, cache_policy)
+}
+
+fn internal_redirect_with_queries<I, K, V>(
+    path: impl AsRef<str>,
+    queries: I,
+    cache_policy: cache::CachePolicy,
+) -> Result<impl IntoResponse, Error>
 where
-    U: TryInto<http::Uri> + std::fmt::Debug,
-    <U as TryInto<http::Uri>>::Error: std::fmt::Debug,
+    I: IntoIterator,
+    I::Item: Borrow<(K, V)>,
+    K: AsRef<str>,
+    V: AsRef<str>,
 {
-    let uri: http::Uri = uri
-        .try_into()
-        .map_err(|err| anyhow!("invalid URI: {:?}", err))?;
+    redirect(
+        extend_path_with_params(encode_path_for_uri(path)?, queries)?,
+        cache_policy,
+    )
+}
+
+fn redirect(
+    uri: impl Into<Uri>,
+    cache_policy: cache::CachePolicy,
+) -> Result<impl IntoResponse, Error> {
+    let uri = uri.into();
 
     if let Some(path_and_query) = uri.path_and_query() {
         if path_and_query.as_str().starts_with("//") {
@@ -378,27 +406,18 @@ where
             http::header::LOCATION,
             http::HeaderValue::try_from(uri.to_string()).context("invalid uri for redirect")?,
         )],
+        Extension(cache_policy),
     ))
 }
 
-#[instrument]
-fn axum_cached_redirect<U>(
-    uri: U,
-    cache_policy: cache::CachePolicy,
-) -> Result<impl IntoResponse, Error>
-where
-    U: TryInto<http::Uri> + std::fmt::Debug,
-    <U as TryInto<http::Uri>>::Error: std::fmt::Debug,
-{
-    let mut resp = axum_redirect(uri)?.into_response();
-    resp.extensions_mut().insert(cache_policy);
-    Ok(resp)
-}
-
-/// Parse an URI into a http::Uri struct.
+/// Take an existing path and extend it encoded with optional
+/// query args.
 /// When `queries` are given these are added to the URL,
 /// with empty `queries` the `?` will be omitted.
-pub(crate) fn axum_parse_uri_with_params<I, K, V>(uri: &str, queries: I) -> Result<http::Uri, Error>
+pub(crate) fn extend_path_with_params<I, K, V>(
+    path_and_query: uri::PathAndQuery,
+    queries: I,
+) -> Result<uri::PathAndQuery, Error>
 where
     I: IntoIterator,
     I::Item: Borrow<(K, V)>,
@@ -407,14 +426,21 @@ where
 {
     let mut queries = queries.into_iter().peekable();
     if queries.peek().is_some() {
+        let previous_path = path_and_query.path().to_owned();
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(queries)
             .finish();
-        format!("{uri}?{}", query_params)
-            .parse::<http::Uri>()
-            .context("error parsing URL")
+
+        Ok(format!("{previous_path}?{query_params}")
+            .try_into()
+            .with_context(|| {
+                format!(
+                    "error parsing PathAndQuery from path: \"{}\" and encoded query: {}",
+                    previous_path, query_params
+                )
+            })?)
     } else {
-        uri.parse::<http::Uri>().context("error parsing URL")
+        Ok(path_and_query)
     }
 }
 
@@ -508,6 +534,7 @@ mod test {
     use super::*;
     use crate::{docbuilder::DocCoverage, test::*, web::match_version};
     use axum::http::StatusCode;
+    use http::Uri;
     use kuchiki::traits::TendrilSink;
     use serde_json::json;
     use test_case::test_case;
@@ -963,29 +990,37 @@ mod test {
     }
 
     #[test]
-    fn test_axum_redirect() {
-        let response = axum_redirect("/something").unwrap().into_response();
+    fn test_redirect() {
+        let response = redirect(
+            "https://domain/something".parse::<Uri>().unwrap(),
+            cache::CachePolicy::NoCaching,
+        )
+        .unwrap()
+        .into_response();
         assert_eq!(response.status(), StatusCode::FOUND);
         assert_eq!(
             response.headers().get(http::header::LOCATION).unwrap(),
-            "/something"
+            "https://domain/something"
         );
         assert!(response
             .headers()
             .get(http::header::CACHE_CONTROL)
             .is_none());
-        assert!(response.extensions().get::<cache::CachePolicy>().is_none());
+        assert!(matches!(
+            response.extensions().get::<cache::CachePolicy>().unwrap(),
+            cache::CachePolicy::NoCaching
+        ));
     }
 
     #[test]
-    fn test_axum_redirect_cached() {
-        let response = axum_cached_redirect("/something", cache::CachePolicy::NoCaching)
+    fn test_internal_redirect_with_encoding() {
+        let response = internal_redirect("/something/äöü", cache::CachePolicy::NoCaching)
             .unwrap()
             .into_response();
         assert_eq!(response.status(), StatusCode::FOUND);
         assert_eq!(
             response.headers().get(http::header::LOCATION).unwrap(),
-            "/something"
+            "/something/%C3%A4%C3%B6%C3%BC"
         );
         assert!(matches!(
             response.extensions().get::<cache::CachePolicy>().unwrap(),
@@ -996,7 +1031,13 @@ mod test {
     #[test_case("without_leading_slash")]
     #[test_case("//with_double_leading_slash")]
     fn test_axum_redirect_failure(path: &str) {
-        assert!(axum_redirect(path).is_err());
-        assert!(axum_cached_redirect(path, cache::CachePolicy::NoCaching).is_err());
+        let path = path.parse::<Uri>().unwrap();
+        assert!(redirect(path, cache::CachePolicy::NoCaching).is_err());
+    }
+
+    #[test_case("/path/äöü", "/path/%C3%A4%C3%B6%C3%BC")]
+    #[test_case("", "/")]
+    fn test_encode_path_for_uri(input: &str, expected: &str) {
+        assert_eq!(encode_path_for_uri(input).unwrap(), expected);
     }
 }

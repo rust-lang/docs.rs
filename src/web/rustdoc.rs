@@ -6,18 +6,17 @@ use crate::{
     storage::rustdoc_archive_path,
     utils::{self, spawn_blocking},
     web::{
-        axum_cached_redirect, axum_parse_uri_with_params,
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
-        encode_url_path,
+        encode_path_for_uri,
         error::{AxumNope, AxumResult},
         file::File,
         headers::CanonicalUrl,
-        match_version_axum,
+        internal_redirect, internal_redirect_with_queries, match_version_axum,
         metrics::RenderingTimesRecorder,
         page::TemplateData,
-        MatchSemver, MetaData,
+        redirect, MatchSemver, MetaData,
     },
     Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
@@ -33,21 +32,22 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Write,
     sync::Arc,
 };
 use tracing::{debug, instrument, trace};
 
+use super::extend_path_with_params;
+
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
-        ("alloc", "stable/alloc"),
-        ("core", "stable/core"),
-        ("proc_macro", "stable/proc_macro"),
-        ("proc-macro", "stable/proc_macro"),
-        ("std", "stable/std"),
-        ("test", "stable/test"),
-        ("rustc", "nightly/nightly-rustc"),
-        ("rustdoc", "nightly/nightly-rustc/rustdoc"),
+        ("alloc", "/stable/alloc/"),
+        ("core", "/stable/core/"),
+        ("proc_macro", "/stable/proc_macro/"),
+        ("proc-macro", "/stable/proc_macro/"),
+        ("std", "/stable/std/"),
+        ("test", "/stable/test/"),
+        ("rustc", "/nightly/nightly-rustc/"),
+        ("rustdoc", "/nightly/nightly-rustc/rustdoc/"),
     ])
 });
 
@@ -98,28 +98,9 @@ pub(crate) async fn rustdoc_redirector_handler(
     Extension(storage): Extension<Arc<Storage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(pool): Extension<Pool>,
-    Query(query_pairs): Query<HashMap<String, String>>,
+    Query(mut query_pairs): Query<BTreeMap<String, String>>,
     uri: Uri,
 ) -> AxumResult<impl IntoResponse> {
-    #[instrument]
-    fn redirect_to_doc(
-        query_pairs: &HashMap<String, String>,
-        url_str: String,
-        cache_policy: CachePolicy,
-        path_in_crate: Option<&str>,
-    ) -> AxumResult<impl IntoResponse> {
-        let mut queries: BTreeMap<String, String> = BTreeMap::new();
-        if let Some(path) = path_in_crate {
-            queries.insert("search".into(), path.into());
-        }
-        queries.extend(query_pairs.to_owned());
-        trace!("redirect to doc");
-        Ok(axum_cached_redirect(
-            axum_parse_uri_with_params(&url_str, queries)?,
-            cache_policy,
-        )?)
-    }
-
     let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
 
     // global static assets for older builds are served from the root, which ends up
@@ -139,7 +120,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             // redirect all ico requests
             // originally from:
             // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
-            return Ok(axum_cached_redirect(
+            return Ok(internal_redirect(
                 "/-/static/favicon.ico",
                 CachePolicy::ForeverInCdnAndBrowser,
             )?
@@ -152,12 +133,23 @@ pub(crate) async fn rustdoc_redirector_handler(
         None => (params.name.to_string(), None),
     };
 
+    if let Some(path_in_crate) = path_in_crate {
+        query_pairs.insert("search".into(), path_in_crate);
+    }
+
     if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
-        return Ok(redirect_to_doc(
-            &query_pairs,
-            format!("https://doc.rust-lang.org/{inner_path}/"),
+        return Ok(redirect(
+            Uri::builder()
+                .scheme("https")
+                .authority("doc.rust-lang.org")
+                .path_and_query(extend_path_with_params(
+                    encode_path_for_uri(inner_path)?,
+                    query_pairs,
+                )?)
+                .build()
+                // this unwrap is safe since we safely encode the path above
+                .unwrap(),
             CachePolicy::ForeverInCdnAndStaleInBrowser,
-            path_in_crate.as_deref(),
         )?
         .into_response());
     }
@@ -258,7 +250,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     if has_docs {
         rendering_time.step("redirect to doc");
 
-        let url_str = if let Some(target) = target {
+        let url_path = if let Some(target) = target {
             format!("/{crate_name}/{version}/{target}/{target_name}/")
         } else {
             format!("/{crate_name}/{version}/{target_name}/")
@@ -270,13 +262,10 @@ pub(crate) async fn rustdoc_redirector_handler(
             CachePolicy::ForeverInCdnAndStaleInBrowser
         };
 
-        Ok(
-            redirect_to_doc(&query_pairs, url_str, cache, path_in_crate.as_deref())?
-                .into_response(),
-        )
+        Ok(internal_redirect_with_queries(url_path, query_pairs, cache)?.into_response())
     } else {
         rendering_time.step("redirect to crate");
-        Ok(axum_cached_redirect(
+        Ok(internal_redirect(
             format!("/crate/{}/{}", crate_name, version),
             CachePolicy::ForeverInCdn,
         )?
@@ -284,10 +273,10 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct RustdocPage {
     latest_path: String,
-    canonical_path: String,
+    canonical_url: CanonicalUrl,
     permalink_path: String,
     latest_version: String,
     target: String,
@@ -313,7 +302,7 @@ impl RustdocPage {
         file_path: &str,
     ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
-        let canonical_path = self.canonical_path.clone();
+        let canonical_url = self.canonical_url.clone();
 
         // Build the page of documentation
         let ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
@@ -336,14 +325,7 @@ impl RustdocPage {
 
         Ok((
             StatusCode::OK,
-            TypedHeader(CanonicalUrl(
-                Uri::builder()
-                    .scheme("https")
-                    .authority("docs.rs")
-                    .path_and_query(canonical_path)
-                    .build()
-                    .context("can't build canonical URL")?,
-            )),
+            TypedHeader(canonical_url),
             Extension(if is_latest_url {
                 CachePolicy::ForeverInCdn
             } else {
@@ -410,7 +392,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     ) -> AxumResult<AxumResponse> {
         trace!("redirect");
         // Format and parse the redirect url
-        Ok(axum_cached_redirect(
+        Ok(internal_redirect(
             format!("/{}/{}/{}", name, vers, path.join("/")),
             cache_policy,
         )?
@@ -554,7 +536,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
-                Ok(axum_cached_redirect(
+                Ok(internal_redirect(
                     format!(
                         "/crate/{}/{}/target-redirect/{}",
                         params.name,
@@ -651,11 +633,11 @@ pub(crate) async fn rustdoc_html_server_handler(
     // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
     // the target and will not canonicalize to a URL that doesn't exist.
     // Don't include index.html in the canonical URL.
-    let canonical_path = format!(
+    let canonical_url = CanonicalUrl::from_path(format!(
         "/{}/latest/{}",
         params.name,
-        encode_url_path(&inner_path.replace("index.html", ""))
-    );
+        inner_path.replace("index.html", ""),
+    ))?;
 
     metrics
         .recently_accessed_releases
@@ -676,7 +658,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         move || {
             Ok(RustdocPage {
                 latest_path,
-                canonical_path,
+                canonical_url,
                 permalink_path,
                 latest_version,
                 target,
@@ -710,7 +692,10 @@ pub(crate) async fn rustdoc_html_server_handler(
 /// `[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
-fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String {
+fn path_for_version(
+    file_path: &[&str],
+    crate_details: &CrateDetails,
+) -> (String, HashMap<String, String>) {
     // check if req_path[3] is the platform choice or the name of the crate
     // Note we don't require the platform to have a trailing slash.
     let platform = if crate_details
@@ -749,15 +734,16 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
         last_component.strip_suffix(".rs.html")
     };
     let target_name = &crate_details.target_name;
-    let mut result = if platform.is_empty() {
+    let path_result = if platform.is_empty() {
         format!("{target_name}/")
     } else {
         format!("{platform}/{target_name}/")
     };
-    if let Some(search) = search_item {
-        write!(result, "?search={search}").unwrap();
-    }
-    result
+
+    let query_params = search_item
+        .map(|i| HashMap::from_iter([("search".into(), i.into())]))
+        .unwrap_or_default();
+    (path_result, query_params)
 }
 
 pub(crate) async fn target_redirect_handler(
@@ -817,7 +803,13 @@ pub(crate) async fn target_redirect_handler(
         pieces.join("/")
     };
 
-    let redirect_path = if spawn_blocking({
+    let cache_policy = if is_latest_url {
+        CachePolicy::ForeverInCdn
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser
+    };
+
+    if spawn_blocking({
         let name = name.clone();
         let file_path = storage_location_for_path.clone();
         move || {
@@ -827,20 +819,25 @@ pub(crate) async fn target_redirect_handler(
     .await?
     {
         // Simple case: page exists in the other target & version, so just change these
-        storage_location_for_path
+        Ok(internal_redirect(
+            format!("/{name}/{version_or_latest}/{storage_location_for_path}"),
+            cache_policy,
+        )?
+        .into_response())
     } else {
         let pieces: Vec<_> = storage_location_for_path.split('/').collect();
-        path_for_version(&pieces, &crate_details)
-    };
-
-    Ok(axum_cached_redirect(
-        format!("/{name}/{version_or_latest}/{redirect_path}"),
-        if is_latest_url {
-            CachePolicy::ForeverInCdn
-        } else {
-            CachePolicy::ForeverInCdnAndStaleInBrowser
-        },
-    )?)
+        let (redirect_path, query_args) = path_for_version(&pieces, &crate_details);
+        Ok(internal_redirect_with_queries(
+            format!("/{name}/{version_or_latest}/{redirect_path}"),
+            query_args,
+            if is_latest_url {
+                CachePolicy::ForeverInCdn
+            } else {
+                CachePolicy::ForeverInCdnAndStaleInBrowser
+            },
+        )?
+        .into_response())
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -908,8 +905,14 @@ pub(crate) async fn download_handler(
     })
     .await?;
 
-    Ok(super::axum_cached_redirect(
-        format!("{}/{}", config.s3_static_root_path, archive_path),
+    Ok(super::redirect(
+        format!(
+            "{}/{}",
+            config.s3_static_root_path,
+            encode_path_for_uri(archive_path)?.as_str(),
+        )
+        .parse::<http::Uri>()
+        .context("could not encode archive download path")?,
         CachePolicy::ForeverInCdn,
     )?)
 }
@@ -929,11 +932,7 @@ pub(crate) async fn static_asset_handler(
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        test::*,
-        web::{cache::CachePolicy, encode_url_path},
-        Config,
-    };
+    use crate::{test::*, web::cache::CachePolicy, Config};
     use anyhow::Context;
     use kuchiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -2404,7 +2403,7 @@ mod test {
                 .rustdoc_file("dummy_dash/index.html")
                 .create()?;
 
-            let utf8_filename = "序列化工具简单测试结果.html";
+            let utf8_filename = "序.html";
             env.fake_release()
                 .name("dummy-docs")
                 .version("0.1.0")
@@ -2452,10 +2451,7 @@ mod test {
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                format!(
-                    "<https://docs.rs/dummy-docs/latest/dummy_docs/{}>; rel=\"canonical\"",
-                    encode_url_path(utf8_filename)
-                )
+                "<https://docs.rs/dummy-docs/latest/dummy_docs/%E5%BA%8F.html>; rel=\"canonical\"",
             );
 
             assert!(web
@@ -2621,6 +2617,49 @@ mod test {
             let response = web.get("/dummy/0.1.0/search-1234.js").send()?;
             assert!(response.status().is_success());
             assert_eq!(response.text()?, "more_content");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn redirect_with_encoded_chars_in_path() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("clap")
+                .version("2.24.0")
+                .archive_storage(true)
+                .create()?;
+            let web = env.frontend();
+
+            assert_redirect_cached_unchecked(
+                "/clap/2.24.0/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20%5B%60Display%60%5D",
+                "/crate/clap/2.24.0/target-redirect/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20[%60Display%60]/index.html",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_with_encoded_chars_in_path() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("clap")
+                .version("2.24.0")
+                .archive_storage(true)
+                .create()?;
+            let web = env.frontend();
+
+            assert_redirect_cached_unchecked(
+                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
+                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for/clap/",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
 
             Ok(())
         })
