@@ -3,7 +3,7 @@
 use crate::{
     db::Pool,
     repositories::RepositoryStatsUpdater,
-    storage::{rustdoc_archive_path, PathNotFoundError},
+    storage::rustdoc_archive_path,
     utils::{self, spawn_blocking},
     web::{
         axum_cached_redirect, axum_parse_uri_with_params,
@@ -58,6 +58,37 @@ pub(crate) struct RustdocRedirectorParams {
     target: Option<String>,
 }
 
+/// try to serve a toolchain specific asset from the legacy location.
+///
+/// Newer rustdoc builds use a specific subfolder on the bucket,
+/// a new `static-root-path` prefix (`/-/rustdoc.static/...`), which
+/// is served via our `static_asset_handler`.
+///
+/// The legacy location is the root, both on the bucket & the URL
+/// path, which is suboptimal since the route overlaps with other routes.
+///
+/// See also https://github.com/rust-lang/docs.rs/pull/1889
+async fn try_serve_legacy_toolchain_asset(
+    storage: Arc<Storage>,
+    config: Arc<Config>,
+    path: impl AsRef<str>,
+) -> AxumResult<AxumResponse> {
+    let path = path.as_ref().to_owned();
+    // FIXME: this could be optimized: when a path doesn't exist
+    // in storage, we don't need to recheck on every request.
+    // Existing files are returned with caching headers, so
+    // are cached by the CDN.
+    // If cached, it doesn't need to be invalidated,
+    // since new nightly versions will always put their
+    // toolchain specific resources into the new folder,
+    // which is reached via the new handler.
+    Ok(
+        spawn_blocking(move || File::from_path(&storage, &path, &config))
+            .await
+            .map(IntoResponse::into_response)?,
+    )
+}
+
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 #[instrument(skip_all)]
@@ -93,41 +124,13 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
-    // Newer builds use a different static-root, and the static assets are served via
-    // `static_asset_handler`
     if let Some((_, extension)) = params.name.rsplit_once('.') {
         if ["css", "js", "png", "svg", "woff", "woff2"]
             .binary_search(&extension)
             .is_ok()
         {
             rendering_time.step("serve static asset");
-            // FIXME: this could be optimized: when a path doesn't exist
-            // in storage, we don't need to recheck on every request.
-            // Existing files are returned with caching headers, so
-            // are cached by the CDN.
-            // If cached, it doesn't need to be invalidated,
-            // since new nightly versions will always put their
-            // toolchain specific resources into the new folder,
-            // which is reached via the new handler.
-            return match spawn_blocking({
-                let storage = storage.clone();
-                let name = params.name.clone();
-                let config = config.clone();
-                move || File::from_path(&storage, &name, &config)
-            })
-            .await
-            {
-                Ok(file) => Ok(file.into_response()),
-                Err(err) => {
-                    if matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
-                        || matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
-                    {
-                        Err(AxumNope::ResourceNotFound)
-                    } else {
-                        Err(AxumNope::InternalError(err))
-                    }
-                }
-            };
+            return try_serve_legacy_toolchain_asset(storage, config, params.name).await;
         }
     }
 
@@ -210,7 +213,16 @@ pub(crate) async fn rustdoc_redirector_handler(
                     {
                         debug!(?target, ?err, "got error serving file");
                     }
-                    return Err(AxumNope::ResourceNotFound);
+                    // FIXME: we sometimes still get requests for toolchain
+                    // specific static assets under the crate/version/ path.
+                    // This is fixed in rustdoc, but pending a rebuild for
+                    // docs that were affected by this bug.
+                    // https://github.com/rust-lang/docs.rs/issues/1979
+                    if target.starts_with("search-") {
+                        return try_serve_legacy_toolchain_asset(storage, config, target).await;
+                    } else {
+                        return Err(err.into());
+                    }
                 }
             }
         }
@@ -912,16 +924,7 @@ pub(crate) async fn static_asset_handler(
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, path);
 
-    Ok(spawn_blocking(
-        move || match File::from_path(&storage, &storage_path, &config) {
-            Ok(file) => Ok(file),
-            Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
-                Err(AxumNope::ResourceNotFound.into())
-            }
-            Err(err) => Err(AxumNope::InternalError(err).into()),
-        },
-    )
-    .await?)
+    Ok(spawn_blocking(move || File::from_path(&storage, &storage_path, &config)).await?)
 }
 
 #[cfg(test)]
@@ -2590,5 +2593,36 @@ mod test {
             assert!(env.storage().get_public_access("rustdoc/dummy/0.2.0.zip")?);
             Ok(())
         });
+    }
+
+    #[test]
+    fn fallback_to_root_storage_for_search_js_assets() {
+        // test workaround for https://github.com/rust-lang/docs.rs/issues/1979
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .create()?;
+
+            env.storage().store_one("asset.js", *b"content")?;
+            env.storage()
+                .store_one("search-1234.js", *b"more_content")?;
+
+            let web = env.frontend();
+
+            assert_eq!(
+                web.get("/dummy/0.1.0/asset.js").send()?.status(),
+                StatusCode::NOT_FOUND
+            );
+            assert!(web.get("/asset.js").send()?.status().is_success());
+
+            assert!(web.get("/search-1234.js").send()?.status().is_success());
+            let response = web.get("/dummy/0.1.0/search-1234.js").send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text()?, "more_content");
+
+            Ok(())
+        })
     }
 }
