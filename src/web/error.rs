@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use crate::web::{releases::Search, AxumErrorPage};
+use crate::{
+    storage::PathNotFoundError,
+    web::{releases::Search, AxumErrorPage},
+};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
@@ -120,7 +123,10 @@ impl From<anyhow::Error> for AxumNope {
     fn from(err: anyhow::Error) -> Self {
         match err.downcast::<AxumNope>() {
             Ok(axum_nope) => axum_nope,
-            Err(err) => AxumNope::InternalError(err),
+            Err(err) => match err.downcast::<PathNotFoundError>() {
+                Ok(_) => AxumNope::ResourceNotFound,
+                Err(err) => AxumNope::InternalError(err),
+            },
         }
     }
 }
