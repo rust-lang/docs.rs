@@ -49,7 +49,6 @@ syntect = { version = "5.0.0", default-features = false, features = ["parsing", 
 toml = "0.5"
 schemamama = "0.3"
 schemamama_postgres = "0.3"
-systemstat = "0.2.0"
 prometheus = { version = "0.13.0", default-features = false }
 rustwide = { version = "0.15.0", features = ["unstable-toolchain-ci"] }
 mime_guess = "2"
