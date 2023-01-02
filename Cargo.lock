@@ -1458,7 +1458,6 @@ dependencies = [
  "string_cache_codegen",
  "strum",
  "syntect",
- "systemstat",
  "tempfile",
  "tera",
  "test-case",
@@ -4835,20 +4834,6 @@ dependencies = [
  "thiserror",
  "walkdir",
  "yaml-rust",
-]
-
-[[package]]
-name = "systemstat"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5158fd55089515c923306476aaf3fa8ffc29a902561bf0017166a93218831c"
-dependencies = [
- "bytesize",
- "lazy_static",
- "libc",
- "nom",
- "time",
- "winapi",
 ]
 
 [[package]]
