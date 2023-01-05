@@ -22,8 +22,7 @@ impl CanonicalUrl {
             .authority("docs.rs")
             .path_and_query(self.0.clone())
             .build()
-            // this unwrap can't fail because PathAndQuery is valid
-            .unwrap()
+            .expect("this unwrap can't fail because PathAndQuery is valid")
     }
 }
 
