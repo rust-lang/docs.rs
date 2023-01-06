@@ -7,7 +7,7 @@ use crate::{
     impl_axum_webpage,
     utils::{report_error, spawn_blocking},
     web::{
-        axum_parse_uri_with_params, axum_redirect,
+        axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
         match_version_axum,
     },
@@ -412,7 +412,7 @@ pub(crate) async fn releases_failures_by_stars_handler(
 pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl IntoResponse> {
     axum_redirect(format!(
         "https://crates.io/users/{}",
-        owner.strip_prefix('@').unwrap_or(&owner)
+        encode_url_path(owner.strip_prefix('@').unwrap_or(&owner))
     ))
     .map_err(|_| AxumNope::OwnerNotFound)
 }

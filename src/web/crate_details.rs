@@ -6,6 +6,7 @@ use crate::{
     repositories::RepositoryStatsUpdater,
     web::{
         cache::CachePolicy,
+        encode_url_path,
         error::{AxumNope, AxumResult},
     },
 };
@@ -319,7 +320,7 @@ pub(crate) async fn crate_details_handler(
     // this handler must always called with a crate name
     if params.version.is_none() {
         return Ok(super::axum_cached_redirect(
-            &format!("/crate/{}/latest", params.name),
+            encode_url_path(&format!("/crate/{}/latest", params.name)),
             CachePolicy::ForeverInCdn,
         )?
         .into_response());
