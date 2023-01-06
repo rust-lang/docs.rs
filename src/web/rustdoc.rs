@@ -10,6 +10,7 @@ use crate::{
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
+        encode_url_path,
         error::{AxumNope, AxumResult},
         file::File,
         headers::CanonicalUrl,
@@ -32,7 +33,6 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Write,
     sync::Arc,
 };
 use tracing::{debug, instrument, trace};
@@ -269,10 +269,13 @@ pub(crate) async fn rustdoc_redirector_handler(
             CachePolicy::ForeverInCdnAndStaleInBrowser
         };
 
-        Ok(
-            redirect_to_doc(&query_pairs, url_str, cache, path_in_crate.as_deref())?
-                .into_response(),
-        )
+        Ok(redirect_to_doc(
+            &query_pairs,
+            encode_url_path(&url_str),
+            cache,
+            path_in_crate.as_deref(),
+        )?
+        .into_response())
     } else {
         rendering_time.step("redirect to crate");
         Ok(axum_cached_redirect(
@@ -403,7 +406,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         trace!("redirect");
         // Format and parse the redirect url
         Ok(axum_cached_redirect(
-            format!("/{}/{}/{}", name, vers, path.join("/")),
+            encode_url_path(&format!("/{}/{}/{}", name, vers, path.join("/"))),
             cache_policy,
         )?
         .into_response())
@@ -547,12 +550,12 @@ pub(crate) async fn rustdoc_html_server_handler(
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
                 Ok(axum_cached_redirect(
-                    format!(
+                    encode_url_path(&format!(
                         "/crate/{}/{}/target-redirect/{}",
                         params.name,
                         version,
                         req_path.join("/")
-                    ),
+                    )),
                     CachePolicy::ForeverInCdn,
                 )?
                 .into_response())
@@ -702,7 +705,10 @@ pub(crate) async fn rustdoc_html_server_handler(
 /// `[/platform]/module/[kind.name.html|index.html]`
 ///
 /// Returns a path that can be appended to `/crate/version/` to create a complete URL.
-fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String {
+fn path_for_version(
+    file_path: &[&str],
+    crate_details: &CrateDetails,
+) -> (String, HashMap<String, String>) {
     // check if req_path[3] is the platform choice or the name of the crate
     // Note we don't require the platform to have a trailing slash.
     let platform = if crate_details
@@ -741,15 +747,17 @@ fn path_for_version(file_path: &[&str], crate_details: &CrateDetails) -> String 
         last_component.strip_suffix(".rs.html")
     };
     let target_name = &crate_details.target_name;
-    let mut result = if platform.is_empty() {
+    let path = if platform.is_empty() {
         format!("{target_name}/")
     } else {
         format!("{platform}/{target_name}/")
     };
-    if let Some(search) = search_item {
-        write!(result, "?search={search}").unwrap();
-    }
-    result
+
+    let query_params = search_item
+        .map(|i| HashMap::from_iter([("search".into(), i.into())]))
+        .unwrap_or_default();
+
+    (path, query_params)
 }
 
 pub(crate) async fn target_redirect_handler(
@@ -809,7 +817,7 @@ pub(crate) async fn target_redirect_handler(
         pieces.join("/")
     };
 
-    let redirect_path = if spawn_blocking({
+    let (redirect_path, query_args) = if spawn_blocking({
         let name = name.clone();
         let file_path = storage_location_for_path.clone();
         move || {
@@ -819,14 +827,17 @@ pub(crate) async fn target_redirect_handler(
     .await?
     {
         // Simple case: page exists in the other target & version, so just change these
-        storage_location_for_path
+        (storage_location_for_path, HashMap::new())
     } else {
         let pieces: Vec<_> = storage_location_for_path.split('/').collect();
         path_for_version(&pieces, &crate_details)
     };
 
     Ok(axum_cached_redirect(
-        format!("/{name}/{version_or_latest}/{redirect_path}"),
+        axum_parse_uri_with_params(
+            &encode_url_path(&format!("/{name}/{version_or_latest}/{redirect_path}")),
+            query_args,
+        )?,
         if is_latest_url {
             CachePolicy::ForeverInCdn
         } else {
@@ -2606,6 +2617,50 @@ mod test {
             let response = web.get(&format!("/dummy/0.1.0/{path}")).send()?;
             assert!(response.status().is_success());
             assert_eq!(response.text()?, "more_content");
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn redirect_with_encoded_chars_in_path() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("clap")
+                .version("2.24.0")
+                .archive_storage(true)
+                .create()?;
+            let web = env.frontend();
+
+            assert_redirect_cached_unchecked(
+                "/clap/2.24.0/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20%5B%60Display%60%5D",
+                "/crate/clap/2.24.0/target-redirect/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20[%60Display%60]/index.html",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_with_encoded_chars_in_path() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("clap")
+                .version("2.24.0")
+                .archive_storage(true)
+                .create()?;
+            let web = env.frontend();
+
+            assert_redirect_cached_unchecked(
+                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
+                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for/clap/",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
 
             Ok(())
         })
