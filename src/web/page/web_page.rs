@@ -84,17 +84,13 @@ macro_rules! impl_axum_webpage {
 
                 $(
                     let canonical_url = {
-                        let canonical_url: fn(&Self) -> Option<String> = $canonical_url;
+                        let canonical_url: fn(&Self) -> Option<$crate::web::headers::CanonicalUrl> = $canonical_url;
                         (canonical_url)(&self)
                     };
                     if let Some(canonical_url) = canonical_url {
                         use axum::headers::HeaderMapExt;
 
-                        response.headers_mut().typed_insert(
-                            $crate::web::headers::CanonicalUrl(
-                                canonical_url.parse().expect("invalid URL for canonical link")
-                            ),
-                        );
+                        response.headers_mut().typed_insert(canonical_url);
                     }
                 )?
 

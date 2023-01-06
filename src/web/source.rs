@@ -4,12 +4,12 @@ use crate::{
     impl_axum_webpage,
     utils::{get_correct_docsrs_style_file, spawn_blocking},
     web::{
-        cache::CachePolicy, encode_url_path, error::AxumNope, file::File as DbFile,
-        headers::CanonicalUrl, MatchSemver, MetaData,
+        cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
+        MatchSemver, MetaData,
     },
     Storage,
 };
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
 
 use postgres::Client;
@@ -163,13 +163,13 @@ impl FileList {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct SourcePage {
     file_list: FileList,
     show_parent_link: bool,
     file: Option<File>,
     file_content: Option<String>,
-    canonical_url: String,
+    canonical_url: CanonicalUrl,
     is_latest_url: bool,
 }
 
@@ -253,20 +253,14 @@ pub(crate) async fn source_browser_handler(
     })
     .await?;
 
-    let canonical_url = format!(
-        "https://docs.rs/crate/{}/latest/source/{}",
-        name,
-        encode_url_path(&path),
-    );
+    let canonical_url = CanonicalUrl::from_path(format!("/crate/{}/latest/source/{}", name, path));
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
         // serve the file with DatabaseFileHandler if file isn't text and not empty
         if !is_text && !blob.is_empty() {
             let mut response = DbFile(blob).into_response();
-            response.headers_mut().typed_insert(CanonicalUrl(
-                canonical_url.parse().context("invalid canonical url")?,
-            ));
+            response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
                 .insert(CachePolicy::ForeverInCdnAndStaleInBrowser);
@@ -325,7 +319,7 @@ pub(crate) async fn source_browser_handler(
 #[cfg(test)]
 mod tests {
     use crate::test::*;
-    use crate::web::{cache::CachePolicy, encode_url_path};
+    use crate::web::cache::CachePolicy;
     use kuchiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use test_case::test_case;
@@ -346,7 +340,7 @@ mod tests {
     #[test_case(false)]
     fn fetch_source_file_utf8_path(archive_storage: bool) {
         wrapper(|env| {
-            let filename = "序列化工具简单测试结果.pdf";
+            let filename = "序.pdf";
 
             env.fake_release()
                 .archive_storage(archive_storage)
@@ -362,10 +356,7 @@ mod tests {
             assert!(response.status().is_success());
             assert_eq!(
                 response.headers().get("link").unwrap(),
-                &format!(
-                    "<https://docs.rs/crate/fake/latest/source/{}>; rel=\"canonical\"",
-                    encode_url_path(filename),
-                )
+                "<https://docs.rs/crate/fake/latest/source/%E5%BA%8F.pdf>; rel=\"canonical\"",
             );
             assert!(response.text()?.contains("some_random_content"));
             Ok(())
