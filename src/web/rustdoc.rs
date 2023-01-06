@@ -10,7 +10,6 @@ use crate::{
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
-        encode_url_path,
         error::{AxumNope, AxumResult},
         file::File,
         headers::CanonicalUrl,
@@ -284,10 +283,10 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct RustdocPage {
     latest_path: String,
-    canonical_path: String,
+    canonical_url: CanonicalUrl,
     permalink_path: String,
     latest_version: String,
     target: String,
@@ -313,7 +312,7 @@ impl RustdocPage {
         file_path: &str,
     ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
-        let canonical_path = self.canonical_path.clone();
+        let canonical_url = self.canonical_url.clone();
 
         // Build the page of documentation
         let ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
@@ -336,14 +335,7 @@ impl RustdocPage {
 
         Ok((
             StatusCode::OK,
-            TypedHeader(CanonicalUrl(
-                Uri::builder()
-                    .scheme("https")
-                    .authority("docs.rs")
-                    .path_and_query(canonical_path)
-                    .build()
-                    .context("can't build canonical URL")?,
-            )),
+            TypedHeader(canonical_url),
             Extension(if is_latest_url {
                 CachePolicy::ForeverInCdn
             } else {
@@ -651,11 +643,11 @@ pub(crate) async fn rustdoc_html_server_handler(
     // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
     // the target and will not canonicalize to a URL that doesn't exist.
     // Don't include index.html in the canonical URL.
-    let canonical_path = format!(
+    let canonical_url = CanonicalUrl::from_path(format!(
         "/{}/latest/{}",
         params.name,
-        encode_url_path(&inner_path.replace("index.html", ""))
-    );
+        inner_path.replace("index.html", ""),
+    ));
 
     metrics
         .recently_accessed_releases
@@ -676,7 +668,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         move || {
             Ok(RustdocPage {
                 latest_path,
-                canonical_path,
+                canonical_url,
                 permalink_path,
                 latest_version,
                 target,
@@ -929,11 +921,7 @@ pub(crate) async fn static_asset_handler(
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        test::*,
-        web::{cache::CachePolicy, encode_url_path},
-        Config,
-    };
+    use crate::{test::*, web::cache::CachePolicy, Config};
     use anyhow::Context;
     use kuchiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -2404,7 +2392,7 @@ mod test {
                 .rustdoc_file("dummy_dash/index.html")
                 .create()?;
 
-            let utf8_filename = "序列化工具简单测试结果.html";
+            let utf8_filename = "序.html";
             env.fake_release()
                 .name("dummy-docs")
                 .version("0.1.0")
@@ -2452,10 +2440,7 @@ mod test {
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                format!(
-                    "<https://docs.rs/dummy-docs/latest/dummy_docs/{}>; rel=\"canonical\"",
-                    encode_url_path(utf8_filename)
-                )
+                "<https://docs.rs/dummy-docs/latest/dummy_docs/%E5%BA%8F.html>; rel=\"canonical\"",
             );
 
             assert!(web
