@@ -7,7 +7,7 @@ use crate::utils::{get_config, get_crate_priority, report_error, set_config, Con
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, warn};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -150,6 +150,23 @@ impl BuildQueue {
             .collect())
     }
 
+    fn has_build_queued(&self, name: &str, version: &str) -> Result<bool> {
+        Ok(self
+            .db
+            .get()?
+            .query_opt(
+                "SELECT id
+                 FROM queue
+                 WHERE 
+                    attempt < $1 AND 
+                    name = $2 AND 
+                    version = $3
+                 ",
+                &[&self.max_attempts, &name, &version],
+            )?
+            .is_some())
+    }
+
     pub(crate) fn process_next_crate(
         &self,
         f: impl FnOnce(&QueuedCrate) -> Result<()>,
@@ -265,37 +282,6 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
     unreachable!()
 }
 
-#[instrument(skip(conn))]
-fn set_yanked(conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
-    let activity = if yanked { "yanked" } else { "unyanked" };
-
-    match conn
-        .execute(
-            "UPDATE releases
-                 SET yanked = $3
-             FROM crates
-             WHERE crates.id = releases.crate_id
-                 AND name = $1
-                 AND version = $2
-            ",
-            &[&name, &version, &yanked],
-        )
-        .with_context(|| format!("error while setting {}-{} to {}", name, version, activity))
-    {
-        Ok(rows) => {
-            if rows != 1 {
-                error!(
-                    "tried to yank or unyank non-existing release: {} {}",
-                    name, version
-                );
-            } else {
-                debug!("{}-{} {}", name, version, activity);
-            }
-        }
-        Err(err) => report_error(&err),
-    }
-}
-
 /// Index methods.
 impl BuildQueue {
     /// Updates registry index repository and adds new crates into build queue.
@@ -357,9 +343,10 @@ impl BuildQueue {
             let yanked = change.yanked();
             let unyanked = change.unyanked();
             if let Some(release) = yanked.or(unyanked) {
-                // FIXME: delay yanks of crates that have not yet finished building
-                // https://github.com/rust-lang/docs.rs/issues/1934
-                set_yanked(
+                // FIXME:  https://github.com/rust-lang/docs.rs/issues/1934
+                // we sometimes have inconsistencies between our yank-state and
+                // the crates.io yank state, and we don't know why yet.
+                self.set_yanked(
                     &mut conn,
                     release.name.as_str(),
                     release.version.as_str(),
@@ -382,6 +369,50 @@ impl BuildQueue {
         diff.set_last_seen_reference(oid)?;
 
         Ok(crates_added)
+    }
+
+    fn set_yanked(&self, conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
+        let activity = if yanked { "yanked" } else { "unyanked" };
+
+        match conn
+            .execute(
+                "UPDATE releases
+                     SET yanked = $3
+                 FROM crates
+                 WHERE crates.id = releases.crate_id
+                     AND name = $1
+                     AND version = $2
+                ",
+                &[&name, &version, &yanked],
+            )
+            .with_context(|| format!("error while setting {}-{} to {}", name, version, activity))
+        {
+            Ok(rows) => {
+                if rows != 1 {
+                    match self
+                        .has_build_queued(name, version)
+                        .context("error trying to fetch build queue")
+                    {
+                        Ok(false) => {
+                            // the rustwide builder will fetch the current yank state from
+                            // crates.io, so and missed update here will be fixed after the
+                            // build is finished.
+                            error!(
+                                "tried to yank or unyank non-existing release: {} {}",
+                                name, version
+                            );
+                        }
+                        Ok(true) => {}
+                        Err(err) => {
+                            report_error(&err);
+                        }
+                    }
+                } else {
+                    debug!("{}-{} {}", name, version, activity);
+                }
+            }
+            Err(err) => report_error(&err),
+        }
     }
 
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
@@ -490,6 +521,24 @@ mod tests {
                 .unwrap();
             assert_eq!(row.get::<_, i32>(0), 9);
             assert_eq!(row.get::<_, i32>(1), 0);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_has_build_queued() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            queue.add_crate("dummy", "0.1.1", 0, None)?;
+            assert!(queue.has_build_queued("dummy", "0.1.1")?);
+
+            env.db()
+                .conn()
+                .execute("UPDATE queue SET attempt = 6", &[])?;
+
+            assert!(!queue.has_build_queued("dummy", "0.1.1")?);
+
             Ok(())
         })
     }
