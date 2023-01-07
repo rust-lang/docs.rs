@@ -9,12 +9,13 @@ use crate::index::api::ReleaseData;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
-    copy_dir_all, parse_rustc_version, queue_builder, set_config, CargoMetadata, ConfigName,
+    copy_dir_all, parse_rustc_version, queue_builder, report_error, set_config, CargoMetadata,
+    ConfigName,
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
-use anyhow::{anyhow, bail, Error};
+use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
 use postgres::Client;
@@ -484,10 +485,16 @@ impl RustwideBuilder {
                         self.metrics.non_library_builds.inc();
                     }
 
-                    let release_data = match self.index.api().get_release_data(name, version) {
+                    let release_data = match self
+                        .index
+                        .api()
+                        .get_release_data(name, version)
+                        .with_context(|| {
+                            format!("could not fetch releases-data for {}-{}", name, version)
+                        }) {
                         Ok(data) => data,
                         Err(err) => {
-                            warn!("{:#?}", err);
+                            report_error(&err);
                             ReleaseData::default()
                         }
                     };
