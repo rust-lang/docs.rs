@@ -218,7 +218,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                     // This is fixed in rustdoc, but pending a rebuild for
                     // docs that were affected by this bug.
                     // https://github.com/rust-lang/docs.rs/issues/1979
-                    if target.starts_with("search-") {
+                    if target.starts_with("search-") || target.starts_with("settings-") {
                         return try_serve_legacy_toolchain_asset(storage, config, target).await;
                     } else {
                         return Err(err.into());
@@ -2595,8 +2595,9 @@ mod test {
         });
     }
 
-    #[test]
-    fn fallback_to_root_storage_for_search_js_assets() {
+    #[test_case("search-1234.js")]
+    #[test_case("settings-1234.js")]
+    fn fallback_to_root_storage_for_some_js_assets(path: &str) {
         // test workaround for https://github.com/rust-lang/docs.rs/issues/1979
         wrapper(|env| {
             env.fake_release()
@@ -2606,8 +2607,7 @@ mod test {
                 .create()?;
 
             env.storage().store_one("asset.js", *b"content")?;
-            env.storage()
-                .store_one("search-1234.js", *b"more_content")?;
+            env.storage().store_one(path, *b"more_content")?;
 
             let web = env.frontend();
 
@@ -2617,8 +2617,8 @@ mod test {
             );
             assert!(web.get("/asset.js").send()?.status().is_success());
 
-            assert!(web.get("/search-1234.js").send()?.status().is_success());
-            let response = web.get("/dummy/0.1.0/search-1234.js").send()?;
+            assert!(web.get(&format!("/{path}")).send()?.status().is_success());
+            let response = web.get(&format!("/dummy/0.1.0/{path}")).send()?;
             assert!(response.status().is_success());
             assert_eq!(response.text()?, "more_content");
 
