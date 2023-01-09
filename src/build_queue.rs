@@ -6,6 +6,7 @@ use crate::storage::Storage;
 use crate::utils::{get_config, get_crate_priority, report_error, set_config, ConfigName};
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
+use fn_error_context::context;
 
 use tracing::{debug, error, info, warn};
 
@@ -69,6 +70,7 @@ impl BuildQueue {
         Ok(())
     }
 
+    #[context("error trying to add {name}-{version} to build queue")]
     pub fn add_crate(
         &self,
         name: &str,
@@ -342,15 +344,16 @@ impl BuildQueue {
             let yanked = change.yanked();
             let unyanked = change.unyanked();
             if let Some(release) = yanked.or(unyanked) {
-                // FIXME:  https://github.com/rust-lang/docs.rs/issues/1934
-                // we sometimes have inconsistencies between our yank-state and
-                // the crates.io yank state, and we don't know why yet.
-                self.set_yanked(
+                // FIXME: delay yanks of crates that have not yet finished building
+                // https://github.com/rust-lang/docs.rs/issues/1934
+                if let Err(err) = self.set_yanked(
                     &mut conn,
                     release.name.as_str(),
                     release.version.as_str(),
                     yanked.is_some(),
-                );
+                ) {
+                    report_error(&err);
+                }
 
                 if let Err(err) =
                     cdn::queue_crate_invalidation(&mut *conn, &self.config, &release.name)
@@ -372,48 +375,48 @@ impl BuildQueue {
         Ok(crates_added)
     }
 
-    pub fn set_yanked(&self, conn: &mut postgres::Client, name: &str, version: &str, yanked: bool) {
+    #[context("error trying to set {name}-{version} to yanked: {yanked}")]
+    pub fn set_yanked(
+        &self,
+        conn: &mut postgres::Client,
+        name: &str,
+        version: &str,
+        yanked: bool,
+    ) -> Result<()> {
         let activity = if yanked { "yanked" } else { "unyanked" };
 
-        match conn
-            .execute(
-                "UPDATE releases
-                     SET yanked = $3
-                 FROM crates
-                 WHERE crates.id = releases.crate_id
-                     AND name = $1
-                     AND version = $2
-                ",
-                &[&name, &version, &yanked],
-            )
-            .with_context(|| format!("error while setting {}-{} to {}", name, version, activity))
-        {
-            Ok(rows) => {
-                if rows != 1 {
-                    match self
-                        .has_build_queued(name, version)
-                        .context("error trying to fetch build queue")
-                    {
-                        Ok(false) => {
-                            // the rustwide builder will fetch the current yank state from
-                            // crates.io, so and missed update here will be fixed after the
-                            // build is finished.
-                            error!(
-                                "tried to yank or unyank non-existing release: {} {}",
-                                name, version
-                            );
-                        }
-                        Ok(true) => {}
-                        Err(err) => {
-                            report_error(&err);
-                        }
-                    }
-                } else {
-                    debug!("{}-{} {}", name, version, activity);
+        let rows = conn.execute(
+            "UPDATE releases
+             SET yanked = $3
+             FROM crates
+             WHERE crates.id = releases.crate_id
+                 AND name = $1
+                 AND version = $2",
+            &[&name, &version, &yanked],
+        )?;
+        if rows != 1 {
+            match self
+                .has_build_queued(name, version)
+                .context("error trying to fetch build queue")
+            {
+                Ok(false) => {
+                    // the rustwide builder will fetch the current yank state from
+                    // crates.io, so and missed update here will be fixed after the
+                    // build is finished.
+                    error!(
+                        "tried to yank or unyank non-existing release: {} {}",
+                        name, version
+                    );
+                }
+                Ok(true) => {}
+                Err(err) => {
+                    report_error(&err);
                 }
             }
-            Err(err) => report_error(&err),
+        } else {
+            debug!("{}-{} {}", name, version, activity);
         }
+        Ok(())
     }
 
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
