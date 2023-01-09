@@ -50,7 +50,7 @@ pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
         diff::Difference::ReleaseNotInDb(_, _) => "ReleaseNotInDb",
         diff::Difference::ReleaseYank(_, _, _) => "ReleaseYank",
     }) {
-        println!("{} => {}", key, count);
+        println!("{:17} => {:4}", key, count);
     }
 
     println!("============");
@@ -59,10 +59,10 @@ pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
     } else {
         println!("activities triggered:");
     }
-    println!("builds queued: {}", result.builds_queued);
-    println!("crates deleted: {}", result.crates_deleted);
-    println!("releases deleted: {}", result.releases_deleted);
-    println!("yanks corrected: {}", result.yanks_corrected);
+    println!("builds queued:    {:4}", result.builds_queued);
+    println!("crates deleted:   {:4}", result.crates_deleted);
+    println!("releases deleted: {:4}", result.releases_deleted);
+    println!("yanks corrected:  {:4}", result.yanks_corrected);
 
     Ok(())
 }
