@@ -15,7 +15,7 @@ const BUILD_PRIORITY: i32 = 15;
 /// will compare our database with the local crates.io index and
 /// apply any changes that we find in the index but not our database.
 ///
-/// Differences that we check for, and the activivies:
+/// Differences that we check for, and the activities:
 /// * release in index, but not our DB => queue a build for this release.
 /// * crate in index, but not in our DB => queue builds for all versions of that crate.
 /// * release in DB, but not in the index => delete the release from our DB & storage.
@@ -23,7 +23,7 @@ const BUILD_PRIORITY: i32 = 15;
 /// * different yank-state between DB & Index => update the yank-state in our DB
 ///
 /// Even when activities fail, the command can just be re-run. While the diff calculation will
-/// be repeated, we won't we-execute fixing activities.
+/// be repeated, we won't re-execute fixing activities.
 pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
     let mut conn = ctx.pool()?.get()?;
     let index = ctx.index()?;
@@ -36,7 +36,7 @@ pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
     let index_data =
         index::load(&index).context("Loading crate data from index for consistency check")?;
 
-    let diff = diff::calculcate_diff(db_data.iter(), index_data.iter());
+    let diff = diff::calculate_diff(db_data.iter(), index_data.iter());
     let result = handle_diff(ctx, diff.iter(), dry_run)?;
 
     println!("============");

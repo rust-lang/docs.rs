@@ -41,7 +41,7 @@ impl Display for Difference {
     }
 }
 
-pub(super) fn calculcate_diff<'a, I>(db_data: I, index_data: I) -> Vec<Difference>
+pub(super) fn calculate_diff<'a, I>(db_data: I, index_data: I) -> Vec<Difference>
 where
     I: Iterator<Item = &'a Crate>,
 {
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        assert!(calculcate_diff(iter::empty(), iter::empty()).is_empty());
+        assert!(calculate_diff(iter::empty(), iter::empty()).is_empty());
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         }];
 
         assert_eq!(
-            calculcate_diff(db_releases.iter(), vec![].iter()),
+            calculate_diff(db_releases.iter(), vec![].iter()),
             vec![Difference::CrateNotInIndex("krate".into())]
         );
     }
@@ -142,7 +142,7 @@ mod tests {
         }];
 
         assert_eq!(
-            calculcate_diff(vec![].iter(), index_releases.iter()),
+            calculate_diff(vec![].iter(), index_releases.iter()),
             vec![Difference::CrateNotInDb(
                 "krate".into(),
                 vec!["0.0.2".into(), "0.0.3".into()]
@@ -180,7 +180,7 @@ mod tests {
         }];
 
         assert_eq!(
-            calculcate_diff(db_releases.iter(), index_releases.iter()),
+            calculate_diff(db_releases.iter(), index_releases.iter()),
             vec![Difference::ReleaseYank(
                 "krate".into(),
                 "0.0.2".into(),
@@ -206,6 +206,6 @@ mod tests {
             }],
         }];
 
-        assert!(calculcate_diff(db_releases.iter(), index_releases.iter()).is_empty());
+        assert!(calculate_diff(db_releases.iter(), index_releases.iter()).is_empty());
     }
 }
