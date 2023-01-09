@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
 use crate::{Config, Context};
 use anyhow::Context as _;
+use fn_error_context::context;
 use postgres::Client;
 use std::fs;
 
@@ -16,6 +17,7 @@ enum CrateDeletionError {
     MissingCrate(String),
 }
 
+#[context("error trying to delete crate {name} from database")]
 pub fn delete_crate(
     conn: &mut Client,
     storage: &Storage,
@@ -52,6 +54,7 @@ pub fn delete_crate(
     Ok(())
 }
 
+#[context("error trying to delete release {name}-{version} from database")]
 pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()> {
     let conn = &mut ctx.pool()?.get()?;
     let storage = ctx.storage()?;

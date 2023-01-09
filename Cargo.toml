@@ -97,6 +97,7 @@ percent-encoding = "2.2.0"
 
 # NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
 tempfile = "3.1.0"
+fn-error-context = "0.2.0"
 
 # Templating
 tera = { version = "1.5.0", features = ["builtins"] }
@@ -122,7 +123,6 @@ kuchiki = "0.8"
 rand = "0.8"
 mockito = "0.31.0"
 test-case = "2.0.0"
-fn-error-context = "0.2.0"
 aws-smithy-client = { version = "0.53.0", features = ["test-util"]}
 aws-smithy-http = "0.53.0"
 indoc = "1.0.7"

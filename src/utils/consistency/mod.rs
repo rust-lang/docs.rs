@@ -1,7 +1,7 @@
 use crate::{build_queue, db::delete, Context};
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
-use tracing::info;
+use tracing::{info, warn};
 
 mod data;
 mod db;
@@ -92,33 +92,44 @@ where
         match difference {
             diff::Difference::CrateNotInIndex(name) => {
                 if !dry_run {
-                    delete::delete_crate(&mut conn, &storage, &config, name)?;
+                    if let Err(err) = delete::delete_crate(&mut conn, &storage, &config, name) {
+                        warn!("{:?}", err);
+                    }
                 }
                 result.crates_deleted += 1;
             }
             diff::Difference::CrateNotInDb(name, versions) => {
                 for version in versions {
                     if !dry_run {
-                        build_queue.add_crate(name, version, BUILD_PRIORITY, None)?;
+                        if let Err(err) = build_queue.add_crate(name, version, BUILD_PRIORITY, None)
+                        {
+                            warn!("{:?}", err);
+                        }
                     }
                     result.builds_queued += 1;
                 }
             }
             diff::Difference::ReleaseNotInIndex(name, version) => {
                 if !dry_run {
-                    delete::delete_version(ctx, name, version)?;
+                    if let Err(err) = delete::delete_version(ctx, name, version) {
+                        warn!("{:?}", err);
+                    }
                 }
                 result.releases_deleted += 1;
             }
             diff::Difference::ReleaseNotInDb(name, version) => {
                 if !dry_run {
-                    build_queue.add_crate(name, version, BUILD_PRIORITY, None)?;
+                    if let Err(err) = build_queue.add_crate(name, version, BUILD_PRIORITY, None) {
+                        warn!("{:?}", err);
+                    }
                 }
                 result.builds_queued += 1;
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
                 if !dry_run {
-                    build_queue::set_yanked(&mut conn, name, version, *yanked);
+                    if let Err(err) = build_queue::set_yanked(&mut conn, name, version, *yanked) {
+                        warn!("{:?}", err);
+                    }
                 }
                 result.yanks_corrected += 1;
             }
