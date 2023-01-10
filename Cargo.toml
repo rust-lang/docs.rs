@@ -64,7 +64,7 @@ dashmap = "5.1.0"
 string_cache = "0.8.0"
 postgres-types = { version = "0.2", features = ["derive"] }
 zip = {version = "0.6.2", default-features = false, features = ["bzip2"]}
-bzip2 = "0.4.2"
+bzip2 = "0.4.4"
 serde_cbor = "0.11.1"
 getrandom = "0.2.1"
 
