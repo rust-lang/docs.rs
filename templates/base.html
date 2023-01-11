@@ -19,6 +19,9 @@
 
         <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
         {%- block css -%}{%- endblock css -%}
+
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ docsrs_version() | slugify }}"></script>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ docsrs_version() | slugify }}"></script>
     </head>
 
     <body class="{% block body_classes %}{% endblock body_classes %}">
@@ -31,8 +34,6 @@
         {%- block body -%}{%- endblock body -%}
         {%- include "footer.html" -%}
 
-        <script type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ docsrs_version() | slugify }}"></script>
-        <script type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ docsrs_version() | slugify }}"></script>
 
         {%- block javascript -%}{%- endblock javascript -%}
     </body>
