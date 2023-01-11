@@ -14,7 +14,7 @@ jobs:
       - name: Build the Docker image
         run: docker build -t docs-rs-web -f dockerfiles/Dockerfile --target web-server .
 
-      - name: Upload the Docker image to ECR
+      - name: Upload the Docker image to ECR (production)
         uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
         with:
           image: docs-rs-web
