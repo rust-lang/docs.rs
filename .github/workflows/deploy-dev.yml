@@ -1,0 +1,27 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  docker:
+    name: Build and upload docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build the Docker image
+        run: docker build -t docs-rs -f dockerfiles/Dockerfile . --target=web-server
+
+      - name: Upload the Docker image to ECR (dev)
+        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
+        with:
+          image: docs-rs-web
+          repository: docs-rs-web
+          region: us-east-1
+          aws_access_key_id: "${{ secrets.dev_aws_access_key_id }}"
+          aws_secret_access_key: "${{ secrets.dev_aws_secret_access_key }}"
+          redeploy_ecs_cluster: docs-rs-staging
+          redeploy_ecs_service: docs-rs-web
