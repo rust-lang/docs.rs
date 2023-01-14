@@ -8,7 +8,10 @@ use aws_sdk_cloudfront::{
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use strum::EnumString;
 use tokio::runtime::Runtime;
 use tracing::{debug, info, instrument, warn};
@@ -444,6 +447,25 @@ pub(crate) fn queued_or_active_crate_invalidations(
         .collect())
 }
 
+/// Return the count of queued or activate invalidations, per distribution id
+pub(crate) fn queued_or_active_crate_invalidation_count_by_distribution(
+    conn: &mut impl postgres::GenericClient,
+) -> Result<HashMap<String, i64>> {
+    Ok(conn
+        .query(
+            r#"
+             SELECT
+                cdn_distribution_id, 
+                count(*)
+             FROM cdn_invalidation_queue 
+             GROUP BY cdn_distribution_id"#,
+            &[],
+        )?
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,6 +553,11 @@ mod tests {
                     ),
                 ]
             );
+
+            let counts = queued_or_active_crate_invalidation_count_by_distribution(&mut *conn)?;
+            assert_eq!(counts.len(), 2);
+            assert_eq!(*counts.get("distribution_id_web").unwrap(), 2);
+            assert_eq!(*counts.get("distribution_id_static").unwrap(), 1);
 
             // queueing the invalidation doesn't create it in the CDN
             assert!(cdn.active_invalidations("distribution_id_web")?.is_empty());
