@@ -2,9 +2,7 @@
 mod macros;
 
 use self::macros::MetricFromOpts;
-use crate::db::Pool;
-use crate::target::TargetAtom;
-use crate::BuildQueue;
+use crate::{cdn, db::Pool, target::TargetAtom, BuildQueue};
 use anyhow::Error;
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
@@ -28,6 +26,9 @@ metrics! {
         queue_is_locked: IntGauge,
         /// queued crates by priority
         queued_crates_count_by_priority: IntGaugeVec["priority"],
+
+        /// queued CDN invalidations
+        queued_cdn_invalidations_by_distribution: IntGaugeVec["distribution"],
 
         /// The number of idle database connections
         idle_db_connections: IntGauge,
@@ -172,6 +173,15 @@ impl Metrics {
             self.queued_crates_count_by_priority
                 .with_label_values(&[&priority.to_string()])
                 .set(*count as i64);
+        }
+
+        let mut conn = pool.get()?;
+        for (distribution_id, count) in
+            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut *conn)?
+        {
+            self.queued_cdn_invalidations_by_distribution
+                .with_label_values(&[&distribution_id])
+                .set(count);
         }
 
         self.failed_crates_count.set(queue.failed_count()? as i64);
