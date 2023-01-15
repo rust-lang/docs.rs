@@ -6,7 +6,7 @@ use aws_sdk_s3::{
     error as s3_error,
     model::{Delete, ObjectIdentifier, Tag, Tagging},
     types::SdkError,
-    Client, Endpoint, Region,
+    Client, Region,
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;
@@ -42,7 +42,7 @@ impl S3Backend {
             .region(Region::new(config.s3_region.clone()));
 
         if let Some(ref endpoint) = config.s3_endpoint {
-            config_builder = config_builder.endpoint_resolver(Endpoint::immutable(endpoint)?);
+            config_builder = config_builder.force_path_style(true).endpoint_url(endpoint);
         }
 
         let client = Client::from_conf(config_builder.build());
