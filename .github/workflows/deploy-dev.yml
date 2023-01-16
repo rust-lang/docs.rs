@@ -21,7 +21,7 @@ jobs:
           image: docs-rs-web
           repository: docs-rs-web
           region: us-east-1
-          aws_access_key_id: "${{ secrets.dev_aws_access_key_id }}"
-          aws_secret_access_key: "${{ secrets.dev_aws_secret_access_key }}"
+          aws_access_key_id: "${{ secrets.staging_aws_access_key_id }}"
+          aws_secret_access_key: "${{ secrets.staging_aws_secret_access_key }}"
           redeploy_ecs_cluster: docs-rs-staging
           redeploy_ecs_service: docs-rs-web
