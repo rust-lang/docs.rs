@@ -447,7 +447,7 @@ pub(crate) fn queued_or_active_crate_invalidations(
         .collect())
 }
 
-/// Return the count of queued or activate invalidations, per distribution id
+/// Return the count of queued or active invalidations, per distribution id
 pub(crate) fn queued_or_active_crate_invalidation_count_by_distribution(
     conn: &mut impl postgres::GenericClient,
 ) -> Result<HashMap<String, i64>> {
