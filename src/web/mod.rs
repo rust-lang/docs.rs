@@ -774,7 +774,7 @@ mod test {
             let text = web.get("/foo/0.2.0/foo").send()?.text()?;
             let platform = kuchiki::parse_html()
                 .one(text)
-                .select(r#"ul > li > a[aria-label="Platform"]"#)
+                .select(r#"form.landing-search-form-nav details > summary[aria-label="Platform"]"#)
                 .unwrap()
                 .count();
             assert_eq!(platform, 1);

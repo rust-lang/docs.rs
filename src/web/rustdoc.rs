@@ -946,7 +946,7 @@ mod test {
         let dom = kuchiki::parse_html().one(data);
 
         if let Some(elem) = dom
-            .select("form > ul > li > a.warn")
+            .select("form.landing-search-form-nav > a.warn.pure-menu-item")
             .expect("invalid selector")
             .next()
         {
@@ -1349,7 +1349,7 @@ mod test {
             let data = web.get(path).send()?.text()?;
             Ok(kuchiki::parse_html()
                 .one(data)
-                .select("form > ul > li > .warn")
+                .select("form.landing-search-form-nav > .warn.pure-menu-item")
                 .expect("invalid selector")
                 .any(|el| el.text_contents().contains("yanked")))
         }
@@ -1594,7 +1594,7 @@ mod test {
             let data = web.get(path).send()?.text()?;
             let dom = kuchiki::parse_html().one(data);
             Ok(dom
-                .select(r#"a[aria-label="Platform"] + ul li a"#)
+                .select(r#"summary[aria-label="Platform"] + ul li a"#)
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();

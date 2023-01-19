@@ -999,7 +999,7 @@ mod tests {
 
             let platform_links: Vec<(String, String)> = kuchiki::parse_html()
                 .one(response.text()?)
-                .select(r#"a[aria-label="Platform"] + ul li a"#)
+                .select(r#"summary[aria-label="Platform"] + ul li a"#)
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();
