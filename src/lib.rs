@@ -57,4 +57,8 @@ pub const BUILD_VERSION: &str = concat!(
 );
 
 /// Where rustdoc's static files are stored in S3.
+/// Since the prefix starts with `/`, it needs to be referenced with a double slash in
+/// API & AWS CLI.
+/// Example:
+/// `s3://rust-docs-rs//rustdoc-static/something.css`
 pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
