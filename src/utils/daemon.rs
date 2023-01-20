@@ -98,6 +98,7 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
 
 pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Error> {
     let cdn = context.cdn()?;
+    let metrics = context.metrics()?;
     let config = context.config()?;
     let pool = context.pool()?;
 
@@ -111,11 +112,11 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
     cron("cdn invalidator", Duration::from_secs(60), move || {
         let mut conn = pool.get()?;
         if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-            cdn::handle_queued_invalidation_requests(&cdn, &mut *conn, distribution_id)
+            cdn::handle_queued_invalidation_requests(&cdn, &metrics, &mut *conn, distribution_id)
                 .context("error handling queued invalidations for web CDN invalidation")?;
         }
         if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-            cdn::handle_queued_invalidation_requests(&cdn, &mut *conn, distribution_id)
+            cdn::handle_queued_invalidation_requests(&cdn, &metrics, &mut *conn, distribution_id)
                 .context("error handling queued invalidations for static CDN invalidation")?;
         }
         Ok(())

@@ -1,4 +1,4 @@
-use crate::{utils::report_error, Config};
+use crate::{metrics::duration_to_seconds, utils::report_error, Config, Metrics};
 use anyhow::{anyhow, Context, Error, Result};
 use aws_sdk_cloudfront::{
     config::retry::RetryConfig,
@@ -275,6 +275,7 @@ impl CdnBackend {
 #[instrument(skip(conn))]
 pub(crate) fn handle_queued_invalidation_requests(
     cdn: &CdnBackend,
+    metrics: &Metrics,
     conn: &mut impl postgres::GenericClient,
     distribution_id: &str,
 ) -> Result<()> {
@@ -300,12 +301,15 @@ pub(crate) fn handle_queued_invalidation_requests(
     // We're only looking at InProgress invalidations,
     // we don't differentiate between `Completed` ones, and invalidations
     // missing in the CloudFront `ListInvalidations` response.
-    conn.execute(
+    let now = Utc::now();
+    for row in conn.query(
         "DELETE FROM cdn_invalidation_queue
          WHERE 
              cdn_distribution_id = $1 AND 
              created_in_cdn IS NOT NULL AND 
-             NOT (cdn_reference = ANY($2))",
+             NOT (cdn_reference = ANY($2))
+         RETURNING created_in_cdn
+        ",
         &[
             &distribution_id,
             &active_invalidations
@@ -313,7 +317,15 @@ pub(crate) fn handle_queued_invalidation_requests(
                 .map(|i| i.invalidation_id.clone())
                 .collect::<Vec<_>>(),
         ],
-    )?;
+    )? {
+        if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>(0)).to_std() {
+            // This can only fail when the duration is negative, which can't happen anyways
+            metrics
+                .cdn_invalidation_time
+                .with_label_values(&[distribution_id])
+                .observe(duration_to_seconds(duration));
+        }
+    }
 
     let possible_path_invalidations: i32 =
         MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS - active_path_invalidations as i32;
@@ -333,7 +345,7 @@ pub(crate) fn handle_queued_invalidation_requests(
     let mut queued_entry_ids: Vec<i64> = Vec::new();
 
     for row in transaction.query(
-        "SELECT id, path_pattern
+        "SELECT id, path_pattern, queued
          FROM cdn_invalidation_queue 
          WHERE cdn_distribution_id = $1 AND created_in_cdn IS NULL
          ORDER BY queued, id
@@ -343,6 +355,14 @@ pub(crate) fn handle_queued_invalidation_requests(
     )? {
         queued_entry_ids.push(row.get("id"));
         path_patterns.push(row.get("path_pattern"));
+
+        if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>("queued")).to_std() {
+            // This can only fail when the duration is negative, which can't happen anyways
+            metrics
+                .cdn_queue_time
+                .with_label_values(&[distribution_id])
+                .observe(duration_to_seconds(duration));
+        }
     }
 
     if path_patterns.is_empty() {
@@ -566,8 +586,18 @@ mod tests {
                 .is_empty());
 
             // now handle the queued invalidations
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_static")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_static",
+            )?;
 
             // which creates them in the CDN
             {
@@ -590,8 +620,18 @@ mod tests {
             cdn.clear_active_invalidations();
 
             // now handle again
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_static")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_static",
+            )?;
 
             // which removes them from the queue table
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
@@ -624,7 +664,12 @@ mod tests {
             queue_crate_invalidation(&mut *conn, &env.config(), "krate")?;
 
             // handle the queued invalidations
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
 
             // only one path was added to the CDN
             let q = queued_or_active_crate_invalidations(&mut *conn)?;
@@ -662,7 +707,12 @@ mod tests {
             queue_crate_invalidation(&mut *conn, &env.config(), "krate")?;
 
             // handle the queued invalidations
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
 
             // nothing was added to the CDN
             assert!(queued_or_active_crate_invalidations(&mut *conn)?
@@ -679,7 +729,12 @@ mod tests {
             cdn.clear_active_invalidations();
 
             // now handle again
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
 
             // which adds the CDN reference
             assert!(queued_or_active_crate_invalidations(&mut *conn)?
@@ -709,7 +764,12 @@ mod tests {
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
 
             // run the handler
-            handle_queued_invalidation_requests(&env.cdn(), &mut *conn, "distribution_id_web")?;
+            handle_queued_invalidation_requests(
+                &env.cdn(),
+                &env.metrics(),
+                &mut *conn,
+                "distribution_id_web",
+            )?;
 
             // no invalidation was created
             assert!(cdn.active_invalidations("distribution_id_web")?.is_empty());
