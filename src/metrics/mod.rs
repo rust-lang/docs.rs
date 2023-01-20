@@ -29,6 +29,10 @@ metrics! {
 
         /// queued CDN invalidations
         queued_cdn_invalidations_by_distribution: IntGaugeVec["distribution"],
+        /// duration of CDN invalidations after having beeing sent to the CDN.
+        pub(crate) cdn_invalidation_time: HistogramVec["distribution"],
+        /// queue time of CDN invalidations before they are sent to the CDN.
+        pub(crate) cdn_queue_time: HistogramVec["distribution"],
 
         /// The number of idle database connections
         idle_db_connections: IntGauge,
@@ -86,6 +90,13 @@ metrics! {
     //
     // https://docs.rs/prometheus/0.9.0/prometheus/struct.Opts.html#structfield.namespace
     namespace: "docsrs",
+}
+
+/// Converts a `Duration` to seconds, used by prometheus internally
+#[inline]
+pub(crate) fn duration_to_seconds(d: Duration) -> f64 {
+    let nanos = f64::from(d.subsec_nanos()) / 1e9;
+    d.as_secs() as f64 + nanos
 }
 
 #[derive(Debug, Default)]

@@ -1,4 +1,7 @@
-use crate::{db::Pool, utils::spawn_blocking, web::error::AxumResult, BuildQueue, Metrics};
+use crate::{
+    db::Pool, metrics::duration_to_seconds, utils::spawn_blocking, web::error::AxumResult,
+    BuildQueue, Metrics,
+};
 use anyhow::Context as _;
 use axum::{
     body::Body,
@@ -12,11 +15,7 @@ use axum::{
     response::IntoResponse,
 };
 use prometheus::{Encoder, HistogramVec, TextEncoder};
-use std::{
-    borrow::Cow,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 #[cfg(test)]
 use tracing::debug;
 
@@ -38,13 +37,6 @@ pub(super) async fn metrics_handler(
         .header(CONTENT_LENGTH, buffer.len())
         .body(Body::from(buffer))
         .context("error generating response")?)
-}
-
-/// Converts a `Duration` to seconds, used by prometheus internally
-#[inline]
-fn duration_to_seconds(d: Duration) -> f64 {
-    let nanos = f64::from(d.subsec_nanos()) / 1e9;
-    d.as_secs() as f64 + nanos
 }
 
 /// Request recorder middleware
