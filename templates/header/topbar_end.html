@@ -5,21 +5,7 @@
                 {% include "header/global_alert.html" -%}
 
                 <ul class="pure-menu-list">
-                    <li class="pure-menu-item pure-menu-has-children">
-                        <a href="#" class="pure-menu-link">
-                            <span title="Releases">{{ "leaf" | fas }}</span>
-                            <span class="title">Releases</span>
-                        </a>
-
-                        <ul class="pure-menu-children">
-                            {{ macros::menu_link(href="/releases", text="All Releases") }}
-                            {{ macros::menu_link(href="/releases/stars", text="Releases by Stars") }}
-                            {{ macros::menu_link(href="/releases/recent-failures", text="Recent Build Failures") }}
-                            {{ macros::menu_link(href="/releases/failures", text="Build Failures by Stars") }}
-                            {{ macros::menu_link(href="/releases/activity", text="Release Activity") }}
-                        </ul>
-                    </li>{#
-
+                    {#
                     The Rust dropdown menu
                     #}<li class="pure-menu-item pure-menu-has-children">
                         <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
