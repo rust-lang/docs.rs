@@ -1,6 +1,6 @@
 use crate::{
     db::Pool, metrics::duration_to_seconds, utils::spawn_blocking, web::error::AxumResult,
-    BuildQueue, Metrics,
+    BuildQueue, Config, Metrics,
 };
 use anyhow::Context as _;
 use axum::{
@@ -21,10 +21,11 @@ use tracing::debug;
 
 pub(super) async fn metrics_handler(
     Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
     Extension(metrics): Extension<Arc<Metrics>>,
     Extension(queue): Extension<Arc<BuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
-    let families = spawn_blocking(move || metrics.gather(&pool, &queue)).await?;
+    let families = spawn_blocking(move || metrics.gather(&pool, &queue, &config)).await?;
 
     let mut buffer = Vec::new();
     TextEncoder::new()
@@ -199,7 +200,8 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.pool()?, &env.build_queue())?;
+            let metrics_serialized =
+                metrics.gather(&env.pool()?, &env.build_queue(), &env.config())?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.get_name() == "docsrs_routes_visited")
