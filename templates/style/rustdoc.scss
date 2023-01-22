@@ -3,19 +3,8 @@
 
 div.container-rustdoc {
     text-align: left;
-
-    > .docs-rs-footer {
-        bottom: -32px;
-        right: -15px;
-    }
 }
 
-
-div.container-rustdoc:not(.source) {
-    > .docs-rs-footer {
-        left: 185px; // This is the left sidebar
-    }
-}
 
 div.rustdoc {
     #sidebar-toggle {
