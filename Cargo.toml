@@ -90,9 +90,8 @@ axum-extra = "0.4.2"
 hyper = { version = "0.14.15", default-features = false }
 tower = "0.4.11"
 tower-service = "0.3.2"
-tower-http = { version = "0.3.4", features = ["trace"] }
+tower-http = { version = "0.3.4", features = ["fs", "trace"] }
 mime = "0.3.16"
-httpdate = "1.0.2"
 percent-encoding = "2.2.0"
 
 # NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
