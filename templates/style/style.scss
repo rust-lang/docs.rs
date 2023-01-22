@@ -211,13 +211,16 @@ pre {
 
 div.container {
     max-width: 1160px;
-    margin: 0 auto;
     text-align: left;
 
     > .chartjs-render-monitor {
         // This is to prevent the canvas text to go under the footer.
         padding-bottom: 35px;
     }
+}
+
+body.centered div.container {
+    margin: 0 auto;
 }
 
 div.landing {
