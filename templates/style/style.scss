@@ -207,8 +207,11 @@ pre {
 
 div.container {
     max-width: 1160px;
-    margin: 0 auto;
     text-align: left;
+}
+
+body.centered div.container {
+    margin: 0 auto;
 }
 
 div.landing {
