@@ -2,7 +2,7 @@
 mod macros;
 
 use self::macros::MetricFromOpts;
-use crate::{cdn, db::Pool, target::TargetAtom, BuildQueue};
+use crate::{cdn, db::Pool, target::TargetAtom, BuildQueue, Config};
 use anyhow::Error;
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
@@ -185,6 +185,7 @@ impl Metrics {
         &self,
         pool: &Pool,
         queue: &BuildQueue,
+        config: &Config,
     ) -> Result<Vec<MetricFamily>, Error> {
         self.idle_db_connections.set(pool.idle_connections() as i64);
         self.used_db_connections.set(pool.used_connections() as i64);
@@ -205,7 +206,7 @@ impl Metrics {
 
         let mut conn = pool.get()?;
         for (distribution_id, count) in
-            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut *conn)?
+            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut *conn, config)?
         {
             self.queued_cdn_invalidations_by_distribution
                 .with_label_values(&[&distribution_id])

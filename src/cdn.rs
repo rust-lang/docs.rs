@@ -470,9 +470,19 @@ pub(crate) fn queued_or_active_crate_invalidations(
 /// Return the count of queued or active invalidations, per distribution id
 pub(crate) fn queued_or_active_crate_invalidation_count_by_distribution(
     conn: &mut impl postgres::GenericClient,
+    config: &Config,
 ) -> Result<HashMap<String, i64>> {
-    Ok(conn
-        .query(
+    let mut result: HashMap<String, i64> = HashMap::from_iter(
+        config
+            .cloudfront_distribution_id_web
+            .iter()
+            .chain(config.cloudfront_distribution_id_static.iter())
+            .cloned()
+            .map(|id| (id, 0)),
+    );
+
+    result.extend(
+        conn.query(
             r#"
              SELECT
                 cdn_distribution_id, 
@@ -482,8 +492,10 @@ pub(crate) fn queued_or_active_crate_invalidation_count_by_distribution(
             &[],
         )?
         .iter()
-        .map(|row| (row.get(0), row.get(1)))
-        .collect())
+        .map(|row| (row.get(0), row.get(1))),
+    );
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -528,6 +540,27 @@ mod tests {
     }
 
     #[test]
+    fn invalidation_counts_are_zero_with_empty_queue() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
+                config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
+            });
+
+            let config = env.config();
+            let mut conn = env.db().conn();
+            assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
+
+            let counts =
+                queued_or_active_crate_invalidation_count_by_distribution(&mut *conn, &config)?;
+            assert_eq!(counts.len(), 2);
+            assert_eq!(*counts.get("distribution_id_web").unwrap(), 0);
+            assert_eq!(*counts.get("distribution_id_static").unwrap(), 0);
+            Ok(())
+        })
+    }
+
+    #[test]
     fn invalidate_a_crate() {
         crate::test::wrapper(|env| {
             env.override_config(|config| {
@@ -536,6 +569,7 @@ mod tests {
             });
 
             let cdn = env.cdn();
+            let config = env.config();
             let mut conn = env.db().conn();
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
 
@@ -574,7 +608,8 @@ mod tests {
                 ]
             );
 
-            let counts = queued_or_active_crate_invalidation_count_by_distribution(&mut *conn)?;
+            let counts =
+                queued_or_active_crate_invalidation_count_by_distribution(&mut *conn, &config)?;
             assert_eq!(counts.len(), 2);
             assert_eq!(*counts.get("distribution_id_web").unwrap(), 2);
             assert_eq!(*counts.get("distribution_id_static").unwrap(), 1);
