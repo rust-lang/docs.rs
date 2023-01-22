@@ -21,6 +21,8 @@ macro_rules! metrics {
                 $metric_vis $metric: $ty,
             )*
             pub(crate) recently_accessed_releases: RecentlyAccessedReleases,
+            pub(crate) cdn_invalidation_time: prometheus::HistogramVec,
+            pub(crate) cdn_queue_time: prometheus::HistogramVec,
         }
         impl $name {
             $vis fn new() -> Result<Self, prometheus::Error> {
@@ -38,6 +40,24 @@ macro_rules! metrics {
                 Ok(Self {
                     registry,
                     recently_accessed_releases: RecentlyAccessedReleases::new(),
+                    cdn_invalidation_time: prometheus::HistogramVec::new(
+                        prometheus::HistogramOpts::new(
+                            "cdn_invalidation_time",
+                            "duration of CDN invalidations after having beeing sent to the CDN.",
+                        )
+                        .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
+                        .variable_label("distribution"),
+                        &["distribution"],
+                    )?,
+                    cdn_queue_time: prometheus::HistogramVec::new(
+                        prometheus::HistogramOpts::new(
+                            "cdn_queue_time",
+                            "queue time of CDN invalidations before they are sent to the CDN. ",
+                        )
+                        .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
+                        .variable_label("distribution"),
+                        &["distribution"],
+                    )?,
                     $(
                         $(#[$meta])*
                         $metric,

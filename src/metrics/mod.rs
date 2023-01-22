@@ -14,6 +14,27 @@ load_metric_type!(IntCounterVec as vec);
 load_metric_type!(IntGaugeVec as vec);
 load_metric_type!(HistogramVec as vec);
 
+/// the measured times from cdn invalidations, meaning:
+/// * how long an invalidation took, or
+/// * how long the invalidation was queued
+/// will be put into these buckets (seconds,
+/// each entry is the upper bound).
+/// Prometheus only gets the counts per bucket in a certain
+/// time range, no exact durations.
+pub const CDN_INVALIDATION_HISTOGRAM_BUCKETS: &[f64; 11] = &[
+    60.0,    // 1
+    120.0,   // 2
+    300.0,   // 5
+    600.0,   // 10
+    900.0,   // 15
+    1200.0,  // 20
+    1800.0,  // 30
+    2700.0,  // 45
+    6000.0,  // 60
+    12000.0, // 120
+    24000.0, // 240
+];
+
 metrics! {
     pub struct Metrics {
         /// Number of crates in the build queue
@@ -29,10 +50,6 @@ metrics! {
 
         /// queued CDN invalidations
         queued_cdn_invalidations_by_distribution: IntGaugeVec["distribution"],
-        /// duration of CDN invalidations after having beeing sent to the CDN.
-        pub(crate) cdn_invalidation_time: HistogramVec["distribution"],
-        /// queue time of CDN invalidations before they are sent to the CDN.
-        pub(crate) cdn_queue_time: HistogramVec["distribution"],
 
         /// The number of idle database connections
         idle_db_connections: IntGauge,
