@@ -1,4 +1,6 @@
-use super::{cache::CachePolicy, error::AxumNope, metrics::request_recorder};
+use super::{
+    cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
+};
 use axum::{
     handler::Handler as AxumHandler,
     http::Request as AxumHttpRequest,
@@ -15,7 +17,7 @@ use tracing::{debug, instrument};
 const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
 
 #[instrument(skip_all)]
-fn get_static<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
+pub(crate) fn get_static<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
 where
     H: AxumHandler<T, S, B>,
     B: Send + 'static + hyper::body::HttpBody,
@@ -102,10 +104,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/favicon.ico",
             get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
         )
-        .route(
-            "/-/static/*path",
-            get_static(super::statics::static_handler),
-        )
+        .nest("/-/static/", build_static_router())
         .route(
             "/opensearch.xml",
             get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
