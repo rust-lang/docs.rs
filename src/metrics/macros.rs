@@ -43,7 +43,7 @@ macro_rules! metrics {
                     cdn_invalidation_time: prometheus::HistogramVec::new(
                         prometheus::HistogramOpts::new(
                             "cdn_invalidation_time",
-                            "duration of CDN invalidations after having beeing sent to the CDN.",
+                            "duration of CDN invalidations after having been sent to the CDN.",
                         )
                         .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
                         .variable_label("distribution"),
