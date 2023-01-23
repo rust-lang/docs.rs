@@ -37,27 +37,36 @@ macro_rules! metrics {
                     $(#[$meta])*
                     registry.register(Box::new($metric.clone()))?;
                 )*
+
+                let cdn_invalidation_time = prometheus::HistogramVec::new(
+                    prometheus::HistogramOpts::new(
+                        "cdn_invalidation_time",
+                        "duration of CDN invalidations after having been sent to the CDN.",
+                    )
+                    .namespace($namespace)
+                    .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
+                    .variable_label("distribution"),
+                    &["distribution"],
+                )?;
+                registry.register(Box::new(cdn_invalidation_time.clone()))?;
+
+                let cdn_queue_time = prometheus::HistogramVec::new(
+                    prometheus::HistogramOpts::new(
+                        "cdn_queue_time",
+                        "queue time of CDN invalidations before they are sent to the CDN. ",
+                    )
+                    .namespace($namespace)
+                    .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
+                    .variable_label("distribution"),
+                    &["distribution"],
+                )?;
+                registry.register(Box::new(cdn_queue_time.clone()))?;
+
                 Ok(Self {
                     registry,
                     recently_accessed_releases: RecentlyAccessedReleases::new(),
-                    cdn_invalidation_time: prometheus::HistogramVec::new(
-                        prometheus::HistogramOpts::new(
-                            "cdn_invalidation_time",
-                            "duration of CDN invalidations after having been sent to the CDN.",
-                        )
-                        .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
-                        .variable_label("distribution"),
-                        &["distribution"],
-                    )?,
-                    cdn_queue_time: prometheus::HistogramVec::new(
-                        prometheus::HistogramOpts::new(
-                            "cdn_queue_time",
-                            "queue time of CDN invalidations before they are sent to the CDN. ",
-                        )
-                        .buckets($crate::metrics::CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
-                        .variable_label("distribution"),
-                        &["distribution"],
-                    )?,
+                    cdn_invalidation_time,
+                    cdn_queue_time,
                     $(
                         $(#[$meta])*
                         $metric,
