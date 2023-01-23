@@ -1,5 +1,5 @@
 // FIXME: Use modules
-@import "vars", "utils", "navbar", "themes", "fa", "footer", "syntax";
+@import "vars", "utils", "navbar", "themes", "fa", "syntax";
 
 /* See FiraSans-LICENSE.txt for the Fira Sans license. */
 @font-face {
@@ -197,10 +197,6 @@ body {
     g.highcharts-grid > path {
         stroke: var(--chart-grid) !important;
     }
-
-    > .about-page {
-        padding-bottom: calc(#{$footer-height} + 2px);
-    }
 }
 
 pre {
@@ -213,11 +209,6 @@ div.container {
     max-width: 1160px;
     margin: 0 auto;
     text-align: left;
-
-    > .chartjs-render-monitor {
-        // This is to prevent the canvas text to go under the footer.
-        padding-bottom: 35px;
-    }
 }
 
 div.landing {

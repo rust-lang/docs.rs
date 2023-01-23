@@ -1,10 +1,5 @@
 // FIXME: Use modules
-@import "vars", "navbar", "themes", "fa", "footer";
-
-// This rule is needed to be sure that the footer will always be at the bottom of the page.
-#rustdoc_body_wrapper {
-    min-height: calc(100vh - #{$footer-height + 2});
-}
+@import "vars", "navbar", "themes", "fa";
 
 #clipboard {
     cursor: pointer;
@@ -17,32 +12,10 @@ body.rustdoc-page > .nav-container > .container {
 
 div.container-rustdoc {
     text-align: left;
-
-    > .docs-rs-footer {
-        width: unset;
-    }
 }
 
 div.container-rustdoc {
     width: unset;
-}
-
-div.container-rustdoc:not(.source) {
-    // This is when the rustdoc sidebar "disappears" (for mobile mode).
-    @media (max-width: 700px) {
-        > .docs-rs-footer:not(.source) {
-            left: -15px;
-        }
-    }
-}
-
-div.container-rustdoc {
-    > .docs-rs-footer {
-        left: -15px;
-        // This is needed because even though the sidebar only contains the header, it still takes
-        // all the height, going over the footer.
-        z-index: 1;
-    }
 }
 
 // this is a super nasty override for help dialog in rustdocs
