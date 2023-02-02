@@ -2397,15 +2397,12 @@ mod test {
                 .unwrap()
                 .contains("noindex"));
 
-            assert!(!web
+            assert!(web
                 .get("/dummy/latest/dummy/")
                 .send()?
                 .headers()
                 .get("x-robots-tag")
-                .unwrap_or_default()
-                .to_str()
-                .unwrap()
-                .contains("noindex"));
+                .is_none());
             Ok(())
         })
     }
