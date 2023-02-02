@@ -2402,7 +2402,7 @@ mod test {
                 .send()?
                 .headers()
                 .get("x-robots-tag")
-                .unwrap()
+                .unwrap_or_default()
                 .to_str()
                 .unwrap()
                 .contains("noindex"));
