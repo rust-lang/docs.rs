@@ -13,7 +13,6 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
         file::File,
-        headers::CanonicalUrl,
         match_version_axum,
         metrics::RenderingTimesRecorder,
         page::TemplateData,
@@ -25,8 +24,7 @@ use anyhow::{anyhow, Context as _};
 use axum::{
     extract::{Extension, Path, Query},
     http::{StatusCode, Uri},
-    response::{Html, IntoResponse, Response as AxumResponse},
-    TypedHeader,
+    response::{AppendHeaders, Html, IntoResponse, Response as AxumResponse},
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
@@ -289,7 +287,6 @@ pub(crate) async fn rustdoc_redirector_handler(
 #[derive(Debug, Clone, Serialize)]
 struct RustdocPage {
     latest_path: String,
-    canonical_url: CanonicalUrl,
     permalink_path: String,
     latest_version: String,
     target: String,
@@ -315,7 +312,6 @@ impl RustdocPage {
         file_path: &str,
     ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
-        let canonical_url = self.canonical_url.clone();
 
         // Build the page of documentation
         let ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
@@ -336,9 +332,10 @@ impl RustdocPage {
             result => result.context("error rewriting HTML")?,
         };
 
+        let robots = if is_latest_url { "" } else { "noindex" };
         Ok((
             StatusCode::OK,
-            TypedHeader(canonical_url),
+            AppendHeaders([("X-Robots-Tag", robots)]),
             Extension(if is_latest_url {
                 CachePolicy::ForeverInCdn
             } else {
@@ -640,18 +637,6 @@ pub(crate) async fn rustdoc_html_server_handler(
         params.name, target_redirect, query_string
     );
 
-    // Set the canonical URL for search engines to the `/latest/` page on docs.rs.
-    // Note: The URL this points to may not exist. For instance, if we're rendering
-    // `struct Foo` in version 0.1.0 of a crate, and version 0.2.0 of that crate removes
-    // `struct Foo`, this will point at a 404. That's fine: search engines will crawl
-    // the target and will not canonicalize to a URL that doesn't exist.
-    // Don't include index.html in the canonical URL.
-    let canonical_url = CanonicalUrl::from_path(format!(
-        "/{}/latest/{}",
-        params.name,
-        inner_path.replace("index.html", ""),
-    ));
-
     metrics
         .recently_accessed_releases
         .record(krate.crate_id, krate.release_id, target);
@@ -671,7 +656,6 @@ pub(crate) async fn rustdoc_html_server_handler(
         move || {
             Ok(RustdocPage {
                 latest_path,
-                canonical_url,
                 permalink_path,
                 latest_version,
                 target,
@@ -2394,90 +2378,35 @@ mod test {
     }
 
     #[test]
-    fn canonical_url() {
+    fn noindex_nonlatest() {
         wrapper(|env| {
             env.fake_release()
-                .name("dummy-dash")
+                .name("dummy")
                 .version("0.1.0")
-                .documentation_url(Some("http://example.com".to_string()))
-                .rustdoc_file("dummy_dash/index.html")
-                .create()?;
-
-            let utf8_filename = "序.html";
-            env.fake_release()
-                .name("dummy-docs")
-                .version("0.1.0")
-                .documentation_url(Some("https://docs.rs/foo".to_string()))
-                .rustdoc_file("dummy_docs/index.html")
-                .rustdoc_file(&format!("dummy_docs/{utf8_filename}"))
-                .create()?;
-
-            env.fake_release()
-                .name("dummy-nodocs")
-                .version("0.1.0")
-                .documentation_url(None)
-                .rustdoc_file("dummy_nodocs/index.html")
-                .rustdoc_file("dummy_nodocs/struct.Foo.html")
+                .rustdoc_file("dummy/index.html")
                 .create()?;
 
             let web = env.frontend();
 
             assert!(web
-                .get("/dummy-dash/0.1.0/dummy_dash/")
+                .get("/dummy/0.1.0/dummy/")
                 .send()?
                 .headers()
-                .get("link")
+                .get("x-robots-tag")
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .contains("rel=\"canonical\""),);
+                .contains("noindex"));
 
-            assert_eq!(
-                web.get("/dummy-docs/0.1.0/dummy_docs/")
-                    .send()?
-                    .headers()
-                    .get("link")
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-                "<https://docs.rs/dummy-docs/latest/dummy_docs/>; rel=\"canonical\""
-            );
-
-            assert_eq!(
-                web.get(&format!("/dummy-docs/0.1.0/dummy_docs/{utf8_filename}"))
-                    .send()?
-                    .headers()
-                    .get("link")
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-                "<https://docs.rs/dummy-docs/latest/dummy_docs/%E5%BA%8F.html>; rel=\"canonical\"",
-            );
-
-            assert!(web
-                .get("/dummy-nodocs/0.1.0/dummy_nodocs/")
+            assert!(!web
+                .get("/dummy/latest/dummy/")
                 .send()?
                 .headers()
-                .get("link")
+                .get("x-robots-tag")
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .contains(
-                    "<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/>; rel=\"canonical\""
-                ),);
-
-            assert_eq!(
-                web
-                    .get("/dummy-nodocs/0.1.0/dummy_nodocs/struct.Foo.html")
-                    .send()?
-              .headers()
-                .get("link")
-                .unwrap()
-                .to_str()
-            .unwrap(),
-            "<https://docs.rs/dummy-nodocs/latest/dummy_nodocs/struct.Foo.html>; rel=\"canonical\"",
-            );
-
+                .contains("noindex"));
             Ok(())
         })
     }

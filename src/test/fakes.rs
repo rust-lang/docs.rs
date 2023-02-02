@@ -246,11 +246,6 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn documentation_url(mut self, documentation: Option<String>) -> Self {
-        self.package.documentation = documentation;
-        self
-    }
-
     /// Returns the release_id
     pub(crate) fn create(mut self) -> Result<i32> {
         use std::fs;
