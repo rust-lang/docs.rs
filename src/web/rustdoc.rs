@@ -24,7 +24,7 @@ use anyhow::{anyhow, Context as _};
 use axum::{
     extract::{Extension, Path, Query},
     http::{StatusCode, Uri},
-    response::{AppendHeaders, Html, IntoResponse, Response as AxumResponse},
+    response::{Html, IntoResponse, Response as AxumResponse},
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
@@ -335,7 +335,7 @@ impl RustdocPage {
         let robots = if is_latest_url { "" } else { "noindex" };
         Ok((
             StatusCode::OK,
-            AppendHeaders([("X-Robots-Tag", robots)]),
+            [("X-Robots-Tag", robots)],
             Extension(if is_latest_url {
                 CachePolicy::ForeverInCdn
             } else {
