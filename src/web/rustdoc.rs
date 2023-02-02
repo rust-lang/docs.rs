@@ -332,10 +332,9 @@ impl RustdocPage {
             result => result.context("error rewriting HTML")?,
         };
 
-        let robots = if is_latest_url { "" } else { "noindex" };
         Ok((
             StatusCode::OK,
-            [("X-Robots-Tag", robots)],
+            (!is_latest_url).then_some([("X-Robots-Tag", "noindex")]),
             Extension(if is_latest_url {
                 CachePolicy::ForeverInCdn
             } else {
