@@ -22,7 +22,7 @@ async fn handle_error(err: io::Error) -> impl IntoResponse {
     AxumNope::InternalError(err.into()).into_response()
 }
 
-fn build_static_response(content: &'static str) -> impl IntoResponse {
+fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     (
         Extension(CachePolicy::ForeverInCdnAndBrowser),
         [(CONTENT_TYPE, mime::TEXT_CSS.as_ref())],
@@ -57,19 +57,19 @@ pub(crate) fn build_static_router() -> AxumRouter {
     AxumRouter::new()
         .route(
             "/vendored.css",
-            get_static(|| async { build_static_response(VENDORED_CSS) }),
+            get_static(|| async { build_static_css_response(VENDORED_CSS) }),
         )
         .route(
             "/style.css",
-            get_static(|| async { build_static_response(STYLE_CSS) }),
+            get_static(|| async { build_static_css_response(STYLE_CSS) }),
         )
         .route(
             "/rustdoc.css",
-            get_static(|| async { build_static_response(RUSTDOC_CSS) }),
+            get_static(|| async { build_static_css_response(RUSTDOC_CSS) }),
         )
         .route(
             "/rustdoc-2021-12-05.css",
-            get_static(|| async { build_static_response(RUSTDOC_2021_12_05_CSS) }),
+            get_static(|| async { build_static_css_response(RUSTDOC_2021_12_05_CSS) }),
         )
         .nest_service(
             "/",
