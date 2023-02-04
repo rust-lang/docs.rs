@@ -2,7 +2,7 @@
 name = "docsrs-metadata"
 version = "0.1.0"
 authors = ["Joshua Nelson <jyn514@gmail.com>", "The Rust Project Developers"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 description = "Document crates the same way docs.rs would"
