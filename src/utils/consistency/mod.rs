@@ -127,7 +127,7 @@ where
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
                 if !dry_run {
-                    if let Err(err) = build_queue::set_yanked(&mut conn, name, version, *yanked) {
+                    if let Err(err) = build_queue.set_yanked(&mut conn, name, version, *yanked) {
                         warn!("{:?}", err);
                     }
                 }
