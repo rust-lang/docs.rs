@@ -185,7 +185,7 @@ impl Storage {
                 fetch_time.step("fetch from storage");
             }
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{}/{}/{}", name, version, path);
+            let remote_path = format!("rustdoc/{name}/{version}/{path}");
             self.get(&remote_path, self.max_file_size_for(path))?
         })
     }
@@ -205,7 +205,7 @@ impl Storage {
                 None,
             )?
         } else {
-            let remote_path = format!("sources/{}/{}/{}", name, version, path);
+            let remote_path = format!("sources/{name}/{version}/{path}");
             self.get(&remote_path, self.max_file_size_for(path))?
         })
     }
@@ -221,7 +221,7 @@ impl Storage {
             self.exists_in_archive(&rustdoc_archive_path(name, version), path)?
         } else {
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{}/{}/{}", name, version, path);
+            let remote_path = format!("rustdoc/{name}/{version}/{path}");
             self.exists(&remote_path)?
         })
     }
@@ -274,7 +274,7 @@ impl Storage {
 
     fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
-        let remote_index_path = format!("{}.index", archive_path);
+        let remote_index_path = format!("{archive_path}.index");
         let local_index_path = self
             .config
             .local_archive_cache_path
@@ -320,7 +320,7 @@ impl Storage {
         assert_eq!(blob.compression, None);
 
         Ok(Blob {
-            path: format!("{}/{}", archive_path, path),
+            path: format!("{archive_path}/{path}"),
             mime: detect_mime(path).into(),
             date_updated: blob.date_updated,
             content: blob.content,
@@ -568,11 +568,11 @@ fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
 }
 
 pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
-    format!("rustdoc/{0}/{1}.zip", name, version)
+    format!("rustdoc/{name}/{version}.zip")
 }
 
 pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
-    format!("sources/{0}/{1}.zip", name, version)
+    format!("sources/{name}/{version}.zip")
 }
 
 #[cfg(test)]
@@ -932,11 +932,11 @@ mod backend_tests {
         let now = Utc::now();
         let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
             .map(|i| {
-                let content = format!("const IDX: usize = {};", i).as_bytes().to_vec();
+                let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
                 Blob {
                     mime: "text/rust".into(),
                     content,
-                    path: format!("{}.rs", i),
+                    path: format!("{i}.rs"),
                     date_updated: now,
                     compression: None,
                 }

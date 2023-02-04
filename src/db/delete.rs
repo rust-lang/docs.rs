@@ -36,7 +36,7 @@ pub fn delete_crate(
     for prefix in paths {
         // delete the whole rustdoc/source folder for this crate.
         // it will include existing archives.
-        let remote_folder = format!("{}/{}/", prefix, name);
+        let remote_folder = format!("{prefix}/{name}/");
         storage.delete_prefix(&remote_folder)?;
 
         // remove existing local archive index files.
@@ -67,7 +67,7 @@ pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()
     };
 
     for prefix in paths {
-        storage.delete_prefix(&format!("{}/{}/{}/", prefix, name, version))?;
+        storage.delete_prefix(&format!("{prefix}/{name}/{version}/"))?;
     }
 
     let local_archive_cache = &ctx.config()?.local_archive_cache_path;
@@ -81,13 +81,10 @@ pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()
         storage.delete_prefix(&archive_filename)?;
 
         // delete eventually existing local indexes
-        let local_index_file = local_archive_cache.join(format!("{}.index", archive_filename));
+        let local_index_file = local_archive_cache.join(format!("{archive_filename}.index"));
         if local_index_file.exists() {
             fs::remove_file(&local_index_file).with_context(|| {
-                format!(
-                    "error when trying to remove local index: {:?}",
-                    local_index_file
-                )
+                format!("error when trying to remove local index: {local_index_file:?}")
             })?;
         }
     }
@@ -119,7 +116,7 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
     let mut transaction = conn.transaction()?;
     for &(table, column) in METADATA {
         transaction.execute(
-            format!("DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)", table, column).as_str(),
+            format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)").as_str(),
             &[&crate_id, &version],
         )?;
     }
@@ -146,7 +143,7 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
     for prefix in paths {
         transaction.execute(
             "DELETE FROM files WHERE path LIKE $1;",
-            &[&format!("{}/{}/{}/%", prefix, name, version)],
+            &[&format!("{prefix}/{name}/{version}/%")],
         )?;
     }
 
@@ -165,8 +162,7 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
     for &(table, column) in METADATA {
         transaction.execute(
             format!(
-                "DELETE FROM {} WHERE {} IN (SELECT id FROM releases WHERE crate_id = $1)",
-                table, column
+                "DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1)"
             )
             .as_str(),
             &[&crate_id],
@@ -246,7 +242,7 @@ mod tests {
                 assert!(env.storage().rustdoc_file_exists(
                     pkg,
                     version,
-                    &format!("{}/index.html", pkg),
+                    &format!("{pkg}/index.html"),
                     archive_storage
                 )?);
             }
@@ -372,7 +368,7 @@ mod tests {
                 assert!(!env.storage().exists(&rustdoc_archive)?);
 
                 // local and remote index are gone too
-                let archive_index = format!("{}.index", rustdoc_archive);
+                let archive_index = format!("{rustdoc_archive}.index");
                 assert!(!env.storage().exists(&archive_index)?);
                 assert!(!env
                     .config()

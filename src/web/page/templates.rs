@@ -54,17 +54,10 @@ fn load_templates(conn: &mut Client) -> Result<Tera> {
     //
     // TODO: remove this when https://github.com/Gilnaa/globwalk/issues/29 is fixed
     let mut tera = Tera::default();
-    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY).with_context(|| {
-        format!(
-            "failed to search {:?} for tera templates",
-            TEMPLATES_DIRECTORY
-        )
-    })?;
+    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY)
+        .with_context(|| format!("failed to search {TEMPLATES_DIRECTORY:?} for tera templates"))?;
     tera.add_template_files(template_files).with_context(|| {
-        format!(
-            "failed while loading tera templates in {:?}",
-            TEMPLATES_DIRECTORY
-        )
+        format!("failed while loading tera templates in {TEMPLATES_DIRECTORY:?}")
     })?;
 
     // This function will return any global alert, if present.
@@ -174,12 +167,12 @@ fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value>
         }
 
         // TODO: This formatting section can be optimized, two string allocations aren't needed
-        let mut value = format!("{:.1}", value);
+        let mut value = format!("{value:.1}");
         if value.ends_with(".0") {
             value.truncate(value.len() - 2);
         }
 
-        format!("{} {}", value, chosen_time)
+        format!("{value} {chosen_time}")
     };
 
     Ok(Value::String(fmt))
@@ -188,7 +181,7 @@ fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value>
 /// Print a tera value to stdout
 #[allow(clippy::unnecessary_wraps)]
 fn dbg(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
-    println!("{:?}", value);
+    println!("{value:?}");
 
     Ok(value.clone())
 }

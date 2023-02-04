@@ -1,4 +1,4 @@
-use crate::{build_queue, db::delete, Context};
+use crate::{db::delete, Context};
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
 use tracing::{info, warn};
@@ -50,7 +50,7 @@ pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
         diff::Difference::ReleaseNotInDb(_, _) => "ReleaseNotInDb",
         diff::Difference::ReleaseYank(_, _, _) => "ReleaseYank",
     }) {
-        println!("{:17} => {:4}", key, count);
+        println!("{key:17} => {count:4}");
     }
 
     println!("============");

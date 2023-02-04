@@ -277,7 +277,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     } else {
         rendering_time.step("redirect to crate");
         Ok(axum_cached_redirect(
-            format!("/crate/{}/{}", crate_name, version),
+            format!("/crate/{crate_name}/{version}"),
             CachePolicy::ForeverInCdn,
         )?
         .into_response())
@@ -615,13 +615,13 @@ pub(crate) async fn rustdoc_html_server_handler(
         } else {
             target
         };
-        format!("/target-redirect/{}/{}", target, inner_path)
+        format!("/target-redirect/{target}/{inner_path}")
     } else {
         "".to_string()
     };
 
     let query_string = if let Some(query) = uri.query() {
-        format!("?{}", query)
+        format!("?{query}")
     } else {
         "".to_string()
     };
@@ -643,7 +643,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     let target = if target.is_empty() {
         String::new()
     } else {
-        format!("{}/", target)
+        format!("{target}/")
     };
 
     rendering_time.step("rewrite html");
@@ -841,11 +841,8 @@ pub(crate) async fn badge_handler(
 ) -> AxumResult<impl IntoResponse> {
     let version = query.version.unwrap_or_else(|| "latest".to_string());
 
-    let url = url::Url::parse(&format!(
-        "https://img.shields.io/docsrs/{}/{}",
-        name, version
-    ))
-    .context("could not parse URL")?;
+    let url = url::Url::parse(&format!("https://img.shields.io/docsrs/{name}/{version}"))
+        .context("could not parse URL")?;
 
     Ok((
         StatusCode::MOVED_PERMANENTLY,
@@ -908,7 +905,7 @@ pub(crate) async fn static_asset_handler(
     Extension(storage): Extension<Arc<Storage>>,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let storage_path = format!("{}{}", RUSTDOC_STATIC_STORAGE_PREFIX, path);
+    let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");
 
     Ok(spawn_blocking(move || File::from_path(&storage, &storage_path, &config)).await?)
 }
@@ -1397,13 +1394,13 @@ mod test {
             let mut current_url = response.url().clone();
             // follow redirects until it actually goes out into the internet
             while !matches!(current_url.host(), Some(Host::Domain(_))) {
-                println!("({} -> {})", last_url, current_url);
+                println!("({last_url} -> {current_url})");
                 assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
                 last_url = response.url().to_string();
                 response = frontend.get(response.url().as_str()).send().unwrap();
                 current_url = Url::parse(response.headers()[reqwest::header::LOCATION].to_str()?)?;
             }
-            println!("({} -> {})", last_url, current_url);
+            println!("({last_url} -> {current_url})");
             assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
             assert_cache_control(
                 &response,
@@ -2110,7 +2107,7 @@ mod test {
             let status = |version| -> Result<_, anyhow::Error> {
                 let page =
                     kuchiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
-                let selector = format!(r#"ul > li a[href="/crate/hexponent/{}"]"#, version);
+                let selector = format!(r#"ul > li a[href="/crate/hexponent/{version}"]"#);
                 let anchor = page
                     .select(&selector)
                     .unwrap()

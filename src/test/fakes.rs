@@ -110,7 +110,7 @@ impl<'a> FakeRelease<'a> {
 
     pub(crate) fn name(mut self, new: &str) -> Self {
         self.package.name = new.into();
-        self.package.id = format!("{}-id", new);
+        self.package.id = format!("{new}-id");
         self.package.targets[0].name = new.into();
         self
     }
@@ -439,7 +439,7 @@ impl FakeGithubStats {
         let existing_count: i64 = conn
             .query_one("SELECT COUNT(*) FROM repositories;", &[])?
             .get(0);
-        let host_id = base64::encode(format!("FAKE ID {}", existing_count));
+        let host_id = base64::encode(format!("FAKE ID {existing_count}"));
 
         let data = conn.query_one(
             "INSERT INTO repositories (host, host_id, name, description, last_commit, stars, forks, issues, updated_at)
@@ -521,7 +521,7 @@ impl FakeBuild {
         }
 
         if let Some(s3_build_log) = self.s3_build_log.as_deref() {
-            let path = format!("build-logs/{}/{}.txt", build_id, default_target);
+            let path = format!("build-logs/{build_id}/{default_target}.txt");
             storage.store_one(path, s3_build_log)?;
         }
 

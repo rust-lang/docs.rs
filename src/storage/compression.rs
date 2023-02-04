@@ -105,7 +105,7 @@ mod tests {
     fn test_compression() {
         let orig = "fn main() {}";
         for alg in CompressionAlgorithm::AVAILABLE {
-            println!("testing algorithm {}", alg);
+            println!("testing algorithm {alg}");
 
             let data = compress(orig.as_bytes(), *alg).unwrap();
             assert_eq!(

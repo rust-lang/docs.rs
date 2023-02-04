@@ -669,8 +669,8 @@ mod test {
 
             let new_owners: Vec<CrateOwner> = (1..5)
                 .map(|i| CrateOwner {
-                    login: format!("login{}", i),
-                    avatar: format!("avatar{}", i),
+                    login: format!("login{i}"),
+                    avatar: format!("avatar{i}"),
                 })
                 .collect();
 

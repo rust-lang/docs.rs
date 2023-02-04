@@ -41,9 +41,9 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     };
 
     if let Err(err) = result {
-        eprintln!("the test failed: {}", err);
+        eprintln!("the test failed: {err}");
         for cause in err.chain() {
-            eprintln!("  caused by: {}", cause);
+            eprintln!("  caused by: {cause}");
         }
 
         eprintln!("{}", err.backtrace());
@@ -84,7 +84,7 @@ pub(crate) fn assert_cache_control(
 /// Make sure that a URL returns a status code between 200-299
 pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
     let status = web.get(path).send()?.status();
-    assert!(status.is_success(), "failed to GET {}: {}", path, status);
+    assert!(status.is_success(), "failed to GET {path}: {status}");
     Ok(())
 }
 
@@ -98,7 +98,7 @@ pub(crate) fn assert_success_cached(
 ) -> Result<()> {
     let response = web.get(path).send()?;
     let status = response.status();
-    assert!(status.is_success(), "failed to GET {}: {}", path, status);
+    assert!(status.is_success(), "failed to GET {path}: {status}");
     assert_cache_control(&response, cache_policy, config);
     Ok(())
 }
@@ -110,12 +110,7 @@ pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
     // for now, 404s should always have `no-cache`
     assert_no_cache(&response);
 
-    assert_eq!(
-        response.status(),
-        404,
-        "GET {} should have been a 404",
-        path
-    );
+    assert_eq!(response.status(), 404, "GET {path} should have been a 404");
     Ok(())
 }
 
@@ -473,10 +468,9 @@ impl TestDatabase {
         let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
         conn.batch_execute(&format!(
             "
-                CREATE SCHEMA {0};
-                SET search_path TO {0}, public;
-            ",
-            schema
+                CREATE SCHEMA {schema};
+                SET search_path TO {schema}, public;
+            "
         ))?;
         crate::db::migrate(None, &mut conn)?;
 
@@ -498,7 +492,7 @@ impl TestDatabase {
             .enumerate()
             .map(|(i, sequence): (_, String)| {
                 let offset = (i + 1) * 10000;
-                format!(r#"ALTER SEQUENCE "{}" RESTART WITH {};"#, sequence, offset)
+                format!(r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#)
             })
             .collect();
         conn.batch_execute(&query)?;

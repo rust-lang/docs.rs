@@ -158,7 +158,7 @@ fn render_response(
                 Err(err) => {
                     if response.status().is_server_error() {
                         // avoid infinite loop if error.html somehow fails to load
-                        panic!("error while serving error page: {:?}", err);
+                        panic!("error while serving error page: {err:?}");
                     } else {
                         return render_response(
                             AxumNope::InternalError(err).into_response(),

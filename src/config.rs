@@ -209,7 +209,7 @@ where
         Ok(content) => Ok(content
             .parse::<T>()
             .map(Some)
-            .with_context(|| format!("failed to parse configuration variable {}", var))?),
+            .with_context(|| format!("failed to parse configuration variable {var}"))?),
         Err(VarError::NotPresent) => {
             trace!("optional configuration variable {} is not set", var);
             Ok(None)

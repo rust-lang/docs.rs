@@ -30,7 +30,7 @@ fn write_fontawesome_sprite() {
             file.read_to_string(&mut data)
                 .expect("fontawesome file read");
             // if this assert goes off, add more hashes here and in the format! below
-            assert!(!data.contains("###"), "file {} breaks raw string", filename);
+            assert!(!data.contains("###"), "file {filename} breaks raw string");
             dest_file
                 .write_all(
                     format!(

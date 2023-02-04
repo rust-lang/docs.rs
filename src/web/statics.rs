@@ -197,13 +197,12 @@ mod tests {
                     let url = format!("/-/static/{}", file.to_str().unwrap());
                     let resp = web.get(&url).send()?;
 
-                    assert!(resp.status().is_success(), "failed to fetch {:?}", url);
+                    assert!(resp.status().is_success(), "failed to fetch {url:?}");
                     assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
                     assert_eq!(
                         resp.bytes()?,
                         fs::read(path).unwrap(),
-                        "failed to fetch {:?}",
-                        url,
+                        "failed to fetch {url:?}",
                     );
                 }
             }
@@ -231,14 +230,13 @@ mod tests {
             let files = &[("vendored.css", "text/css")];
 
             for (file, mime) in files {
-                let url = format!("/-/static/{}", file);
+                let url = format!("/-/static/{file}");
                 let resp = web.get(&url).send()?;
 
                 assert_eq!(
                     resp.headers().get("Content-Type"),
                     Some(&mime.parse().unwrap()),
-                    "{:?} has an incorrect content type",
-                    url,
+                    "{url:?} has an incorrect content type",
                 );
             }
 
@@ -265,8 +263,7 @@ mod tests {
             // to a framework that doesn't include builtin protection in the future.
             assert!(
                 matches!(serve_file(path).await, Err(AxumNope::ResourceNotFound)),
-                "{} did not return a 404",
-                path
+                "{path} did not return a 404"
             );
         }
     }

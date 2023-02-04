@@ -172,7 +172,7 @@ where
         .spawn(move || loop {
             thread::sleep(interval);
             if let Err(err) =
-                exec().with_context(|| format!("failed to run scheduled task '{}'", name))
+                exec().with_context(|| format!("failed to run scheduled task '{name}'"))
             {
                 report_error(&err);
             }

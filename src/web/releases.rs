@@ -163,7 +163,7 @@ async fn get_search_results(pool: Pool, query_params: &str) -> Result<SearchResu
     #[cfg(test)]
     let host = mockito::server_url();
 
-    let url = url::Url::parse(&format!("{}/api/v1/crates{}", host, query_params))?;
+    let url = url::Url::parse(&format!("{host}/api/v1/crates{query_params}"))?;
     debug!("fetching search results from {}", url);
 
     // extract the query from the query args.
@@ -494,10 +494,7 @@ async fn redirect_to_random_crate(
 
         metrics.im_feeling_lucky_searches.inc();
 
-        Ok(axum_redirect(format!(
-            "/{}/{}/{}/",
-            name, version, target_name
-        ))?)
+        Ok(axum_redirect(format!("/{name}/{version}/{target_name}/"))?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
         Err(AxumNope::NoResults)
@@ -601,9 +598,9 @@ pub(crate) async fn search_handler(
     let executed_query = search_result.executed_query.unwrap_or_default();
 
     let title = if search_result.results.is_empty() {
-        format!("No results found for '{}'", executed_query)
+        format!("No results found for '{executed_query}'")
     } else {
-        format!("Search results for '{}'", executed_query)
+        format!("Search results for '{executed_query}'")
     };
 
     Ok(Search {
@@ -984,7 +981,7 @@ mod tests {
                 .send()?;
             assert_eq!(response.status(), 500);
 
-            assert!(response.text()?.contains(&format!("{}", status)));
+            assert!(response.text()?.contains(&format!("{status}")));
             Ok(())
         })
     }
@@ -1447,7 +1444,7 @@ mod tests {
                 if let Some(priority) = expected.2 {
                     assert!(li
                         .text_contents()
-                        .contains(&format!("priority: {}", priority)));
+                        .contains(&format!("priority: {priority}")));
                 }
             }
 
@@ -1495,7 +1492,7 @@ mod tests {
                         web.get(&url).send()?
                     };
                 let status = resp.status();
-                assert!(status.is_success(), "failed to GET {}: {}", url, status);
+                assert!(status.is_success(), "failed to GET {url}: {status}");
             }
 
             Ok(())
@@ -1533,10 +1530,7 @@ mod tests {
                     let found = not_matching.iter().map(|(a, _)| a).collect::<Vec<_>>();
                     assert!(
                         not_matching.is_empty(),
-                        "Titles did not match for URL `{}`: not found: {:?}, found: {:?}",
-                        url,
-                        not_found,
-                        found,
+                        "Titles did not match for URL `{url}`: not found: {not_found:?}, found: {found:?}",
                     );
                 }
             };

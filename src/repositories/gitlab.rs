@@ -54,7 +54,7 @@ impl GitLab {
         if let Some(token) = access_token {
             headers.insert(
                 AUTHORIZATION,
-                HeaderValue::from_str(&format!("Bearer {}", token))?,
+                HeaderValue::from_str(&format!("Bearer {token}"))?,
             );
         } else {
             warn!(
@@ -268,11 +268,11 @@ mod tests {
             &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
         ) {
             Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-            x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
         }
         match updater.fetch_repositories(&[String::new()]) {
             Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-            x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
         }
     }
 
@@ -290,7 +290,7 @@ mod tests {
                 assert_eq!(res.missing, vec![String::new()]);
                 assert_eq!(res.present.len(), 0);
             }
-            x => panic!("Failed: {:?}", x),
+            x => panic!("Failed: {x:?}"),
         }
     }
 
