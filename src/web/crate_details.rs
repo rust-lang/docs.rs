@@ -282,8 +282,7 @@ pub(crate) fn releases_for_crate(
                 }),
                 Err(err) => {
                     report_error(&anyhow!(err).context(format!(
-                        "invalid semver in database for crate {}: {}",
-                        crate_id, version
+                        "invalid semver in database for crate {crate_id}: {version}"
                     )));
                     None
                 }

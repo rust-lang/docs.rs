@@ -214,7 +214,7 @@ pub(crate) async fn source_browser_handler(
         MatchSemver::Exact((version, _)) => (version.clone(), version, false),
         MatchSemver::Semver((version, _)) => {
             return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}/source/{}", name, version, path),
+                &format!("/crate/{name}/{version}/source/{path}"),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());
@@ -253,7 +253,7 @@ pub(crate) async fn source_browser_handler(
     })
     .await?;
 
-    let canonical_url = CanonicalUrl::from_path(format!("/crate/{}/latest/source/{}", name, path));
+    let canonical_url = CanonicalUrl::from_path(format!("/crate/{name}/latest/source/{path}"));
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";

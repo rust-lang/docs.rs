@@ -58,7 +58,7 @@ impl GitHub {
         if let Some(ref token) = config.github_accesstoken {
             headers.insert(
                 AUTHORIZATION,
-                HeaderValue::from_str(&format!("token {}", token))?,
+                HeaderValue::from_str(&format!("token {token}"))?,
             );
         } else {
             warn!("did not collect `github.com` stats as no token was provided");
@@ -277,7 +277,7 @@ mod tests {
 
             match updater.fetch_repositories(&[String::new()]) {
                 Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
+                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
             }
             Ok(())
         });
@@ -297,7 +297,7 @@ mod tests {
 
             match updater.fetch_repositories(&[String::new()]) {
                 Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {:?}", x),
+                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
             }
             Ok(())
         });
@@ -323,7 +323,7 @@ mod tests {
                     assert_eq!(res.missing, vec![String::new()]);
                     assert_eq!(res.present.len(), 0);
                 }
-                x => panic!("Failed: {:?}", x),
+                x => panic!("Failed: {x:?}"),
             }
             Ok(())
         });

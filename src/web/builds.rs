@@ -50,7 +50,7 @@ pub(crate) async fn build_list_handler(
 
         MatchSemver::Semver((version, _)) => {
             return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}/builds", name, version),
+                &format!("/crate/{name}/{version}/builds"),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());
@@ -74,7 +74,7 @@ pub(crate) async fn build_list_handler(
         metadata,
         builds,
         limits,
-        canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/builds", name)),
+        canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
     }
     .into_response())
 }
@@ -90,7 +90,7 @@ pub(crate) async fn build_list_json_handler(
         MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
         MatchSemver::Semver((version, _)) => {
             return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}/builds.json", name, version),
+                &format!("/crate/{name}/{version}/builds.json"),
                 CachePolicy::ForeverInCdn,
             )?
             .into_response());

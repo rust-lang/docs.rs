@@ -91,7 +91,7 @@ fn write_git_version(out_dir: &Path) -> Result<()> {
 
     std::fs::write(
         out_dir.join("git_version"),
-        format!("({} {})", git_hash, build_date),
+        format!("({git_hash} {build_date})"),
     )?;
 
     Ok(())

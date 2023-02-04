@@ -75,7 +75,7 @@ pub(crate) async fn sitemap_handler(
                 crates.name ILIKE $1 
              GROUP BY crates.name, releases.target_name
              ",
-            &[&format!("{}%", letter)],
+            &[&format!("{letter}%")],
         )?;
 
         Ok(query
@@ -155,7 +155,7 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
             return Ok(page.into_response());
         }
     };
-    let template = format!("core/about/{}.html", name);
+    let template = format!("core/about/{name}.html");
     Ok(AboutPage {
         template,
         active_tab: name,
@@ -183,9 +183,9 @@ mod tests {
 
             // everything not length=1 and ascii-lowercase should fail
             for invalid_letter in &["1", "aa", "A", ""] {
-                println!("trying to fail letter {}", invalid_letter);
+                println!("trying to fail letter {invalid_letter}");
                 assert_eq!(
-                    web.get(&format!("/-/sitemap/{}/sitemap.xml", invalid_letter))
+                    web.get(&format!("/-/sitemap/{invalid_letter}/sitemap.xml"))
                         .send()?
                         .status(),
                     StatusCode::NOT_FOUND
@@ -202,7 +202,7 @@ mod tests {
 
             // letter-sitemaps always work, even without crates & releases
             for letter in 'a'..='z' {
-                assert_success(&format!("/-/sitemap/{}/sitemap.xml", letter), web)?;
+                assert_success(&format!("/-/sitemap/{letter}/sitemap.xml"), web)?;
             }
 
             env.fake_release().name("some_random_crate").create()?;
@@ -222,7 +222,7 @@ mod tests {
             // and not in the others
             for letter in ('a'..='z').filter(|&c| c != 's') {
                 let response = web
-                    .get(&format!("/-/sitemap/{}/sitemap.xml", letter))
+                    .get(&format!("/-/sitemap/{letter}/sitemap.xml"))
                     .send()?;
 
                 assert!(response.status().is_success());
@@ -267,7 +267,7 @@ mod tests {
                     continue;
                 }
                 let filename = file_path.file_stem().unwrap().to_str().unwrap();
-                let path = format!("/about/{}", filename);
+                let path = format!("/about/{filename}");
                 assert_success(&path, web)?;
             }
             assert_success("/about", web)

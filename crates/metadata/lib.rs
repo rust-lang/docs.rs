@@ -280,18 +280,18 @@ impl Metadata {
             cargo_args.push("--config".into());
             let rustflags =
                 toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
-            cargo_args.push(format!("build.rustflags={}", rustflags));
+            cargo_args.push(format!("build.rustflags={rustflags}"));
             cargo_args.push("-Zhost-config".into());
             cargo_args.push("-Ztarget-applies-to-host".into());
             cargo_args.push("--config".into());
-            cargo_args.push(format!("host.rustflags={}", rustflags));
+            cargo_args.push(format!("host.rustflags={rustflags}"));
         }
 
         if !all_rustdoc_args.is_empty() {
             cargo_args.push("--config".into());
             let rustdocflags =
                 toml::to_string(&all_rustdoc_args).expect("serializing a string should never fail");
-            cargo_args.push(format!("build.rustdocflags={}", rustdocflags));
+            cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
         }
 
         cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
@@ -645,7 +645,7 @@ mod test_targets {
             other_targets: others,
             ..
         } = metadata.targets(false);
-        assert!(others.is_empty(), "{:?}", others);
+        assert!(others.is_empty(), "{others:?}");
     }
 }
 

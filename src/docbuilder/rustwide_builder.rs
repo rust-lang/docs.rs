@@ -230,7 +230,7 @@ impl RustwideBuilder {
 
         let mut build_dir = self
             .workspace
-            .build_dir(&format!("essential-files-{}", rustc_version));
+            .build_dir(&format!("essential-files-{rustc_version}"));
         build_dir.purge().map_err(FailureError::compat)?;
 
         // This is an empty library crate that is supposed to always build.
@@ -361,7 +361,7 @@ impl RustwideBuilder {
             }
         }
 
-        let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
+        let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
         build_dir.purge().map_err(FailureError::compat)?;
 
         let krate = match kind {
@@ -490,7 +490,7 @@ impl RustwideBuilder {
                         .api()
                         .get_release_data(name, version)
                         .with_context(|| {
-                            format!("could not fetch releases-data for {}-{}", name, version)
+                            format!("could not fetch releases-data for {name}-{version}")
                         }) {
                         Ok(data) => data,
                         Err(err) => {
@@ -523,7 +523,7 @@ impl RustwideBuilder {
                     }
 
                     let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
-                    let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
+                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
                     self.storage.store_one(build_log_path, res.build_log)?;
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
@@ -539,7 +539,7 @@ impl RustwideBuilder {
                         // we're doing this in the end so eventual problems in the build
                         // won't lead to non-existing docs.
                         for prefix in &["rustdoc", "sources"] {
-                            let prefix = format!("{}/{}/{}/", prefix, name, version);
+                            let prefix = format!("{prefix}/{name}/{version}/");
                             debug!("cleaning old storage folder {}", prefix);
                             self.storage.delete_prefix(&prefix)?;
                         }
@@ -741,15 +741,14 @@ impl RustwideBuilder {
             //
             // FIXME: host-only crates like proc-macros should probably not have this passed? but #1417 should make it OK
             format!(
-                r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{}""#,
-                target
+                r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
             ),
             // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
             // docs.rs, but once it's stable we can remove this flag.
             "-Zrustdoc-scrape-examples".into(),
         ];
         if let Some(cpu_limit) = self.config.build_cpu_limit {
-            cargo_args.push(format!("-j{}", cpu_limit));
+            cargo_args.push(format!("-j{cpu_limit}"));
         }
         // Cargo has a series of frightening bugs around cross-compiling proc-macros:
         // - Passing `--target` causes RUSTDOCFLAGS to fail to be passed 🤦
@@ -879,8 +878,8 @@ mod tests {
             let default_target = "x86_64-unknown-linux-gnu";
 
             let storage = env.storage();
-            let old_rustdoc_file = format!("rustdoc/{}/{}/some_doc_file", crate_, version);
-            let old_source_file = format!("sources/{}/{}/some_source_file", crate_, version);
+            let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
+            let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
             storage.store_one(&old_rustdoc_file, Vec::new())?;
             storage.store_one(&old_source_file, Vec::new())?;
 
@@ -938,28 +937,23 @@ mod tests {
             assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
             // default target was built and is accessible
-            assert!(storage.exists_in_archive(&doc_archive, &format!("{}/index.html", crate_path))?);
-            assert_success(&format!("/{}/{}/{}", crate_, version, crate_path), web)?;
+            assert!(storage.exists_in_archive(&doc_archive, &format!("{crate_path}/index.html"))?);
+            assert_success(&format!("/{crate_}/{version}/{crate_path}"), web)?;
 
             // source is also packaged
             assert!(storage.exists_in_archive(&source_archive, "src/lib.rs")?);
-            assert_success(
-                &format!("/crate/{}/{}/source/src/lib.rs", crate_, version),
-                web,
-            )?;
+            assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs"), web)?;
 
             assert!(!storage.exists_in_archive(
                 &doc_archive,
-                &format!("{}/{}/index.html", default_target, crate_path),
+                &format!("{default_target}/{crate_path}/index.html"),
             )?);
 
-            let default_target_url = format!(
-                "/{}/{}/{}/{}/index.html",
-                crate_, version, default_target, crate_path
-            );
+            let default_target_url =
+                format!("/{crate_}/{version}/{default_target}/{crate_path}/index.html");
             assert_redirect(
                 &default_target_url,
-                &format!("/{}/{}/{}/index.html", crate_, version, crate_path),
+                &format!("/{crate_}/{version}/{crate_path}/index.html"),
                 web,
             )?;
 
@@ -985,13 +979,11 @@ mod tests {
                     }
                     let target_docs_present = storage.exists_in_archive(
                         &doc_archive,
-                        &format!("{}/{}/index.html", target, crate_path),
+                        &format!("{target}/{crate_path}/index.html"),
                     )?;
 
-                    let target_url = format!(
-                        "/{}/{}/{}/{}/index.html",
-                        crate_, version, target, crate_path
-                    );
+                    let target_url =
+                        format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
 
                     assert!(target_docs_present);
                     assert_success(&target_url, web)?;
@@ -1011,8 +1003,8 @@ mod tests {
             let version = "0.2.3";
 
             let storage = env.storage();
-            let old_rustdoc_file = format!("rustdoc/{}/{}/some_doc_file", crate_, version);
-            let old_source_file = format!("sources/{}/{}/some_source_file", crate_, version);
+            let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
+            let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
             storage.store_one(&old_rustdoc_file, Vec::new())?;
             storage.store_one(&old_source_file, Vec::new())?;
 
@@ -1104,16 +1096,11 @@ mod tests {
 
             let target = "x86_64-unknown-linux-gnu";
             let crate_path = crate_.replace('-', "_");
-            let target_docs_present = storage.exists_in_archive(
-                &doc_archive,
-                &format!("{}/{}/index.html", target, crate_path),
-            )?;
+            let target_docs_present = storage
+                .exists_in_archive(&doc_archive, &format!("{target}/{crate_path}/index.html"))?;
 
             let web = env.frontend();
-            let target_url = format!(
-                "/{}/{}/{}/{}/index.html",
-                crate_, version, target, crate_path
-            );
+            let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
 
             assert!(target_docs_present);
             assert_success(&target_url, web)?;

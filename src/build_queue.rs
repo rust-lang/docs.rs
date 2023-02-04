@@ -300,7 +300,7 @@ impl BuildQueue {
         for change in &changes {
             if let Some((ref krate, ..)) = change.deleted() {
                 match delete_crate(&mut conn, &self.storage, &self.config, krate)
-                    .with_context(|| format!("failed to delete crate {}", krate))
+                    .with_context(|| format!("failed to delete crate {krate}"))
                 {
                     Ok(_) => info!(
                         "crate {} was deleted from the index and the database",

@@ -339,16 +339,16 @@ fn duration_to_str(init: DateTime<Utc>) -> String {
 
     match delta {
         (days, ..) if days > 5 => format!("{}", init.format("%b %d, %Y")),
-        (days @ 2..=5, ..) => format!("{} days ago", days),
+        (days @ 2..=5, ..) => format!("{days} days ago"),
         (1, ..) => "one day ago".to_string(),
 
-        (_, hours, ..) if hours > 1 => format!("{} hours ago", hours),
+        (_, hours, ..) if hours > 1 => format!("{hours} hours ago"),
         (_, 1, ..) => "an hour ago".to_string(),
 
-        (_, _, minutes, _) if minutes > 1 => format!("{} minutes ago", minutes),
+        (_, _, minutes, _) if minutes > 1 => format!("{minutes} minutes ago"),
         (_, _, 1, _) => "one minute ago".to_string(),
 
-        (_, _, _, seconds) if seconds > 0 => format!("{} seconds ago", seconds),
+        (_, _, _, seconds) if seconds > 0 => format!("{seconds} seconds ago"),
         _ => "just now".to_string(),
     }
 }
@@ -410,7 +410,7 @@ where
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(queries)
             .finish();
-        format!("{uri}?{}", query_params)
+        format!("{uri}?{query_params}")
             .parse::<http::Uri>()
             .context("error parsing URL")
     } else {
@@ -637,11 +637,11 @@ mod test {
         wrapper(|env| {
             let web = env.frontend();
             for krate in &["std", "alloc", "core", "proc_macro", "test"] {
-                let target = format!("https://doc.rust-lang.org/stable/{}/", krate);
+                let target = format!("https://doc.rust-lang.org/stable/{krate}/");
 
                 // with or without slash
-                assert_redirect(&format!("/{}", krate), &target, web)?;
-                assert_redirect(&format!("/{}/", krate), &target, web)?;
+                assert_redirect(&format!("/{krate}"), &target, web)?;
+                assert_redirect(&format!("/{krate}/"), &target, web)?;
             }
 
             let target = "https://doc.rust-lang.org/stable/proc_macro/";

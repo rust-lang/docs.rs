@@ -120,7 +120,7 @@ mod tests {
             let file = |path| {
                 File::from_path(
                     &env.storage(),
-                    &format!("rustdoc/dummy/0.1.0/{}", path),
+                    &format!("rustdoc/dummy/0.1.0/{path}"),
                     &env.config(),
                 )
             };

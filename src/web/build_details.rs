@@ -68,7 +68,7 @@ pub(crate) async fn build_details_handler(
             output
         } else {
             let target: String = row.get("default_target");
-            let path = format!("build-logs/{}/{}.txt", id, target);
+            let path = format!("build-logs/{id}/{target}.txt");
             let file = File::from_path(&storage, &path, &config)?;
             String::from_utf8(file.0.content)?
         };
@@ -204,7 +204,7 @@ mod tests {
 
             let res = env
                 .frontend()
-                .get(&format!("/crate/foo/0.1.0/builds/{}", build_id))
+                .get(&format!("/crate/foo/0.1.0/builds/{build_id}"))
                 .send()?;
             assert_eq!(res.status(), 404);
             assert!(res.text()?.contains("no such build"));

@@ -415,12 +415,12 @@ pub(crate) fn queue_crate_invalidation(
     if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
         add(
             distribution_id,
-            &[&format!("/{}*", name), &format!("/crate/{}*", name)],
+            &[&format!("/{name}*"), &format!("/crate/{name}*")],
         )
         .context("error enqueueing web CDN invalidation")?;
     }
     if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-        add(distribution_id, &[&format!("/rustdoc/{}*", name)])
+        add(distribution_id, &[&format!("/rustdoc/{name}*")])
             .context("error enqueueing static CDN invalidation")?;
     }
 

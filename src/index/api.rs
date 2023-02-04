@@ -72,7 +72,7 @@ impl Api {
     pub fn get_crate_data(&self, name: &str) -> Result<CrateData> {
         let owners = self
             .get_owners(name)
-            .context(format!("Failed to get owners for {}", name))?;
+            .context(format!("Failed to get owners for {name}"))?;
 
         Ok(CrateData { owners })
     }
@@ -80,7 +80,7 @@ impl Api {
     pub(crate) fn get_release_data(&self, name: &str, version: &str) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
-            .context(format!("Failed to get crate data for {}-{}", name, version))?;
+            .context(format!("Failed to get crate data for {name}-{version}"))?;
 
         Ok(ReleaseData {
             release_time,

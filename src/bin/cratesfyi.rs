@@ -52,15 +52,15 @@ fn main() {
     };
 
     if let Err(err) = CommandLine::parse().handle_args() {
-        let mut msg = format!("Error: {}", err);
+        let mut msg = format!("Error: {err}");
         for cause in err.chain() {
-            write!(msg, "\n\nCaused by:\n    {}", cause).unwrap();
+            write!(msg, "\n\nCaused by:\n    {cause}").unwrap();
         }
-        eprintln!("{}", msg);
+        eprintln!("{msg}");
 
         let backtrace = err.backtrace().to_string();
         if !backtrace.is_empty() {
-            eprintln!("\nStack backtrace:\n{}", backtrace);
+            eprintln!("\nStack backtrace:\n{backtrace}");
         }
 
         // we need to drop the sentry guard here so all unsent
@@ -254,7 +254,7 @@ impl PrioritySubcommand {
                 if let Some(priority) = remove_crate_priority(&mut *ctx.conn()?, &pattern)
                     .context("Could not remove pattern's priority")?
                 {
-                    println!("Removed pattern with priority {}", priority);
+                    println!("Removed pattern with priority {priority}");
                 } else {
                     println!("Pattern did not exist and so was not removed");
                 }

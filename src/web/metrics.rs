@@ -212,17 +212,16 @@ mod tests {
                     assert_eq!(labels.len(), 1); // not sure when this would be false
                     let route = labels[0].get_value();
                     let count = metric.get_counter().get_value();
-                    format!("{}: {}", route, count)
+                    format!("{route}: {count}")
                 })
                 .collect();
-            println!("routes: {:?}", routes_visited_pretty);
+            println!("routes: {routes_visited_pretty:?}");
 
             for (label, count) in expected.iter() {
                 assert_eq!(
                     metrics.routes_visited.with_label_values(&[*label]).get(),
                     *count,
-                    "routes_visited metrics for {} are incorrect",
-                    label,
+                    "routes_visited metrics for {label} are incorrect",
                 );
                 assert_eq!(
                     metrics
@@ -230,8 +229,7 @@ mod tests {
                         .with_label_values(&[*label])
                         .get_sample_count(),
                     *count,
-                    "response_time metrics for {} are incorrect",
-                    label,
+                    "response_time metrics for {label} are incorrect",
                 );
             }
 
