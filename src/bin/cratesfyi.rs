@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context as _, Error, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
-use docs_rs::db::{self, add_path_into_database, Pool, PoolClient};
+use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
     get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
@@ -16,6 +16,7 @@ use docs_rs::{
     start_web_server, BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder,
     Storage,
 };
+use humantime::Duration;
 use once_cell::sync::OnceCell;
 use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
@@ -417,6 +418,12 @@ enum DatabaseSubcommand {
         command: BlacklistSubcommand,
     },
 
+    /// Limit overrides operations
+    Limits {
+        #[command(subcommand)]
+        command: LimitsSubcommand,
+    },
+
     /// Compares the database with the index and resolves inconsistencies
     #[cfg(feature = "consistency_check")]
     Synchronize {
@@ -473,9 +480,77 @@ impl DatabaseSubcommand {
             .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
+            Self::Limits { command } => command.handle_args(ctx)?,
+
             #[cfg(feature = "consistency_check")]
             Self::Synchronize { dry_run } => {
                 docs_rs::utils::consistency::run_check(&ctx, dry_run)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+enum LimitsSubcommand {
+    /// Get sandbox limit overrides for a crate
+    Get { crate_name: String },
+
+    /// List sandbox limit overrides for all crates
+    List,
+
+    /// Set sandbox limits overrides for a crate
+    Set {
+        crate_name: String,
+        #[arg(long)]
+        memory: Option<usize>,
+        #[arg(long)]
+        targets: Option<usize>,
+        #[arg(long)]
+        timeout: Option<Duration>,
+    },
+
+    /// Remove sandbox limits overrides for a crate
+    Remove { crate_name: String },
+}
+
+impl LimitsSubcommand {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
+        let conn = &mut *ctx.conn()?;
+        match self {
+            Self::Get { crate_name } => {
+                let overrides = Overrides::for_crate(conn, &crate_name)?;
+                println!("sandbox limit overrides for {crate_name} = {overrides:?}");
+            }
+
+            Self::List => {
+                for (crate_name, overrides) in Overrides::all(conn)? {
+                    println!("sandbox limit overrides for {crate_name} = {overrides:?}");
+                }
+            }
+
+            Self::Set {
+                crate_name,
+                memory,
+                targets,
+                timeout,
+            } => {
+                let overrides = Overrides::for_crate(conn, &crate_name)?;
+                println!("previous sandbox limit overrides for {crate_name} = {overrides:?}");
+                let overrides = Overrides {
+                    memory,
+                    targets,
+                    timeout: timeout.map(Into::into),
+                };
+                Overrides::save(conn, &crate_name, overrides)?;
+                let overrides = Overrides::for_crate(conn, &crate_name)?;
+                println!("new sandbox limit overrides for {crate_name} = {overrides:?}");
+            }
+
+            Self::Remove { crate_name } => {
+                let overrides = Overrides::for_crate(conn, &crate_name)?;
+                println!("previous overrides for {crate_name} = {overrides:?}");
+                Overrides::remove(conn, &crate_name)?;
             }
         }
         Ok(())
