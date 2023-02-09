@@ -43,6 +43,14 @@ impl Overrides {
         if overrides.timeout.is_some() && overrides.targets.is_none() {
             tracing::warn!("setting `Overrides::timeout` implies a default `Overrides::targets = 1`, prefer setting this explicitly");
         }
+
+        if conn
+            .query_opt("SELECT id FROM crates WHERE crates.name = $1", &[&krate])?
+            .is_none()
+        {
+            tracing::warn!("setting overrides for unknown crate `{krate}`");
+        }
+
         conn.execute(
             "
                 INSERT INTO sandbox_overrides (
