@@ -256,7 +256,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                             .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
                             .send()
                             .map_ok(|_| {
-                                self.s3.metrics.uploaded_files_total.inc();
+                                self.s3.metrics.instance.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
                                 warn!("Failed to upload blob to S3: {:?}", err);

@@ -484,11 +484,11 @@ impl RustwideBuilder {
 
                     let has_examples = build.host_source_dir().join("examples").is_dir();
                     if res.result.successful {
-                        self.metrics.successful_builds.inc();
+                        self.metrics.instance.successful_builds.inc();
                     } else if res.cargo_metadata.root().is_library() {
-                        self.metrics.failed_builds.inc();
+                        self.metrics.instance.failed_builds.inc();
                     } else {
-                        self.metrics.non_library_builds.inc();
+                        self.metrics.instance.non_library_builds.inc();
                     }
 
                     let release_data = if !is_local {

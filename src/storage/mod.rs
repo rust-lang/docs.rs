@@ -810,7 +810,10 @@ mod backend_tests {
             assert_eq!(blob.mime, actual.mime);
         }
 
-        assert_eq!(NAMES.len(), metrics.uploaded_files_total.get() as usize);
+        assert_eq!(
+            NAMES.len(),
+            metrics.instance.uploaded_files_total.get() as usize
+        );
 
         Ok(())
     }
@@ -886,7 +889,7 @@ mod backend_tests {
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        assert_eq!(2, metrics.instance.uploaded_files_total.get());
 
         Ok(())
     }
@@ -933,7 +936,7 @@ mod backend_tests {
         expected_algs.insert(CompressionAlgorithm::default());
         assert_eq!(algs, expected_algs);
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        assert_eq!(2, metrics.instance.uploaded_files_total.get());
 
         Ok(())
     }

@@ -14,8 +14,8 @@ use docs_rs::utils::{
     remove_crate_priority, set_crate_priority, ConfigName,
 };
 use docs_rs::{
-    start_web_server, BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder,
-    Storage,
+    start_background_metrics_webserver, start_web_server, BuildQueue, Config, Context, Index,
+    Metrics, PackageKind, RustwideBuilder, Storage,
 };
 use humantime::Duration;
 use once_cell::sync::OnceCell;
@@ -111,6 +111,8 @@ enum CommandLine {
     },
 
     StartRegistryWatcher {
+        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
+        metric_server_socket_addr: String,
         /// Enable or disable the repository stats updater
         #[arg(
             long = "repository-stats-updater",
@@ -122,7 +124,10 @@ enum CommandLine {
         cdn_invalidator: Toggle,
     },
 
-    StartBuildServer,
+    StartBuildServer {
+        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
+        metric_server_socket_addr: String,
+    },
 
     /// Starts the daemon
     Daemon {
@@ -154,6 +159,7 @@ impl CommandLine {
                 subcommand,
             } => subcommand.handle_args(ctx, skip_if_exists)?,
             Self::StartRegistryWatcher {
+                metric_server_socket_addr,
                 repository_stats_updater,
                 cdn_invalidator,
             } => {
@@ -164,9 +170,15 @@ impl CommandLine {
                     docs_rs::utils::daemon::start_background_cdn_invalidator(&ctx)?;
                 }
 
+                start_background_metrics_webserver(Some(&metric_server_socket_addr), &ctx)?;
+
                 docs_rs::utils::watch_registry(ctx.build_queue()?, ctx.config()?, ctx.index()?)?;
             }
-            Self::StartBuildServer => {
+            Self::StartBuildServer {
+                metric_server_socket_addr,
+            } => {
+                start_background_metrics_webserver(Some(&metric_server_socket_addr), &ctx)?;
+
                 let build_queue = ctx.build_queue()?;
                 let rustwide_builder = RustwideBuilder::init(&ctx)?;
                 queue_builder(rustwide_builder, build_queue)?;

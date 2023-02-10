@@ -204,7 +204,7 @@ impl BuildQueue {
                 to_process.name, to_process.version
             )
         });
-        self.metrics.total_builds.inc();
+        self.metrics.instance.total_builds.inc();
         if let Err(err) =
             cdn::queue_crate_invalidation(&mut transaction, &self.config, &to_process.name)
         {
@@ -225,7 +225,7 @@ impl BuildQueue {
                     .get(0);
 
                 if attempt >= self.max_attempts {
-                    self.metrics.failed_builds.inc();
+                    self.metrics.instance.failed_builds.inc();
                 }
 
                 report_error(&e);
@@ -320,7 +320,7 @@ impl BuildQueue {
                             "{}-{} added into build queue",
                             release.name, release.version
                         );
-                        self.metrics.queued_builds.inc();
+                        self.metrics.instance.queued_builds.inc();
                         crates_added += 1;
                     }
                     Err(err) => report_error(&err),
@@ -601,8 +601,8 @@ mod tests {
 
             // Ensure metrics were recorded correctly
             let metrics = env.metrics();
-            assert_eq!(metrics.total_builds.get(), 9);
-            assert_eq!(metrics.failed_builds.get(), 1);
+            assert_eq!(metrics.instance.total_builds.get(), 9);
+            assert_eq!(metrics.instance.failed_builds.get(), 1);
 
             // no invalidations were run since we don't have a distribution id configured
             assert!(cdn::queued_or_active_crate_invalidations(&mut *env.db().conn())?.is_empty());

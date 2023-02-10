@@ -77,6 +77,22 @@ async fn block_blacklisted_prefixes_middleware<B>(
     next.run(request).await
 }
 
+pub(super) fn build_metric_routes() -> AxumRouter {
+    AxumRouter::new()
+        .route_with_tsr(
+            "/about/metrics/instance",
+            get_internal(super::metrics::instance_metrics_handler),
+        )
+        .route_with_tsr(
+            "/about/metrics/service",
+            get_internal(super::metrics::service_metrics_handler),
+        )
+        .route_with_tsr(
+            "/about/metrics",
+            get_internal(super::metrics::metrics_handler),
+        )
+}
+
 pub(super) fn build_axum_routes() -> AxumRouter {
     // hint for naming axum routes:
     // when routes overlap, the route parameters at the same position
@@ -121,10 +137,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/about/builds",
             get_internal(super::sitemap::about_builds_handler),
         )
-        .route_with_tsr(
-            "/about/metrics",
-            get_internal(super::metrics::metrics_handler),
-        )
+        .merge(build_metric_routes())
         .route_with_tsr("/about", get_internal(super::sitemap::about_handler))
         .route_with_tsr(
             "/about/:subpage",

@@ -3,7 +3,7 @@
 pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
-use crate::utils::spawn_blocking;
+use crate::utils::{report_error, spawn_blocking};
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum_extra::middleware::option_layer;
 use serde_json::Value;
@@ -31,6 +31,7 @@ mod statics;
 use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
+    error_handling::HandleErrorLayer,
     extract::Extension,
     http::Request as AxumRequest,
     http::StatusCode,
@@ -46,8 +47,12 @@ use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use postgres::Client;
 use semver::{Version, VersionReq};
 use serde::Serialize;
-use std::borrow::Borrow;
-use std::{borrow::Cow, net::SocketAddr, sync::Arc};
+use std::{
+    borrow::{Borrow, Cow},
+    net::SocketAddr,
+    sync::Arc,
+    thread,
+};
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use url::form_urlencoded;
@@ -262,15 +267,13 @@ async fn log_timeouts_to_sentry<B>(req: AxumRequest<B>, next: Next<B>) -> AxumRe
     response
 }
 
-#[instrument(skip_all)]
-pub(crate) fn build_axum_app(
+fn apply_middleware(
+    router: AxumRouter,
     context: &dyn Context,
-    template_data: Arc<TemplateData>,
-) -> Result<AxumRouter, Error> {
+    template_data: Option<Arc<TemplateData>>,
+) -> Result<AxumRouter> {
     let config = context.config()?;
-    Ok(routes::build_axum_routes().layer(
-        // It’s recommended to use tower::ServiceBuilder to apply multiple middleware at once,
-        // instead of calling Router::layer repeatedly:
+    Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
@@ -288,13 +291,55 @@ pub(crate) fn build_axum_app(
             .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
             .layer(Extension(context.repository_stats_updater()?))
-            .layer(Extension(template_data))
+            .layer(HandleErrorLayer::new(error::dummy_error_handler))
+            .option_layer(template_data.map(Extension))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(middleware::from_fn(
                 page::web_page::render_templates_middleware,
             ))
             .layer(middleware::from_fn(cache::cache_middleware)),
     ))
+}
+
+pub(crate) fn build_axum_app(
+    context: &dyn Context,
+    template_data: Arc<TemplateData>,
+) -> Result<AxumRouter, Error> {
+    apply_middleware(routes::build_axum_routes(), context, Some(template_data))
+}
+
+pub(crate) fn build_metrics_axum_app(context: &dyn Context) -> Result<AxumRouter, Error> {
+    apply_middleware(routes::build_metric_routes(), context, None)
+}
+
+pub fn start_background_metrics_webserver(
+    addr: Option<&str>,
+    context: &dyn Context,
+) -> Result<(), Error> {
+    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
+
+    tracing::info!(
+        "Starting metrics web server on `{}:{}`",
+        axum_addr.ip(),
+        axum_addr.port()
+    );
+
+    let metrics_axum_app = build_metrics_axum_app(context)?.into_make_service();
+    let runtime = context.runtime()?;
+
+    thread::spawn(move || {
+        runtime.block_on(async {
+            if let Err(err) = axum::Server::bind(&axum_addr)
+                .serve(metrics_axum_app)
+                .await
+                .context("error running metrics web server")
+            {
+                report_error(&err);
+            }
+        })
+    });
+
+    Ok(())
 }
 
 #[instrument(skip_all)]

@@ -10,7 +10,7 @@ pub use self::docbuilder::RustwideBuilder;
 pub use self::index::Index;
 pub use self::metrics::Metrics;
 pub use self::storage::Storage;
-pub use self::web::start_web_server;
+pub use self::web::{start_background_metrics_webserver, start_web_server};
 
 mod build_queue;
 pub mod cdn;
