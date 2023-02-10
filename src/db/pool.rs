@@ -77,7 +77,7 @@ impl Pool {
         match self.with_pool(|p| p.get()) {
             Ok(conn) => Ok(conn),
             Err(err) => {
-                self.metrics.failed_db_connections.inc();
+                self.metrics.instance.failed_db_connections.inc();
                 Err(PoolError::ClientError(err))
             }
         }

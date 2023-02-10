@@ -35,22 +35,23 @@ pub const CDN_INVALIDATION_HISTOGRAM_BUCKETS: &[f64; 11] = &[
     24000.0, // 240
 ];
 
+#[derive(Debug)]
+pub struct Metrics {
+    pub instance: InstanceMetrics,
+    pub service: ServiceMetrics,
+}
+
+impl Metrics {
+    pub fn new() -> Result<Self, prometheus::Error> {
+        Ok(Self {
+            instance: InstanceMetrics::new()?,
+            service: ServiceMetrics::new()?,
+        })
+    }
+}
+
 metrics! {
-    pub struct Metrics {
-        /// Number of crates in the build queue
-        queued_crates_count: IntGauge,
-        /// Number of crates in the build queue that have a positive priority
-        prioritized_crates_count: IntGauge,
-        /// Number of crates that failed to build
-        failed_crates_count: IntGauge,
-        /// Whether the build queue is locked
-        queue_is_locked: IntGauge,
-        /// queued crates by priority
-        queued_crates_count_by_priority: IntGaugeVec["priority"],
-
-        /// queued CDN invalidations
-        queued_cdn_invalidations_by_distribution: IntGaugeVec["distribution"],
-
+    pub struct InstanceMetrics {
         /// The number of idle database connections
         idle_db_connections: IntGauge,
         /// The number of used database connections
@@ -143,7 +144,7 @@ impl RecentlyAccessedReleases {
             .insert((version, TargetAtom::from(target)), now);
     }
 
-    pub(crate) fn gather(&self, metrics: &Metrics) {
+    pub(crate) fn gather(&self, metrics: &InstanceMetrics) {
         fn inner<K: std::hash::Hash + Eq>(map: &DashMap<K, Instant>, metric: &IntGaugeVec) {
             let mut hour_count = 0;
             let mut half_hour_count = 0;
@@ -182,18 +183,112 @@ impl RecentlyAccessedReleases {
     }
 }
 
-impl Metrics {
+impl InstanceMetrics {
+    pub(crate) fn gather(&self, pool: &Pool) -> Result<Vec<MetricFamily>, Error> {
+        self.idle_db_connections.set(pool.idle_connections() as i64);
+        self.used_db_connections.set(pool.used_connections() as i64);
+        self.max_db_connections.set(pool.max_size() as i64);
+
+        self.recently_accessed_releases.gather(self);
+        self.gather_system_performance();
+        Ok(self.registry.gather())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn gather_system_performance(&self) {}
+
+    #[cfg(target_os = "linux")]
+    fn gather_system_performance(&self) {
+        use procfs::process::Process;
+
+        let process = Process::myself().unwrap();
+        self.open_file_descriptors
+            .set(process.fd_count().unwrap() as i64);
+        self.running_threads
+            .set(process.stat().unwrap().num_threads);
+    }
+}
+
+fn metric_from_opts<T: MetricFromOpts + Clone + prometheus::core::Collector + 'static>(
+    registry: &prometheus::Registry,
+    metric: &str,
+    help: &str,
+    variable_label: Option<&str>,
+) -> Result<T, prometheus::Error> {
+    let mut opts = prometheus::Opts::new(metric, help).namespace("docsrs");
+
+    if let Some(label) = variable_label {
+        opts = opts.variable_label(label);
+    }
+
+    let metric = T::from_opts(opts)?;
+    registry.register(Box::new(metric.clone()))?;
+    Ok(metric)
+}
+
+#[derive(Debug)]
+pub struct ServiceMetrics {
+    pub queued_crates_count: IntGauge,
+    pub prioritized_crates_count: IntGauge,
+    pub failed_crates_count: IntGauge,
+    pub queue_is_locked: IntGauge,
+    pub queued_crates_count_by_priority: IntGaugeVec,
+    pub queued_cdn_invalidations_by_distribution: IntGaugeVec,
+
+    registry: prometheus::Registry,
+}
+
+impl ServiceMetrics {
+    pub fn new() -> Result<Self, prometheus::Error> {
+        let registry = prometheus::Registry::new();
+        Ok(Self {
+            registry: registry.clone(),
+            queued_crates_count: metric_from_opts(
+                &registry,
+                "queued_crates_count",
+                "Number of crates in the build queue",
+                None,
+            )?,
+            prioritized_crates_count: metric_from_opts(
+                &registry,
+                "prioritized_crates_count",
+                "Number of crates in the build queue that have a positive priority",
+                None,
+            )?,
+            failed_crates_count: metric_from_opts(
+                &registry,
+                "failed_crates_count",
+                "Number of crates that failed to build",
+                None,
+            )?,
+            queue_is_locked: metric_from_opts(
+                &registry,
+                "queue_is_locked",
+                "Whether the build queue is locked",
+                None,
+            )?,
+            queued_crates_count_by_priority: metric_from_opts(
+                &registry,
+                "queued_crates_count_by_priority",
+                "queued crates by priority",
+                Some("priority"),
+            )?,
+            queued_cdn_invalidations_by_distribution: metric_from_opts(
+                &registry,
+                "queued_cdn_invalidations_by_distribution",
+                "queued CDN invalidations",
+                Some("distribution"),
+            )?,
+        })
+    }
+
     pub(crate) fn gather(
         &self,
         pool: &Pool,
         queue: &BuildQueue,
         config: &Config,
     ) -> Result<Vec<MetricFamily>, Error> {
-        self.idle_db_connections.set(pool.idle_connections() as i64);
-        self.used_db_connections.set(pool.used_connections() as i64);
-        self.max_db_connections.set(pool.max_size() as i64);
         self.queue_is_locked.set(queue.is_locked()? as i64);
-
         self.queued_crates_count.set(queue.pending_count()? as i64);
         self.prioritized_crates_count
             .set(queue.prioritized_count()? as i64);
@@ -216,23 +311,6 @@ impl Metrics {
         }
 
         self.failed_crates_count.set(queue.failed_count()? as i64);
-
-        self.recently_accessed_releases.gather(self);
-        self.gather_system_performance();
         Ok(self.registry.gather())
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn gather_system_performance(&self) {}
-
-    #[cfg(target_os = "linux")]
-    fn gather_system_performance(&self) {
-        use procfs::process::Process;
-
-        let process = Process::myself().unwrap();
-        self.open_file_descriptors
-            .set(process.fd_count().unwrap() as i64);
-        self.running_threads
-            .set(process.stat().unwrap().num_threads);
     }
 }

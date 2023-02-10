@@ -2,7 +2,6 @@ pub(super) trait MetricFromOpts: Sized {
     fn from_opts(opts: prometheus::Opts) -> Result<Self, prometheus::Error>;
 }
 
-#[macro_export]
 macro_rules! metrics {
     (
         $vis:vis struct $name:ident {
@@ -82,7 +81,6 @@ macro_rules! metrics {
     };
 }
 
-#[macro_export]
 macro_rules! load_metric_type {
     ($name:ident as single) => {
         use prometheus::$name;

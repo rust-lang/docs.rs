@@ -363,6 +363,7 @@ pub(crate) fn handle_queued_invalidation_requests(
         if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>(0)).to_std() {
             // This can only fail when the duration is negative, which can't happen anyways
             metrics
+                .instance
                 .cdn_invalidation_time
                 .with_label_values(&[distribution_id])
                 .observe(duration_to_seconds(duration));
@@ -400,6 +401,7 @@ pub(crate) fn handle_queued_invalidation_requests(
         if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>("queued")).to_std() {
             // This can only fail when the duration is negative, which can't happen anyways
             metrics
+                .instance
                 .cdn_queue_time
                 .with_label_values(&[distribution_id])
                 .observe(duration_to_seconds(duration));

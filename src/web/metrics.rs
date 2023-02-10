@@ -2,22 +2,35 @@ use crate::{
     db::Pool, metrics::duration_to_seconds, utils::spawn_blocking, web::error::AxumResult,
     BuildQueue, Config, Metrics,
 };
-use anyhow::Context as _;
+use anyhow::{Context as _, Result};
 use axum::{
-    body::Body,
     extract::{Extension, MatchedPath},
     http::Request as AxumRequest,
-    http::{
-        header::{CONTENT_LENGTH, CONTENT_TYPE},
-        Response as AxumHttpResponse, StatusCode,
-    },
+    http::{header::CONTENT_TYPE, StatusCode},
     middleware::Next,
     response::IntoResponse,
 };
-use prometheus::{Encoder, HistogramVec, TextEncoder};
+use prometheus::{proto::MetricFamily, Encoder, HistogramVec, TextEncoder};
 use std::{borrow::Cow, sync::Arc, time::Instant};
 #[cfg(test)]
 use tracing::debug;
+
+async fn fetch_and_render_metrics(
+    fetcher: impl Fn() -> Result<Vec<MetricFamily>> + Send + 'static,
+) -> AxumResult<impl IntoResponse> {
+    let metrics_families = spawn_blocking(fetcher).await?;
+
+    let mut buffer = Vec::new();
+    TextEncoder::new()
+        .encode(&metrics_families, &mut buffer)
+        .context("error encoding metrics")?;
+
+    Ok((
+        StatusCode::OK,
+        [(CONTENT_TYPE, mime::TEXT_PLAIN.as_ref())],
+        buffer,
+    ))
+}
 
 pub(super) async fn metrics_handler(
     Extension(pool): Extension<Pool>,
@@ -25,19 +38,29 @@ pub(super) async fn metrics_handler(
     Extension(metrics): Extension<Arc<Metrics>>,
     Extension(queue): Extension<Arc<BuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
-    let families = spawn_blocking(move || metrics.gather(&pool, &queue, &config)).await?;
+    fetch_and_render_metrics(move || {
+        let mut families = Vec::new();
+        families.extend_from_slice(&metrics.instance.gather(&pool)?);
+        families.extend_from_slice(&metrics.service.gather(&pool, &queue, &config)?);
+        Ok(families)
+    })
+    .await
+}
 
-    let mut buffer = Vec::new();
-    TextEncoder::new()
-        .encode(&families, &mut buffer)
-        .context("error encoding metrics")?;
+pub(super) async fn service_metrics_handler(
+    Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(queue): Extension<Arc<BuildQueue>>,
+) -> AxumResult<impl IntoResponse> {
+    fetch_and_render_metrics(move || metrics.service.gather(&pool, &queue, &config)).await
+}
 
-    Ok(AxumHttpResponse::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, mime::TEXT_PLAIN.as_ref())
-        .header(CONTENT_LENGTH, buffer.len())
-        .body(Body::from(buffer))
-        .context("error generating response")?)
+pub(super) async fn instance_metrics_handler(
+    Extension(pool): Extension<Pool>,
+    Extension(metrics): Extension<Arc<Metrics>>,
+) -> AxumResult<impl IntoResponse> {
+    fetch_and_render_metrics(move || metrics.instance.gather(&pool)).await
 }
 
 /// Request recorder middleware
@@ -75,10 +98,12 @@ pub(crate) async fn request_recorder<B>(
     let resp_time = duration_to_seconds(start.elapsed());
 
     metrics
+        .instance
         .routes_visited
         .with_label_values(&[&route_name])
         .inc();
     metrics
+        .instance
         .response_time
         .with_label_values(&[&route_name])
         .observe(resp_time);
@@ -135,7 +160,7 @@ impl Drop for RenderingTimesRecorder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{assert_success, wrapper};
+    use crate::test::wrapper;
     use crate::Context;
     use std::collections::HashMap;
 
@@ -200,8 +225,7 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized =
-                metrics.gather(&env.pool()?, &env.build_queue(), &env.config())?;
+            let metrics_serialized = metrics.instance.gather(&env.pool()?)?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.get_name() == "docsrs_routes_visited")
@@ -221,12 +245,17 @@ mod tests {
 
             for (label, count) in expected.iter() {
                 assert_eq!(
-                    metrics.routes_visited.with_label_values(&[*label]).get(),
+                    metrics
+                        .instance
+                        .routes_visited
+                        .with_label_values(&[*label])
+                        .get(),
                     *count,
                     "routes_visited metrics for {label} are incorrect",
                 );
                 assert_eq!(
                     metrics
+                        .instance
                         .response_time
                         .with_label_values(&[*label])
                         .get_sample_count(),
@@ -242,8 +271,39 @@ mod tests {
     #[test]
     fn test_metrics_page_success() {
         wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/about/metrics", web)
+            let response = env.frontend().get("/about/metrics").send()?;
+            assert!(response.status().is_success());
+
+            let body = response.text()?;
+            assert!(body.contains("docsrs_failed_builds"), "{}", body);
+            assert!(body.contains("queued_crates_count"), "{}", body);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_service_metrics_page_success() {
+        wrapper(|env| {
+            let response = env.frontend().get("/about/metrics/service").send()?;
+            assert!(response.status().is_success());
+
+            let body = response.text()?;
+            assert!(!body.contains("docsrs_failed_builds"), "{}", body);
+            assert!(body.contains("queued_crates_count"), "{}", body);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_instance_metrics_page_success() {
+        wrapper(|env| {
+            let response = env.frontend().get("/about/metrics/instance").send()?;
+            assert!(response.status().is_success());
+
+            let body = response.text()?;
+            assert!(body.contains("docsrs_failed_builds"), "{}", body);
+            assert!(!body.contains("queued_crates_count"), "{}", body);
+            Ok(())
         })
     }
 }

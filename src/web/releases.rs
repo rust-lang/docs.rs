@@ -503,7 +503,7 @@ async fn redirect_to_random_crate(
         let version: String = row.get("version");
         let target_name: String = row.get("target_name");
 
-        metrics.im_feeling_lucky_searches.inc();
+        metrics.instance.im_feeling_lucky_searches.inc();
 
         Ok(axum_redirect(format!("/{name}/{version}/{target_name}/"))?)
     } else {

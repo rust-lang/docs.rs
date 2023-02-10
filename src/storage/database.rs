@@ -160,7 +160,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &[&blob.path, &blob.mime, &blob.content, &compression],
             )?;
-            self.metrics.uploaded_files_total.inc();
+            self.metrics.instance.uploaded_files_total.inc();
         }
         Ok(())
     }
