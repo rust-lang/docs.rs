@@ -4,6 +4,7 @@ services:
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile
+        platform: "linux/amd64"
         depends_on:
             - db
             - s3
