@@ -95,7 +95,9 @@ impl Index {
             .repository_url
             .as_deref()
             .unwrap_or("https://github.com/rust-lang/crates.io-index");
-        crates_index::Index::with_path(&self.path, repo_url).map_err(Into::into)
+        let mut index = crates_index::Index::with_path(&self.path, repo_url)?;
+        index.update()?;
+        Ok(index)
     }
 
     pub fn api(&self) -> &Api {
