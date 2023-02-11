@@ -4,10 +4,9 @@ use super::cache::CachePolicy;
 use crate::{
     error::Result,
     storage::{Blob, Storage},
-    utils::report_error,
     Config,
 };
-use anyhow::anyhow;
+
 use axum::{
     extract::Extension,
     http::{
@@ -36,10 +35,11 @@ impl File {
 
 impl IntoResponse for File {
     fn into_response(self) -> AxumResponse {
-        let content_type: Mime = self.0.mime.parse::<Mime>().unwrap_or_else(|e| {
-            report_error(&anyhow!(e).context("could not parse mime from storage object"));
-            mime::APPLICATION_OCTET_STREAM
-        });
+        let content_type: Mime = self
+            .0
+            .mime
+            .parse::<Mime>()
+            .unwrap_or(mime::APPLICATION_OCTET_STREAM);
 
         (
             StatusCode::OK,
