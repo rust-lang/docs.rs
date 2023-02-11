@@ -18,8 +18,17 @@ const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"))
 const RUSTDOC_2021_12_05_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2021-12-05.css"));
 
+/// handle io-errors while serving static files.
+///
+/// Some errors can directly converted into a `404 NOT FOUND`,
+/// the rest will lead to a server error.
 async fn handle_error(err: io::Error) -> impl IntoResponse {
-    AxumNope::InternalError(err.into()).into_response()
+    match err.raw_os_error() {
+        // ENOTDIR -> "not a directory
+        Some(20) => AxumNope::ResourceNotFound,
+        // fallback: raise a server error
+        _ => AxumNope::InternalError(err.into()),
+    }
 }
 
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
@@ -128,6 +137,24 @@ mod tests {
             );
             assert_eq!(resp.content_length().unwrap(), VENDORED_CSS.len() as u64);
             assert_eq!(resp.text()?, VENDORED_CSS);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn io_error_not_a_directory_leads_to_404() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            // just to be sure that `index.js` exists
+            assert!(web.get("/-/static/index.js").send()?.status().is_success());
+
+            // `index.js` exists, but is not a directory,
+            // so trying to fetch it via `ServeDir` will lead
+            // to an IO-error.
+            let resp = web.get("/-/static/index.js/something").send()?;
+            assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
 
             Ok(())
         });
