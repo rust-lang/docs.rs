@@ -44,7 +44,7 @@ Docs.rs requires at least the following native C dependencies.
 - make
 - cmake
 - zlib
-- openssl
+- openssl (with dev pkgs) -- Ubuntu example `sudo apt install libssl-dev`
 
 There may be other dependencies that have not been documented.
 
@@ -63,7 +63,8 @@ cp .env.sample .env
 mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 cargo build
-# Start the external services
+# Start the external services.
+# It may be `docker compose` in newer versions
 docker-compose up -d db s3
 # anything that doesn't run via docker-compose needs the settings defined in
 # .env. Either via `. ./.env` as below, or via any dotenv shell integration.
