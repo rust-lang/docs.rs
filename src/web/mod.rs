@@ -31,7 +31,6 @@ mod statics;
 use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    error_handling::HandleErrorLayer,
     extract::Extension,
     http::Request as AxumRequest,
     http::StatusCode,
@@ -291,8 +290,7 @@ fn apply_middleware(
             .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
             .layer(Extension(context.repository_stats_updater()?))
-            .layer(HandleErrorLayer::new(error::dummy_error_handler))
-            .option_layer(template_data.map(Extension))
+            .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(middleware::from_fn(
                 page::web_page::render_templates_middleware,

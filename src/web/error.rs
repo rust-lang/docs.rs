@@ -133,13 +133,6 @@ impl From<anyhow::Error> for AxumNope {
 
 pub(crate) type AxumResult<T> = Result<T, AxumNope>;
 
-/// This function is only necessary because `.option_layer()` changes the error type
-/// and we need to change it back. Since the axum middleware has no way of returning
-/// an actual error this function should never actually be called.
-pub(crate) async fn dummy_error_handler(_err: axum::BoxError) -> http::StatusCode {
-    http::StatusCode::INTERNAL_SERVER_ERROR
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test::wrapper;
