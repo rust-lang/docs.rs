@@ -140,8 +140,8 @@ mod tests {
 
     #[test]
     fn test_feature_map_filters_private() {
-        let private1 = Feature::new("_private1".into(), vec!["feature1".into()], false);
-        let feature2 = Feature::new("feature2".into(), Vec::new(), false);
+        let private1 = Feature::new("_private1".into(), vec!["feature1".into()]);
+        let feature2 = Feature::new("feature2".into(), Vec::new());
 
         let raw = vec![private1.clone(), feature2.clone()];
         let feature_map = get_feature_map(raw);
@@ -153,15 +153,14 @@ mod tests {
 
     #[test]
     fn test_default_tree_structure_with_nested_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), vec!["feature1".into()], false);
-        let non_default = Feature::new("non-default".into(), Vec::new(), false);
+        let default = Feature::new(DEFAULT_NAME.into(), vec!["feature1".into()]);
+        let non_default = Feature::new("non-default".into(), Vec::new());
         let feature1 = Feature::new(
             "feature1".into(),
             vec!["feature2".into(), "feature3".into()],
-            false,
         );
-        let feature2 = Feature::new("feature2".into(), Vec::new(), false);
-        let feature3 = Feature::new("feature3".into(), Vec::new(), false);
+        let feature2 = Feature::new("feature2".into(), Vec::new());
+        let feature3 = Feature::new("feature3".into(), Vec::new());
 
         let raw = vec![
             default.clone(),
@@ -188,10 +187,9 @@ mod tests {
         let feature1 = Feature::new(
             "feature1".into(),
             vec!["feature2".into(), "feature3".into()],
-            false,
         );
-        let feature2 = Feature::new("feature2".into(), Vec::new(), false);
-        let feature3 = Feature::new("feature3".into(), Vec::new(), false);
+        let feature2 = Feature::new("feature2".into(), Vec::new());
+        let feature3 = Feature::new("feature3".into(), Vec::new());
 
         let raw = vec![feature3.clone(), feature2.clone(), feature1.clone()];
         let mut feature_map = get_feature_map(raw);
@@ -206,8 +204,8 @@ mod tests {
 
     #[test]
     fn test_default_tree_structure_single_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), Vec::new(), false);
-        let non_default = Feature::new("non-default".into(), Vec::new(), false);
+        let default = Feature::new(DEFAULT_NAME.into(), Vec::new());
+        let non_default = Feature::new("non-default".into(), Vec::new());
 
         let raw = vec![default.clone(), non_default.clone()];
         let mut feature_map = get_feature_map(raw);
@@ -225,10 +223,9 @@ mod tests {
         let feature1 = Feature::new(
             "feature1".into(),
             vec!["feature10".into(), "feature11".into()],
-            false,
         );
-        let feature2 = Feature::new("feature2".into(), vec!["feature20".into()], false);
-        let feature3 = Feature::new("feature3".into(), Vec::new(), false);
+        let feature2 = Feature::new("feature2".into(), vec!["feature20".into()]);
+        let feature3 = Feature::new("feature3".into(), Vec::new());
 
         let raw = vec![feature3.clone(), feature2.clone(), feature1.clone()];
         let (features, default_len) = order_features_and_count_default_len(raw);
@@ -242,8 +239,8 @@ mod tests {
 
     #[test]
     fn test_order_features_and_get_len_single_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), Vec::new(), false);
-        let non_default = Feature::new("non-default".into(), Vec::new(), false);
+        let default = Feature::new(DEFAULT_NAME.into(), Vec::new());
+        let non_default = Feature::new("non-default".into(), Vec::new());
 
         let raw = vec![default.clone(), non_default.clone()];
         let (features, default_len) = order_features_and_count_default_len(raw);

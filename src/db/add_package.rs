@@ -63,7 +63,7 @@ pub(crate) fn add_package_into_database(
          VALUES (
             $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,
             $10, $11, $12, $13, $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23, $24, $25, $26, $27 
+            $19, $20, $21, $22, $23, $24, $25, $26, $27
          )
          ON CONFLICT (crate_id, version) DO UPDATE
             SET release_time = $3,
@@ -233,31 +233,15 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
 fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
     let mut features = Vec::with_capacity(pkg.features.len());
     if let Some(subfeatures) = pkg.features.get("default") {
-        features.push(Feature::new("default".into(), subfeatures.clone(), false));
+        features.push(Feature::new("default".into(), subfeatures.clone()));
     };
     features.extend(
         pkg.features
             .iter()
             .filter(|(name, _)| *name != "default")
-            .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone(), false)),
+            .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone())),
     );
-    features.extend(get_optional_dependencies(pkg));
     features
-}
-
-fn get_optional_dependencies(pkg: &MetadataPackage) -> Vec<Feature> {
-    pkg.dependencies
-        .iter()
-        .filter(|dep| dep.optional)
-        .map(|dep| {
-            let name = if let Some(rename) = &dep.rename {
-                rename.clone()
-            } else {
-                dep.name.clone()
-            };
-            Feature::new(name, Vec::new(), true)
-        })
-        .collect()
 }
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
@@ -358,9 +342,9 @@ fn add_keywords_into_database(
     }
 
     conn.execute(
-        "INSERT INTO keyword_rels (rid, kid) 
-        SELECT $1 as rid, id as kid 
-        FROM keywords 
+        "INSERT INTO keyword_rels (rid, kid)
+        SELECT $1 as rid, id as kid
+        FROM keywords
         WHERE slug = ANY($2)
         ON CONFLICT DO NOTHING;",
         &[&release_id, &wanted_keywords.keys().collect::<Vec<_>>()],
@@ -414,15 +398,15 @@ fn update_owners_in_database(
         "INSERT INTO owner_rels (cid, oid)
              SELECT $1,oid
              FROM UNNEST($2::int[]) as oid
-             ON CONFLICT (cid,oid) 
+             ON CONFLICT (cid,oid)
              DO NOTHING",
         &[&crate_id, &oids],
     )?;
 
     conn.execute(
         "DELETE FROM owner_rels
-         WHERE 
-            cid = $1 AND 
+         WHERE
+            cid = $1 AND
             NOT (oid = ANY($2))",
         &[&crate_id, &oids],
     )?;
@@ -466,7 +450,7 @@ mod test {
 
             let kw_r = conn
                 .query(
-                    "SELECT kw.name,kw.slug 
+                    "SELECT kw.name,kw.slug
                     FROM keywords as kw
                     INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
                     WHERE kwr.rid = $1
@@ -531,7 +515,7 @@ mod test {
             let mut conn = env.db().conn();
             let kw_r = conn
                 .query(
-                    "SELECT kw.name,kw.slug 
+                    "SELECT kw.name,kw.slug
                     FROM keywords as kw
                     INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
                     WHERE kwr.rid = $1
@@ -585,7 +569,7 @@ mod test {
             update_owners_in_database(&mut conn, &[owner1.clone()], crate_id)?;
 
             let owner_def = conn.query_one(
-                "SELECT login, avatar 
+                "SELECT login, avatar
                 FROM owners",
                 &[],
             )?;
@@ -593,10 +577,10 @@ mod test {
             assert_eq!(owner_def.get::<_, String>(1), owner1.avatar);
 
             let owner_rel = conn.query_one(
-                "SELECT o.login 
-                FROM owners o, owner_rels r 
-                WHERE 
-                    o.id = r.oid AND 
+                "SELECT o.login
+                FROM owners o, owner_rels r
+                WHERE
+                    o.id = r.oid AND
                     r.cid = $1",
                 &[&crate_id],
             )?;
@@ -633,10 +617,10 @@ mod test {
             assert_eq!(owner_def.get::<_, String>(1), updated_owner.avatar);
 
             let owner_rel = conn.query_one(
-                "SELECT o.login 
-                FROM owners o, owner_rels r 
-                WHERE 
-                    o.id = r.oid AND 
+                "SELECT o.login
+                FROM owners o, owner_rels r
+                WHERE
+                    o.id = r.oid AND
                     r.cid = $1",
                 &[&crate_id],
             )?;
@@ -690,10 +674,10 @@ mod test {
 
             let crate_owners: Vec<String> = conn
                 .query(
-                    "SELECT o.login 
-                     FROM owners o, owner_rels r 
-                     WHERE 
-                         o.id = r.oid AND 
+                    "SELECT o.login
+                     FROM owners o, owner_rels r
+                     WHERE
+                         o.id = r.oid AND
                          r.cid = $1",
                     &[&crate_id],
                 )?

@@ -1160,4 +1160,56 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    #[ignore]
+    fn test_implicit_features_for_optional_dependencies() {
+        wrapper(|env| {
+            let crate_ = "serde";
+            let version = "1.0.152";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            let mut conn = env.db().conn();
+            let features: Vec<crate::db::types::Feature> = conn
+                .query_opt(
+                    "SELECT releases.features FROM releases
+                     INNER JOIN crates ON crates.id = releases.crate_id
+                     WHERE crates.name = $1 AND releases.version = $2",
+                    &[&crate_, &version],
+                )?
+                .context("missing release")?
+                .get(0);
+
+            assert!(features.iter().any(|f| f.name == "serde_derive"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() {
+        wrapper(|env| {
+            let crate_ = "stylish-core";
+            let version = "0.1.1";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            let mut conn = env.db().conn();
+            let features: Vec<crate::db::types::Feature> = conn
+                .query_opt(
+                    "SELECT releases.features FROM releases
+                     INNER JOIN crates ON crates.id = releases.crate_id
+                     WHERE crates.name = $1 AND releases.version = $2",
+                    &[&crate_, &version],
+                )?
+                .context("missing release")?
+                .get(0);
+
+            assert!(!features.iter().any(|f| f.name == "with_builtin_macros"));
+
+            Ok(())
+        });
+    }
 }

@@ -861,7 +861,7 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
         ),
         sql_migration!(
             context, 37, "add cdn-invalidation-queue table",
-            " 
+            "
             CREATE TABLE cdn_invalidation_queue (
                 id BIGSERIAL,
                 crate VARCHAR(255) NOT NULL,
@@ -881,6 +881,13 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             DROP INDEX cdn_invalidation_queue_created_in_cdn_idx;
             DROP TABLE cdn_invalidation_queue;
             "
+        ),
+        sql_migration!(
+            context,
+            38,
+            "Remove mark for features that are derived from optional dependencies",
+            "ALTER TYPE feature DROP ATTRIBUTE optional_dependency;",
+            "ALTER TYPE feature ADD ATTRIBUTE optional_dependency BOOL;"
         ),
     ];
 
