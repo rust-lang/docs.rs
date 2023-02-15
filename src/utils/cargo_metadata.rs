@@ -1,5 +1,5 @@
 use crate::error::Result;
-use anyhow::bail;
+use anyhow::{bail, Context};
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,7 +10,7 @@ pub(crate) struct CargoMetadata {
 }
 
 impl CargoMetadata {
-    pub(crate) fn load(
+    pub(crate) fn load_from_rustwide(
         workspace: &Workspace,
         toolchain: &Toolchain,
         source_dir: &Path,
@@ -20,21 +20,34 @@ impl CargoMetadata {
             .cd(source_dir)
             .log_output(false)
             .run_capture()?;
-
-        let mut iter = res.stdout_lines().iter();
-        let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
-            serde_json::from_str::<DeserializedMetadata>(serialized)?
-        } else {
-            bail!("invalid output returned by `cargo metadata`");
+        let [metadata] = res.stdout_lines() else {
+            bail!("invalid output returned by `cargo metadata`")
         };
+        Self::load_from_metadata(metadata)
+    }
 
+    #[cfg(test)]
+    pub(crate) fn load_from_host_path(source_dir: &Path) -> Result<Self> {
+        let res = std::process::Command::new("cargo")
+            .args(["metadata", "--format-version", "1", "--offline"])
+            .current_dir(source_dir)
+            .output()?;
+        let status = res.status;
+        if !status.success() {
+            bail!("error returned by `cargo metadata`: {status}")
+        }
+        Self::load_from_metadata(std::str::from_utf8(&res.stdout)?)
+    }
+
+    pub(crate) fn load_from_metadata(metadata: &str) -> Result<Self> {
+        let metadata = serde_json::from_str::<DeserializedMetadata>(metadata)?;
         let root = metadata.resolve.root;
         Ok(CargoMetadata {
             root: metadata
                 .packages
                 .into_iter()
                 .find(|pkg| pkg.id == root)
-                .unwrap(),
+                .context("metadata.packages missing root package")?,
         })
     }
 
