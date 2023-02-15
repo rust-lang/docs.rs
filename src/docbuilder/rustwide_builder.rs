@@ -311,8 +311,8 @@ impl RustwideBuilder {
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<bool> {
         self.update_toolchain()?;
-        let metadata =
-            CargoMetadata::load(&self.workspace, &self.toolchain, path).map_err(|err| {
+        let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
+            .map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
@@ -646,8 +646,11 @@ impl RustwideBuilder {
         metadata: &Metadata,
         create_essential_files: bool,
     ) -> Result<FullBuildResult> {
-        let cargo_metadata =
-            CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
+        let cargo_metadata = CargoMetadata::load_from_rustwide(
+            &self.workspace,
+            &self.toolchain,
+            &build.host_source_dir(),
+        )?;
 
         let mut rustdoc_flags = vec![if create_essential_files {
             "--emit=unversioned-shared-resources,toolchain-shared-resources"

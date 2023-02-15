@@ -434,7 +434,8 @@ where
 mod test {
     use super::*;
     use crate::test::*;
-    use crate::utils::MetadataPackage;
+    use crate::utils::{CargoMetadata, MetadataPackage};
+    use test_case::test_case;
 
     #[test]
     fn new_keywords() {
@@ -690,5 +691,49 @@ mod test {
 
             Ok(())
         })
+    }
+
+    #[test_case("", [])]
+    #[test_case(
+        r#"
+            [features]
+            foo = []
+        "#,
+        [Feature::new("foo".into(), vec![])]
+    )]
+    #[test_case(
+        r#"
+            [dependencies]
+            base64 = { optional = true, version = "=0.13.1" }
+        "#,
+        [Feature::new("base64".into(), vec!["dep:base64".into()])]
+    )]
+    #[test_case(
+        r#"
+            [dependencies]
+            base64 = { optional = true, version = "=0.13.1" }
+            [features]
+            not-base64 = ["dep:base64"]
+        "#,
+        [Feature::new("not-base64".into(), vec!["dep:base64".into()])]
+    )]
+    fn test_get_features(extra: &str, expected: impl AsRef<[Feature]>) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        std::fs::create_dir(dir.path().join("src"))?;
+        std::fs::write(dir.path().join("src/lib.rs"), "")?;
+
+        let base = r#"
+            [package]
+            name = "test"
+            version = "0.0.0"
+        "#;
+
+        std::fs::write(dir.path().join("Cargo.toml"), [base, extra].concat())?;
+        let metadata = CargoMetadata::load_from_host_path(dir.path())?;
+        let features = super::get_features(metadata.root());
+        assert_eq!(features, expected.as_ref());
+
+        Ok(())
     }
 }
