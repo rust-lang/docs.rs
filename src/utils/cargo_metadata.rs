@@ -34,7 +34,8 @@ impl CargoMetadata {
             .output()?;
         let status = res.status;
         if !status.success() {
-            bail!("error returned by `cargo metadata`: {status}")
+            let stderr = std::str::from_utf8(&res.stderr).unwrap_or("");
+            bail!("error returned by `cargo metadata`: {status}\n{stderr}")
         }
         Self::load_from_metadata(std::str::from_utf8(&res.stdout)?)
     }

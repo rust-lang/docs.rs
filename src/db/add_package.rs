@@ -697,25 +697,25 @@ mod test {
     #[test_case(
         r#"
             [features]
-            foo = []
+            bar = []
         "#,
-        [Feature::new("foo".into(), vec![])]
+        [Feature::new("bar".into(), vec![])]
     )]
     #[test_case(
         r#"
             [dependencies]
-            base64 = { optional = true, version = "=0.13.1" }
+            bar = { optional = true, path = "bar" }
         "#,
-        [Feature::new("base64".into(), vec!["dep:base64".into()])]
+        [Feature::new("bar".into(), vec!["dep:bar".into()])]
     )]
     #[test_case(
         r#"
             [dependencies]
-            base64 = { optional = true, version = "=0.13.1" }
+            bar = { optional = true, path = "bar" }
             [features]
-            not-base64 = ["dep:base64"]
+            not-bar = ["dep:bar"]
         "#,
-        [Feature::new("not-base64".into(), vec!["dep:base64".into()])]
+        [Feature::new("not-bar".into(), vec!["dep:bar".into()])]
     )]
     fn test_get_features(extra: &str, expected: impl AsRef<[Feature]>) -> Result<()> {
         let dir = tempfile::tempdir()?;
@@ -723,9 +723,22 @@ mod test {
         std::fs::create_dir(dir.path().join("src"))?;
         std::fs::write(dir.path().join("src/lib.rs"), "")?;
 
+        std::fs::create_dir(dir.path().join("bar"))?;
+        std::fs::create_dir(dir.path().join("bar/src"))?;
+        std::fs::write(dir.path().join("bar/src/lib.rs"), "")?;
+
+        std::fs::write(
+            dir.path().join("bar/Cargo.toml"),
+            r#"
+                [package]
+                name = "bar"
+                version = "0.0.0"
+            "#,
+        )?;
+
         let base = r#"
             [package]
-            name = "test"
+            name = "foo"
             version = "0.0.0"
         "#;
 
