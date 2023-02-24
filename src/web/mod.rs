@@ -5,6 +5,7 @@ pub mod page;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::spawn_blocking;
 use anyhow::{anyhow, bail, Context as _, Result};
+use axum_extra::middleware::option_layer;
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -30,7 +31,13 @@ mod statics;
 use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    extract::Extension, http::StatusCode, middleware, response::IntoResponse, Router as AxumRouter,
+    extract::Extension,
+    http::Request as AxumRequest,
+    http::StatusCode,
+    middleware,
+    middleware::Next,
+    response::{IntoResponse, Response as AxumResponse},
+    Router as AxumRouter,
 };
 use chrono::{DateTime, Utc};
 use error::AxumNope;
@@ -40,9 +47,10 @@ use postgres::Client;
 use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::borrow::Borrow;
+use std::time::Duration;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use url::form_urlencoded;
 
 // from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
@@ -243,11 +251,24 @@ async fn match_version_axum(
     .await
 }
 
+async fn log_timeouts_to_sentry<B>(req: AxumRequest<B>, next: Next<B>) -> AxumResponse {
+    let uri = req.uri().clone();
+
+    let response = next.run(req).await;
+
+    if response.status() == StatusCode::REQUEST_TIMEOUT {
+        tracing::error!(?uri, "request timeout");
+    }
+
+    response
+}
+
 #[instrument(skip_all)]
 pub(crate) fn build_axum_app(
     context: &dyn Context,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
+    let config = context.config()?;
     Ok(routes::build_axum_routes().layer(
         // It’s recommended to use tower::ServiceBuilder to apply multiple middleware at once,
         // instead of calling Router::layer repeatedly:
@@ -255,6 +276,14 @@ pub(crate) fn build_axum_app(
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
             .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(option_layer(
+                config
+                    .report_request_timeouts
+                    .then_some(middleware::from_fn(log_timeouts_to_sentry)),
+            ))
+            .layer(option_layer(config.request_timeout.map(|timeout| {
+                TimeoutLayer::new(Duration::from_secs(timeout))
+            })))
             .layer(Extension(context.pool()?))
             .layer(Extension(context.build_queue()?))
             .layer(Extension(context.metrics()?))
