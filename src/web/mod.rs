@@ -272,7 +272,10 @@ pub(crate) fn build_axum_app(
 
 #[instrument(skip_all)]
 pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(), Error> {
-    let template_data = Arc::new(TemplateData::new(&mut *context.pool()?.get()?)?);
+    let template_data = Arc::new(TemplateData::new(
+        &mut *context.pool()?.get()?,
+        context.config()?.render_threads,
+    )?);
 
     let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
 

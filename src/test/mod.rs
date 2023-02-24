@@ -548,8 +548,13 @@ impl TestFrontend {
         }
 
         debug!("loading template data");
-        let template_data =
-            Arc::new(TemplateData::new(&mut context.pool().unwrap().get().unwrap()).unwrap());
+        let template_data = Arc::new(
+            TemplateData::new(
+                &mut context.pool().unwrap().get().unwrap(),
+                context.config().unwrap().render_threads,
+            )
+            .unwrap(),
+        );
 
         debug!("binding local TCP port for axum");
         let axum_listener =

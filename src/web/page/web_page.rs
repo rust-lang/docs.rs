@@ -1,8 +1,5 @@
 use super::TemplateData;
-use crate::{
-    utils::spawn_blocking,
-    web::{csp::Csp, error::AxumNope},
-};
+use crate::web::{csp::Csp, error::AxumNope};
 use anyhow::Error;
 use axum::{
     body::{boxed, Body},
@@ -141,11 +138,14 @@ fn render_response(
             context.insert("csp_nonce", &csp_nonce);
 
             let rendered = if cpu_intensive_rendering {
-                spawn_blocking({
-                    let templates = templates.clone();
-                    move || Ok(templates.templates.render(&template, &context)?)
-                })
-                .await
+                templates
+                    .render_in_threadpool(move |templates| {
+                        templates
+                            .templates
+                            .render(&template, &context)
+                            .map_err(Into::into)
+                    })
+                    .await
             } else {
                 templates
                     .templates

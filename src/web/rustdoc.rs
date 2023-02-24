@@ -649,33 +649,33 @@ pub(crate) async fn rustdoc_html_server_handler(
     rendering_time.step("rewrite html");
 
     // Build the page of documentation,
-    // inside `spawn_blocking` since it's CPU intensive.
-    spawn_blocking({
-        let metrics = metrics.clone();
-        move || {
-            Ok(RustdocPage {
-                latest_path,
-                permalink_path,
-                latest_version,
-                target,
-                inner_path,
-                is_latest_version,
-                is_latest_url,
-                is_prerelease,
-                metadata: krate.metadata.clone(),
-                krate: krate.clone(),
+    templates
+        .render_in_threadpool({
+            let metrics = metrics.clone();
+            move |templates| {
+                Ok(RustdocPage {
+                    latest_path,
+                    permalink_path,
+                    latest_version,
+                    target,
+                    inner_path,
+                    is_latest_version,
+                    is_latest_url,
+                    is_prerelease,
+                    metadata: krate.metadata.clone(),
+                    krate: krate.clone(),
+                }
+                .into_response(
+                    &blob.content,
+                    config.max_parse_memory,
+                    templates,
+                    &metrics,
+                    &config,
+                    &storage_path,
+                ))
             }
-            .into_response(
-                &blob.content,
-                config.max_parse_memory,
-                &templates,
-                &metrics,
-                &config,
-                &storage_path,
-            ))
-        }
-    })
-    .await?
+        })
+        .await?
 }
 
 /// Checks whether the given path exists.
