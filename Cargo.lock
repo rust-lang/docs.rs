@@ -1430,6 +1430,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "mockito",
+ "num_cpus",
  "once_cell",
  "path-slash",
  "percent-encoding",

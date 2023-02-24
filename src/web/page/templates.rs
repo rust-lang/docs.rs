@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use path_slash::PathExt;
 use postgres::Client;
 use serde_json::Value;
-use std::{collections::HashMap, fmt, path::PathBuf};
+use std::{collections::HashMap, fmt, path::PathBuf, sync::Arc};
 use tera::{Result as TeraResult, Tera};
 use tracing::{error, trace};
 use walkdir::WalkDir;
@@ -18,19 +18,48 @@ const TEMPLATES_DIRECTORY: &str = "templates";
 #[derive(Debug)]
 pub(crate) struct TemplateData {
     pub templates: Tera,
+    rendering_threadpool: rayon::ThreadPool,
 }
 
 impl TemplateData {
-    pub(crate) fn new(conn: &mut Client) -> Result<Self> {
+    pub(crate) fn new(conn: &mut Client, num_threads: usize) -> Result<Self> {
         trace!("Loading templates");
 
         let data = Self {
             templates: load_templates(conn)?,
+            rendering_threadpool: rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .thread_name(move |idx| format!("docsrs-render {idx}"))
+                .build()?,
         };
 
         trace!("Finished loading templates");
 
         Ok(data)
+    }
+
+    /// offload CPU intensive rendering into a rayon threadpool.
+    ///
+    /// This is a thin wrapper around `rayon::spawn` which waits
+    /// sync task to finish.
+    ///
+    /// Use this instead of `spawn_blocking` so we don't block tokio.
+    pub(crate) async fn render_in_threadpool<F, R>(self: &Arc<Self>, render_fn: F) -> Result<R>
+    where
+        F: FnOnce(&TemplateData) -> Result<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let (send, recv) = tokio::sync::oneshot::channel();
+        self.rendering_threadpool.spawn({
+            let templates = self.clone();
+            move || {
+                // `.send` only fails when the receiver is dropped,
+                // at which point we don't need the result any more.
+                let _ = send.send(render_fn(&templates));
+            }
+        });
+
+        recv.await.context("sender was dropped")?
     }
 }
 

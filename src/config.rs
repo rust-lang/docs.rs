@@ -49,6 +49,9 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 
+    /// amout of threads for CPU intensive rendering
+    pub(crate) render_threads: usize,
+
     // random crate search generates a number of random IDs to
     // efficiently find a random crate with > 100 GH stars.
     // The amount depends on the ratio of crates with >100 stars
@@ -153,6 +156,7 @@ impl Config {
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
+            render_threads: env("DOCSRS_RENDER_THREADS", num_cpus::get())?,
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
 
