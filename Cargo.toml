@@ -91,7 +91,7 @@ axum-extra = "0.5.0"
 hyper = { version = "0.14.15", default-features = false }
 tower = "0.4.11"
 tower-service = "0.3.2"
-tower-http = { version = "0.4.0", features = ["fs", "trace"] }
+tower-http = { version = "0.4.0", features = ["fs", "trace", "timeout"] }
 mime = "0.3.16"
 percent-encoding = "2.2.0"
 
