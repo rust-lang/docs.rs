@@ -86,7 +86,7 @@ memmap2 = "0.5.0"
 
 # axum dependencies
 axum = { version = "0.6.1", features = ["headers"]}
-axum-extra = "0.4.2"
+axum-extra = "0.5.0"
 hyper = { version = "0.14.15", default-features = false }
 tower = "0.4.11"
 tower-service = "0.3.2"
