@@ -5,6 +5,10 @@
     {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
 {%- endblock title -%}
 
+{%- block body_classes -%}
+centered
+{%- endblock body_classes -%}
+
 {%- block topbar -%}
   {%- set latest_version = "" -%}
   {%- set latest_path = "" -%}
