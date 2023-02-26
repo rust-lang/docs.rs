@@ -46,7 +46,7 @@ failure = "0.1.8"
 thiserror = "1.0.26"
 comrak = { version = "0.16.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
-toml = "0.5"
+toml = "0.7.2"
 schemamama = "0.3"
 schemamama_postgres = "0.3"
 prometheus = { version = "0.13.0", default-features = false }
