@@ -68,6 +68,7 @@ fn render_with_highlighter(
         &ComrakPlugins {
             render: ComrakRenderPlugins {
                 codefence_syntax_highlighter: Some(&CodeAdapter(highlighter)),
+                ..Default::default()
             },
         },
     )
