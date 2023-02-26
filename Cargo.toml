@@ -32,7 +32,7 @@ regex = "1"
 clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "0.18.5", optional = true }
 rayon = { version = "1", optional = true }
-crates-index-diff = { version = "15.0.1", features = [ "max-performance" ]}
+crates-index-diff = { version = "16.0.1", features = [ "max-performance" ]}
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
@@ -129,7 +129,7 @@ indoc = "1.0.7"
 
 [build-dependencies]
 time = "0.3"
-git-repository = { version = "0.29.0", default-features = false }
+gix = { version = "0.37.2", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }

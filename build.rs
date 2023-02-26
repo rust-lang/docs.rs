@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Error, Result};
-use git_repository as git;
+use gix as git;
 use std::{env, path::Path};
 
 mod tracked {

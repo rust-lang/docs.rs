@@ -50,17 +50,17 @@ impl BuildQueue {
         }
     }
 
-    pub fn last_seen_reference(&self) -> Result<Option<crates_index_diff::git::ObjectId>> {
+    pub fn last_seen_reference(&self) -> Result<Option<crates_index_diff::gix::ObjectId>> {
         let mut conn = self.db.get()?;
         if let Some(value) = get_config::<String>(&mut conn, ConfigName::LastSeenIndexReference)? {
-            return Ok(Some(crates_index_diff::git::ObjectId::from_hex(
+            return Ok(Some(crates_index_diff::gix::ObjectId::from_hex(
                 value.as_bytes(),
             )?));
         }
         Ok(None)
     }
 
-    fn set_last_seen_reference(&self, oid: crates_index_diff::git::ObjectId) -> Result<()> {
+    fn set_last_seen_reference(&self, oid: crates_index_diff::gix::ObjectId) -> Result<()> {
         let mut conn = self.db.get()?;
         set_config(
             &mut conn,
@@ -815,7 +815,7 @@ mod tests {
             assert_eq!(queue.last_seen_reference()?, None);
             assert!(!queue.is_locked()?);
 
-            let oid = crates_index_diff::git::ObjectId::from_hex(
+            let oid = crates_index_diff::gix::ObjectId::from_hex(
                 b"ffffffffffffffffffffffffffffffffffffffff",
             )?;
             queue.set_last_seen_reference(oid)?;

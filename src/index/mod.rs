@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::{path::PathBuf, process::Command};
 
 use anyhow::Context;
-use crates_index_diff::git;
+use crates_index_diff::gix;
 use url::Url;
 
 use self::api::Api;
@@ -28,7 +28,7 @@ struct IndexConfig {
 /// repository has a remote called `origin` and that the branch `master` exists on it.
 ///
 /// [RFC 2141]: https://rust-lang.github.io/rfcs/2141-alternative-registries.html
-fn load_config(repo: &git::Repository) -> Result<IndexConfig> {
+fn load_config(repo: &gix::Repository) -> Result<IndexConfig> {
     let file = repo
         .rev_parse_single("refs/remotes/origin/master:config.json")
         .with_context(|| anyhow::anyhow!("registry index missing ./config.json in root"))?
@@ -42,7 +42,7 @@ impl Index {
     pub fn from_url(path: PathBuf, url: String) -> Result<Self> {
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
-            git::progress::Discard,
+            gix::progress::Discard,
             &AtomicBool::default(),
             crates_index_diff::index::CloneOptions { url: url.clone() },
         )
@@ -79,7 +79,7 @@ impl Index {
             .unwrap_or_default();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &self.path,
-            git::progress::Discard,
+            gix::progress::Discard,
             &AtomicBool::default(),
             options,
         )
