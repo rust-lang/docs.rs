@@ -1,4 +1,4 @@
-use super::{cache::CachePolicy, error::AxumNope, metrics::request_recorder, routes::get_static};
+use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
 use axum::{
     extract::Extension,
     headers::HeaderValue,
@@ -9,7 +9,6 @@ use axum::{
     routing::get_service,
     Router as AxumRouter,
 };
-use std::io;
 use tower_http::services::ServeDir;
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
@@ -17,19 +16,6 @@ const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"));
 const RUSTDOC_2021_12_05_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2021-12-05.css"));
-
-/// handle io-errors while serving static files.
-///
-/// Some errors can directly converted into a `404 NOT FOUND`,
-/// the rest will lead to a server error.
-async fn handle_error(err: io::Error) -> impl IntoResponse {
-    match err.raw_os_error() {
-        // ENOTDIR -> "not a directory
-        Some(20) => AxumNope::ResourceNotFound,
-        // fallback: raise a server error
-        _ => AxumNope::InternalError(err.into()),
-    }
-}
 
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     (
@@ -83,7 +69,6 @@ pub(crate) fn build_static_router() -> AxumRouter {
         .nest_service(
             "/",
             get_service(ServeDir::new("static").fallback(ServeDir::new("vendor")))
-                .handle_error(handle_error)
                 .layer(middleware::from_fn(set_needed_static_headers))
                 .layer(middleware::from_fn(|request, next| async {
                     request_recorder(request, next, Some("static resource")).await
