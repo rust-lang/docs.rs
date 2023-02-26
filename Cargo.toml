@@ -125,7 +125,7 @@ mockito = "0.31.0"
 test-case = "3.0.0"
 aws-smithy-client = { version = "0.54.4", features = ["test-util"]}
 aws-smithy-http = "0.54.4"
-indoc = "1.0.7"
+indoc = "2.0.0"
 
 [build-dependencies]
 time = "0.3"
