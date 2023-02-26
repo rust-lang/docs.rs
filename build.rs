@@ -1,5 +1,4 @@
 use anyhow::{Context as _, Error, Result};
-use gix as git;
 use std::{env, path::Path};
 
 mod tracked {
@@ -98,7 +97,7 @@ fn write_git_version(out_dir: &Path) -> Result<()> {
 }
 
 fn get_git_hash() -> Result<Option<String>> {
-    match git::open_opts(env::current_dir()?, git::open::Options::isolated()) {
+    match gix::open_opts(env::current_dir()?, gix::open::Options::isolated()) {
         Ok(repo) => {
             let head_id = repo.head()?.id();
 
