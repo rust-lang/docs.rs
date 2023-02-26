@@ -2,6 +2,7 @@ use crate::config::Config;
 use axum::{
     http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
+use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use std::{
     fmt::Write,
     sync::{
@@ -23,7 +24,7 @@ impl Csp {
         getrandom::getrandom(&mut random).expect("failed to generate a nonce");
 
         Self {
-            nonce: base64::encode(random),
+            nonce: b64.encode(random),
             suppress: AtomicBool::new(false),
         }
     }

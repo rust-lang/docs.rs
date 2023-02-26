@@ -18,6 +18,7 @@ use axum::{
     extract::{Extension, Path, Query},
     response::{IntoResponse, Response as AxumResponse},
 };
+use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::Client;
 use serde::{Deserialize, Serialize};
@@ -560,7 +561,7 @@ pub(crate) async fn search_handler(
     }
 
     let search_result = if let Some(paginate) = params.get("paginate") {
-        let decoded = base64::decode(paginate.as_bytes()).map_err(|e| {
+        let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
             warn!(
                 "error when decoding pagination base64 string \"{}\": {:?}",
                 paginate, e
@@ -609,10 +610,10 @@ pub(crate) async fn search_handler(
         search_query: Some(executed_query),
         next_page_link: search_result
             .next_page
-            .map(|params| format!("/releases/search?paginate={}", base64::encode(params))),
+            .map(|params| format!("/releases/search?paginate={}", b64.encode(params))),
         previous_page_link: search_result
             .prev_page
-            .map(|params| format!("/releases/search?paginate={}", base64::encode(params))),
+            .map(|params| format!("/releases/search?paginate={}", b64.encode(params))),
         ..Default::default()
     }
     .into_response())
@@ -932,14 +933,14 @@ mod tests {
                 other_search_links[0],
                 format!(
                     "/releases/search?paginate={}",
-                    base64::encode("?and=the&parameters=for&the=previouspage"),
+                    b64.encode("?and=the&parameters=for&the=previouspage"),
                 )
             );
             assert_eq!(
                 other_search_links[1],
                 format!(
                     "/releases/search?paginate={}",
-                    base64::encode("?some=parameters&that=cratesio&might=return")
+                    b64.encode("?some=parameters&that=cratesio&might=return")
                 )
             );
 
@@ -954,7 +955,7 @@ mod tests {
                 .frontend()
                 .get(&format!(
                     "/releases/search?paginate={}",
-                    base64::encode("something_that_doesnt_start_with_?")
+                    b64.encode("something_that_doesnt_start_with_?")
                 ))
                 .send()?;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -1016,7 +1017,7 @@ mod tests {
             let links = get_release_links(
                 &format!(
                     "/releases/search?paginate={}",
-                    base64::encode("?some=dummy&pagination=parameters")
+                    b64.encode("?some=dummy&pagination=parameters")
                 ),
                 web,
             )?;

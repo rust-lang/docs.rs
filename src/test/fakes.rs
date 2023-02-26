@@ -6,6 +6,7 @@ use crate::index::api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
 use crate::utils::{Dependency, MetadataPackage, Target};
 use anyhow::Context;
+use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use postgres::Client;
 use std::collections::{HashMap, HashSet};
@@ -439,7 +440,7 @@ impl FakeGithubStats {
         let existing_count: i64 = conn
             .query_one("SELECT COUNT(*) FROM repositories;", &[])?
             .get(0);
-        let host_id = base64::encode(format!("FAKE ID {existing_count}"));
+        let host_id = b64.encode(format!("FAKE ID {existing_count}"));
 
         let data = conn.query_one(
             "INSERT INTO repositories (host, host_id, name, description, last_commit, stars, forks, issues, updated_at)
