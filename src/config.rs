@@ -49,7 +49,7 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub(crate) registry_gc_interval: u64,
 
-    /// amout of threads for CPU intensive rendering
+    /// amount of threads for CPU intensive rendering
     pub(crate) render_threads: usize,
 
     // random crate search generates a number of random IDs to
