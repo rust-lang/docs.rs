@@ -53,9 +53,14 @@ impl TemplateData {
         self.rendering_threadpool.spawn({
             let templates = self.clone();
             move || {
-                // `.send` only fails when the receiver is dropped,
-                // at which point we don't need the result any more.
-                let _ = send.send(render_fn(&templates));
+                // the job may have been queued on the thread-pool for a while,
+                // if the request was closed in the meantime the receiver should have
+                // dropped and we don't need to bother rendering the template
+                if !send.is_closed() {
+                    // `.send` only fails when the receiver is dropped while we were rendering,
+                    // at which point we don't need the result any more.
+                    let _ = send.send(render_fn(&templates));
+                }
             }
         });
 
