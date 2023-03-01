@@ -18,6 +18,15 @@ const TEMPLATES_DIRECTORY: &str = "templates";
 #[derive(Debug)]
 pub(crate) struct TemplateData {
     pub templates: Tera,
+    /// rendering threadpool for CPU intensive rendering.
+    /// When the app is shut down, the pool won't wait
+    /// for pending tasks in this pool.
+    /// In the case of rendering, this is what we want.
+    /// See also https://github.com/rayon-rs/rayon/issues/688.
+    ///
+    /// This is better than using `tokio::spawn_blocking` because
+    /// tokio will wait until all tasks are finished when shutting
+    /// down.
     rendering_threadpool: rayon::ThreadPool,
 }
 
