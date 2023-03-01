@@ -187,6 +187,8 @@ pub(crate) async fn rustdoc_redirector_handler(
             .await?
             .ok_or(AxumNope::ResourceNotFound)?;
 
+            rendering_time.step("fetch from storage");
+
             match spawn_blocking({
                 let version = version.clone();
                 let storage = storage.clone();
@@ -491,6 +493,10 @@ pub(crate) async fn rustdoc_html_server_handler(
     }
 
     trace!(?storage_path, ?req_path, "try fetching from storage");
+
+    // record the data-fetch step
+    // until we re-add it below inside `fetch_rustdoc_file`
+    rendering_time.step("fetch from storage");
 
     // Attempt to load the file from the database
     let blob = match spawn_blocking({
