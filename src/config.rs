@@ -1,9 +1,6 @@
 use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
-use std::env::VarError;
-use std::error::Error;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
 use tracing::trace;
 
 #[derive(Debug)]
@@ -42,7 +39,7 @@ pub struct Config {
     pub(crate) gitlab_accesstoken: Option<String>,
 
     // request timeout in seconds
-    pub(crate) request_timeout: Option<u64>,
+    pub(crate) request_timeout: Option<Duration>,
     pub(crate) report_request_timeouts: bool,
 
     // Max size of the files served by the docs.rs frontend
@@ -161,7 +158,7 @@ impl Config {
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
             render_threads: env("DOCSRS_RENDER_THREADS", num_cpus::get())?,
-            request_timeout: maybe_env("DOCSRS_REQUEST_TIMEOUT")?,
+            request_timeout: maybe_env::<u64>("DOCSRS_REQUEST_TIMEOUT")?.map(Duration::from_secs),
             report_request_timeouts: env("DOCSRS_REPORT_REQUEST_TIMEOUTS", false)?,
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,

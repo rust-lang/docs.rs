@@ -47,7 +47,6 @@ use postgres::Client;
 use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::borrow::Borrow;
-use std::time::Duration;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 use tower::ServiceBuilder;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
@@ -281,9 +280,7 @@ pub(crate) fn build_axum_app(
                     .report_request_timeouts
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
-            .layer(option_layer(config.request_timeout.map(|timeout| {
-                TimeoutLayer::new(Duration::from_secs(timeout))
-            })))
+            .layer(option_layer(config.request_timeout.map(TimeoutLayer::new)))
             .layer(Extension(context.pool()?))
             .layer(Extension(context.build_queue()?))
             .layer(Extension(context.metrics()?))
