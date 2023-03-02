@@ -42,6 +42,9 @@ pub struct Config {
     pub(crate) request_timeout: Option<Duration>,
     pub(crate) report_request_timeouts: bool,
 
+    // block traffic based on headers
+    pub(crate) blocked_traffic: Vec<(String, Vec<String>)>,
+
     // Max size of the files served by the docs.rs frontend
     pub(crate) max_file_size: usize,
     pub(crate) max_file_size_html: usize,
@@ -160,6 +163,7 @@ impl Config {
             render_threads: env("DOCSRS_RENDER_THREADS", num_cpus::get())?,
             request_timeout: maybe_env::<u64>("DOCSRS_REQUEST_TIMEOUT")?.map(Duration::from_secs),
             report_request_timeouts: env("DOCSRS_REPORT_REQUEST_TIMEOUTS", false)?,
+            blocked_traffic: blocked_traffic()?,
 
             random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
 
@@ -222,5 +226,46 @@ where
             Ok(None)
         }
         Err(VarError::NotUnicode(_)) => Err(anyhow!("configuration variable {} is not UTF-8", var)),
+    }
+}
+
+fn blocked_traffic() -> Result<Vec<(String, Vec<String>)>> {
+    let pattern_list: String = maybe_env("BLOCKED_TRAFFIC")?.unwrap_or_default();
+    parse_traffic_patterns(&pattern_list)
+        .map(|(header, value_env_var)| -> Result<_> {
+            let value_list: String = maybe_env(value_env_var)?.unwrap_or_default();
+            let values = value_list.split(',').map(String::from).collect();
+            Ok((header.into(), values))
+        })
+        .collect()
+}
+
+fn parse_traffic_patterns(patterns: &str) -> impl Iterator<Item = (&str, &str)> {
+    patterns.split_terminator(',').map(|pattern| {
+        pattern.split_once('=').unwrap_or_else(|| {
+            panic!(
+                "BLOCKED_TRAFFIC must be in the form HEADER=VALUE_ENV_VAR, \
+                 got invalid pattern {pattern}"
+            )
+        })
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_traffic_patterns_splits_on_comma_and_looks_for_equal_sign() {
+        let pattern_string_1 = "Foo=BAR,Bar=BAZ";
+        let pattern_string_2 = "Baz=QUX";
+        let pattern_string_3 = "";
+
+        let patterns_1 = parse_traffic_patterns(pattern_string_1).collect::<Vec<_>>();
+        assert_eq!(vec![("Foo", "BAR"), ("Bar", "BAZ")], patterns_1);
+
+        let patterns_2 = parse_traffic_patterns(pattern_string_2).collect::<Vec<_>>();
+        assert_eq!(vec![("Baz", "QUX")], patterns_2);
+        assert!(parse_traffic_patterns(pattern_string_3).next().is_none());
     }
 }

@@ -21,6 +21,7 @@ mod headers;
 mod highlight;
 mod markdown;
 pub(crate) mod metrics;
+mod middleware;
 mod releases;
 mod routes;
 mod rustdoc;
@@ -34,7 +35,7 @@ use axum::{
     extract::Extension,
     http::Request as AxumRequest,
     http::StatusCode,
-    middleware,
+    middleware as axum_middleware,
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
     Router as AxumRouter,
@@ -275,24 +276,27 @@ pub(crate) fn build_axum_app(
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
             .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(Extension(context.config()?))
+            .layer(axum_middleware::from_fn(
+                middleware::block_traffic::block_traffic,
+            ))
             .layer(option_layer(
                 config
                     .report_request_timeouts
-                    .then_some(middleware::from_fn(log_timeouts_to_sentry)),
+                    .then_some(axum_middleware::from_fn(log_timeouts_to_sentry)),
             ))
             .layer(option_layer(config.request_timeout.map(TimeoutLayer::new)))
             .layer(Extension(context.pool()?))
             .layer(Extension(context.build_queue()?))
             .layer(Extension(context.metrics()?))
-            .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
             .layer(Extension(context.repository_stats_updater()?))
             .layer(Extension(template_data))
-            .layer(middleware::from_fn(csp::csp_middleware))
-            .layer(middleware::from_fn(
+            .layer(axum_middleware::from_fn(csp::csp_middleware))
+            .layer(axum_middleware::from_fn(
                 page::web_page::render_templates_middleware,
             ))
-            .layer(middleware::from_fn(cache::cache_middleware)),
+            .layer(axum_middleware::from_fn(cache::cache_middleware)),
     ))
 }
 
