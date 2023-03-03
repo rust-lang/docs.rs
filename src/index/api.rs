@@ -15,6 +15,7 @@ const APP_USER_AGENT: &str = concat!(
 #[derive(Debug)]
 pub struct Api {
     api_base: Option<Url>,
+    max_retries: u32,
     client: reqwest::blocking::Client,
 }
 
@@ -47,7 +48,7 @@ pub struct CrateOwner {
 }
 
 impl Api {
-    pub(super) fn new(api_base: Option<Url>) -> Result<Self> {
+    pub(super) fn new(api_base: Option<Url>, max_retries: u32) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
             (ACCEPT, HeaderValue::from_static("application/json")),
@@ -59,7 +60,11 @@ impl Api {
             .default_headers(headers)
             .build()?;
 
-        Ok(Self { api_base, client })
+        Ok(Self {
+            api_base,
+            client,
+            max_retries,
+        })
     }
 
     fn api_base(&self) -> Result<Url> {
@@ -120,7 +125,7 @@ impl Api {
 
         let response: Response = retry(
             || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
-            3,
+            self.max_retries,
         )?
         .json()?;
 
@@ -159,7 +164,7 @@ impl Api {
 
         let response: Response = retry(
             || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
-            3,
+            self.max_retries,
         )?
         .json()?;
 

@@ -39,7 +39,7 @@ fn load_config(repo: &gix::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub fn from_url(path: PathBuf, url: String) -> Result<Self> {
+    pub fn from_url(path: PathBuf, url: String, max_api_call_retries: u32) -> Result<Self> {
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
             gix::progress::Discard,
@@ -49,7 +49,8 @@ impl Index {
         .context("initialising registry index repository")?;
 
         let config = load_config(diff.repository()).context("loading registry config")?;
-        let api = Api::new(config.api).context("initialising registry api client")?;
+        let api = Api::new(config.api, max_api_call_retries)
+            .context("initialising registry api client")?;
         Ok(Self {
             path,
             api,
@@ -57,13 +58,14 @@ impl Index {
         })
     }
 
-    pub fn new(path: PathBuf) -> Result<Self> {
+    pub fn new(path: PathBuf, max_api_call_retries: u32) -> Result<Self> {
         // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
         // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
             .context("initialising registry index repository")?;
         let config = load_config(diff.repository()).context("loading registry config")?;
-        let api = Api::new(config.api).context("initialising registry api client")?;
+        let api = Api::new(config.api, max_api_call_retries)
+            .context("initialising registry api client")?;
         Ok(Self {
             path,
             api,
