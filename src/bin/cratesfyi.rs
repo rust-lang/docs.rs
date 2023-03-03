@@ -216,9 +216,16 @@ enum QueueSubcommand {
     /// Get the registry watcher's last seen reference
     GetLastSeenReference,
 
-    /// Set the register watcher's last seen reference
+    /// Set the registry watcher's last seen reference
+    #[command(arg_required_else_help(true))]
     SetLastSeenReference {
-        reference: crates_index_diff::gix::ObjectId,
+        /// The reference to set to, required unless flag used
+        #[arg(conflicts_with("head"))]
+        reference: Option<crates_index_diff::gix::ObjectId>,
+
+        /// Fetch the current HEAD of the remote index and use it
+        #[arg(long, conflicts_with("reference"))]
+        head: bool,
     },
 }
 
@@ -244,8 +251,19 @@ impl QueueSubcommand {
                 }
             }
 
-            Self::SetLastSeenReference { reference } => {
+            Self::SetLastSeenReference { reference, head } => {
+                let reference = match (reference, head) {
+                    (Some(reference), false) => reference,
+                    (None, true) => {
+                        println!("Fetching changes to set reference to HEAD");
+                        let (_, oid) = ctx.index()?.diff()?.peek_changes()?;
+                        oid
+                    }
+                    (_, _) => unreachable!(),
+                };
+
                 ctx.build_queue()?.set_last_seen_reference(reference)?;
+                println!("Set last seen reference: {reference}");
             }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
