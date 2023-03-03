@@ -5,7 +5,7 @@ use crate::{
     cdn,
     db::Pool,
     impl_axum_webpage,
-    utils::{report_error, spawn_blocking},
+    utils::{report_error, retry_async, spawn_blocking},
     web::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
@@ -128,7 +128,11 @@ struct SearchResult {
 /// Get the search results for a crate search query
 ///
 /// This delegates to the crates.io search API.
-async fn get_search_results(pool: Pool, query_params: &str) -> Result<SearchResult, anyhow::Error> {
+async fn get_search_results(
+    pool: Pool,
+    config: &Config,
+    query_params: &str,
+) -> Result<SearchResult, anyhow::Error> {
     #[derive(Deserialize)]
     struct CratesIoSearchResult {
         crates: Vec<CratesIoCrate>,
@@ -178,13 +182,19 @@ async fn get_search_results(pool: Pool, query_params: &str) -> Result<SearchResu
         }
     });
 
-    let releases: CratesIoSearchResult = HTTP_CLIENT
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    let releases: CratesIoSearchResult = retry_async(
+        || async {
+            Ok(HTTP_CLIENT
+                .get(url.clone())
+                .send()
+                .await?
+                .error_for_status()?)
+        },
+        config.crates_io_api_call_retries,
+    )
+    .await?
+    .json()
+    .await?;
 
     let names = Arc::new(
         releases
@@ -584,14 +594,14 @@ pub(crate) async fn search_handler(
             return Err(AxumNope::NoResults);
         }
 
-        get_search_results(pool, &query_params).await?
+        get_search_results(pool, &config, &query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(pool, &format!("?{}", &query_params)).await?
+        get_search_results(pool, &config, &format!("?{}", &query_params)).await?
     } else {
         return Err(AxumNope::NoResults);
     };
@@ -968,6 +978,10 @@ mod tests {
     #[test_case(StatusCode::BAD_GATEWAY)]
     fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(status: StatusCode) {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.crates_io_api_call_retries = 0;
+            });
+
             let _m = mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),

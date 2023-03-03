@@ -698,9 +698,9 @@ impl Context for BinContext {
             let config = self.config()?;
             let path = config.registry_index_path.clone();
             if let Some(registry_url) = config.registry_url.clone() {
-                Index::from_url(path, registry_url)
+                Index::from_url(path, registry_url, config.crates_io_api_call_retries)
             } else {
-                Index::new(path)
+                Index::new(path, config.crates_io_api_call_retries)
             }?
         };
         fn repository_stats_updater(self) -> RepositoryStatsUpdater = {

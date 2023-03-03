@@ -38,6 +38,9 @@ pub struct Config {
     // Gitlab authentication
     pub(crate) gitlab_accesstoken: Option<String>,
 
+    // amount of retries for external API calls, mostly crates.io
+    pub crates_io_api_call_retries: u32,
+
     // request timeout in seconds
     pub(crate) request_timeout: Option<Duration>,
     pub(crate) report_request_timeouts: bool,
@@ -119,6 +122,8 @@ impl Config {
 
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
+
+            crates_io_api_call_retries: env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3)?,
 
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
