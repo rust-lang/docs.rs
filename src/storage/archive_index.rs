@@ -71,6 +71,7 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
     let mut archive = zip::ZipArchive::new(zipfile)?;
 
     let conn = rusqlite::Connection::open(&destination)?;
+    conn.execute("PRAGMA synchronous = FULL", ())?;
     conn.execute("BEGIN", ())?;
     conn.execute(
         "
