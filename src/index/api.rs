@@ -1,11 +1,10 @@
+use crate::{error::Result, utils::retry};
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::Deserialize;
 use url::Url;
-
-use crate::error::Result;
 
 const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -119,7 +118,11 @@ impl Api {
             downloads: i32,
         }
 
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+        let response: Response = retry(
+            || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
+            3,
+        )?
+        .json()?;
 
         let version = Version::parse(version)?;
         let version = response

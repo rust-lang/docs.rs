@@ -27,6 +27,10 @@ use serde::Serialize;
 use tracing::error;
 pub(crate) mod sized_buffer;
 
+use std::thread;
+use std::time::Duration;
+use tracing::warn;
+
 pub(crate) const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
     " ",
@@ -110,6 +114,27 @@ where
     tokio::task::spawn_blocking(f)
         .await
         .context("failed to join thread")?
+}
+
+pub(crate) fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
+    for attempt in 1.. {
+        match f() {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                if attempt > max_attempts {
+                    return Err(err);
+                } else {
+                    let sleep_for = 2u32.pow(attempt);
+                    warn!(
+                        "got error on attempt {}, will try again after {}s:\n{:?}",
+                        attempt, sleep_for, err
+                    );
+                    thread::sleep(Duration::from_secs(sleep_for as u64));
+                }
+            }
+        }
+    }
+    unreachable!()
 }
 
 #[cfg(test)]

@@ -3,17 +3,15 @@ use crate::db::{delete_crate, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
-use crate::utils::{get_config, get_crate_priority, report_error, set_config, ConfigName};
+use crate::utils::{get_config, get_crate_priority, report_error, retry, set_config, ConfigName};
 use crate::{Config, Index, Metrics, RustwideBuilder};
 use anyhow::Context;
 use fn_error_context::context;
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -260,27 +258,6 @@ impl BuildQueue {
         let mut conn = self.db.get()?;
         set_config(&mut conn, ConfigName::QueueLocked, false)
     }
-}
-
-fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
-    for attempt in 1.. {
-        match f() {
-            Ok(result) => return Ok(result),
-            Err(err) => {
-                if attempt > max_attempts {
-                    return Err(err);
-                } else {
-                    let sleep_for = 2u32.pow(attempt);
-                    warn!(
-                        "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt, sleep_for, err
-                    );
-                    thread::sleep(Duration::from_secs(sleep_for as u64));
-                }
-            }
-        }
-    }
-    unreachable!()
 }
 
 /// Index methods.
