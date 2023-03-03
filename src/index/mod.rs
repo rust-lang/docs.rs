@@ -71,7 +71,7 @@ impl Index {
         })
     }
 
-    pub(crate) fn diff(&self) -> Result<crates_index_diff::Index> {
+    pub fn diff(&self) -> Result<crates_index_diff::Index> {
         let options = self
             .repository_url
             .clone()
