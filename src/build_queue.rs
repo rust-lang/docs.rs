@@ -292,17 +292,9 @@ impl BuildQueue {
         let mut conn = self.db.get()?;
         let diff = index.diff()?;
 
-        let Some(last_seen_reference) = self.last_seen_reference()? else {
-            // we should always have a last seen reference in the database, other than when
-            // initialising a new deployment (e.g. dev/test/staging), in those cases we don't want
-            // to rebuild the entire world, so we get crates-index-diff to fetch the current state
-            // then use the current head as the base and will only start building new crates from
-            // now on
-            let (_, oid) = diff.peek_changes_ordered()?;
-            warn!("no last_seen_reference in database, setting to current head {oid}");
-            self.set_last_seen_reference(oid)?;
-            return Ok(0);
-        };
+        let last_seen_reference = self
+            .last_seen_reference()?
+            .context("no last_seen_reference set in database")?;
         diff.set_last_seen_reference(last_seen_reference)?;
 
         let (mut changes, new_reference) = diff.peek_changes_ordered()?;
