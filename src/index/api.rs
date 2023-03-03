@@ -157,7 +157,11 @@ impl Api {
             login: Option<String>,
         }
 
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+        let response: Response = retry(
+            || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
+            3,
+        )?
+        .json()?;
 
         let result = response
             .users
