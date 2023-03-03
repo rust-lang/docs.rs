@@ -134,7 +134,7 @@ fn match_version(
                  WHERE normalize_crate_name(name) = normalize_crate_name($1)",
                 &[&name],
             )
-            .unwrap(); // FIXME: remove this unwrap when all handlers using it are migrated to axum
+            .context("error fetching crate")?;
 
         let row = rows.get(0).ok_or(AxumNope::CrateNotFound)?;
 
