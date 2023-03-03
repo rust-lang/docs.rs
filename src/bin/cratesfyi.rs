@@ -37,7 +37,15 @@ fn main() {
         );
 
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        tracing_registry.with(sentry_tracing::layer()).init();
+        tracing_registry
+            .with(sentry_tracing::layer().event_filter(|md| {
+                if md.fields().field("reported_to_sentry").is_some() {
+                    sentry_tracing::EventFilter::Ignore
+                } else {
+                    sentry_tracing::default_event_filter(md)
+                }
+            }))
+            .init();
         Some(sentry::init((
             sentry_dsn,
             sentry::ClientOptions {
