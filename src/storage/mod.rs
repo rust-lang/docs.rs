@@ -12,6 +12,7 @@ use crate::{db::Pool, Config, Metrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
+use std::io::BufReader;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -361,24 +362,19 @@ impl Storage {
         }
 
         let mut zip_content = zip.finish()?.into_inner();
-        let mut index_content = vec![];
-        archive_index::create(&mut io::Cursor::new(&mut zip_content), &mut index_content)?;
-        let alg = CompressionAlgorithm::default();
-        let compressed_index_content = compress(&index_content[..], alg)?;
 
         let remote_index_path = format!("{}.index", &archive_path);
 
-        // additionally store the index in the local cache, so it's directly available
         let local_index_path = self
             .config
             .local_archive_cache_path
             .join(&remote_index_path);
-        if local_index_path.exists() {
-            fs::remove_file(&local_index_path)?;
-        }
         fs::create_dir_all(local_index_path.parent().unwrap())?;
-        let mut local_index_file = fs::File::create(&local_index_path)?;
-        local_index_file.write_all(&index_content)?;
+        archive_index::create(&mut io::Cursor::new(&mut zip_content), &local_index_path)?;
+
+        let alg = CompressionAlgorithm::default();
+        let compressed_index_content =
+            compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?;
 
         self.store_inner(
             vec![
