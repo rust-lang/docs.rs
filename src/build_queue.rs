@@ -335,6 +335,7 @@ impl BuildQueue {
                             "{}-{} added into build queue",
                             release.name, release.version
                         );
+                        self.metrics.queued_builds.inc();
                         crates_added += 1;
                     }
                     Err(err) => report_error(&err),

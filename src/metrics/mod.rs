@@ -83,6 +83,8 @@ metrics! {
         /// Count of recently accessed platforms of versions of crates
         pub(crate) recent_platforms: IntGaugeVec["duration"],
 
+        /// number of queued builds
+        pub(crate) queued_builds: IntCounter,
         /// Number of crates built
         pub(crate) total_builds: IntCounter,
         /// Number of builds that successfully generated docs
