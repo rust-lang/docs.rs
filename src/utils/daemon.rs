@@ -12,7 +12,7 @@ use anyhow::{anyhow, Context as _, Error};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
@@ -23,22 +23,6 @@ pub fn watch_registry(
     index: Arc<Index>,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
-
-    // On startup we fetch the last seen index reference from
-    // the database and set it in the local index repository.
-    match build_queue.last_seen_reference() {
-        Ok(Some(oid)) => {
-            index.diff()?.set_last_seen_reference(oid)?;
-        }
-        Ok(None) => {}
-        Err(err) => {
-            error!(
-                "queue locked because of invalid last_seen_index_reference in database: {:?}",
-                err
-            );
-            build_queue.lock()?;
-        }
-    }
 
     loop {
         if build_queue.is_locked()? {
