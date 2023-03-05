@@ -5,6 +5,9 @@ ignore = [
 
     "RUSTSEC-2021-0127", # serde_cbor is unmaintained
     # https://github.com/rust-lang/docs.rs/issues/1568
+
+    "RUSTSEC-2023-0018", # rustwide -> remove_dir_all,TOCTOU / Race Condition 
+    # https://github.com/rust-lang/docs.rs/issues/2074
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
