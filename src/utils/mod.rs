@@ -20,10 +20,11 @@ mod html;
 mod queue;
 pub(crate) mod queue_builder;
 mod rustc_version;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use postgres::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::panic;
 use tracing::error;
 pub(crate) mod sized_buffer;
 
@@ -111,9 +112,11 @@ where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .context("failed to join thread")?
+    match tokio::task::spawn_blocking(f).await {
+        Ok(result) => result,
+        Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 pub(crate) fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
