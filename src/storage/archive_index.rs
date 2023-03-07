@@ -107,6 +107,7 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
 
     conn.execute("CREATE INDEX idx_files_path ON files (path);", ())?;
     conn.execute("END", ())?;
+    conn.execute("VACUUM", ())?;
 
     Ok(())
 }
