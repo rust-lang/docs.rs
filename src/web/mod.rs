@@ -49,7 +49,7 @@ use serde::Serialize;
 use std::borrow::Borrow;
 use std::{borrow::Cow, net::SocketAddr, sync::Arc};
 use tower::ServiceBuilder;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use url::form_urlencoded;
 
 // from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
@@ -275,6 +275,7 @@ pub(crate) fn build_axum_app(
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
             .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(CatchPanicLayer::new())
             .layer(option_layer(
                 config
                     .report_request_timeouts
