@@ -423,7 +423,7 @@ pub(crate) async fn get_all_releases(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::index::api::GithubUser;
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_cached, wrapper, TestDatabase,
     };
@@ -820,9 +820,10 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.1")
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
+                    ..Default::default()
                 })
                 .create()?;
 
@@ -838,13 +839,15 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.2")
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobarv2".into(),
+                    ..Default::default()
                 })
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
+                    ..Default::default()
                 })
                 .create()?;
 
@@ -865,9 +868,10 @@ mod tests {
             env.fake_release()
                 .name("foo")
                 .version("0.0.3")
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
+                    ..Default::default()
                 })
                 .create()?;
 
@@ -883,9 +887,10 @@ mod tests {
             env.fake_release()
                 .name("bar")
                 .version("0.0.1")
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoov2".into(),
+                    ..Default::default()
                 })
                 .create()?;
 

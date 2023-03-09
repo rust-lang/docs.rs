@@ -16,6 +16,7 @@ services:
             - "/var/run/docker.sock:/var/run/docker.sock"
             - ".rustwide-docker:/opt/docsrs/rustwide"
             - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+            - "artifact-cache:/opt/docsrs/prefix/artifact_cache"
         environment:
             DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
             DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
@@ -23,6 +24,7 @@ services:
             S3_ENDPOINT: http://s3:9000
             AWS_ACCESS_KEY_ID: cratesfyi
             AWS_SECRET_ACCESS_KEY: secret_key
+            DOCSRS_PREFIX: /opt/docsrs/prefix
         env_file:
             - .env
         healthcheck:
@@ -94,3 +96,4 @@ volumes:
     postgres-data: {}
     minio-data: {}
     cratesio-index: {}
+    artifact-cache: {}

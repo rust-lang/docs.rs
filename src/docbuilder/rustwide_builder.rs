@@ -1,3 +1,4 @@
+use super::caching::ArtifactCache;
 use crate::db::file::add_path_into_database;
 use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
@@ -27,13 +28,14 @@ use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, Workspac
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
+#[derive(Debug)]
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
@@ -48,6 +50,7 @@ pub struct RustwideBuilder {
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
     index: Arc<Index>,
+    artifact_cache: ArtifactCache,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     skip_build_if_exists: bool,
@@ -90,6 +93,7 @@ impl RustwideBuilder {
         Ok(RustwideBuilder {
             workspace,
             toolchain,
+            artifact_cache: ArtifactCache::new(config.prefix.join("artifact_cache"))?,
             config,
             db: context.pool()?,
             storage: context.storage()?,
@@ -200,6 +204,7 @@ impl RustwideBuilder {
 
         let has_changed = old_version.as_deref() != Some(&self.rustc_version);
         if has_changed {
+            self.artifact_cache.purge()?;
             self.add_essential_files()?;
         }
         Ok(has_changed)
@@ -322,6 +327,7 @@ impl RustwideBuilder {
         self.build_package(&package.name, &package.version, PackageKind::Local(path))
     }
 
+    #[instrument(skip(self))]
     pub fn build_package(
         &mut self,
         name: &str,
@@ -385,6 +391,34 @@ impl RustwideBuilder {
             .run(|build| {
                 (|| -> Result<bool> {
                     use docsrs_metadata::BuildTargets;
+
+                    let release_data = match self
+                        .index
+                        .api()
+                        .get_release_data(name, version)
+                        .context("error fetching release data from crates.io")
+                    {
+                        Ok(data) => data,
+                        Err(err) => {
+                            warn!("{:#?}", err);
+                            ReleaseData::default()
+                        }
+                    };
+
+                    if let Some(ref published_by) = release_data.published_by {
+                        info!(
+                            host_target_dir=?build.host_target_dir(),
+                            published_by_id=published_by.id,
+                            published_by_login=published_by.login,
+                            "restoring artifact cache",
+                        );
+                        if let Err(err) = self
+                            .artifact_cache
+                            .restore_to(&published_by.id.to_string(), build.host_target_dir())
+                        {
+                            warn!(?err, "could not restore artifact cache");
+                        }
+                    }
 
                     let mut has_docs = false;
                     let mut successful_targets = Vec::new();
@@ -535,6 +569,22 @@ impl RustwideBuilder {
                             update_crate_data_in_database(&mut conn, name, &crate_data)?
                         }
                         Err(err) => warn!("{:#?}", err),
+                    }
+
+                    if let Some(ref published_by) = release_data.published_by {
+                        info!(
+                            host_target_dir=?build.host_target_dir(),
+                            published_by_id=published_by.id,
+                            published_by_login=published_by.login,
+                            "saving artifact cache",
+                        );
+                        if let Err(err) = self
+                            .artifact_cache
+                            .save(&published_by.id.to_string(), build.host_target_dir())
+                            .context("error giving back artifact cache")
+                        {
+                            warn!(?err, "could not give back artifact cache");
+                        };
                     }
 
                     if res.result.successful {

@@ -2,7 +2,7 @@ use super::TestDatabase;
 
 use crate::docbuilder::{BuildResult, DocCoverage};
 use crate::error::Result;
-use crate::index::api::{CrateData, CrateOwner, ReleaseData};
+use crate::index::api::{CrateData, GithubUser, ReleaseData};
 use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
 use crate::utils::{Dependency, MetadataPackage, Target};
 use anyhow::Context;
@@ -85,11 +85,7 @@ impl<'a> FakeRelease<'a> {
             doc_targets: Vec::new(),
             default_target: None,
             registry_crate_data: CrateData { owners: Vec::new() },
-            registry_release_data: ReleaseData {
-                release_time: Utc::now(),
-                yanked: false,
-                downloads: 0,
-            },
+            registry_release_data: ReleaseData::default(),
             has_docs: true,
             has_examples: false,
             readme: None,
@@ -214,7 +210,7 @@ impl<'a> FakeRelease<'a> {
         self.source_file("README.md", content.as_bytes())
     }
 
-    pub(crate) fn add_owner(mut self, owner: CrateOwner) -> Self {
+    pub(crate) fn add_owner(mut self, owner: GithubUser) -> Self {
         self.registry_crate_data.owners.push(owner);
         self
     }
