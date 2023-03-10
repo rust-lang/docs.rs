@@ -4,64 +4,44 @@ use bzip2::Compression;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
-    fmt,
     io::{self, Read},
 };
+use strum::{Display, EnumIter, EnumString, FromRepr};
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
-macro_rules! enum_id {
-    ($vis:vis enum $name:ident { $($variant:ident = $discriminant:expr,)* }) => {
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        $vis enum $name {
-            $($variant = $discriminant,)*
-        }
-
-        impl $name {
-            #[cfg(test)]
-            const AVAILABLE: &'static [Self] = &[$(Self::$variant,)*];
-        }
-
-        impl fmt::Display for CompressionAlgorithm {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                match self {
-                    $(Self::$variant => write!(f, stringify!($variant)),)*
-                }
-            }
-        }
-
-        impl std::str::FromStr for CompressionAlgorithm {
-            type Err = ();
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                match s {
-                    $(stringify!($variant) => Ok(Self::$variant),)*
-                    _ => Err(()),
-                }
-            }
-        }
-
-        impl std::convert::TryFrom<i32> for CompressionAlgorithm {
-            type Error = i32;
-            fn try_from(i: i32) -> Result<Self, Self::Error> {
-                match i {
-                    $($discriminant => Ok(Self::$variant),)*
-                    _ => Err(i),
-                }
-            }
-        }
-    }
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Default,
+    EnumString,
+    Display,
+    FromRepr,
+    EnumIter,
+)]
+pub enum CompressionAlgorithm {
+    #[default]
+    Zstd = 0,
+    Bzip2 = 1,
 }
 
-enum_id! {
-    pub enum CompressionAlgorithm {
-        Zstd = 0,
-        Bzip2 = 1,
-    }
-}
-
-impl Default for CompressionAlgorithm {
-    fn default() -> Self {
-        CompressionAlgorithm::Zstd
+impl std::convert::TryFrom<i32> for CompressionAlgorithm {
+    type Error = i32;
+    fn try_from(i: i32) -> Result<Self, Self::Error> {
+        if i >= 0 {
+            match Self::from_repr(i as usize) {
+                Some(alg) => Ok(alg),
+                None => Err(i),
+            }
+        } else {
+            Err(i)
+        }
     }
 }
 
@@ -100,16 +80,17 @@ pub fn decompress(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_compression() {
         let orig = "fn main() {}";
-        for alg in CompressionAlgorithm::AVAILABLE {
+        for alg in CompressionAlgorithm::iter() {
             println!("testing algorithm {alg}");
 
-            let data = compress(orig.as_bytes(), *alg).unwrap();
+            let data = compress(orig.as_bytes(), alg).unwrap();
             assert_eq!(
-                decompress(data.as_slice(), *alg, std::usize::MAX).unwrap(),
+                decompress(data.as_slice(), alg, std::usize::MAX).unwrap(),
                 orig.as_bytes()
             );
         }
@@ -123,7 +104,7 @@ mod tests {
         let exact = &[b'A'; MAX_SIZE] as &[u8];
         let big = &[b'A'; MAX_SIZE * 2] as &[u8];
 
-        for &alg in CompressionAlgorithm::AVAILABLE {
+        for alg in CompressionAlgorithm::iter() {
             let compressed_small = compress(small, alg).unwrap();
             let compressed_exact = compress(exact, alg).unwrap();
             let compressed_big = compress(big, alg).unwrap();
@@ -150,5 +131,11 @@ mod tests {
                 .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
                 .is_some());
         }
+    }
+
+    #[test]
+    fn test_enum_display() {
+        assert_eq!(CompressionAlgorithm::Zstd.to_string(), "Zstd");
+        assert_eq!(CompressionAlgorithm::Bzip2.to_string(), "Bzip2");
     }
 }
