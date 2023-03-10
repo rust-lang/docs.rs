@@ -14,17 +14,21 @@ services:
         expose: ["3000"]
         volumes:
             - "/var/run/docker.sock:/var/run/docker.sock"
-            - ".rustwide-docker:/opt/docsrs/rustwide"
-            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
-            - "artifact-cache:/opt/docsrs/prefix/artifact_cache"
+            # we only need one of the two mappings here. 
+            # this will link to your local filesystem, which makes build debugging 
+            # easier
+            - "./ignored/opt-docsrs:/opt/docsrs_ext/"
+            # this uses a docker volume and will be faster, but you need to 
+            # log into the container to debug its contents
+            # - "prefix-ext:/opt/docsrs_ext/"
         environment:
-            DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+            DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs_ext/rustwide
+            DOCSRS_PREFIX: /opt/docsrs_ext/prefix
             DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
             DOCSRS_STORAGE_BACKEND: s3
             S3_ENDPOINT: http://s3:9000
             AWS_ACCESS_KEY_ID: cratesfyi
             AWS_SECRET_ACCESS_KEY: secret_key
-            DOCSRS_PREFIX: /opt/docsrs/prefix
         env_file:
             - .env
         healthcheck:
@@ -95,5 +99,4 @@ services:
 volumes:
     postgres-data: {}
     minio-data: {}
-    cratesio-index: {}
-    artifact-cache: {}
+    prefix-ext: {}
