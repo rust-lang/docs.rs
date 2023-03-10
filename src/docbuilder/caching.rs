@@ -1,31 +1,9 @@
-use crate::utils::copy_dir_all;
 use anyhow::{Context as _, Result};
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 use tracing::{debug, instrument, warn};
-
-/// move cache folder to target, falling back to copy + delete on error.
-fn move_or_copy<P: AsRef<Path> + std::fmt::Debug, Q: AsRef<Path> + std::fmt::Debug>(
-    source: P,
-    dest: Q,
-) -> io::Result<()> {
-    if let Some(parent) = dest.as_ref().parent() {
-        fs::create_dir_all(parent)?;
-    }
-    if let Err(err) = fs::rename(&source, &dest) {
-        warn!(
-            ?err,
-            ?source,
-            ?dest,
-            "could not move target directory, fall back to copy"
-        );
-        copy_dir_all(&source, &dest)?;
-        fs::remove_dir_all(&source)?;
-    }
-    Ok(())
-}
 
 /// artifact caching with cleanup
 #[derive(Debug)]
@@ -89,7 +67,7 @@ impl ArtifactCache {
             return Ok(());
         }
 
-        move_or_copy(cache_dir, target_dir).context("could not move cache directory to target")?;
+        fs::rename(cache_dir, target_dir).context("could not move cache directory to target")?;
         Ok(())
     }
 
@@ -100,12 +78,12 @@ impl ArtifactCache {
         target_dir: P,
     ) -> Result<()> {
         let cache_dir = self.cache_dir.join(cache_key);
-        if !cache_dir.exists() {
-            fs::create_dir_all(&cache_dir)?;
+        if cache_dir.exists() {
+            fs::remove_dir_all(&cache_dir)?;
         }
 
-        move_or_copy(&target_dir, &cache_dir)
-            .context("could not move target directory to cache")?;
+        debug!(?target_dir, ?cache_dir, "saving artifact cache");
+        fs::rename(&target_dir, &cache_dir).context("could not move target directory to cache")?;
         self.cleanup(&cache_dir)?;
         Ok(())
     }
