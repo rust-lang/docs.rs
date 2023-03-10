@@ -41,7 +41,6 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
         // we can use Itertools.group_by on it.
         .iterator()
         .map(|row| row.expect("error fetching rows"))
-        .into_iter()
         .group_by(|row| row.get("name"))
     {
         let releases: Releases = release_rows
