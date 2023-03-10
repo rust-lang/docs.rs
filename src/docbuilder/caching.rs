@@ -62,8 +62,8 @@ impl ArtifactCache {
     ) -> Result<()> {
         let target_dir = target_dir.as_ref();
         if target_dir.exists() {
-            // to be safe, while most of the time the dir doesn't exist,
-            // or is empty.
+            // Delete the target dir to be safe, even though most of the
+            // time the dir doesn't exist or is empty.
             fs::remove_dir_all(target_dir).context("could not clean target directory")?;
         }
 
