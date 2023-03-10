@@ -29,6 +29,14 @@ impl ArtifactCache {
     /// - ...?
     #[instrument(skip(self))]
     fn cleanup(&self, target_dir: &Path) -> Result<()> {
+        // proc-macro crates have a `doc` directory
+        // directly in the target.
+        let doc_dir = target_dir.join("doc");
+        if doc_dir.is_dir() {
+            debug!(?doc_dir, "cache dir cleanup");
+            fs::remove_dir_all(doc_dir)?;
+        }
+
         for item in fs::read_dir(target_dir)? {
             // the first level of directories are the targets in most cases,
             // delete their doc-directories
