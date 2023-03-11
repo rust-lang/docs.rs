@@ -237,6 +237,7 @@ mod tests {
                         "created_at": created.to_rfc3339(),
                         "yanked": true,
                         "downloads": 223,
+                        "license": "MIT",
                         "published_by": {
                             "id": 2,
                             "login": "the_second_owner",
@@ -249,6 +250,7 @@ mod tests {
                         "created_at": Utc::now().to_rfc3339(),
                         "yanked": false,
                         "downloads": 333,
+                        "license": "MIT",
                         "published_by": {
                             "id": 1,
                             "login": "owner",
