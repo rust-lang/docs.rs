@@ -1,9 +1,32 @@
-use anyhow::{Context as _, Result};
+use anyhow::{bail, Context as _, Result};
 use std::{
-    fs,
+    collections::HashMap,
+    fs::{self, OpenOptions},
     path::{Path, PathBuf},
+    time::SystemTime,
 };
+use sysinfo::{DiskExt, RefreshKind, System, SystemExt};
 use tracing::{debug, instrument, warn};
+
+static LAST_ACCESSED_FILE_NAME: &str = "docsrs_last_accessed";
+
+/// gives you the percentage of free disk space on the
+/// filesystem where the given `path` lives on.
+/// Return value is between 0 and 1.
+fn free_disk_space_ratio<P: AsRef<Path>>(path: P) -> Result<f32> {
+    let sys = System::new_with_specifics(RefreshKind::new().with_disks());
+
+    let disk_by_mount_point: HashMap<_, _> =
+        sys.disks().iter().map(|d| (d.mount_point(), d)).collect();
+
+    let path = path.as_ref();
+
+    if let Some(disk) = path.ancestors().find_map(|p| disk_by_mount_point.get(p)) {
+        Ok((disk.available_space() as f64 / disk.total_space() as f64) as f32)
+    } else {
+        bail!("could not find mount point for path {}", path.display());
+    }
+}
 
 /// artifact caching with cleanup
 #[derive(Debug)]
@@ -23,10 +46,8 @@ impl ArtifactCache {
 
     /// clean up a target directory.
     ///
-    /// Should delete all things that shouldn't leak between
-    /// builds, so:
-    /// - doc-output
-    /// - ...?
+    /// Will:
+    /// * delete the doc output in the root & target directories
     #[instrument(skip(self))]
     fn cleanup(&self, target_dir: &Path) -> Result<()> {
         // proc-macro crates have a `doc` directory
@@ -50,6 +71,78 @@ impl ArtifactCache {
         Ok(())
     }
 
+    fn cache_dir_for_key(&self, cache_key: &str) -> PathBuf {
+        self.cache_dir.join(cache_key)
+    }
+
+    /// update the "last used" marker for the cache key
+    fn touch(&self, cache_key: &str) -> Result<()> {
+        let file = self
+            .cache_dir_for_key(cache_key)
+            .join(LAST_ACCESSED_FILE_NAME);
+
+        fs::create_dir_all(file.parent().expect("we always have a parent"))?;
+        if file.exists() {
+            fs::remove_file(&file)?;
+        }
+        OpenOptions::new().create(true).write(true).open(&file)?;
+        Ok(())
+    }
+
+    /// return the list of cache-directories, sorted by last usage.
+    ///
+    /// The oldest / least used cache will be first.
+    /// To be used for cleanup.
+    ///
+    /// A missing age-marker file is interpreted as "old age".
+    fn all_cache_folders_by_age(&self) -> Result<Vec<PathBuf>> {
+        let mut entries: Vec<(PathBuf, Option<SystemTime>)> = fs::read_dir(&self.cache_dir)?
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let path = entry.path();
+                path.is_dir().then(|| {
+                    let last_accessed = path
+                        .join(LAST_ACCESSED_FILE_NAME)
+                        .metadata()
+                        .and_then(|metadata| metadata.modified())
+                        .ok();
+                    (path, last_accessed)
+                })
+            })
+            .collect();
+
+        // `None` will appear first after sorting
+        entries.sort_by_key(|(_, time)| *time);
+
+        Ok(entries.into_iter().map(|(path, _)| path).collect())
+    }
+
+    /// free up disk space by deleting the oldest cache folders.
+    ///
+    /// Deletes cache folders until the `free_percent_goal` is reached.
+    pub(crate) fn clear_disk_space(&self, free_percent_goal: f32) -> Result<()> {
+        let space_ok =
+            || -> Result<bool> { Ok(free_disk_space_ratio(&self.cache_dir)? >= free_percent_goal) };
+
+        if space_ok()? {
+            return Ok(());
+        }
+
+        for folder in self.all_cache_folders_by_age()? {
+            warn!(
+                ?folder,
+                "freeing up disk space by deleting oldest cache folder"
+            );
+            fs::remove_dir_all(&folder)?;
+
+            if space_ok()? {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
     /// restore a cached target directory.
     ///
     /// Will just move the cache folder into the rustwide
@@ -67,7 +160,7 @@ impl ArtifactCache {
             fs::remove_dir_all(target_dir).context("could not clean target directory")?;
         }
 
-        let cache_dir = self.cache_dir.join(cache_key);
+        let cache_dir = self.cache_dir_for_key(cache_key);
         if !cache_dir.exists() {
             // when there is no existing cache dir,
             // we can just create an empty target.
@@ -85,7 +178,7 @@ impl ArtifactCache {
         cache_key: &str,
         target_dir: P,
     ) -> Result<()> {
-        let cache_dir = self.cache_dir.join(cache_key);
+        let cache_dir = self.cache_dir_for_key(cache_key);
         if cache_dir.exists() {
             fs::remove_dir_all(&cache_dir)?;
         }
@@ -93,6 +186,7 @@ impl ArtifactCache {
         debug!(?target_dir, ?cache_dir, "saving artifact cache");
         fs::rename(&target_dir, &cache_dir).context("could not move target directory to cache")?;
         self.cleanup(&cache_dir)?;
+        self.touch(cache_key)?;
         Ok(())
     }
 }

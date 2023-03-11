@@ -69,6 +69,7 @@ bzip2 = "0.4.4"
 serde_cbor = "0.11.1"
 getrandom = "0.2.1"
 itertools = { version = "0.10.5", optional = true}
+sysinfo = { version = "0.28.2", default-features = false }
 
 # Async
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros"] }
