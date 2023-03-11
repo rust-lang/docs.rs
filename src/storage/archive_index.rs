@@ -1,41 +1,16 @@
 use crate::error::Result;
 use crate::storage::{compression::CompressionAlgorithm, FileRange};
 use anyhow::{bail, Context as _};
-use lru::LruCache;
 use memmap2::MmapOptions;
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension};
 use serde::de::DeserializeSeed;
 use serde::de::{IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::num::NonZeroUsize;
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fmt, fs,
-    fs::File,
-    io,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, fmt, fs, fs::File, io, io::Read, path::Path};
+
+use super::sqlite_pool::SqliteConnectionPool;
 
 static SQLITE_FILE_HEADER: &[u8] = b"SQLite format 3\0";
-
-thread_local! {
-    // local SQLite connection cache.
-    // `rusqlite::Connection` is not `Sync`, so we need to keep this by thread.
-    // Parallel connections to the same SQLite file are handled by SQLite itself.
-    //
-    // Alternative would be to have this cache global, but to prevent using
-    // the same connection from multiple threads at once.
-    //
-    // The better solution probably depends on the request pattern: are we
-    // typically having many requests to a small group of crates?
-    // Or are the requests more spread over many crates the there wouldn't be
-    // many conflicts on the connection?
-    static SQLITE_CONNECTIONS: RefCell<LruCache<PathBuf, Connection>> = RefCell::new(
-        LruCache::new(NonZeroUsize::new(32).unwrap())
-    );
-}
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct FileInfo {
@@ -211,35 +186,6 @@ fn find_in_slice(bytes: &[u8], search_for: &str) -> Result<Option<FileInfo>> {
     .deserialize(&mut deserializer)?)
 }
 
-/// try to open an index file as SQLite
-/// Uses a thread-local cache of open connections to the index files.
-/// Will test the connection before returning it, and attempt to
-/// reconnect if the test fails.
-fn with_sqlite_connection<R, P: AsRef<Path>, F: Fn(&Connection) -> Result<R>>(
-    path: P,
-    f: F,
-) -> Result<R> {
-    let path = path.as_ref().to_owned();
-    SQLITE_CONNECTIONS.with(|connections| {
-        let mut connections = connections.borrow_mut();
-
-        if let Some(conn) = connections.get(&path) {
-            if conn.execute("SELECT 1", []).is_ok() {
-                return f(conn);
-            }
-        }
-
-        let conn = Connection::open_with_flags(
-            &path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
-
-        // we're using `get_or_insert` to save the second lookup receiving the
-        // reference into the cache, after having pushed the entry.
-        f(connections.get_or_insert(path, || conn))
-    })
-}
-
 fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<FileInfo>> {
     let mut stmt = conn.prepare(
         "
@@ -288,9 +234,10 @@ fn is_sqlite_file<P: AsRef<Path>>(archive_index_path: P) -> Result<bool> {
 pub(crate) fn find_in_file<P: AsRef<Path>>(
     archive_index_path: P,
     search_for: &str,
+    pool: &SqliteConnectionPool,
 ) -> Result<Option<FileInfo>> {
     if is_sqlite_file(&archive_index_path)? {
-        with_sqlite_connection(archive_index_path, |connection| {
+        pool.with_connection(archive_index_path, |connection| {
             find_in_sqlite_index(connection, search_for)
         })
     } else {
@@ -381,15 +328,23 @@ mod tests {
 
         assert!(!is_sqlite_file(&cbor_index_file).unwrap());
 
-        let fi = find_in_file(cbor_index_file.path(), "testfile1")
-            .unwrap()
-            .unwrap();
+        let fi = find_in_file(
+            cbor_index_file.path(),
+            "testfile1",
+            &SqliteConnectionPool::default(),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(fi.range, FileRange::new(39, 459));
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
 
-        assert!(find_in_file(cbor_index_file.path(), "some_other_file")
-            .unwrap()
-            .is_none());
+        assert!(find_in_file(
+            cbor_index_file.path(),
+            "some_other_file",
+            &SqliteConnectionPool::default(),
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]
@@ -400,14 +355,20 @@ mod tests {
         create(&mut tf, &tempfile).unwrap();
         assert!(is_sqlite_file(&tempfile).unwrap());
 
-        let fi = find_in_file(&tempfile, "testfile1").unwrap().unwrap();
+        let fi = find_in_file(&tempfile, "testfile1", &SqliteConnectionPool::default())
+            .unwrap()
+            .unwrap();
 
         assert_eq!(fi.range, FileRange::new(39, 459));
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
 
-        assert!(find_in_file(&tempfile, "some_other_file")
-            .unwrap()
-            .is_none());
+        assert!(find_in_file(
+            &tempfile,
+            "some_other_file",
+            &SqliteConnectionPool::default(),
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]
