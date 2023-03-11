@@ -581,9 +581,9 @@ impl RustwideBuilder {
                         if let Err(err) = self
                             .artifact_cache
                             .save(&published_by.id.to_string(), build.host_target_dir())
-                            .context("error giving back artifact cache")
+                            .context("error saving artifact cache")
                         {
-                            warn!(?err, "could not give back artifact cache");
+                            warn!(?err, "could not save artifact cache");
                         };
                     }
 
