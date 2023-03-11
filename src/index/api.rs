@@ -176,7 +176,7 @@ mod tests {
     use serde_json::{self, json};
 
     fn api() -> Api {
-        Api::new(Some(Url::parse(&mockito::server_url()).unwrap())).unwrap()
+        Api::new(Some(Url::parse(&mockito::server_url()).unwrap()), 1).unwrap()
     }
 
     #[test]
@@ -190,13 +190,17 @@ mod tests {
                         "id": 1,
                         "login": "the_first_owner",
                         "name": "name",
-                        "avatar": "http://something"
+                        "avatar": "http://something",
+                        "kind": "user",
+                        "url": "https://github.com/the_second_owner"
                     },
                     {
                         "id": 2,
                         "login": "the_second_owner",
                         "name": "another name",
-                        "avatar": "http://anotherthing"
+                        "avatar": "http://anotherthing",
+                        "kind": "user",
+                        "url": "https://github.com/the_second_owner"
                     }
                 ]}))
                 .unwrap(),
