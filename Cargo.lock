@@ -3342,7 +3342,7 @@ dependencies = [
  "crossbeam-utils",
  "num_cpus",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot",
  "rustc_version",
  "scheduled-thread-pool",
  "skeptic",
