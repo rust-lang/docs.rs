@@ -64,7 +64,7 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
     for i in 0..archive.len() {
         let zf = archive.by_index(i)?;
 
-        let compression_bzip: i32 = CompressionAlgorithm::Bzip2.into();
+        let compression_bzip = CompressionAlgorithm::Bzip2 as i32;
 
         conn.execute(
             "INSERT INTO files (path, start, end, compression) VALUES (?, ?, ?, ?)",
