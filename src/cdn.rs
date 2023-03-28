@@ -1,12 +1,12 @@
 use crate::{metrics::duration_to_seconds, utils::report_error, Config, Metrics};
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, bail, Context, Error, Result};
 use aws_sdk_cloudfront::{
     config::retry::RetryConfig,
     model::{InvalidationBatch, Paths},
+    types::SdkError,
     Client, Region,
 };
 use chrono::{DateTime, Utc};
-use futures_util::StreamExt;
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -36,6 +36,7 @@ pub struct CdnInvalidation {
     pub(crate) distribution_id: String,
     pub(crate) invalidation_id: String,
     pub(crate) path_patterns: Vec<String>,
+    pub(crate) completed: bool,
 }
 
 #[derive(Debug)]
@@ -104,6 +105,7 @@ impl CdnBackend {
                     distribution_id: distribution_id.to_owned(),
                     invalidation_id: id,
                     path_patterns: path_patterns.iter().cloned().map(str::to_owned).collect(),
+                    completed: false,
                 })
             }
             CdnBackend::Dummy {
@@ -118,6 +120,7 @@ impl CdnBackend {
                     distribution_id: distribution_id.to_owned(),
                     invalidation_id: caller_reference.to_string(),
                     path_patterns: path_patterns.iter().cloned().map(str::to_owned).collect(),
+                    completed: false,
                 };
 
                 invalidation_requests.push(invalidation.clone());
@@ -142,7 +145,11 @@ impl CdnBackend {
         }
     }
 
-    fn active_invalidations(&self, distribution_id: &str) -> Result<Vec<CdnInvalidation>, Error> {
+    fn invalidation_status(
+        &self,
+        distribution_id: &str,
+        invalidation_id: &str,
+    ) -> Result<Option<CdnInvalidation>, Error> {
         match self {
             CdnBackend::Dummy {
                 invalidation_requests,
@@ -154,87 +161,85 @@ impl CdnBackend {
 
                 Ok(invalidation_requests
                     .iter()
-                    .filter(|i| i.distribution_id == distribution_id)
-                    .cloned()
-                    .collect())
+                    .find(|i| {
+                        i.distribution_id == distribution_id && i.invalidation_id == invalidation_id
+                    })
+                    .cloned())
             }
             CdnBackend::CloudFront {
                 runtime, client, ..
             } => Ok(
-                runtime.block_on(CdnBackend::list_active_cloudfront_invalidations(
+                runtime.block_on(CdnBackend::get_cloudfront_invalidation_status(
                     client,
                     distribution_id,
+                    invalidation_id,
                 ))?,
             ),
         }
     }
 
     #[instrument]
-    async fn list_active_cloudfront_invalidations(
+    async fn get_cloudfront_invalidation_status(
         client: &Client,
         distribution_id: &str,
-    ) -> Result<Vec<CdnInvalidation>, Error> {
-        let mut stream = client
-            .list_invalidations()
+        invalidation_id: &str,
+    ) -> Result<Option<CdnInvalidation>, Error> {
+        let response = match client
+            .get_invalidation()
             .distribution_id(distribution_id)
-            .into_paginator()
-            .items()
-            .send();
-
-        let mut ids: Vec<String> = Vec::new();
-        while let Some(invalidation) = stream.next().await {
-            let invalidation = invalidation?;
-
-            if let (Some(id), Some(status)) = (invalidation.id(), invalidation.status()) {
-                // the `ListInvalidation` AWS API doesn't support filtering, so we
-                // have to query all invalidations and filter here.
-                if status == "InProgress" {
-                    ids.push(id.to_owned());
-                } else if status != "Completed" {
-                    report_error(&anyhow!(
-                        "got unknown cloudfront invalidation status: {} in {:?}",
-                        status,
-                        invalidation
-                    ));
+            .id(invalidation_id.to_owned())
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(SdkError::ServiceError(err)) => {
+                if err.raw().http().status() == http::StatusCode::NOT_FOUND {
+                    return Ok(None);
+                } else {
+                    return Err(err.into_err().into());
                 }
             }
+            Err(err) => return Err(err.into()),
+        };
+
+        let Some(invalidation) = response.invalidation() else {
+            bail!("missing invalidation in response");
+        };
+
+        let patterns = invalidation
+            .invalidation_batch()
+            .and_then(|batch| batch.paths())
+            .and_then(|paths| paths.items())
+            .unwrap_or_default()
+            .to_vec();
+
+        if patterns.is_empty() {
+            warn!(
+                invalidation_id,
+                ?invalidation,
+                "got invalidation detail response without paths"
+            );
         }
-
-        let mut result = Vec::new();
-        for id in ids {
-            let response = client
-                .get_invalidation()
-                .distribution_id(distribution_id)
-                .id(id.clone())
-                .send()
-                .await?;
-
-            let mut patterns = Vec::new();
-            if let Some(invalidation) = response.invalidation() {
-                if let Some(batch) = invalidation.invalidation_batch() {
-                    if let Some(paths) = batch.paths() {
-                        if let Some(items) = paths.items() {
-                            patterns.extend_from_slice(items);
-                        }
+        Ok(Some(CdnInvalidation {
+            distribution_id: distribution_id.to_owned(),
+            invalidation_id: invalidation_id.to_owned(),
+            path_patterns: patterns,
+            completed: invalidation
+                .status()
+                .map(|status| match status {
+                    "InProgress" => false,
+                    "Completed" => true,
+                    _ => {
+                        report_error(&anyhow!(
+                            "got unknown cloudfront invalidation status: {} in {:?}",
+                            status,
+                            invalidation
+                        ));
+                        true
                     }
-                }
-            }
-            if patterns.is_empty() {
-                warn!(
-                    id,
-                    ?response,
-                    "got invalidation detail response without paths"
-                );
-            }
-
-            result.push(CdnInvalidation {
-                distribution_id: distribution_id.to_owned(),
-                invalidation_id: id,
-                path_patterns: patterns,
-            });
-        }
-
-        Ok(result)
+                })
+                .unwrap_or(true),
+        }))
     }
 
     #[instrument]
@@ -281,9 +286,21 @@ pub(crate) fn handle_queued_invalidation_requests(
 ) -> Result<()> {
     info!("handling queued CDN invalidations");
 
-    let active_invalidations = cdn
-        .active_invalidations(distribution_id)
-        .context("error querying active invalidations")?;
+    let mut active_invalidations = Vec::new();
+    for row in conn.query(
+        "SELECT 
+             DISTINCT cdn_reference 
+         FROM cdn_invalidation_queue
+         WHERE 
+             cdn_reference IS NOT NULL AND 
+             cdn_distribution_id = $1
+        ",
+        &[&distribution_id],
+    )? {
+        if let Some(status) = cdn.invalidation_status(distribution_id, row.get(0))? {
+            active_invalidations.push(status);
+        }
+    }
 
     // for now we assume all invalidation paths are wildcard invalidations,
     // so we apply the wildcard limit.
@@ -326,7 +343,6 @@ pub(crate) fn handle_queued_invalidation_requests(
                 .observe(duration_to_seconds(duration));
         }
     }
-
     let possible_path_invalidations: i32 =
         MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS - active_path_invalidations as i32;
 
@@ -514,6 +530,43 @@ mod tests {
     };
     use aws_smithy_http::body::SdkBody;
 
+    fn active_invalidations(cdn: &CdnBackend, distribution_id: &str) -> Vec<CdnInvalidation> {
+        let CdnBackend::Dummy {ref invalidation_requests, .. } = cdn  else {
+            panic!("invalid CDN backend");
+        };
+
+        let invalidation_requests = invalidation_requests
+            .lock()
+            .expect("could not lock mutex on dummy CDN");
+
+        invalidation_requests
+            .iter()
+            .filter(|i| i.distribution_id == distribution_id)
+            .cloned()
+            .collect()
+    }
+
+    fn insert_running_invalidation(
+        conn: &mut postgres::Client,
+        distribution_id: &str,
+        invalidation_id: &str,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO cdn_invalidation_queue (
+                 crate, cdn_distribution_id, path_pattern, queued, created_in_cdn, cdn_reference
+             ) VALUES (
+                 'dummy',
+                 $1, 
+                 '/doesnt_matter',
+                 CURRENT_TIMESTAMP,
+                 CURRENT_TIMESTAMP,
+                 $2
+             )",
+            &[&distribution_id, &invalidation_id],
+        )?;
+        Ok(())
+    }
+
     #[test]
     fn create_cloudfront() {
         wrapper(|env| {
@@ -620,10 +673,8 @@ mod tests {
             assert_eq!(*counts.get("distribution_id_static").unwrap(), 1);
 
             // queueing the invalidation doesn't create it in the CDN
-            assert!(cdn.active_invalidations("distribution_id_web")?.is_empty());
-            assert!(cdn
-                .active_invalidations("distribution_id_static")?
-                .is_empty());
+            assert!(active_invalidations(&cdn, "distribution_id_web").is_empty());
+            assert!(active_invalidations(&cdn, "distribution_id_static").is_empty());
 
             // now handle the queued invalidations
             handle_queued_invalidation_requests(
@@ -641,11 +692,11 @@ mod tests {
 
             // which creates them in the CDN
             {
-                let ir_web = cdn.active_invalidations("distribution_id_web")?;
+                let ir_web = active_invalidations(&cdn, "distribution_id_web");
                 assert_eq!(ir_web.len(), 1);
                 assert_eq!(ir_web[0].path_patterns, vec!["/krate*", "/crate/krate*"]);
 
-                let ir_static = cdn.active_invalidations("distribution_id_static")?;
+                let ir_static = active_invalidations(&cdn, "distribution_id_static");
                 assert_eq!(ir_web.len(), 1);
                 assert_eq!(ir_static[0].path_patterns, vec!["/rustdoc/krate*"]);
             }
@@ -690,7 +741,7 @@ mod tests {
             let cdn = env.cdn();
 
             // create an invalidation with 15 paths, so we're over the limit
-            cdn.create_invalidation(
+            let already_running_invalidation = cdn.create_invalidation(
                 "distribution_id_web",
                 &(0..(MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS - 1))
                     .map(|_| "/something*")
@@ -699,6 +750,11 @@ mod tests {
 
             let mut conn = env.db().conn();
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
+            insert_running_invalidation(
+                &mut conn,
+                "distribution_id_web",
+                &already_running_invalidation.invalidation_id,
+            )?;
 
             // queue an invalidation
             queue_crate_invalidation(&mut *conn, &env.config(), "krate")?;
@@ -713,10 +769,16 @@ mod tests {
 
             // only one path was added to the CDN
             let q = queued_or_active_crate_invalidations(&mut *conn)?;
-            assert_eq!(q.iter().filter(|i| i.cdn_reference.is_some()).count(), 1);
+            assert_eq!(
+                q.iter()
+                    .filter_map(|i| i.cdn_reference.as_ref())
+                    .filter(|&reference| reference != &already_running_invalidation.invalidation_id)
+                    .count(),
+                1
+            );
 
             // old invalidation is still active, new one is added
-            let ir_web = cdn.active_invalidations("distribution_id_web")?;
+            let ir_web = active_invalidations(&cdn, "distribution_id_web");
             assert_eq!(ir_web.len(), 2);
             assert_eq!(ir_web[0].path_patterns.len(), 12);
             assert_eq!(ir_web[1].path_patterns.len(), 1);
@@ -735,13 +797,18 @@ mod tests {
             let cdn = env.cdn();
 
             // create an invalidation with 15 paths, so we're over the limit
-            cdn.create_invalidation(
+            let already_running_invalidation = cdn.create_invalidation(
                 "distribution_id_web",
                 &(0..15).map(|_| "/something*").collect::<Vec<_>>(),
             )?;
 
             let mut conn = env.db().conn();
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
+            insert_running_invalidation(
+                &mut conn,
+                "distribution_id_web",
+                &already_running_invalidation.invalidation_id,
+            )?;
 
             // queue an invalidation
             queue_crate_invalidation(&mut *conn, &env.config(), "krate")?;
@@ -757,10 +824,14 @@ mod tests {
             // nothing was added to the CDN
             assert!(queued_or_active_crate_invalidations(&mut *conn)?
                 .iter()
+                .filter(|i| !matches!(
+                    &i.cdn_reference,
+                    Some(val) if val == &already_running_invalidation.invalidation_id
+                ))
                 .all(|i| i.cdn_reference.is_none()));
 
             // old invalidations are still active
-            let ir_web = cdn.active_invalidations("distribution_id_web")?;
+            let ir_web = active_invalidations(&cdn, "distribution_id_web");
             assert_eq!(ir_web.len(), 1);
             assert_eq!(ir_web[0].path_patterns.len(), 15);
 
@@ -782,7 +853,7 @@ mod tests {
                 .all(|i| i.cdn_reference.is_some()));
 
             // and creates them in the CDN too
-            let ir_web = cdn.active_invalidations("distribution_id_web")?;
+            let ir_web = active_invalidations(&cdn, "distribution_id_web");
             assert_eq!(ir_web.len(), 1);
             assert_eq!(ir_web[0].path_patterns, vec!["/krate*", "/crate/krate*"]);
 
@@ -812,7 +883,7 @@ mod tests {
             )?;
 
             // no invalidation was created
-            assert!(cdn.active_invalidations("distribution_id_web")?.is_empty());
+            assert!(active_invalidations(&cdn, "distribution_id_web").is_empty());
 
             Ok(())
         });
@@ -885,5 +956,78 @@ mod tests {
 
         assert_eq!(conn.requests().len(), 1);
         conn.assert_requests_match(&[]);
+    }
+
+    #[tokio::test]
+    async fn get_invalidation_info_doesnt_exist() {
+        let conn = TestConnection::new(vec![(
+            http::Request::builder()
+                .header("content-type", "application/xml")
+                .uri(http::uri::Uri::from_static(
+                   "https://cloudfront.amazonaws.com/2020-05-31/distribution/some_distribution/invalidation/some_reference"
+                ))
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(404)
+                .body(SdkBody::empty())
+                .unwrap(),
+        )]);
+        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
+
+        assert!(CdnBackend::get_cloudfront_invalidation_status(
+            &client,
+            "some_distribution",
+            "some_reference",
+        )
+        .await
+        .expect("error getting invalidation")
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn get_invalidation_info_completed() {
+        let conn = TestConnection::new(vec![(
+            http::Request::builder()
+                .header("content-type", "application/xml")
+                .uri(http::uri::Uri::from_static(
+                   "https://cloudfront.amazonaws.com/2020-05-31/distribution/some_distribution/invalidation/some_reference"
+                ))
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(200)
+                .body(SdkBody::from(
+                   r#"<Invalidation xmlns="http://cloudfront.amazonaws.com/doc/2020-05-31/">
+                         <Id>some_reference</Id>
+                         <Status>Completed</Status>
+                         <CreateTime>2023-04-09T18:09:50.346Z</CreateTime>
+                         <InvalidationBatch>
+                             <Paths>
+                                 <Quantity>1</Quantity>
+                                 <Items><Path>/*</Path></Items>
+                             </Paths>
+                             <CallerReference>03a63d75-21e7-46ba-858d-8999466e633f</CallerReference>
+                         </InvalidationBatch>
+                     </Invalidation>"#
+                )).unwrap(),
+        )]);
+        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
+
+        assert_eq!(
+            CdnBackend::get_cloudfront_invalidation_status(
+                &client,
+                "some_distribution",
+                "some_reference",
+            )
+            .await
+            .expect("error getting invalidation"),
+            Some(CdnInvalidation {
+                distribution_id: "some_distribution".into(),
+                invalidation_id: "some_reference".into(),
+                path_patterns: ["/*".into()].to_vec(),
+                completed: true
+            })
+        );
     }
 }
