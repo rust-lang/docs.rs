@@ -401,6 +401,11 @@ pub(crate) fn queue_crate_invalidation(
     config: &Config,
     name: &str,
 ) -> Result<()> {
+    if !config.full_page_cache {
+        info!("full page cache disabled, skipping queueing invalidation");
+        return Ok(());
+    }
+
     let mut add = |distribution_id: &str, path_patterns: &[&str]| -> Result<()> {
         for pattern in path_patterns {
             debug!(distribution_id, pattern, "enqueueing web CDN invalidation");
