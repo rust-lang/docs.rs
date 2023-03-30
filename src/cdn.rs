@@ -401,7 +401,7 @@ pub(crate) fn queue_crate_invalidation(
     config: &Config,
     name: &str,
 ) -> Result<()> {
-    if !config.full_page_cache {
+    if !config.cache_invalidatable_responses {
         info!("full page cache disabled, skipping queueing invalidation");
         return Ok(());
     }

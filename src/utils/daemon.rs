@@ -109,7 +109,7 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
         return Ok(());
     }
 
-    if !config.full_page_cache {
+    if !config.cache_invalidatable_responses {
         info!("full page cache disabled, skipping background cdn invalidation");
         return Ok(());
     }
