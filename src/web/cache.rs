@@ -48,16 +48,26 @@ impl CachePolicy {
             CachePolicy::NoStoreMustRevalidate => Some(NO_STORE_MUST_REVALIDATE.clone()),
             CachePolicy::ForeverInCdnAndBrowser => Some(FOREVER_IN_CDN_AND_BROWSER.clone()),
             CachePolicy::ForeverInCdn => {
-                // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
-                // CloudFront using the default TTL, while the browser not seeing any caching header.
-                // This means we can have the CDN caching the documentation while just
-                // issuing a purge after a build.
-                // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
-                None
+                if config.full_page_cache {
+                    // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
+                    // CloudFront using the default TTL, while the browser not seeing any caching header.
+                    // This means we can have the CDN caching the documentation while just
+                    // issuing a purge after a build.
+                    // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
+                    None
+                } else {
+                    Some(NO_CACHING.clone())
+                }
             }
-            CachePolicy::ForeverInCdnAndStaleInBrowser => config
-                .cache_control_stale_while_revalidate
-                .map(|seconds| format!("stale-while-revalidate={seconds}").parse().unwrap()),
+            CachePolicy::ForeverInCdnAndStaleInBrowser => {
+                if config.full_page_cache {
+                    config
+                        .cache_control_stale_while_revalidate
+                        .map(|seconds| format!("stale-while-revalidate={seconds}").parse().unwrap())
+                } else {
+                    Some(NO_CACHING.clone())
+                }
+            }
         }
     }
 }
@@ -129,6 +139,7 @@ mod tests {
             Ok(())
         });
     }
+
     #[test]
     fn render_stale_with_config() {
         wrapper(|env| {
@@ -141,6 +152,38 @@ mod tests {
                     .render(&env.config())
                     .unwrap(),
                 "stale-while-revalidate=666"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn render_forever_in_cdn_disabled() {
+        wrapper(|env| {
+            env.override_config(|config| {
+                config.full_page_cache = false;
+            });
+
+            assert_eq!(
+                CachePolicy::ForeverInCdn.render(&env.config()).unwrap(),
+                "max-age=0"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn render_forever_in_cdn_or_stale_disabled() {
+        wrapper(|env| {
+            env.override_config(|config| {
+                config.full_page_cache = false;
+            });
+
+            assert_eq!(
+                CachePolicy::ForeverInCdnAndStaleInBrowser
+                    .render(&env.config())
+                    .unwrap(),
+                "max-age=0"
             );
             Ok(())
         });

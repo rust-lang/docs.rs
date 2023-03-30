@@ -77,6 +77,11 @@ pub struct Config {
     // generate just that directive. Values are in seconds.
     pub(crate) cache_control_stale_while_revalidate: Option<u32>,
 
+    // Activate full page caching.
+    // When disabled, we still cache static assets.
+    // This only affects pages that depend on invalidations to work.
+    pub(crate) full_page_cache: bool,
+
     pub(crate) cdn_backend: CdnKind,
 
     // CloudFront distribution ID for the web server.
@@ -173,6 +178,8 @@ impl Config {
             cache_control_stale_while_revalidate: maybe_env(
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?,
+
+            full_page_cache: env("DOCSRS_FULL_PAGE_CACHE", true)?,
 
             cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
 

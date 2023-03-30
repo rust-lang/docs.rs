@@ -109,6 +109,11 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
         return Ok(());
     }
 
+    if !config.full_page_cache {
+        info!("full page cache disabled, skipping background cdn invalidation");
+        return Ok(());
+    }
+
     cron("cdn invalidator", Duration::from_secs(60), move || {
         let mut conn = pool.get()?;
         if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
