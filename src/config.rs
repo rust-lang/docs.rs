@@ -80,7 +80,7 @@ pub struct Config {
     // Activate full page caching.
     // When disabled, we still cache static assets.
     // This only affects pages that depend on invalidations to work.
-    pub(crate) full_page_cache: bool,
+    pub(crate) cache_invalidatable_responses: bool,
 
     pub(crate) cdn_backend: CdnKind,
 
@@ -179,7 +179,7 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?,
 
-            full_page_cache: env("DOCSRS_FULL_PAGE_CACHE", true)?,
+            cache_invalidatable_responses: env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?,
 
             cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
 

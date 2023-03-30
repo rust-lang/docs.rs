@@ -48,7 +48,7 @@ impl CachePolicy {
             CachePolicy::NoStoreMustRevalidate => Some(NO_STORE_MUST_REVALIDATE.clone()),
             CachePolicy::ForeverInCdnAndBrowser => Some(FOREVER_IN_CDN_AND_BROWSER.clone()),
             CachePolicy::ForeverInCdn => {
-                if config.full_page_cache {
+                if config.cache_invalidatable_responses {
                     // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
                     // CloudFront using the default TTL, while the browser not seeing any caching header.
                     // This means we can have the CDN caching the documentation while just
@@ -60,7 +60,7 @@ impl CachePolicy {
                 }
             }
             CachePolicy::ForeverInCdnAndStaleInBrowser => {
-                if config.full_page_cache {
+                if config.cache_invalidatable_responses {
                     config
                         .cache_control_stale_while_revalidate
                         .map(|seconds| format!("stale-while-revalidate={seconds}").parse().unwrap())
@@ -161,7 +161,7 @@ mod tests {
     fn render_forever_in_cdn_disabled() {
         wrapper(|env| {
             env.override_config(|config| {
-                config.full_page_cache = false;
+                config.cache_invalidatable_responses = false;
             });
 
             assert_eq!(
@@ -176,7 +176,7 @@ mod tests {
     fn render_forever_in_cdn_or_stale_disabled() {
         wrapper(|env| {
             env.override_config(|config| {
-                config.full_page_cache = false;
+                config.cache_invalidatable_responses = false;
             });
 
             assert_eq!(
