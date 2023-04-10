@@ -130,6 +130,29 @@ impl CdnBackend {
     }
 
     #[cfg(test)]
+    fn insert_completed_invalidation(
+        &self,
+        distribution_id: &str,
+        invalidation_id: &str,
+        path_patterns: &[&str],
+    ) {
+        let CdnBackend::Dummy { ref invalidation_requests, .. } = self else {
+            panic!("invalid CDN backend");
+        };
+
+        let mut invalidation_requests = invalidation_requests
+            .lock()
+            .expect("could not lock mutex on dummy CDN");
+
+        invalidation_requests.push(CdnInvalidation {
+            distribution_id: distribution_id.to_owned(),
+            invalidation_id: invalidation_id.to_owned(),
+            path_patterns: path_patterns.iter().cloned().map(str::to_owned).collect(),
+            completed: true,
+        });
+    }
+
+    #[cfg(test)]
     fn clear_active_invalidations(&self) {
         match self {
             CdnBackend::Dummy {
@@ -298,7 +321,9 @@ pub(crate) fn handle_queued_invalidation_requests(
         &[&distribution_id],
     )? {
         if let Some(status) = cdn.invalidation_status(distribution_id, row.get(0))? {
-            active_invalidations.push(status);
+            if !status.completed {
+                active_invalidations.push(status);
+            }
         }
     }
 
@@ -541,7 +566,7 @@ mod tests {
 
         invalidation_requests
             .iter()
-            .filter(|i| i.distribution_id == distribution_id)
+            .filter(|i| !i.completed && i.distribution_id == distribution_id)
             .cloned()
             .collect()
     }
@@ -750,6 +775,22 @@ mod tests {
 
             let mut conn = env.db().conn();
             assert!(queued_or_active_crate_invalidations(&mut *conn)?.is_empty());
+
+            // insert some completed invalidations into the queue & the CDN, these will be ignored
+            for i in 0..10 {
+                insert_running_invalidation(
+                    &mut conn,
+                    "distribution_id_web",
+                    &format!("some_id_{i}"),
+                )?;
+                cdn.insert_completed_invalidation(
+                    "distribution_id_web",
+                    &format!("some_id_{i}"),
+                    &["/*"],
+                );
+            }
+
+            // insert the CDN representation of the already running invalidation
             insert_running_invalidation(
                 &mut conn,
                 "distribution_id_web",
