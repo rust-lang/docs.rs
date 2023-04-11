@@ -30,6 +30,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
+const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
@@ -188,9 +189,11 @@ impl RustwideBuilder {
         // if `rustfmt` is not available in the newer version
         // NOTE: this ignores the error so that you can still run a build without rustfmt.
         // This should only happen if you run a build for the first time when rustfmt isn't available.
-        if let Err(err) = self.toolchain.add_component(&self.workspace, "rustfmt") {
-            warn!("failed to install rustfmt: {}", err);
-            info!("continuing anyway, since this must be the first build");
+        for component in COMPONENTS {
+            if let Err(err) = self.toolchain.add_component(&self.workspace, component) {
+                warn!("failed to install {component}: {err}");
+                info!("continuing anyway, since this must be the first build");
+            }
         }
 
         self.rustc_version = self.detect_rustc_version()?;
