@@ -14,10 +14,6 @@
         /* Since we use `overflow-wrap: anywhere;`, we never have the need for a X scrollbar... */
         overflow-x: hidden;
     }
-
-    main {
-        padding-bottom: 50px;
-    }
 }
 
 @media (max-width: 700px) {
