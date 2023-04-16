@@ -5,6 +5,34 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
     subMenu?.style.setProperty('--menu-x', `${currentMenu.getBoundingClientRect().x}px`);
 }
 
+function generateReleaseList(data, crateName) {
+}
+
+let loadReleases = function() {
+    const releaseListElem = document.getElementById('releases-list');
+    // To prevent reloading the list unnecessarily.
+    loadReleases = function() {};
+    if (!releaseListElem) {
+        // We're not in a documentation page, so no need to do anything.
+        return;
+    }
+    const crateName = window.location.pathname.split('/')[1];
+    const xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+        if (xhttp.readyState !== XMLHttpRequest.DONE) {
+          return;
+        }
+        if (xhttp.status === 200) {
+            releaseListElem.innerHTML = xhttp.responseText;
+        } else {
+            console.error(`Failed to load release list: [${xhttp.status}] ${xhttp.responseText}`);
+            document.getElementById('releases-list').innerHTML = "Failed to load release list";
+        }
+    };
+    xhttp.open("GET", `/${crateName}/releases`, true);
+    xhttp.send();
+};
+
 // Allow menus to be open and used by keyboard.
 (function() {
     var currentMenu;
@@ -53,6 +81,7 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
         currentMenu = newMenu;
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
+        loadReleases();
     }
     function menuOnClick(e) {
         if (this.getAttribute("href") != "#") {

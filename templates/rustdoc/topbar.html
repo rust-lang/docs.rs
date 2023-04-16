@@ -134,11 +134,8 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             <li class="pure-menu-heading">Versions</li>
 
                             <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
-                                    <ul class="pure-menu-list">
-                                        {# Display all releases of this crate #}
-                                        {{ macros::releases_list(name=krate.name, releases=krate.releases, target=target, inner_path=inner_path) }}
-                                    </ul>
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1">
+                                    <span class="rotate">{{ "spinner" | fas }}</span>
                                 </div>
                             </li>
                         </ul>
