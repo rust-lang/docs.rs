@@ -2,11 +2,11 @@ use super::{Blob, FileRange, StorageTransaction};
 use crate::{Config, Metrics};
 use anyhow::Error;
 use aws_sdk_s3::{
-    config::retry::RetryConfig,
-    error as s3_error,
-    model::{Delete, ObjectIdentifier, Tag, Tagging},
-    types::SdkError,
-    Client, Region,
+    config::{retry::RetryConfig, Region},
+    error::SdkError,
+    operation::{get_object::GetObjectError, head_object::HeadObjectError},
+    types::{Delete, ObjectIdentifier, Tag, Tagging},
+    Client,
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;
@@ -81,7 +81,7 @@ impl S3Backend {
             {
                 Ok(_) => Ok(true),
                 Err(SdkError::ServiceError(err))
-                    if (matches!(err.err().kind, s3_error::HeadObjectErrorKind::NotFound(_))
+                    if (matches!(err.err(), HeadObjectError::NotFound(_))
                         || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
@@ -172,10 +172,8 @@ impl S3Backend {
                 .send()
                 .map_err(|err| match err {
                     SdkError::ServiceError(err)
-                        if (matches!(
-                            err.err().kind,
-                            s3_error::GetObjectErrorKind::NoSuchKey(_)
-                        ) || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
+                        if (matches!(err.err(), GetObjectError::NoSuchKey(_))
+                            || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
                     {
                         super::PathNotFoundError.into()
                     }

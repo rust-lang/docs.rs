@@ -1,10 +1,10 @@
 use crate::{metrics::duration_to_seconds, utils::report_error, Config, Metrics};
 use anyhow::{anyhow, bail, Context, Error, Result};
 use aws_sdk_cloudfront::{
-    config::retry::RetryConfig,
-    model::{InvalidationBatch, Paths},
-    types::SdkError,
-    Client, Region,
+    config::{retry::RetryConfig, Region},
+    error::SdkError,
+    types::{InvalidationBatch, Paths},
+    Client,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -549,7 +549,10 @@ mod tests {
     use super::*;
     use crate::test::wrapper;
 
-    use aws_sdk_cloudfront::{Client, Config, Credentials, Region};
+    use aws_sdk_cloudfront::{
+        config::{Credentials, Region},
+        Client, Config,
+    };
     use aws_smithy_client::{
         erase::DynConnector, http_connector::HttpConnector, test_connection::TestConnection,
     };
