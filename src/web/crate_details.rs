@@ -373,6 +373,53 @@ pub(crate) async fn crate_details_handler(
     Ok(res.into_response())
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct ReleaseList {
+    releases: Vec<Release>,
+    crate_name: String,
+}
+
+impl_axum_webpage! {
+    ReleaseList = "rustdoc/releases.html",
+    cpu_intensive_rendering = true,
+}
+
+#[tracing::instrument]
+pub(crate) async fn get_all_releases(
+    Path(params): Path<CrateDetailHandlerParams>,
+    Extension(pool): Extension<Pool>,
+) -> AxumResult<AxumResponse> {
+    let releases: Vec<Release> = spawn_blocking({
+        let pool = pool.clone();
+        let params = params.clone();
+        move || {
+            let mut conn = pool.get()?;
+            let query = "
+            SELECT
+                crates.id AS crate_id
+            FROM crates
+            WHERE crates.name = $1;";
+
+            let rows = conn.query(query, &[&params.name])?;
+
+            let result = if rows.is_empty() {
+                return Ok(Vec::new());
+            } else {
+                &rows[0]
+            };
+            // get releases, sorted by semver
+            releases_for_crate(&mut *conn, result.get("crate_id"))
+        }
+    })
+    .await?;
+
+    let res = ReleaseList {
+        releases,
+        crate_name: params.name,
+    };
+    Ok(res.into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

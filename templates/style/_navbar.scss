@@ -15,6 +15,15 @@ body {
     padding: 0;
 }
 
+@keyframes rotating_text {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 div.nav-container {
     // Nothing is supposed to be over or hovering the top navbar. Maybe add a few others '('? :)
     z-index: 999;
@@ -322,6 +331,14 @@ div.nav-container {
             li.pure-menu-item:last-child {
                 border-bottom: none;
             }
+        }
+    }
+
+    #releases-list {
+        .rotate {
+            display: inline-block;
+            font-size: 30px;
+            animation: rotating_text 2s linear infinite;
         }
     }
 }

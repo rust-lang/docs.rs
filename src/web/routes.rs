@@ -167,6 +167,10 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/crate/:name",
             get_internal(super::crate_details::crate_details_handler),
         )
+        .route(
+            "/:name/releases",
+            get_internal(super::crate_details::get_all_releases),
+        )
         .route_with_tsr(
             "/crate/:name/:version",
             get_internal(super::crate_details::crate_details_handler),
