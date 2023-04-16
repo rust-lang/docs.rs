@@ -77,3 +77,26 @@ impl SqliteConnectionPool {
         f(&conn)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_connection() {
+        let filename = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+        rusqlite::Connection::open(&filename).unwrap();
+
+        let pool = SqliteConnectionPool::new(NonZeroU64::new(1).unwrap());
+
+        pool.with_connection(&filename, |conn| {
+            conn.query_row("SELECT 1", [], |row| {
+                assert_eq!(row.get::<_, i32>(0).unwrap(), 1);
+                Ok(())
+            })
+            .unwrap();
+            Ok(())
+        })
+        .unwrap();
+    }
+}
