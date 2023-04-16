@@ -3,29 +3,42 @@ use comrak::{
     adapters::SyntaxHighlighterAdapter, ComrakExtensionOptions, ComrakOptions, ComrakPlugins,
     ComrakRenderPlugins,
 };
-use std::{collections::HashMap, fmt::Write};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 struct CodeAdapter<F>(F);
 
 impl<F: Fn(Option<&str>, &str) -> String> SyntaxHighlighterAdapter for CodeAdapter<F> {
-    fn highlight(&self, lang: Option<&str>, code: &str) -> String {
+    fn write_highlighted(
+        &self,
+        output: &mut dyn std::io::Write,
+        lang: Option<&str>,
+        code: &str,
+    ) -> std::io::Result<()> {
         // comrak does not treat `,` as an info-string delimiter, so we do that here
         // TODO: https://github.com/kivikakk/comrak/issues/246
         let lang = lang.and_then(|lang| lang.split(',').next());
-        (self.0)(lang, code)
+        write!(output, "{}", (self.0)(lang, code))
     }
 
-    fn build_pre_tag(&self, attributes: &HashMap<String, String>) -> String {
-        build_opening_tag("pre", attributes)
+    fn write_pre_tag(
+        &self,
+        output: &mut dyn std::io::Write,
+        attributes: HashMap<String, String>,
+    ) -> std::io::Result<()> {
+        write_opening_tag(output, "pre", &attributes)
     }
 
-    fn build_code_tag(&self, attributes: &HashMap<String, String>) -> String {
+    fn write_code_tag(
+        &self,
+        output: &mut dyn std::io::Write,
+        attributes: HashMap<String, String>,
+    ) -> std::io::Result<()> {
         // similarly to above, since comrak does not treat `,` as an info-string delimiter it will
         // try to apply `class="language-rust,ignore"` for the info-string `rust,ignore`, so we
         // have to detect that case and fixup the class here
         // TODO: https://github.com/kivikakk/comrak/issues/246
-        let mut attributes = attributes.clone();
+        let mut attributes = attributes;
         if let Some(classes) = attributes.get_mut("class") {
             *classes = classes
                 .split(' ')
@@ -35,17 +48,20 @@ impl<F: Fn(Option<&str>, &str) -> String> SyntaxHighlighterAdapter for CodeAdapt
             // TODO: https://github.com/rust-lang/rust/issues/79524 or itertools
             classes.pop();
         }
-        build_opening_tag("code", &attributes)
+        write_opening_tag(output, "code", &attributes)
     }
 }
 
-fn build_opening_tag(tag: &str, attributes: &HashMap<String, String>) -> String {
-    let mut tag_parts = format!("<{tag}");
+fn write_opening_tag(
+    output: &mut dyn std::io::Write,
+    tag: &str,
+    attributes: &HashMap<String, String>,
+) -> std::io::Result<()> {
+    write!(output, "<{tag}")?;
     for (attr, val) in attributes {
-        write!(tag_parts, " {attr}=\"{val}\"").unwrap();
+        write!(output, " {attr}=\"{val}\"")?;
     }
-    tag_parts.push('>');
-    tag_parts
+    write!(output, ">")
 }
 
 fn render_with_highlighter(
