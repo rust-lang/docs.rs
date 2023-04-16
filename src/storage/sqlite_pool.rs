@@ -27,6 +27,9 @@ static MAX_LIFE_TIME: Duration = Duration::from_secs(60 * 60);
 ///
 /// We keep at minimum of one connection per database, for one hour.  
 /// Any additional connections will be dropped after 10 minutes of inactivity.
+///
+/// * `max_databases` is the maximum amout of databases in the pool.
+/// * for each of the databases, we manage a pool of 1-10 connections
 #[derive(Clone)]
 pub(crate) struct SqliteConnectionPool {
     pools: Cache<PathBuf, r2d2::Pool<SqliteConnectionManager>>,
@@ -39,10 +42,10 @@ impl Default for SqliteConnectionPool {
 }
 
 impl SqliteConnectionPool {
-    pub(crate) fn new(max_connections: NonZeroU64) -> Self {
+    pub(crate) fn new(max_databases: NonZeroU64) -> Self {
         Self {
             pools: Cache::builder()
-                .max_capacity(max_connections.get())
+                .max_capacity(max_databases.get())
                 .time_to_idle(MAX_LIFE_TIME)
                 .build(),
         }
