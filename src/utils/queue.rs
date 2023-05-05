@@ -5,20 +5,38 @@ use postgres::Client;
 
 const DEFAULT_PRIORITY: i32 = 0;
 
-/// Get the build queue priority for a crate
-pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
+/// Get the build queue priority for a crate, returns the matching pattern too
+pub fn list_crate_priorities(conn: &mut Client) -> Result<Vec<(String, i32)>> {
+    Ok(conn
+        .query("SELECT pattern, priority FROM crate_priorities", &[])?
+        .into_iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect())
+}
+
+/// Get the build queue priority for a crate with its matching pattern
+pub fn get_crate_pattern_and_priority(
+    conn: &mut Client,
+    name: &str,
+) -> Result<Option<(String, i32)>> {
     // Search the `priority` table for a priority where the crate name matches the stored pattern
     let query = conn.query(
-        "SELECT priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
+        "SELECT pattern, priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
         &[&name],
     )?;
 
     // If no match is found, return the default priority
     if let Some(row) = query.get(0) {
-        Ok(row.get(0))
+        Ok(Some((row.get(0), row.get(1))))
     } else {
-        Ok(DEFAULT_PRIORITY)
+        Ok(None)
     }
+}
+
+/// Get the build queue priority for a crate
+pub fn get_crate_priority(conn: &mut Client, name: &str) -> Result<i32> {
+    Ok(get_crate_pattern_and_priority(conn, name)?
+        .map_or(DEFAULT_PRIORITY, |(_, priority)| priority))
 }
 
 /// Set all crates that match [`pattern`] to have a certain priority
