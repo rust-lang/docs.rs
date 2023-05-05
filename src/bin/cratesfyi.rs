@@ -10,7 +10,8 @@ use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
-    get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
+    get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
+    remove_crate_priority, set_crate_priority, ConfigName,
 };
 use docs_rs::{
     start_web_server, BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder,
@@ -234,6 +235,14 @@ impl QueueSubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum PrioritySubcommand {
+    /// Get priority for a crate
+    ///
+    /// (returns only the first matching pattern, there may be other matching patterns)
+    Get { crate_name: String },
+
+    /// List priorities for all patterns
+    List,
+
     /// Set all crates matching a pattern to a priority level
     Set {
         /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
@@ -253,19 +262,37 @@ enum PrioritySubcommand {
 
 impl PrioritySubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
+        let conn = &mut *ctx.conn()?;
         match self {
+            Self::List => {
+                for (pattern, priority) in list_crate_priorities(conn)? {
+                    println!("{pattern:>20} : {priority:>3}");
+                }
+            }
+
+            Self::Get { crate_name } => {
+                if let Some((pattern, priority)) =
+                    get_crate_pattern_and_priority(conn, &crate_name)?
+                {
+                    println!("{pattern} : {priority}");
+                } else {
+                    println!("No priority found for {crate_name}");
+                }
+            }
+
             Self::Set { pattern, priority } => {
-                set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
+                set_crate_priority(conn, &pattern, priority)
                     .context("Could not set pattern's priority")?;
+                println!("Set pattern '{pattern}' to priority {priority}");
             }
 
             Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(&mut *ctx.conn()?, &pattern)
+                if let Some(priority) = remove_crate_priority(conn, &pattern)
                     .context("Could not remove pattern's priority")?
                 {
-                    println!("Removed pattern with priority {priority}");
+                    println!("Removed pattern '{pattern}' with priority {priority}");
                 } else {
-                    println!("Pattern did not exist and so was not removed");
+                    println!("Pattern '{pattern}' did not exist and so was not removed");
                 }
             }
         }
