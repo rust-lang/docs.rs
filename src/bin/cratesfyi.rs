@@ -201,7 +201,8 @@ enum QueueSubcommand {
             name = "BUILD_PRIORITY",
             short = 'p',
             long = "priority",
-            default_value = "5"
+            default_value = "5",
+            allow_negative_numbers = true
         )]
         build_priority: i32,
     },
@@ -249,6 +250,7 @@ enum PrioritySubcommand {
         #[arg(name = "PATTERN")]
         pattern: String,
         /// The priority to give crates matching the given `PATTERN`
+        #[arg(allow_negative_numbers = true)]
         priority: i32,
     },
 
