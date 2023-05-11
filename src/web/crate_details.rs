@@ -38,7 +38,7 @@ pub struct CrateDetails {
     release_time: DateTime<Utc>,
     build_status: bool,
     last_successful_build: Option<String>,
-    rustdoc_status: bool,
+    pub rustdoc_status: bool,
     pub archive_storage: bool,
     repository_url: Option<String>,
     homepage_url: Option<String>,
