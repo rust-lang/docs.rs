@@ -222,7 +222,7 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
 /// https://raw.githubusercontent.com/rusqlite/rusqlite/master/libsqlite3-sys/sqlite3/sqlite3.c
 /// and
 /// https://en.wikipedia.org/wiki/SQLite (-> _Magic number_)
-/// ```ignore
+/// ```text
 /// > FORMAT DETAILS
 /// > OFFSET   SIZE    DESCRIPTION
 /// >    0      16     Header string: "SQLite format 3\000"
