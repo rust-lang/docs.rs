@@ -197,9 +197,16 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
 
     stmt.query_row((search_for,), |row| {
         let compression: i32 = row.get(2)?;
+
         Ok(FileInfo {
             range: row.get(0)?..=row.get(1)?,
-            compression: compression.try_into().expect("invalid compression value"),
+            compression: compression.try_into().map_err(|value| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Integer,
+                    format!("invalid compression algorithm '{}' in database", value).into(),
+                )
+            })?,
         })
     })
     .optional()
