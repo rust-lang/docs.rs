@@ -69,7 +69,7 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
         conn.execute(
             "INSERT INTO files (path, start, end, compression) VALUES (?, ?, ?, ?)",
             (
-                zf.name().to_string(),
+                zf.name(),
                 zf.data_start(),
                 zf.data_start() + zf.compressed_size() - 1,
                 match zf.compression() {
