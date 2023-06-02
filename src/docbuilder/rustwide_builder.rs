@@ -17,7 +17,7 @@ use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{Config, Context, Index, Metrics, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
-use docsrs_metadata::{Metadata, DEFAULT_TARGETS, HOST_TARGET};
+use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
 use postgres::Client;
 use regex::Regex;
@@ -373,6 +373,7 @@ impl RustwideBuilder {
         let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
         build_dir.purge().map_err(FailureError::compat)?;
 
+        let is_local = matches!(kind, PackageKind::Local(_));
         let krate = match kind {
             PackageKind::Local(path) => Crate::local(path),
             PackageKind::CratesIo => Crate::crates_io(name, version),
@@ -389,44 +390,47 @@ impl RustwideBuilder {
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                (|| -> Result<bool> {
-                    use docsrs_metadata::BuildTargets;
+                let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+                let BuildTargets {
+                    default_target,
+                    other_targets,
+                } = metadata.targets(self.config.include_default_targets);
+                let mut targets = vec![default_target];
+                targets.extend(&other_targets);
+                // Fetch this before we enter the sandbox, so networking isn't blocked.
+                build.fetch_build_std_dependencies(&targets)?;
 
-                    let release_data = match self
-                        .index
-                        .api()
-                        .get_release_data(name, version)
-                        .context("error fetching release data from crates.io")
-                    {
-                        Ok(data) => data,
-                        Err(err) => {
-                            warn!("{:#?}", err);
-                            ReleaseData::default()
-                        }
-                    };
-
-                    if let Some(ref published_by) = release_data.published_by {
-                        info!(
-                            host_target_dir=?build.host_target_dir(),
-                            published_by_id=published_by.id,
-                            published_by_login=published_by.login,
-                            "restoring artifact cache",
-                        );
-                        if let Err(err) = self
-                            .artifact_cache
-                            .restore_to(&published_by.id.to_string(), build.host_target_dir())
-                        {
-                            warn!(?err, "could not restore artifact cache");
-                        }
+                let release_data = match self
+                    .index
+                    .api()
+                    .get_release_data(name, version)
+                    .context("error fetching release data from crates.io")
+                {
+                    Ok(data) => data,
+                    Err(err) => {
+                        warn!("{:#?}", err);
+                        ReleaseData::default()
                     }
+                };
 
+                if let Some(ref published_by) = release_data.published_by {
+                    info!(
+                        host_target_dir=?build.host_target_dir(),
+                        published_by_id=published_by.id,
+                        published_by_login=published_by.login,
+                        "restoring artifact cache",
+                    );
+                    if let Err(err) = self
+                        .artifact_cache
+                        .restore_to(&published_by.id.to_string(), build.host_target_dir())
+                    {
+                        warn!(?err, "could not restore artifact cache");
+                    }
+                }
+
+                (|| -> Result<bool> {
                     let mut has_docs = false;
                     let mut successful_targets = Vec::new();
-                    let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-                    let BuildTargets {
-                        default_target,
-                        other_targets,
-                    } = metadata.targets(self.config.include_default_targets);
 
                     // Perform an initial build
                     let mut res =
@@ -522,19 +526,24 @@ impl RustwideBuilder {
                         self.metrics.non_library_builds.inc();
                     }
 
-                    let release_data = match self
-                        .index
-                        .api()
-                        .get_release_data(name, version)
-                        .with_context(|| {
-                            format!("could not fetch releases-data for {name}-{version}")
-                        }) {
-                        Ok(data) => data,
-                        Err(err) => {
-                            report_error(&err);
-                            ReleaseData::default()
+                    let release_data = if !is_local {
+                        match self
+                            .index
+                            .api()
+                            .get_release_data(name, version)
+                            .with_context(|| {
+                                format!("could not fetch releases-data for {name}-{version}")
+                            }) {
+                            Ok(data) => Some(data),
+                            Err(err) => {
+                                report_error(&err);
+                                None
+                            }
                         }
-                    };
+                    } else {
+                        None
+                    }
+                    .unwrap_or_default();
 
                     let cargo_metadata = res.cargo_metadata.root();
                     let repository = self.get_repo(cargo_metadata)?;
@@ -564,11 +573,13 @@ impl RustwideBuilder {
                     self.storage.store_one(build_log_path, res.build_log)?;
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
-                    match self.index.api().get_crate_data(name) {
-                        Ok(crate_data) => {
-                            update_crate_data_in_database(&mut conn, name, &crate_data)?
+                    if !is_local {
+                        match self.index.api().get_crate_data(name) {
+                            Ok(crate_data) => {
+                                update_crate_data_in_database(&mut conn, name, &crate_data)?
+                            }
+                            Err(err) => warn!("{:#?}", err),
                         }
-                        Err(err) => warn!("{:#?}", err),
                     }
 
                     if let Some(ref published_by) = release_data.published_by {
@@ -775,14 +786,6 @@ impl RustwideBuilder {
         limits: &Limits,
         mut rustdoc_flags_extras: Vec<String>,
     ) -> Result<Command<'ws, 'pl>> {
-        // If the explicit target is not a tier one target, we need to install it.
-        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
-            // This is a no-op if the target is already installed.
-            self.toolchain
-                .add_target(&self.workspace, target)
-                .map_err(FailureError::compat)?;
-        }
-
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
             "--offline".into(),
@@ -830,6 +833,18 @@ impl RustwideBuilder {
 
         rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
         let cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
+
+        // If the explicit target is not a tier one target, we need to install it.
+        let has_build_std = cargo_args.windows(2).any(|args| {
+            args[0].starts_with("-Zbuild-std")
+                || (args[0] == "-Z" && args[1].starts_with("build-std"))
+        }) || cargo_args.last().unwrap().starts_with("-Zbuild-std");
+        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) && !has_build_std {
+            // This is a no-op if the target is already installed.
+            self.toolchain
+                .add_target(&self.workspace, target)
+                .map_err(FailureError::compat)?;
+        }
 
         let mut command = build
             .cargo()
@@ -1267,5 +1282,15 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_std() {
+        wrapper(|env| {
+            assert!(RustwideBuilder::init(env)?
+                .build_local_package(Path::new("tests/crates/build-std"))?);
+            Ok(())
+        })
     }
 }

@@ -473,6 +473,15 @@ pub(crate) async fn rustdoc_html_server_handler(
     .await?
     .ok_or(AxumNope::ResourceNotFound)?;
 
+    if !krate.rustdoc_status {
+        rendering_time.step("redirect to crate");
+        return Ok(axum_cached_redirect(
+            format!("/crate/{}/{}", params.name, version_or_latest),
+            CachePolicy::ForeverInCdn,
+        )?
+        .into_response());
+    }
+
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
     if req_path.first().copied() == Some(&krate.metadata.default_target) {
@@ -2581,6 +2590,30 @@ mod test {
             assert_redirect_cached_unchecked(
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for/clap/",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
+
+            Ok(())
+        })
+    }
+
+    #[test_case("/something/1.2.3/some_path/", "/crate/something/1.2.3")]
+    #[test_case("/something/latest/some_path/", "/crate/something/latest")]
+    fn rustdoc_page_from_failed_build_redirects_to_crate(path: &str, expected: &str) {
+        wrapper(|env| {
+            env.fake_release()
+                .name("something")
+                .version("1.2.3")
+                .archive_storage(true)
+                .build_result_failed()
+                .create()?;
+            let web = env.frontend();
+
+            assert_redirect_cached(
+                path,
+                expected,
                 CachePolicy::ForeverInCdn,
                 web,
                 &env.config(),

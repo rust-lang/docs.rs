@@ -69,6 +69,8 @@ docker-compose up -d db s3
 # anything that doesn't run via docker-compose needs the settings defined in
 # .env. Either via `. ./.env` as below, or via any dotenv shell integration.
 . ./.env
+# allow downloads from the s3 container to support the /crate/.../download endpoint
+mcli policy set download docsrs/rust-docs-rs
 # Setup the database you just created
 cargo run -- database migrate
 # Build a sample crate to make sure it works

@@ -4,7 +4,10 @@ pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage}
 pub(crate) use self::copy::copy_dir_all;
 pub use self::daemon::{start_daemon, watch_registry};
 pub(crate) use self::html::rewrite_lol;
-pub use self::queue::{get_crate_priority, remove_crate_priority, set_crate_priority};
+pub use self::queue::{
+    get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
+    remove_crate_priority, set_crate_priority,
+};
 pub use self::queue_builder::queue_builder;
 pub(crate) use self::rustc_version::{get_correct_docsrs_style_file, parse_rustc_version};
 
@@ -62,7 +65,7 @@ pub fn set_config(
 ) -> anyhow::Result<()> {
     let name: &'static str = name.into();
     conn.execute(
-        "INSERT INTO config (name, value) 
+        "INSERT INTO config (name, value)
         VALUES ($1, $2)
         ON CONFLICT (name) DO UPDATE SET value = $2;",
         &[&name, &serde_json::to_value(value)?],

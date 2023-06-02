@@ -2,16 +2,20 @@ mod archive_index;
 mod compression;
 mod database;
 mod s3;
+mod sqlite_pool;
 
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
+use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, Metrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
+use std::io::BufReader;
+use std::num::NonZeroU64;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -112,6 +116,7 @@ enum StorageBackend {
 pub struct Storage {
     backend: StorageBackend,
     config: Arc<Config>,
+    sqlite_pool: SqliteConnectionPool,
 }
 
 impl Storage {
@@ -122,6 +127,10 @@ impl Storage {
         runtime: Arc<Runtime>,
     ) -> Result<Self> {
         Ok(Storage {
+            sqlite_pool: SqliteConnectionPool::new(
+                NonZeroU64::new(config.max_sqlite_pool_size)
+                    .ok_or_else(|| anyhow!("invalid sqlite pool size"))?,
+            ),
             config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
@@ -228,7 +237,9 @@ impl Storage {
 
     pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
         match self.get_index_filename(archive_path) {
-            Ok(index_filename) => Ok(archive_index::find_in_file(index_filename, path)?.is_some()),
+            Ok(index_filename) => {
+                Ok(archive_index::find_in_file(index_filename, path, &self.sqlite_pool)?.is_some())
+            }
             Err(err) => {
                 if err.downcast_ref::<PathNotFoundError>().is_some() {
                     Ok(false)
@@ -305,8 +316,12 @@ impl Storage {
         if let Some(ref mut t) = fetch_time {
             t.step("find path in index");
         }
-        let info = archive_index::find_in_file(self.get_index_filename(archive_path)?, path)?
-            .ok_or(PathNotFoundError)?;
+        let info = archive_index::find_in_file(
+            self.get_index_filename(archive_path)?,
+            path,
+            &self.sqlite_pool,
+        )?
+        .ok_or(PathNotFoundError)?;
 
         if let Some(t) = fetch_time {
             t.step("range request");
@@ -361,24 +376,19 @@ impl Storage {
         }
 
         let mut zip_content = zip.finish()?.into_inner();
-        let mut index_content = vec![];
-        archive_index::create(&mut io::Cursor::new(&mut zip_content), &mut index_content)?;
-        let alg = CompressionAlgorithm::default();
-        let compressed_index_content = compress(&index_content[..], alg)?;
 
         let remote_index_path = format!("{}.index", &archive_path);
 
-        // additionally store the index in the local cache, so it's directly available
         let local_index_path = self
             .config
             .local_archive_cache_path
             .join(&remote_index_path);
-        if local_index_path.exists() {
-            fs::remove_file(&local_index_path)?;
-        }
         fs::create_dir_all(local_index_path.parent().unwrap())?;
-        let mut local_index_file = fs::File::create(&local_index_path)?;
-        local_index_file.write_all(&index_content)?;
+        archive_index::create(&mut io::Cursor::new(&mut zip_content), &local_index_path)?;
+
+        let alg = CompressionAlgorithm::default();
+        let compressed_index_content =
+            compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?;
 
         self.store_inner(
             vec![

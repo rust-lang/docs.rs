@@ -10,7 +10,8 @@ use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
-    get_config, queue_builder, remove_crate_priority, set_crate_priority, ConfigName,
+    get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
+    remove_crate_priority, set_crate_priority, ConfigName,
 };
 use docs_rs::{
     start_web_server, BuildQueue, Config, Context, Index, Metrics, PackageKind, RustwideBuilder,
@@ -200,7 +201,8 @@ enum QueueSubcommand {
             name = "BUILD_PRIORITY",
             short = 'p',
             long = "priority",
-            default_value = "5"
+            default_value = "5",
+            allow_negative_numbers = true
         )]
         build_priority: i32,
     },
@@ -209,6 +211,21 @@ enum QueueSubcommand {
     DefaultPriority {
         #[command(subcommand)]
         subcommand: PrioritySubcommand,
+    },
+
+    /// Get the registry watcher's last seen reference
+    GetLastSeenReference,
+
+    /// Set the registry watcher's last seen reference
+    #[command(arg_required_else_help(true))]
+    SetLastSeenReference {
+        /// The reference to set to, required unless flag used
+        #[arg(conflicts_with("head"))]
+        reference: Option<crates_index_diff::gix::ObjectId>,
+
+        /// Fetch the current HEAD of the remote index and use it
+        #[arg(long, conflicts_with("reference"))]
+        head: bool,
     },
 }
 
@@ -226,6 +243,29 @@ impl QueueSubcommand {
                 ctx.config()?.registry_url.as_deref(),
             )?,
 
+            Self::GetLastSeenReference => {
+                if let Some(reference) = ctx.build_queue()?.last_seen_reference()? {
+                    println!("Last seen reference: {reference}");
+                } else {
+                    println!("No last seen reference available");
+                }
+            }
+
+            Self::SetLastSeenReference { reference, head } => {
+                let reference = match (reference, head) {
+                    (Some(reference), false) => reference,
+                    (None, true) => {
+                        println!("Fetching changes to set reference to HEAD");
+                        let (_, oid) = ctx.index()?.diff()?.peek_changes()?;
+                        oid
+                    }
+                    (_, _) => unreachable!(),
+                };
+
+                ctx.build_queue()?.set_last_seen_reference(reference)?;
+                println!("Set last seen reference: {reference}");
+            }
+
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
         }
         Ok(())
@@ -234,12 +274,21 @@ impl QueueSubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum PrioritySubcommand {
+    /// Get priority for a crate
+    ///
+    /// (returns only the first matching pattern, there may be other matching patterns)
+    Get { crate_name: String },
+
+    /// List priorities for all patterns
+    List,
+
     /// Set all crates matching a pattern to a priority level
     Set {
         /// See https://www.postgresql.org/docs/current/functions-matching.html for pattern syntax
         #[arg(name = "PATTERN")]
         pattern: String,
         /// The priority to give crates matching the given `PATTERN`
+        #[arg(allow_negative_numbers = true)]
         priority: i32,
     },
 
@@ -253,19 +302,37 @@ enum PrioritySubcommand {
 
 impl PrioritySubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
+        let conn = &mut *ctx.conn()?;
         match self {
+            Self::List => {
+                for (pattern, priority) in list_crate_priorities(conn)? {
+                    println!("{pattern:>20} : {priority:>3}");
+                }
+            }
+
+            Self::Get { crate_name } => {
+                if let Some((pattern, priority)) =
+                    get_crate_pattern_and_priority(conn, &crate_name)?
+                {
+                    println!("{pattern} : {priority}");
+                } else {
+                    println!("No priority found for {crate_name}");
+                }
+            }
+
             Self::Set { pattern, priority } => {
-                set_crate_priority(&mut *ctx.conn()?, &pattern, priority)
+                set_crate_priority(conn, &pattern, priority)
                     .context("Could not set pattern's priority")?;
+                println!("Set pattern '{pattern}' to priority {priority}");
             }
 
             Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(&mut *ctx.conn()?, &pattern)
+                if let Some(priority) = remove_crate_priority(conn, &pattern)
                     .context("Could not remove pattern's priority")?
                 {
-                    println!("Removed pattern with priority {priority}");
+                    println!("Removed pattern '{pattern}' with priority {priority}");
                 } else {
-                    println!("Pattern did not exist and so was not removed");
+                    println!("Pattern '{pattern}' did not exist and so was not removed");
                 }
             }
         }
