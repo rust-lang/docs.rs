@@ -178,8 +178,9 @@ impl ArtifactCache {
             return Ok(());
         }
 
-        self.ensure_cache_exists()?;
+        fs::create_dir_all(target_dir.parent().unwrap())?;
         fs::rename(cache_dir, target_dir).context("could not move cache directory to target")?;
+        self.cleanup(target_dir)?;
         Ok(())
     }
 
