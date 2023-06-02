@@ -117,7 +117,7 @@ impl CrateDetails {
                 releases.readme,
                 releases.description_long,
                 releases.release_time,
-                releases.build_status,
+                COALESCE(builds.build_status, false) as build_status,
                 releases.rustdoc_status,
                 releases.archive_storage,
                 releases.repository_url,
@@ -145,6 +145,12 @@ impl CrateDetails {
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
+            LEFT JOIN LATERAL (
+                SELECT * FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time
+                DESC LIMIT 1
+            ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2;";
 
         let rows = conn.query(query, &[&name, &version])?;
@@ -305,14 +311,20 @@ pub(crate) fn releases_for_crate(
     let mut releases: Vec<Release> = conn
         .query(
             "SELECT
-                id,
-                version,
-                build_status,
-                yanked,
-                is_library,
-                rustdoc_status,
-                target_name
+                releases.id,
+                releases.version,
+                COALESCE(builds.build_status, false) as build_status,
+                releases.yanked,
+                releases.is_library,
+                releases.rustdoc_status,
+                releases.target_name
              FROM releases
+             LEFT JOIN LATERAL (
+                SELECT build_status FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time
+                DESC LIMIT 1
+             ) AS builds ON true
              WHERE
                  releases.crate_id = $1",
             &[&crate_id],

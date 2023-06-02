@@ -90,7 +90,7 @@ pub(crate) fn get_releases(
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
+            ((NOT $3) OR (builds.build_status = FALSE AND releases.is_library = TRUE))
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
@@ -658,7 +658,7 @@ pub(crate) async fn activity_handler(
                 SELECT
                     release_time::date AS date_,
                     COUNT(*) AS counts,
-                    SUM(CAST((is_library = TRUE AND build_status = FALSE) AS INT)) AS failures
+                    SUM(CAST((is_library = TRUE AND (SELECT builds.build_status FROM builds WHERE builds.rid = releases.id ORDER BY builds.build_time DESC LIMIT 1) = FALSE) AS INT)) AS failures
                 FROM
                     releases
                 WHERE
