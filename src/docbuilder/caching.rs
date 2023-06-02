@@ -36,11 +36,21 @@ pub(crate) struct ArtifactCache {
 
 impl ArtifactCache {
     pub(crate) fn new(cache_dir: PathBuf) -> Result<Self> {
-        Ok(Self { cache_dir })
+        let cache = Self { cache_dir };
+        cache.ensure_cache_exists()?;
+        Ok(cache)
     }
 
     pub(crate) fn purge(&self) -> Result<()> {
         fs::remove_dir_all(&self.cache_dir)?;
+        self.ensure_cache_exists()?;
+        Ok(())
+    }
+
+    fn ensure_cache_exists(&self) -> Result<()> {
+        if !self.cache_dir.exists() {
+            fs::create_dir_all(&self.cache_dir)?;
+        }
         Ok(())
     }
 
@@ -168,6 +178,7 @@ impl ArtifactCache {
             return Ok(());
         }
 
+        self.ensure_cache_exists()?;
         fs::rename(cache_dir, target_dir).context("could not move cache directory to target")?;
         Ok(())
     }
@@ -182,6 +193,7 @@ impl ArtifactCache {
         if cache_dir.exists() {
             fs::remove_dir_all(&cache_dir)?;
         }
+        self.ensure_cache_exists()?;
 
         debug!(?target_dir, ?cache_dir, "saving artifact cache");
         fs::rename(&target_dir, &cache_dir).context("could not move target directory to cache")?;
