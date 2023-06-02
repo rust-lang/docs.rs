@@ -131,7 +131,7 @@ impl CrateDetails {
                 releases.readme,
                 releases.description_long,
                 releases.release_time,
-                releases.build_status,
+                COALESCE(builds.build_status, false) as "build_status!",
                 (
                     SELECT id
                     FROM builds
@@ -168,6 +168,12 @@ impl CrateDetails {
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
+            LEFT JOIN LATERAL (
+                SELECT * FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time
+                DESC LIMIT 1
+            ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2;"#,
             name,
             version.to_string(),
@@ -338,17 +344,23 @@ pub(crate) async fn releases_for_crate(
     crate_id: i32,
 ) -> Result<Vec<Release>, anyhow::Error> {
     let mut releases: Vec<Release> = sqlx::query!(
-        "SELECT
-            id,
-            version,
-            build_status,
-            yanked,
-            is_library,
-            rustdoc_status,
-            target_name
+        r#"SELECT
+             releases.id,
+             releases.version,
+             COALESCE(builds.build_status, false) as "build_status!",
+             releases.yanked,
+             releases.is_library,
+             releases.rustdoc_status,
+             releases.target_name
          FROM releases
+         LEFT JOIN LATERAL (
+            SELECT build_status FROM builds
+            WHERE builds.rid = releases.id
+            ORDER BY builds.build_time
+            DESC LIMIT 1
+         ) AS builds ON true
          WHERE
-             releases.crate_id = $1",
+             releases.crate_id = $1"#,
         crate_id,
     )
     .fetch(&mut *conn)
