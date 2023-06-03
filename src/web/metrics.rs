@@ -16,14 +16,17 @@ use std::{borrow::Cow, sync::Arc, time::Instant};
 use tracing::debug;
 
 async fn fetch_and_render_metrics(
-    fetcher: impl Fn() -> Result<Vec<MetricFamily>> + Send + 'static,
+    fetch_metrics: impl Fn() -> Result<Vec<MetricFamily>> + Send + 'static,
 ) -> AxumResult<impl IntoResponse> {
-    let metrics_families = spawn_blocking(fetcher).await?;
-
-    let mut buffer = Vec::new();
-    TextEncoder::new()
-        .encode(&metrics_families, &mut buffer)
-        .context("error encoding metrics")?;
+    let buffer = spawn_blocking(move || {
+        let metrics_families = fetch_metrics()?;
+        let mut buffer = Vec::new();
+        TextEncoder::new()
+            .encode(&metrics_families, &mut buffer)
+            .context("error encoding metrics")?;
+        Ok(buffer)
+    })
+    .await?;
 
     Ok((
         StatusCode::OK,
