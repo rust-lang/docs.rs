@@ -65,7 +65,7 @@ pub(crate) fn encode_url_path(path: &str) -> String {
     utf8_percent_encode(path, PATH).to_string()
 }
 
-const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
 
 #[derive(Debug)]
 struct MatchVersion {
