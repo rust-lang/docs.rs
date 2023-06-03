@@ -326,16 +326,14 @@ pub fn start_background_metrics_webserver(
     let metrics_axum_app = build_metrics_axum_app(context)?.into_make_service();
     let runtime = context.runtime()?;
 
-    thread::spawn(move || {
-        runtime.block_on(async {
-            if let Err(err) = axum::Server::bind(&axum_addr)
-                .serve(metrics_axum_app)
-                .await
-                .context("error running metrics web server")
-            {
-                report_error(&err);
-            }
-        })
+    runtime.spawn(async move {
+        if let Err(err) = axum::Server::bind(&axum_addr)
+            .serve(metrics_axum_app)
+            .await
+            .context("error running metrics web server")
+        {
+            report_error(&err);
+        }
     });
 
     Ok(())
