@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::Write;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -107,12 +108,12 @@ enum CommandLine {
     /// Starts web server
     StartWebServer {
         #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        socket_addr: String,
+        socket_addr: SocketAddr,
     },
 
     StartRegistryWatcher {
         #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: String,
+        metric_server_socket_addr: SocketAddr,
         /// Enable or disable the repository stats updater
         #[arg(
             long = "repository-stats-updater",
@@ -126,7 +127,7 @@ enum CommandLine {
 
     StartBuildServer {
         #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: String,
+        metric_server_socket_addr: SocketAddr,
     },
 
     /// Starts the daemon
@@ -170,14 +171,14 @@ impl CommandLine {
                     docs_rs::utils::daemon::start_background_cdn_invalidator(&ctx)?;
                 }
 
-                start_background_metrics_webserver(Some(&metric_server_socket_addr), &ctx)?;
+                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
                 docs_rs::utils::watch_registry(ctx.build_queue()?, ctx.config()?, ctx.index()?)?;
             }
             Self::StartBuildServer {
                 metric_server_socket_addr,
             } => {
-                start_background_metrics_webserver(Some(&metric_server_socket_addr), &ctx)?;
+                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
                 let build_queue = ctx.build_queue()?;
                 let rustwide_builder = RustwideBuilder::init(&ctx)?;
@@ -185,7 +186,7 @@ impl CommandLine {
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
-                start_web_server(Some(&socket_addr), &ctx)?;
+                start_web_server(Some(socket_addr), &ctx)?;
             }
             Self::Daemon { registry_watcher } => {
                 docs_rs::utils::start_daemon(ctx, registry_watcher == Toggle::Enabled)?;
