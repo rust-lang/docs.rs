@@ -18,7 +18,7 @@ use crate::{
         page::TemplateData,
         MatchSemver, MetaData,
     },
-    Config, Metrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
+    Config, InstanceMetrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
 use anyhow::{anyhow, Context as _};
 use axum::{
@@ -91,7 +91,7 @@ async fn try_serve_legacy_toolchain_asset(
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Extension(storage): Extension<Arc<Storage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(pool): Extension<Pool>,
@@ -117,8 +117,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         )?)
     }
 
-    let mut rendering_time =
-        RenderingTimesRecorder::new(&metrics.instance.rustdoc_redirect_rendering_times);
+    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
 
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
@@ -310,7 +309,7 @@ impl RustdocPage {
         rustdoc_html: &[u8],
         max_parse_memory: usize,
         templates: &TemplateData,
-        metrics: &Metrics,
+        metrics: &InstanceMetrics,
         config: &Config,
         file_path: &str,
     ) -> AxumResult<AxumResponse> {
@@ -323,7 +322,7 @@ impl RustdocPage {
         // while logging OOM errors from html rewriting
         let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
-                metrics.instance.html_rewrite_ooms.inc();
+                metrics.html_rewrite_ooms.inc();
 
                 return Err(AxumNope::InternalError(
                     anyhow!(
@@ -370,7 +369,7 @@ pub(crate) struct RustdocHtmlParams {
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_html_server_handler(
     Path(params): Path<RustdocHtmlParams>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Extension(templates): Extension<Arc<TemplateData>>,
     Extension(pool): Extension<Pool>,
     Extension(storage): Extension<Arc<Storage>>,
@@ -379,7 +378,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
-    let mut rendering_time = RenderingTimesRecorder::new(&metrics.instance.rustdoc_rendering_times);
+    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_rendering_times);
 
     // since we directly use the Uri-path and not the extracted params from the router,
     // we have to percent-decode the string here.
@@ -653,7 +652,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     );
 
     metrics
-        .instance
         .recently_accessed_releases
         .record(krate.crate_id, krate.release_id, target);
 

@@ -10,7 +10,7 @@ use self::s3::S3Backend;
 use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
-use crate::{db::Pool, Config, Metrics};
+use crate::{db::Pool, Config, InstanceMetrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
@@ -122,7 +122,7 @@ pub struct Storage {
 impl Storage {
     pub fn new(
         pool: Pool,
-        metrics: Arc<Metrics>,
+        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         runtime: Arc<Runtime>,
     ) -> Result<Self> {
@@ -782,7 +782,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_blobs(storage: &Storage, metrics: &Metrics) -> Result<()> {
+    fn test_store_blobs(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -810,10 +810,7 @@ mod backend_tests {
             assert_eq!(blob.mime, actual.mime);
         }
 
-        assert_eq!(
-            NAMES.len(),
-            metrics.instance.uploaded_files_total.get() as usize
-        );
+        assert_eq!(NAMES.len(), metrics.uploaded_files_total.get() as usize);
 
         Ok(())
     }
@@ -825,7 +822,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_all_in_archive(storage: &Storage, metrics: &Metrics) -> Result<()> {
+    fn test_store_all_in_archive(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-archive-test")
             .tempdir()?;
@@ -889,12 +886,12 @@ mod backend_tests {
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
 
-        assert_eq!(2, metrics.instance.uploaded_files_total.get());
+        assert_eq!(2, metrics.uploaded_files_total.get());
 
         Ok(())
     }
 
-    fn test_store_all(storage: &Storage, metrics: &Metrics) -> Result<()> {
+    fn test_store_all(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -936,7 +933,7 @@ mod backend_tests {
         expected_algs.insert(CompressionAlgorithm::default());
         assert_eq!(algs, expected_algs);
 
-        assert_eq!(2, metrics.instance.uploaded_files_total.get());
+        assert_eq!(2, metrics.uploaded_files_total.get());
 
         Ok(())
     }
@@ -1075,7 +1072,7 @@ mod backend_tests {
                 #[test]
                 fn $test() {
                     crate::test::wrapper(|env| {
-                        super::$test(&*get_storage(env), &*env.metrics())
+                        super::$test(&*get_storage(env), &*env.instance_metrics())
                     });
                 }
             )*

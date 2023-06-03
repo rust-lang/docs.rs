@@ -11,7 +11,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         match_version_axum,
     },
-    BuildQueue, Config, Metrics,
+    BuildQueue, Config, InstanceMetrics,
 };
 use anyhow::{anyhow, Context as _, Result};
 use axum::{
@@ -458,7 +458,7 @@ impl Default for Search {
 
 async fn redirect_to_random_crate(
     config: Arc<Config>,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
     pool: Pool,
 ) -> AxumResult<impl IntoResponse> {
     // We try to find a random crate and redirect to it.
@@ -503,7 +503,7 @@ async fn redirect_to_random_crate(
         let version: String = row.get("version");
         let target_name: String = row.get("target_name");
 
-        metrics.instance.im_feeling_lucky_searches.inc();
+        metrics.im_feeling_lucky_searches.inc();
 
         Ok(axum_redirect(format!("/{name}/{version}/{target_name}/"))?)
     } else {
@@ -520,7 +520,7 @@ impl_axum_webpage! {
 pub(crate) async fn search_handler(
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Query(mut params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
     let query = params

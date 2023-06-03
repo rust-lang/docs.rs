@@ -82,7 +82,7 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
 
 pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Error> {
     let cdn = context.cdn()?;
-    let metrics = context.metrics()?;
+    let metrics = context.instance_metrics()?;
     let config = context.config()?;
     let pool = context.pool()?;
 

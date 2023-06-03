@@ -1,4 +1,4 @@
-use crate::{metrics::duration_to_seconds, utils::report_error, Config, Metrics};
+use crate::{metrics::duration_to_seconds, utils::report_error, Config, InstanceMetrics};
 use anyhow::{anyhow, bail, Context, Error, Result};
 use aws_sdk_cloudfront::{
     config::{retry::RetryConfig, Region},
@@ -303,7 +303,7 @@ impl CdnBackend {
 #[instrument(skip(conn))]
 pub(crate) fn handle_queued_invalidation_requests(
     cdn: &CdnBackend,
-    metrics: &Metrics,
+    metrics: &InstanceMetrics,
     conn: &mut impl postgres::GenericClient,
     distribution_id: &str,
 ) -> Result<()> {
@@ -363,7 +363,6 @@ pub(crate) fn handle_queued_invalidation_requests(
         if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>(0)).to_std() {
             // This can only fail when the duration is negative, which can't happen anyways
             metrics
-                .instance
                 .cdn_invalidation_time
                 .with_label_values(&[distribution_id])
                 .observe(duration_to_seconds(duration));
@@ -401,7 +400,6 @@ pub(crate) fn handle_queued_invalidation_requests(
         if let Ok(duration) = (now - row.get::<_, DateTime<Utc>>("queued")).to_std() {
             // This can only fail when the duration is negative, which can't happen anyways
             metrics
-                .instance
                 .cdn_queue_time
                 .with_label_values(&[distribution_id])
                 .observe(duration_to_seconds(duration));
@@ -709,13 +707,13 @@ mod tests {
             // now handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_static",
             )?;
@@ -743,13 +741,13 @@ mod tests {
             // now handle again
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_static",
             )?;
@@ -808,7 +806,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;
@@ -862,7 +860,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;
@@ -888,7 +886,7 @@ mod tests {
             // now handle again
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;
@@ -923,7 +921,7 @@ mod tests {
             // run the handler
             handle_queued_invalidation_requests(
                 &env.cdn(),
-                &env.metrics(),
+                &env.instance_metrics(),
                 &mut *conn,
                 "distribution_id_web",
             )?;

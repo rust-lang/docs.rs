@@ -1,5 +1,5 @@
 use super::{Blob, FileRange, StorageTransaction};
-use crate::{Config, Metrics};
+use crate::{Config, InstanceMetrics};
 use anyhow::Error;
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
@@ -25,14 +25,14 @@ pub(super) struct S3Backend {
     client: Client,
     runtime: Arc<Runtime>,
     bucket: String,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
     #[cfg(test)]
     temporary: bool,
 }
 
 impl S3Backend {
     pub(super) fn new(
-        metrics: Arc<Metrics>,
+        metrics: Arc<InstanceMetrics>,
         config: &Config,
         runtime: Arc<Runtime>,
     ) -> Result<Self, Error> {
@@ -256,7 +256,7 @@ impl<'a> StorageTransaction for S3StorageTransaction<'a> {
                             .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
                             .send()
                             .map_ok(|_| {
-                                self.s3.metrics.instance.uploaded_files_total.inc();
+                                self.s3.metrics.uploaded_files_total.inc();
                             })
                             .map_err(|err| {
                                 warn!("Failed to upload blob to S3: {:?}", err);

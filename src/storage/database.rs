@@ -1,17 +1,17 @@
 use super::{Blob, FileRange, StorageTransaction};
 use crate::db::Pool;
 use crate::error::Result;
-use crate::Metrics;
+use crate::InstanceMetrics;
 use postgres::Transaction;
 use std::{convert::TryFrom, sync::Arc};
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
 }
 
 impl DatabaseBackend {
-    pub(crate) fn new(pool: Pool, metrics: Arc<Metrics>) -> Self {
+    pub(crate) fn new(pool: Pool, metrics: Arc<InstanceMetrics>) -> Self {
         Self { pool, metrics }
     }
 
@@ -132,7 +132,7 @@ impl DatabaseBackend {
 
 pub(super) struct DatabaseClient {
     conn: crate::db::PoolClient,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
 }
 
 impl DatabaseClient {
@@ -146,7 +146,7 @@ impl DatabaseClient {
 
 pub(super) struct DatabaseStorageTransaction<'a> {
     transaction: Transaction<'a>,
-    metrics: &'a Metrics,
+    metrics: &'a InstanceMetrics,
 }
 
 impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
@@ -160,7 +160,7 @@ impl<'a> StorageTransaction for DatabaseStorageTransaction<'a> {
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &[&blob.path, &blob.mime, &blob.content, &compression],
             )?;
-            self.metrics.instance.uploaded_files_total.inc();
+            self.metrics.uploaded_files_total.inc();
         }
         Ok(())
     }

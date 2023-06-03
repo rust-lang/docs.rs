@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{Storage, StorageKind};
 use crate::web::{build_axum_app, cache, page::TemplateData};
-use crate::{BuildQueue, Config, Context, Index, Metrics};
+use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, ServiceMetrics};
 use anyhow::Context as _;
 use fn_error_context::context;
 use once_cell::unsync::OnceCell;
@@ -216,7 +216,8 @@ pub(crate) struct TestEnvironment {
     cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
     runtime: OnceCell<Arc<Runtime>>,
-    metrics: OnceCell<Arc<Metrics>>,
+    instance_metrics: OnceCell<Arc<InstanceMetrics>>,
+    service_metrics: OnceCell<Arc<ServiceMetrics>>,
     frontend: OnceCell<TestFrontend>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
 }
@@ -247,7 +248,8 @@ impl TestEnvironment {
             storage: OnceCell::new(),
             cdn: OnceCell::new(),
             index: OnceCell::new(),
-            metrics: OnceCell::new(),
+            instance_metrics: OnceCell::new(),
+            service_metrics: OnceCell::new(),
             frontend: OnceCell::new(),
             runtime: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
@@ -314,7 +316,7 @@ impl TestEnvironment {
             .get_or_init(|| {
                 Arc::new(BuildQueue::new(
                     self.db().pool(),
-                    self.metrics(),
+                    self.instance_metrics(),
                     self.config(),
                     self.storage(),
                 ))
@@ -340,7 +342,7 @@ impl TestEnvironment {
                 Arc::new(
                     Storage::new(
                         self.db().pool(),
-                        self.metrics(),
+                        self.instance_metrics(),
                         self.config(),
                         self.runtime(),
                     )
@@ -350,11 +352,22 @@ impl TestEnvironment {
             .clone()
     }
 
-    pub(crate) fn metrics(&self) -> Arc<Metrics> {
-        self.metrics
-            .get_or_init(|| Arc::new(Metrics::new().expect("failed to initialize the metrics")))
+    pub(crate) fn instance_metrics(&self) -> Arc<InstanceMetrics> {
+        self.instance_metrics
+            .get_or_init(|| {
+                Arc::new(InstanceMetrics::new().expect("failed to initialize the instance metrics"))
+            })
             .clone()
     }
+
+    pub(crate) fn service_metrics(&self) -> Arc<ServiceMetrics> {
+        self.service_metrics
+            .get_or_init(|| {
+                Arc::new(ServiceMetrics::new().expect("failed to initialize the service metrics"))
+            })
+            .clone()
+    }
+
     pub(crate) fn runtime(&self) -> Arc<Runtime> {
         self.runtime
             .get_or_init(|| {
@@ -395,7 +408,8 @@ impl TestEnvironment {
 
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db.get_or_init(|| {
-            TestDatabase::new(&self.config(), self.metrics()).expect("failed to initialize the db")
+            TestDatabase::new(&self.config(), self.instance_metrics())
+                .expect("failed to initialize the db")
         })
     }
 
@@ -438,8 +452,12 @@ impl Context for TestEnvironment {
         Ok(self.db().pool())
     }
 
-    fn metrics(&self) -> Result<Arc<Metrics>> {
-        Ok(self.metrics())
+    fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>> {
+        Ok(self.instance_metrics())
+    }
+
+    fn service_metrics(&self) -> Result<Arc<ServiceMetrics>> {
+        Ok(self.service_metrics())
     }
 
     fn index(&self) -> Result<Arc<Index>> {
@@ -461,7 +479,7 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Self> {
+    fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
