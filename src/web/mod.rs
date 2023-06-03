@@ -51,7 +51,6 @@ use std::{
     borrow::{Borrow, Cow},
     net::SocketAddr,
     sync::Arc,
-    thread,
 };
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
@@ -273,6 +272,7 @@ fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let config = context.config()?;
+    let has_templates = template_data.is_some();
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -293,9 +293,9 @@ fn apply_middleware(
             .layer(Extension(context.repository_stats_updater()?))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
-            .layer(middleware::from_fn(
+            .layer(option_layer(has_templates.then_some(middleware::from_fn(
                 page::web_page::render_templates_middleware,
-            ))
+            ))))
             .layer(middleware::from_fn(cache::cache_middleware)),
     ))
 }
