@@ -46,6 +46,7 @@ use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use postgres::Client;
 use semver::{Version, VersionReq};
 use serde::Serialize;
+use std::net::{IpAddr, Ipv4Addr};
 use std::{
     borrow::{Borrow, Cow},
     net::SocketAddr,
@@ -65,7 +66,7 @@ pub(crate) fn encode_url_path(path: &str) -> String {
     utf8_percent_encode(path, PATH).to_string()
 }
 
-const DEFAULT_BIND: &str = "0.0.0.0:3000";
+const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
 
 #[derive(Debug)]
 struct MatchVersion {
@@ -311,10 +312,10 @@ pub(crate) fn build_metrics_axum_app(context: &dyn Context) -> Result<AxumRouter
 }
 
 pub fn start_background_metrics_webserver(
-    addr: Option<&str>,
+    addr: Option<SocketAddr>,
     context: &dyn Context,
 ) -> Result<(), Error> {
-    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
+    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND);
 
     tracing::info!(
         "Starting metrics web server on `{}:{}`",
@@ -341,13 +342,13 @@ pub fn start_background_metrics_webserver(
 }
 
 #[instrument(skip_all)]
-pub fn start_web_server(addr: Option<&str>, context: &dyn Context) -> Result<(), Error> {
+pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Result<(), Error> {
     let template_data = Arc::new(TemplateData::new(
         &mut *context.pool()?.get()?,
         context.config()?.render_threads,
     )?);
 
-    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND).parse()?;
+    let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
     tracing::info!(
         "Starting web server on `{}:{}`",
