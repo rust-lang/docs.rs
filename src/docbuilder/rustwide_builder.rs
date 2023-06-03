@@ -13,7 +13,7 @@ use crate::utils::{
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
-use crate::{Config, Context, Index, Metrics, Storage};
+use crate::{Config, Context, Index, InstanceMetrics, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
@@ -45,7 +45,7 @@ pub struct RustwideBuilder {
     config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
     index: Arc<Index>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
@@ -92,7 +92,7 @@ impl RustwideBuilder {
             config,
             db: context.pool()?,
             storage: context.storage()?,
-            metrics: context.metrics()?,
+            metrics: context.instance_metrics()?,
             index: context.index()?,
             rustc_version: String::new(),
             repository_stats_updater: context.repository_stats_updater()?,
@@ -484,11 +484,11 @@ impl RustwideBuilder {
 
                     let has_examples = build.host_source_dir().join("examples").is_dir();
                     if res.result.successful {
-                        self.metrics.instance.successful_builds.inc();
+                        self.metrics.successful_builds.inc();
                     } else if res.cargo_metadata.root().is_library() {
-                        self.metrics.instance.failed_builds.inc();
+                        self.metrics.failed_builds.inc();
                     } else {
-                        self.metrics.instance.non_library_builds.inc();
+                        self.metrics.non_library_builds.inc();
                     }
 
                     let release_data = if !is_local {

@@ -1,6 +1,6 @@
 use crate::{
     db::Pool, metrics::duration_to_seconds, utils::spawn_blocking, web::error::AxumResult,
-    BuildQueue, Config, Metrics,
+    BuildQueue, Config, InstanceMetrics, ServiceMetrics,
 };
 use anyhow::{Context as _, Result};
 use axum::{
@@ -38,13 +38,14 @@ async fn fetch_and_render_metrics(
 pub(super) async fn metrics_handler(
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(instance_metrics): Extension<Arc<InstanceMetrics>>,
+    Extension(service_metrics): Extension<Arc<ServiceMetrics>>,
     Extension(queue): Extension<Arc<BuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
     fetch_and_render_metrics(move || {
         let mut families = Vec::new();
-        families.extend_from_slice(&metrics.instance.gather(&pool)?);
-        families.extend_from_slice(&metrics.service.gather(&pool, &queue, &config)?);
+        families.extend_from_slice(&instance_metrics.gather(&pool)?);
+        families.extend_from_slice(&service_metrics.gather(&pool, &queue, &config)?);
         Ok(families)
     })
     .await
@@ -53,17 +54,17 @@ pub(super) async fn metrics_handler(
 pub(super) async fn service_metrics_handler(
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(metrics): Extension<Arc<ServiceMetrics>>,
     Extension(queue): Extension<Arc<BuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(move || metrics.service.gather(&pool, &queue, &config)).await
+    fetch_and_render_metrics(move || metrics.gather(&pool, &queue, &config)).await
 }
 
 pub(super) async fn instance_metrics_handler(
     Extension(pool): Extension<Pool>,
-    Extension(metrics): Extension<Arc<Metrics>>,
+    Extension(metrics): Extension<Arc<InstanceMetrics>>,
 ) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(move || metrics.instance.gather(&pool)).await
+    fetch_and_render_metrics(move || metrics.gather(&pool)).await
 }
 
 /// Request recorder middleware
@@ -92,7 +93,7 @@ pub(crate) async fn request_recorder<B>(
 
     let metrics = request
         .extensions()
-        .get::<Arc<Metrics>>()
+        .get::<Arc<InstanceMetrics>>()
         .expect("metrics missing in request extensions")
         .clone();
 
@@ -101,12 +102,10 @@ pub(crate) async fn request_recorder<B>(
     let resp_time = duration_to_seconds(start.elapsed());
 
     metrics
-        .instance
         .routes_visited
         .with_label_values(&[&route_name])
         .inc();
     metrics
-        .instance
         .response_time
         .with_label_values(&[&route_name])
         .observe(resp_time);
@@ -214,7 +213,7 @@ mod tests {
                 .create()?;
 
             let frontend = env.frontend();
-            let metrics = env.metrics();
+            let metrics = env.instance_metrics();
 
             for (route, _) in ROUTES.iter() {
                 frontend.get(route).send()?;
@@ -228,7 +227,7 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.instance.gather(&env.pool()?)?;
+            let metrics_serialized = metrics.gather(&env.pool()?)?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.get_name() == "docsrs_routes_visited")
@@ -248,17 +247,12 @@ mod tests {
 
             for (label, count) in expected.iter() {
                 assert_eq!(
-                    metrics
-                        .instance
-                        .routes_visited
-                        .with_label_values(&[*label])
-                        .get(),
+                    metrics.routes_visited.with_label_values(&[*label]).get(),
                     *count,
                     "routes_visited metrics for {label} are incorrect",
                 );
                 assert_eq!(
                     metrics
-                        .instance
                         .response_time
                         .with_label_values(&[*label])
                         .get_sample_count(),

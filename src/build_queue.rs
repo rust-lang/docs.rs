@@ -4,7 +4,7 @@ use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::{get_config, get_crate_priority, report_error, retry, set_config, ConfigName};
-use crate::{Config, Index, Metrics, RustwideBuilder};
+use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
 use anyhow::Context;
 use fn_error_context::context;
 
@@ -28,14 +28,14 @@ pub struct BuildQueue {
     config: Arc<Config>,
     storage: Arc<Storage>,
     pub(crate) db: Pool,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
     max_attempts: i32,
 }
 
 impl BuildQueue {
     pub fn new(
         db: Pool,
-        metrics: Arc<Metrics>,
+        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<Storage>,
     ) -> Self {
@@ -204,7 +204,7 @@ impl BuildQueue {
                 to_process.name, to_process.version
             )
         });
-        self.metrics.instance.total_builds.inc();
+        self.metrics.total_builds.inc();
         if let Err(err) =
             cdn::queue_crate_invalidation(&mut transaction, &self.config, &to_process.name)
         {
@@ -225,7 +225,7 @@ impl BuildQueue {
                     .get(0);
 
                 if attempt >= self.max_attempts {
-                    self.metrics.instance.failed_builds.inc();
+                    self.metrics.failed_builds.inc();
                 }
 
                 report_error(&e);
@@ -320,7 +320,7 @@ impl BuildQueue {
                             "{}-{} added into build queue",
                             release.name, release.version
                         );
-                        self.metrics.instance.queued_builds.inc();
+                        self.metrics.queued_builds.inc();
                         crates_added += 1;
                     }
                     Err(err) => report_error(&err),
@@ -600,9 +600,9 @@ mod tests {
             assert!(!called, "there were still items in the queue");
 
             // Ensure metrics were recorded correctly
-            let metrics = env.metrics();
-            assert_eq!(metrics.instance.total_builds.get(), 9);
-            assert_eq!(metrics.instance.failed_builds.get(), 1);
+            let metrics = env.instance_metrics();
+            assert_eq!(metrics.total_builds.get(), 9);
+            assert_eq!(metrics.failed_builds.get(), 1);
 
             // no invalidations were run since we don't have a distribution id configured
             assert!(cdn::queued_or_active_crate_invalidations(&mut *env.db().conn())?.is_empty());

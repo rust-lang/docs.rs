@@ -35,21 +35,6 @@ pub const CDN_INVALIDATION_HISTOGRAM_BUCKETS: &[f64; 11] = &[
     24000.0, // 240
 ];
 
-#[derive(Debug)]
-pub struct Metrics {
-    pub instance: InstanceMetrics,
-    pub service: ServiceMetrics,
-}
-
-impl Metrics {
-    pub fn new() -> Result<Self, prometheus::Error> {
-        Ok(Self {
-            instance: InstanceMetrics::new()?,
-            service: ServiceMetrics::new()?,
-        })
-    }
-}
-
 metrics! {
     pub struct InstanceMetrics {
         /// The number of idle database connections

@@ -1,4 +1,4 @@
-use crate::metrics::Metrics;
+use crate::metrics::InstanceMetrics;
 use crate::Config;
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
@@ -15,12 +15,12 @@ pub struct Pool {
     pool: Arc<std::sync::Mutex<Option<r2d2::Pool<PostgresConnectionManager<NoTls>>>>>,
     #[cfg(not(test))]
     pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
-    metrics: Arc<Metrics>,
+    metrics: Arc<InstanceMetrics>,
     max_size: u32,
 }
 
 impl Pool {
-    pub fn new(config: &Config, metrics: Arc<Metrics>) -> Result<Pool, PoolError> {
+    pub fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Pool, PoolError> {
         debug!(
             "creating database pool (if this hangs, consider running `docker-compose up -d db s3`)"
         );
@@ -30,13 +30,17 @@ impl Pool {
     #[cfg(test)]
     pub(crate) fn new_with_schema(
         config: &Config,
-        metrics: Arc<Metrics>,
+        metrics: Arc<InstanceMetrics>,
         schema: &str,
     ) -> Result<Pool, PoolError> {
         Self::new_inner(config, metrics, schema)
     }
 
-    fn new_inner(config: &Config, metrics: Arc<Metrics>, schema: &str) -> Result<Pool, PoolError> {
+    fn new_inner(
+        config: &Config,
+        metrics: Arc<InstanceMetrics>,
+        schema: &str,
+    ) -> Result<Pool, PoolError> {
         let url = config
             .database_url
             .parse()
@@ -77,7 +81,7 @@ impl Pool {
         match self.with_pool(|p| p.get()) {
             Ok(conn) => Ok(conn),
             Err(err) => {
-                self.metrics.instance.failed_db_connections.inc();
+                self.metrics.failed_db_connections.inc();
                 Err(PoolError::ClientError(err))
             }
         }

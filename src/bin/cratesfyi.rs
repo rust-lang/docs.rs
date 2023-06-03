@@ -16,7 +16,7 @@ use docs_rs::utils::{
 };
 use docs_rs::{
     start_background_metrics_webserver, start_web_server, BuildQueue, Config, Context, Index,
-    Metrics, PackageKind, RustwideBuilder, Storage,
+    InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
 };
 use humantime::Duration;
 use once_cell::sync::OnceCell;
@@ -712,7 +712,8 @@ struct BinContext {
     cdn: OnceCell<Arc<CdnBackend>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
-    metrics: OnceCell<Arc<Metrics>>,
+    service_metrics: OnceCell<Arc<ServiceMetrics>>,
+    instance_metrics: OnceCell<Arc<InstanceMetrics>>,
     index: OnceCell<Arc<Index>>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
     runtime: OnceCell<Arc<Runtime>>,
@@ -726,7 +727,8 @@ impl BinContext {
             cdn: OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
-            metrics: OnceCell::new(),
+            service_metrics: OnceCell::new(),
+            instance_metrics: OnceCell::new(),
             index: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
             runtime: OnceCell::new(),
@@ -753,13 +755,13 @@ impl Context for BinContext {
     lazy! {
         fn build_queue(self) -> BuildQueue = BuildQueue::new(
             self.pool()?,
-            self.metrics()?,
+            self.instance_metrics()?,
             self.config()?,
             self.storage()?,
         );
         fn storage(self) -> Storage = Storage::new(
             self.pool()?,
-            self.metrics()?,
+            self.instance_metrics()?,
             self.config()?,
             self.runtime()?,
         )?;
@@ -768,7 +770,8 @@ impl Context for BinContext {
             &self.runtime()?,
         );
         fn config(self) -> Config = Config::from_env()?;
-        fn metrics(self) -> Metrics = Metrics::new()?;
+        fn service_metrics(self) -> ServiceMetrics = ServiceMetrics::new()?;
+        fn instance_metrics(self) -> InstanceMetrics = InstanceMetrics::new()?;
         fn runtime(self) -> Runtime = {
             Builder::new_multi_thread()
                 .enable_all()
@@ -793,7 +796,9 @@ impl Context for BinContext {
     fn pool(&self) -> Result<Pool> {
         Ok(self
             .pool
-            .get_or_try_init::<_, Error>(|| Ok(Pool::new(&*self.config()?, self.metrics()?)?))?
+            .get_or_try_init::<_, Error>(|| {
+                Ok(Pool::new(&*self.config()?, self.instance_metrics()?)?)
+            })?
             .clone())
     }
 }
