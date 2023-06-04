@@ -70,8 +70,12 @@ impl RustwideBuilder {
             };
             builder = builder.sandbox_image(image);
         }
+
+        let artifact_cache = ArtifactCache::new(config.prefix.join("artifact_cache"))?;
+
         if cfg!(test) {
             builder = builder.fast_init(true);
+            artifact_cache.purge()?;
         }
 
         let workspace = builder.init().map_err(FailureError::compat)?;
@@ -93,7 +97,7 @@ impl RustwideBuilder {
         Ok(RustwideBuilder {
             workspace,
             toolchain,
-            artifact_cache: ArtifactCache::new(config.prefix.join("artifact_cache"))?,
+            artifact_cache,
             config,
             db: context.pool()?,
             storage: context.storage()?,
