@@ -761,7 +761,12 @@ impl RustwideBuilder {
             let old_dir = target_dir.join("doc");
             let new_dir = target_dir.join(target).join("doc");
             debug!("rename {} to {}", old_dir.display(), new_dir.display());
-            std::fs::create_dir(target_dir.join(target))?;
+            {
+                let parent = new_dir.parent().unwrap();
+                if !parent.exists() {
+                    std::fs::create_dir(target_dir.join(target))?;
+                }
+            }
             std::fs::rename(old_dir, new_dir)?;
         }
 
