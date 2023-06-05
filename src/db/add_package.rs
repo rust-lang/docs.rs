@@ -30,7 +30,6 @@ pub(crate) async fn add_package_into_database(
     conn: &mut sqlx::PgConnection,
     metadata_pkg: &MetadataPackage,
     source_dir: &Path,
-    res: &BuildResult,
     default_target: &str,
     source_files: Value,
     doc_targets: Vec<String>,
@@ -56,14 +55,14 @@ pub(crate) async fn add_package_into_database(
             rustdoc_status, test_status, license, repository_url,
             homepage_url, description, description_long, readme,
             keywords, have_examples, downloads, files,
-            doc_targets, is_library, doc_rustc_version,
+            doc_targets, is_library,
             documentation_url, default_target, features,
             repository_id, archive_storage
          )
          VALUES (
             $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,
             $10, $11, $12, $13, $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23, $24, $25, $26,
+            $19, $20, $21, $22, $23, $24, $25
          )
          ON CONFLICT (crate_id, version) DO UPDATE
             SET release_time = $3,
@@ -84,12 +83,11 @@ pub(crate) async fn add_package_into_database(
                 files = $18,
                 doc_targets = $19,
                 is_library = $20,
-                doc_rustc_version = $21,
-                documentation_url = $22,
-                default_target = $23,
-                features = $24,
-                repository_id = $25,
-                archive_storage = $26
+                documentation_url = $21,
+                default_target = $22,
+                features = $23,
+                repository_id = $24,
+                archive_storage = $25
          RETURNING id",
         crate_id,
         &metadata_pkg.version,
@@ -111,7 +109,6 @@ pub(crate) async fn add_package_into_database(
         source_files,
         serde_json::to_value(doc_targets)?,
         is_library,
-        &res.rustc_version,
         metadata_pkg.documentation,
         default_target,
         features as Vec<Feature>,
