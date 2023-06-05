@@ -509,44 +509,54 @@ pub(crate) struct MetaData {
     pub(crate) yanked: bool,
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
-    pub(crate) rustdoc_css_file: String,
+    pub(crate) rustdoc_css_file: Option<String>,
 }
 
 impl MetaData {
+    #[fn_error_context::context("getting metadata for {name} {version}")]
     fn from_crate(
         conn: &mut Client,
         name: &str,
         version: &str,
         version_or_latest: &str,
     ) -> Result<MetaData> {
-        conn.query_opt(
-            "SELECT crates.name,
-                       releases.version,
-                       releases.description,
-                       releases.target_name,
-                       releases.rustdoc_status,
-                       releases.default_target,
-                       releases.doc_targets,
-                       releases.yanked,
-                       releases.doc_rustc_version
-                FROM releases
-                INNER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
+        let row = conn.query_one(
+            "SELECT
+                crates.name,
+                releases.version,
+                releases.description,
+                releases.target_name,
+                releases.rustdoc_status,
+                releases.default_target,
+                releases.doc_targets,
+                releases.yanked,
+                builds.rustc_version
+             FROM releases
+             INNER JOIN crates ON crates.id = releases.crate_id
+             LEFT JOIN LATERAL (
+                 SELECT * FROM builds
+                 WHERE builds.rid = releases.id
+                 ORDER BY builds.build_time
+                 DESC LIMIT 1
+             ) AS builds ON true
+             WHERE crates.name = $1 AND releases.version = $2",
             &[&name, &version],
-        )?
-        .map(|row| MetaData {
-            name: row.get(0),
-            version: row.get(1),
+        )?;
+        Ok(MetaData {
+            name: row.get("name"),
+            version: row.get("version"),
             version_or_latest: version_or_latest.to_string(),
-            description: row.get(2),
-            target_name: row.get(3),
-            rustdoc_status: row.get(4),
-            default_target: row.get(5),
-            doc_targets: MetaData::parse_doc_targets(row.get(6)),
-            yanked: row.get(7),
-            rustdoc_css_file: get_correct_docsrs_style_file(row.get(8)).unwrap(),
+            description: row.get("description"),
+            target_name: row.get("target_name"),
+            rustdoc_status: row.get("rustdoc_status"),
+            default_target: row.get("default_target"),
+            doc_targets: MetaData::parse_doc_targets(row.get("doc_targets")),
+            yanked: row.get("yanked"),
+            rustdoc_css_file: row
+                .get::<_, Option<&str>>("rustc_version")
+                .map(get_correct_docsrs_style_file)
+                .transpose()?,
         })
-        .ok_or_else(|| anyhow!("missing metadata for {} {}", name, version))
     }
 
     fn parse_doc_targets(targets: Value) -> Vec<String> {
@@ -938,7 +948,7 @@ mod test {
                 "arm64-unknown-linux-gnu".to_string(),
             ],
             yanked: false,
-            rustdoc_css_file: "rustdoc.css".to_string(),
+            rustdoc_css_file: Some("rustdoc.css".to_string()),
         };
 
         let correct_json = json!({
@@ -1016,7 +1026,7 @@ mod test {
                     default_target: "x86_64-unknown-linux-gnu".to_string(),
                     doc_targets: vec![],
                     yanked: false,
-                    rustdoc_css_file: "rustdoc.css".to_string(),
+                    rustdoc_css_file: Some("rustdoc.css".to_string()),
                 },
             );
             Ok(())

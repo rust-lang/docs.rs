@@ -136,7 +136,7 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
-                releases.doc_rustc_version,
+                builds.rustc_version,
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
@@ -188,7 +188,10 @@ impl CrateDetails {
             default_target: krate.get("default_target"),
             doc_targets: MetaData::parse_doc_targets(krate.get("doc_targets")),
             yanked: krate.get("yanked"),
-            rustdoc_css_file: get_correct_docsrs_style_file(krate.get("doc_rustc_version"))?,
+            rustdoc_css_file: krate
+                .get::<_, Option<&str>>("rustc_version")
+                .map(get_correct_docsrs_style_file)
+                .transpose()?,
         };
 
         let mut crate_details = CrateDetails {

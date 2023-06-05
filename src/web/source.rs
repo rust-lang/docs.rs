@@ -2,7 +2,7 @@ use super::{error::AxumResult, match_version_axum};
 use crate::{
     db::Pool,
     impl_axum_webpage,
-    utils::{get_correct_docsrs_style_file, spawn_blocking},
+    utils::spawn_blocking,
     web::{
         cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
         MatchSemver, MetaData,
@@ -75,29 +75,18 @@ impl FileList {
         version_or_latest: &str,
         folder: &str,
     ) -> Result<Option<FileList>> {
-        let row = match conn.query_opt(
-            "SELECT crates.name,
-                        releases.version,
-                        releases.description,
-                        releases.target_name,
-                        releases.rustdoc_status,
-                        releases.files,
-                        releases.default_target,
-                        releases.doc_targets,
-                        releases.yanked,
-                        releases.doc_rustc_version
-                FROM releases
-                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
+        let Some(row) = conn.query_opt(
+            "SELECT releases.files
+             FROM releases
+             LEFT OUTER JOIN crates ON crates.id = releases.crate_id
+             WHERE crates.name = $1 AND releases.version = $2",
             &[&name, &version],
-        )? {
-            Some(row) => row,
-            None => return Ok(None),
+        )?
+        else {
+            return Ok(None);
         };
 
-        let files = if let Some(files) = row.try_get::<_, Option<Value>>(5)? {
-            files
-        } else {
+        let Some(files) = row.try_get::<_, Option<Value>>("files")? else {
             return Ok(None);
         };
 
@@ -143,18 +132,7 @@ impl FileList {
             });
 
             Ok(Some(FileList {
-                metadata: MetaData {
-                    name: row.get(0),
-                    version: row.get(1),
-                    version_or_latest: version_or_latest.to_string(),
-                    description: row.get(2),
-                    target_name: row.get(3),
-                    rustdoc_status: row.get(4),
-                    default_target: row.get(6),
-                    doc_targets: MetaData::parse_doc_targets(row.get(7)),
-                    yanked: row.get(8),
-                    rustdoc_css_file: get_correct_docsrs_style_file(row.get(9))?,
-                },
+                metadata: MetaData::from_crate(conn, name, version, version_or_latest)?,
                 files: file_list,
             }))
         } else {
