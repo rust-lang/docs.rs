@@ -624,18 +624,19 @@ pub(crate) struct MetaData {
     pub(crate) yanked: bool,
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
-    pub(crate) rustdoc_css_file: String,
+    pub(crate) rustdoc_css_file: Option<String>,
 }
 
 impl MetaData {
+    #[fn_error_context::context("getting metadata for {name} {version}")]
     async fn from_crate(
         conn: &mut sqlx::PgConnection,
         name: &str,
         version: &Version,
         req_version: Option<ReqVersion>,
     ) -> Result<MetaData> {
-        sqlx::query!(
-            "SELECT
+        let row = sqlx::query!(
+            r#"SELECT
                 crates.name,
                 releases.version,
                 releases.description,
@@ -644,17 +645,24 @@ impl MetaData {
                 releases.default_target,
                 releases.doc_targets,
                 releases.yanked,
-                releases.doc_rustc_version
+                builds.rustc_version as "rustc_version?"
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
-            WHERE crates.name = $1 AND releases.version = $2",
+            LEFT JOIN LATERAL (
+                SELECT * FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time
+                DESC LIMIT 1
+            ) AS builds ON true
+            WHERE crates.name = $1 AND releases.version = $2"#,
             name,
             version.to_string(),
         )
-        .fetch_optional(&mut *conn)
+        .fetch_one(&mut *conn)
         .await
-        .context("error fetching crate metadata")?
-        .map(|row| MetaData {
+        .context("error fetching crate metadata")?;
+
+        Ok(MetaData {
             name: row.name,
             version: version.clone(),
             req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
@@ -664,9 +672,13 @@ impl MetaData {
             default_target: row.default_target,
             doc_targets: MetaData::parse_doc_targets(row.doc_targets),
             yanked: row.yanked,
-            rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version).unwrap(),
+            // rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version).unwrap(),
+            rustdoc_css_file: row
+                .rustc_version
+                .as_deref()
+                .map(get_correct_docsrs_style_file)
+                .transpose()?,
         })
-        .ok_or_else(|| anyhow!("missing metadata for {} {}", name, version))
     }
 
     fn parse_doc_targets(targets: Value) -> Vec<String> {
@@ -1072,7 +1084,7 @@ mod test {
                 "arm64-unknown-linux-gnu".to_string(),
             ],
             yanked: false,
-            rustdoc_css_file: "rustdoc.css".to_string(),
+            rustdoc_css_file: Some("rustdoc.css".to_string()),
         };
 
         let correct_json = json!({
@@ -1156,7 +1168,7 @@ mod test {
                     default_target: "x86_64-unknown-linux-gnu".to_string(),
                     doc_targets: vec![],
                     yanked: false,
-                    rustdoc_css_file: "rustdoc.css".to_string(),
+                    rustdoc_css_file: Some("rustdoc.css".to_string()),
                 },
             );
             Ok(())

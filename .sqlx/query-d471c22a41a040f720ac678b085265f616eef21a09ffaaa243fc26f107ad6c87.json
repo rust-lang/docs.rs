@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT crates.name,\n                    releases.version,\n                    releases.description,\n                    releases.target_name,\n                    releases.rustdoc_status,\n                    releases.files,\n                    releases.default_target,\n                    releases.doc_targets,\n                    releases.yanked,\n                    releases.doc_rustc_version\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            WHERE crates.name = $1 AND releases.version = $2",
+  "query": "SELECT\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.target_name,\n                releases.rustdoc_status,\n                releases.default_target,\n                releases.doc_targets,\n                releases.yanked,\n                builds.rustc_version as \"rustc_version?\"\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            LEFT JOIN LATERAL (\n                SELECT * FROM builds\n                WHERE builds.rid = releases.id\n                ORDER BY builds.build_time\n                DESC LIMIT 1\n            ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2",
   "describe": {
     "columns": [
       {
@@ -30,27 +30,22 @@
       },
       {
         "ordinal": 5,
-        "name": "files",
-        "type_info": "Json"
-      },
-      {
-        "ordinal": 6,
         "name": "default_target",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "doc_targets",
         "type_info": "Json"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "yanked",
         "type_info": "Bool"
       },
       {
-        "ordinal": 9,
-        "name": "doc_rustc_version",
+        "ordinal": 8,
+        "name": "rustc_version?",
         "type_info": "Varchar"
       }
     ],
@@ -66,12 +61,11 @@
       true,
       false,
       false,
-      true,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "9f1181d51fde9d63ffafbf397e5a5af66cdd3764872cd5a3a401ffd5ca075de8"
+  "hash": "d471c22a41a040f720ac678b085265f616eef21a09ffaaa243fc26f107ad6c87"
 }
