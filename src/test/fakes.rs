@@ -477,7 +477,6 @@ impl<'a> FakeRelease<'a> {
             &mut async_conn,
             &package,
             crate_dir,
-            last_build_result,
             default_target,
             source_meta,
             self.doc_targets,
