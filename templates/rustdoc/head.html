@@ -1,5 +1,7 @@
 {%- import "macros.html" as macros -%}
+        {% if metadata.rustdoc_css_file %}
         <link rel="stylesheet" href="/-/static/{{metadata.rustdoc_css_file}}?{{ docsrs_version() | slugify }}" media="all" />
+        {% endif %}
 
         <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 

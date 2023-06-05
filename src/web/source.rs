@@ -3,7 +3,6 @@ use crate::{
     db::Pool,
     impl_axum_webpage,
     storage::PathNotFoundError,
-    utils::get_correct_docsrs_style_file,
     web::{
         cache::CachePolicy, error::AxumNope, extractors::Path, file::File as DbFile,
         headers::CanonicalUrl, MetaData, ReqVersion,
@@ -76,16 +75,7 @@ impl FileList {
         folder: &str,
     ) -> Result<Option<FileList>> {
         let row = match sqlx::query!(
-            "SELECT crates.name,
-                    releases.version,
-                    releases.description,
-                    releases.target_name,
-                    releases.rustdoc_status,
-                    releases.files,
-                    releases.default_target,
-                    releases.doc_targets,
-                    releases.yanked,
-                    releases.doc_rustc_version
+            "SELECT releases.files
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
             WHERE crates.name = $1 AND releases.version = $2",
@@ -147,18 +137,7 @@ impl FileList {
             });
 
             Ok(Some(FileList {
-                metadata: MetaData {
-                    name: row.name,
-                    version: version.clone(),
-                    req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
-                    description: row.description,
-                    target_name: Some(row.target_name),
-                    rustdoc_status: row.rustdoc_status,
-                    default_target: row.default_target,
-                    doc_targets: MetaData::parse_doc_targets(row.doc_targets),
-                    yanked: row.yanked,
-                    rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version)?,
-                },
+                metadata: MetaData::from_crate(conn, name, version, req_version).await?,
                 files: file_list,
             }))
         } else {
