@@ -248,6 +248,31 @@ mod tests {
     }
 
     #[test]
+    fn build_empty_list() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .no_builds()
+                .create()?;
+
+            let response = env.frontend().get("/crate/foo/0.1.0/builds").send()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            let page = kuchikiki::parse_html().one(response.text()?);
+
+            let rows: Vec<_> = page
+                .select("ul > li a.release")
+                .unwrap()
+                .map(|row| row.text_contents())
+                .collect();
+
+            assert!(rows.is_empty());
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn limits() {
         wrapper(|env| {
             env.fake_release().name("foo").version("0.1.0").create()?;
