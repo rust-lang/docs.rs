@@ -268,6 +268,15 @@ mod tests {
 
             assert!(rows.is_empty());
 
+            let warning = page
+                .select_first(".warning")
+                .expect("missing warning element")
+                .text_contents();
+
+            assert!(warning.contains("has not built"));
+            assert!(warning.contains("queued"));
+            assert!(warning.contains("open an issue"));
+
             Ok(())
         });
     }
