@@ -1,0 +1,1 @@
+-- no up-migration, we only have a down-migration as validation

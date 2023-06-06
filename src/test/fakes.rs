@@ -22,7 +22,7 @@ pub(crate) struct FakeRelease<'a> {
     storage: Arc<AsyncStorage>,
     runtime: Arc<Runtime>,
     package: MetadataPackage,
-    builds: Vec<FakeBuild>,
+    builds: Option<Vec<FakeBuild>>,
     /// name, content
     source_files: Vec<(&'a str, &'a [u8])>,
     /// name, content
@@ -90,7 +90,7 @@ impl<'a> FakeRelease<'a> {
                 .cloned()
                 .collect::<HashMap<String, Vec<String>>>(),
             },
-            builds: vec![],
+            builds: None,
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
             doc_targets: Vec::new(),
@@ -147,20 +147,31 @@ impl<'a> FakeRelease<'a> {
     // TODO: How should `has_docs` actually be handled?
     pub(crate) fn build_result_failed(self) -> Self {
         assert!(
-            self.builds.is_empty(),
+            self.builds.is_none(),
             "cannot use custom builds with build_result_failed"
         );
         Self {
             has_docs: false,
-            builds: vec![FakeBuild::default().successful(false)],
+            builds: Some(vec![FakeBuild::default().successful(false)]),
             ..self
         }
     }
 
     pub(crate) fn builds(self, builds: Vec<FakeBuild>) -> Self {
-        assert!(self.builds.is_empty());
+        assert!(self.builds.is_none());
         assert!(!builds.is_empty());
-        Self { builds, ..self }
+        Self {
+            builds: Some(builds),
+            ..self
+        }
+    }
+
+    pub(crate) fn no_builds(self) -> Self {
+        assert!(self.builds.is_none());
+        Self {
+            builds: Some(vec![]),
+            ..self
+        }
     }
 
     pub(crate) fn yanked(mut self, new: bool) -> Self {
@@ -281,7 +292,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     /// Returns the release_id
-    pub(crate) async fn create_async(mut self) -> Result<i32> {
+    pub(crate) async fn create_async(self) -> Result<i32> {
         use std::fs;
         use std::path::Path;
 
@@ -417,12 +428,9 @@ impl<'a> FakeRelease<'a> {
         debug!("added source files {}", source_meta);
 
         // If the test didn't add custom builds, inject a default one
-        if self.builds.is_empty() {
-            self.builds.push(FakeBuild::default());
-        }
-        let last_build_result = &self.builds.last().unwrap().result;
+        let builds = self.builds.unwrap_or_else(|| vec![FakeBuild::default()]);
 
-        if last_build_result.successful {
+        if builds.last().map(|b| b.result.successful).unwrap_or(false) {
             let index = [&package.name, "index.html"].join("/");
             if package.is_library() && !rustdoc_files.iter().any(|(path, _)| path == &index) {
                 rustdoc_files.push((&index, DEFAULT_CONTENT));
@@ -494,7 +502,7 @@ impl<'a> FakeRelease<'a> {
             &self.registry_crate_data,
         )
         .await?;
-        for build in &self.builds {
+        for build in builds {
             build
                 .create(&mut async_conn, &storage, release_id, default_target)
                 .await?;
