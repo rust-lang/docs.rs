@@ -13,6 +13,7 @@ use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, InstanceMetrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
+use fn_error_context::context;
 use path_slash::PathExt;
 use postgres::fallible_iterator::FallibleIterator;
 use std::io::BufReader;
@@ -201,6 +202,7 @@ impl Storage {
         })
     }
 
+    #[context("fetching {path} from {name} {version} (archive: {archive_storage})")]
     pub(crate) fn fetch_source_file(
         &self,
         name: &str,
