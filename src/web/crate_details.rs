@@ -9,8 +9,9 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
     },
+    Storage,
 };
-use anyhow::anyhow;
+use anyhow::{bail, Context, Result};
 use axum::{
     extract::{Extension, Path},
     response::{IntoResponse, Response as AxumResponse},
@@ -89,6 +90,34 @@ pub struct Release {
     pub is_library: bool,
     pub rustdoc_status: bool,
     pub target_name: String,
+}
+
+#[fn_error_context::context("fetching readme for {name} {version}")]
+fn fetch_readme_from_source(
+    storage: &Storage,
+    name: &str,
+    version: &str,
+    archive_storage: bool,
+) -> anyhow::Result<String> {
+    let manifest = storage.fetch_source_file(name, version, "Cargo.toml", archive_storage)?;
+    let manifest = String::from_utf8(manifest.content)
+        .context("parsing Cargo.toml")?
+        .parse::<toml::Value>()
+        .context("parsing Cargo.toml")?;
+    let paths = match manifest.get("package").and_then(|p| p.get("readme")) {
+        Some(toml::Value::Boolean(true)) => vec!["README.md"],
+        Some(toml::Value::Boolean(false)) => vec![],
+        Some(toml::Value::String(path)) => vec![path.as_ref()],
+        _ => vec!["README.md", "README.txt", "README"],
+    };
+    for path in &paths {
+        if let Ok(readme) = storage.fetch_source_file(name, version, path, archive_storage) {
+            let readme = String::from_utf8(readme.content)
+                .with_context(|| format!("parsing {path} content"))?;
+            return Ok(readme);
+        }
+    }
+    bail!("couldn't find readme in stored source, checked {paths:?}")
 }
 
 impl CrateDetails {
@@ -237,6 +266,13 @@ impl CrateDetails {
         Ok(Some(crate_details))
     }
 
+    fn enrich_readme(&mut self, storage: &Storage) -> Result<()> {
+        let readme =
+            fetch_readme_from_source(storage, &self.name, &self.version, self.archive_storage)?;
+        self.readme = Some(readme);
+        Ok(())
+    }
+
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
     /// yanked/prereleased if that is all that exist).
     pub fn latest_release(&self) -> &Release {
@@ -270,7 +306,9 @@ pub(crate) fn releases_for_crate(
         .into_iter()
         .filter_map(|row| {
             let version: String = row.get("version");
-            match semver::Version::parse(&version) {
+            match semver::Version::parse(&version).with_context(|| {
+                format!("invalid semver in database for crate {crate_id}: {version}")
+            }) {
                 Ok(semversion) => Some(Release {
                     id: row.get("id"),
                     version: semversion,
@@ -281,9 +319,7 @@ pub(crate) fn releases_for_crate(
                     target_name: row.get("target_name"),
                 }),
                 Err(err) => {
-                    report_error(&anyhow!(err).context(format!(
-                        "invalid semver in database for crate {crate_id}: {version}"
-                    )));
+                    report_error(&err);
                     None
                 }
             }
@@ -310,9 +346,10 @@ pub(crate) struct CrateDetailHandlerParams {
     version: Option<String>,
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(pool, storage))]
 pub(crate) async fn crate_details_handler(
     Path(params): Path<CrateDetailHandlerParams>,
+    Extension(storage): Extension<Arc<Storage>>,
     Extension(pool): Extension<Pool>,
     Extension(repository_stats_updater): Extension<Arc<RepositoryStatsUpdater>>,
 ) -> AxumResult<AxumResponse> {
@@ -352,13 +389,19 @@ pub(crate) async fn crate_details_handler(
 
     let details = spawn_blocking(move || {
         let mut conn = pool.get()?;
-        CrateDetails::new(
+        let mut details = CrateDetails::new(
             &mut *conn,
             &params.name,
             &version,
             &version_or_latest,
             Some(&repository_stats_updater),
-        )
+        )?;
+        if let Some(ref mut details) = details {
+            if let Err(e) = details.enrich_readme(&storage) {
+                tracing::debug!("{e:?}")
+            }
+        }
+        Ok(details)
     })
     .await?
     .ok_or(AxumNope::VersionNotFound)?;
@@ -1107,6 +1150,51 @@ mod tests {
                 .url()
                 .as_str()
                 .ends_with("/crate/aquarelle/latest/builds.json"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn readme() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .readme_only_database("database readme")
+                .create()?;
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.2.0")
+                .readme_only_database("database readme")
+                .source_file("README.md", b"storage readme")
+                .create()?;
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.3.0")
+                .source_file("README.md", b"storage readme")
+                .create()?;
+
+            env.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .readme_only_database("database readme")
+                .source_file("MEREAD", b"storage meread")
+                .source_file("Cargo.toml", br#"package.readme = "MEREAD""#)
+                .create()?;
+
+            let check_readme = |path, content| {
+                let resp = env.frontend().get(path).send().unwrap();
+                let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+                assert!(body.contains(content));
+            };
+
+            check_readme("/crate/dummy/0.1.0", "database readme");
+            check_readme("/crate/dummy/0.2.0", "storage readme");
+            check_readme("/crate/dummy/0.3.0", "storage readme");
+            check_readme("/crate/dummy/0.4.0", "storage meread");
 
             Ok(())
         });

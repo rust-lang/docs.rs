@@ -619,6 +619,7 @@ mod tests {
             env.fake_release()
                 .name("fake")
                 .version("0.1.0")
+                .source_file("Cargo.toml", b"")
                 .source_file("config.json", b"{}")
                 .create()?;
 
@@ -637,7 +638,10 @@ mod tests {
             assert!(text.starts_with(r#"<!DOCTYPE html>"#));
 
             // file list doesn't show "../"
-            assert_eq!(get_file_list_links(&text), vec!["./config.json"]);
+            assert_eq!(
+                get_file_list_links(&text),
+                vec!["./Cargo.toml", "./config.json"]
+            );
 
             Ok(())
         });
@@ -649,6 +653,7 @@ mod tests {
             env.fake_release()
                 .name("fake")
                 .version("0.1.0")
+                .source_file("Cargo.toml", b"some_random_content")
                 .source_file("folder1/some_filename.rs", b"some_random_content")
                 .source_file("folder2/another_filename.rs", b"some_random_content")
                 .source_file("root_filename.rs", b"some_random_content")
@@ -665,7 +670,12 @@ mod tests {
 
             assert_eq!(
                 get_file_list_links(&response.text()?),
-                vec!["./folder1/", "./folder2/", "./root_filename.rs"]
+                vec![
+                    "./folder1/",
+                    "./folder2/",
+                    "./Cargo.toml",
+                    "./root_filename.rs"
+                ]
             );
             Ok(())
         });

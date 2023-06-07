@@ -214,6 +214,12 @@ impl<'a> FakeRelease<'a> {
         self.source_file("README.md", content.as_bytes())
     }
 
+    /// NOTE: this should be markdown. It will be rendered as HTML when served.
+    pub(crate) fn readme_only_database(mut self, content: &'a str) -> Self {
+        self.readme = Some(content);
+        self
+    }
+
     pub(crate) fn add_owner(mut self, owner: CrateOwner) -> Self {
         self.registry_crate_data.owners.push(owner);
         self
@@ -347,6 +353,23 @@ impl<'a> FakeRelease<'a> {
         debug!("before upload source");
         let source_tmp = create_temp_dir();
         store_files_into(&self.source_files, source_tmp.path())?;
+
+        if !self
+            .source_files
+            .iter()
+            .any(|&(path, _)| path == "Cargo.toml")
+        {
+            let MetadataPackage { name, version, .. } = &package;
+            let content = format!(
+                r#"
+                [package]
+                name = "{name}"
+                version = "{version}"
+            "#
+            );
+            store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
+        }
+
         let (source_meta, algs) = upload_files(FileKind::Sources, source_tmp.path())?;
         debug!("added source files {}", source_meta);
 
