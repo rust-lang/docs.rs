@@ -177,6 +177,10 @@ mod tests {
                 "/crate/rcc/0.0.0/builds.json",
                 "/crate/:name/:version/builds.json",
             ),
+            (
+                "/crate/rcc/0.0.0/status.json",
+                "/crate/:name/:version/status.json",
+            ),
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
             ("/-/static/keyboard.js", "static resource"),
