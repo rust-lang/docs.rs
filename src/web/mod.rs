@@ -27,6 +27,7 @@ mod rustdoc;
 mod sitemap;
 mod source;
 mod statics;
+mod status;
 
 use crate::{db::Pool, impl_axum_webpage, Context};
 use anyhow::Error;
@@ -114,6 +115,14 @@ impl MatchSemver {
             | MatchSemver::Semver((v, i))
             | MatchSemver::Latest((v, i)) => (v, i),
         }
+    }
+
+    /// If the matched version was an exact match to a semver version, returns the
+    /// version string and id for the query. If the lookup required a semver match, returns
+    /// `VersionNotFound`.
+    fn assume_exact(self) -> Result<(String, i32), AxumNope> {
+        let MatchSemver::Exact(details) = self else { return Err(AxumNope::VersionNotFound) };
+        Ok(details)
     }
 }
 
