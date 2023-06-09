@@ -173,13 +173,17 @@ mod tests {
             ("/", "/"),
             ("/crate/hexponent/0.2.0", "/crate/:name/:version"),
             ("/crate/rcc/0.0.0", "/crate/:name/:version"),
+            (
+                "/crate/rcc/0.0.0/builds.json",
+                "/crate/:name/:version/builds.json",
+            ),
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
             ("/-/static/keyboard.js", "static resource"),
             ("/-/static/source.js", "static resource"),
             ("/-/static/opensearch.xml", "static resource"),
             ("/releases", "/releases"),
-            ("/releases/feed", "static resource"),
+            ("/releases/feed", "/releases/feed"),
             ("/releases/queue", "/releases/queue"),
             ("/releases/recent-failures", "/releases/recent-failures"),
             (

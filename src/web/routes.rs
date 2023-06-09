@@ -190,7 +190,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         )
         .route_with_tsr(
             "/releases/feed",
-            get_static(super::releases::releases_feed_handler),
+            get_internal(super::releases::releases_feed_handler),
         )
         .route_with_tsr(
             "/releases/:owner",
@@ -218,7 +218,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         )
         .route(
             "/crate/:name/:version/builds.json",
-            get_static(super::builds::build_list_json_handler),
+            get_internal(super::builds::build_list_json_handler),
         )
         .route_with_tsr(
             "/crate/:name/:version/builds/:id",
