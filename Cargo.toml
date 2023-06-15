@@ -34,7 +34,7 @@ clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "0.19", optional = true }
 rayon = "1.6.1"
 num_cpus = "1.15.0"
-crates-index-diff = { version = "17.0.0", features = [ "max-performance" ]}
+crates-index-diff = { version = "19.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
@@ -134,7 +134,7 @@ indoc = "2.0.0"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.44.1", default-features = false }
+gix = { version = "0.47.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
