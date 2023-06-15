@@ -1,0 +1,22 @@
+{
+    "extends": [
+        "config:base",
+        ":pinAllExceptPeerDependencies",
+        ":dependencyDashboard",
+        ":maintainLockFilesWeekly",
+        ":prConcurrentLimitNone",
+        ":prHourlyLimitNone",
+        ":semanticCommitsDisabled",
+    ],
+    "rust": {
+        "labels": ["A-backend"],
+    },
+    "packageRules": [
+        {
+            "matchLanguages": ["rust"],
+            "matchUpdateTypes": ["lockFileMaintenance"],
+            "additionalBranchPrefix": "rust-",
+            "commitMessageSuffix": "(Rust)",
+        }
+    ],
+}
