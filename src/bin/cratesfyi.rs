@@ -15,8 +15,8 @@ use docs_rs::utils::{
     remove_crate_priority, set_crate_priority, ConfigName,
 };
 use docs_rs::{
-    start_background_metrics_webserver, start_web_server, BuildQueue, Config, Context, Index,
-    InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
+    migrate_old_archive_indexes, start_background_metrics_webserver, start_web_server, BuildQueue,
+    Config, Context, Index, InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
 };
 use humantime::Duration;
 use once_cell::sync::OnceCell;
@@ -482,6 +482,9 @@ enum DatabaseSubcommand {
     /// Backfill GitHub/Gitlab stats for crates.
     BackfillRepositoryStats,
 
+    /// migrate the old CBOR archive index files to SQLIte
+    MigrateArchiveIndex,
+
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
@@ -531,6 +534,10 @@ impl DatabaseSubcommand {
 
             Self::UpdateRepositoryFields => {
                 ctx.repository_stats_updater()?.update_all_crates()?;
+            }
+
+            Self::MigrateArchiveIndex => {
+                migrate_old_archive_indexes(&*ctx.storage()?, &mut *ctx.conn()?)?;
             }
 
             Self::BackfillRepositoryStats => {

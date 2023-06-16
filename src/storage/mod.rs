@@ -11,9 +11,10 @@ use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, InstanceMetrics};
-use anyhow::{anyhow, ensure};
+use anyhow::{anyhow, ensure, Context as _};
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
+use postgres::fallible_iterator::FallibleIterator;
 use std::io::BufReader;
 use std::num::NonZeroU64;
 use std::{
@@ -21,12 +22,13 @@ use std::{
     ffi::OsStr,
     fmt, fs,
     io::{self, Write},
+    iter,
     ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::runtime::Runtime;
-use tracing::{instrument, trace};
+use tracing::{info, instrument, trace};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -283,7 +285,7 @@ impl Storage {
         Ok(blob)
     }
 
-    fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
+    pub(super) fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
         let remote_index_path = format!("{archive_path}.index");
         let local_index_path = self
@@ -583,6 +585,69 @@ pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
 
 pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
     format!("sources/{name}/{version}.zip")
+}
+
+#[instrument(skip(storage))]
+fn migrate_one(storage: &Storage, archive_path: &str) -> Result<()> {
+    // this will also download the index if it doesn't exist locally
+    let local_index_filename = storage.get_index_filename(archive_path)?;
+
+    if archive_index::is_sqlite_file(&local_index_filename)? {
+        info!("index already in SQLite format, skipping");
+        return Ok(());
+    }
+
+    info!("converting local index...");
+    let remote_index_path = format!("{}.index", &archive_path);
+    let new_index_temp_path = archive_index::convert_to_sqlite_index(&local_index_filename)?;
+
+    // first upload to S3, ongoing requests will still use the local CBOR index
+    info!("uplading to S3...");
+    // S3 put-object will overwrite the existing index
+    storage.store_one(remote_index_path, std::fs::read(&new_index_temp_path)?)?;
+
+    // move the temporary file into place
+    // This has a race condition when a request is trying to read the index between
+    // the `remove_file` and the `rename`. In this case the handler will then just
+    // unnecessarily download the index again.
+    fs::remove_file(&local_index_filename)?;
+    fs::rename(new_index_temp_path, local_index_filename)?;
+
+    Ok(())
+}
+
+/// migrate existing archive indexes from the old CBOR format to SQLite
+pub fn migrate_old_archive_indexes(
+    storage: &Storage,
+    conn: &mut impl postgres::GenericClient,
+) -> Result<()> {
+    for row in conn
+        .query_raw(
+            "
+            SELECT 
+                crates.name,
+                releases.version
+            FROM 
+                crates
+                INNER JOIN releases ON releases.crate_id = crates.id
+            WHERE 
+                releases.archive_storage = true
+            ",
+            iter::empty::<String>(),
+        )?
+        .iterator()
+    {
+        let row = row?;
+        let name: &str = row.get(0);
+        let version: &str = row.get(1);
+        info!("converting archive index for {} {}...", name, version);
+
+        migrate_one(storage, &rustdoc_archive_path(name, version))
+            .context("error converting rustdoc archive index")?;
+        migrate_one(storage, &source_archive_path(name, version))
+            .context("error converting source archive index")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

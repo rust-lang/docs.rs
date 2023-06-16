@@ -1,18 +1,20 @@
 use crate::error::Result;
 use crate::storage::{compression::CompressionAlgorithm, FileRange};
-use anyhow::{bail, Context as _};
+use anyhow::Context as _;
 use memmap2::MmapOptions;
 use rusqlite::{Connection, OptionalExtension};
 use serde::de::DeserializeSeed;
 use serde::de::{IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::io::BufReader;
 use std::{collections::HashMap, fmt, fs, fs::File, io, io::Read, path::Path};
+use tempfile::TempPath;
 
 use super::sqlite_pool::SqliteConnectionPool;
 
 static SQLITE_FILE_HEADER: &[u8] = b"SQLite format 3\0";
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub(crate) struct FileInfo {
     range: FileRange,
     compression: CompressionAlgorithm,
@@ -27,9 +29,75 @@ impl FileInfo {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct Index {
     files: HashMap<String, FileInfo>,
+}
+
+impl Index {
+    pub(crate) fn write_sqlite<P: AsRef<Path>>(&self, destination: P) -> Result<()> {
+        let destination = destination.as_ref();
+        if destination.exists() {
+            fs::remove_file(destination)?;
+        }
+
+        let conn = rusqlite::Connection::open(destination)?;
+        conn.execute("PRAGMA synchronous = FULL", ())?;
+        conn.execute("BEGIN", ())?;
+        conn.execute(
+            "
+            CREATE TABLE files (
+                id INTEGER PRIMARY KEY,
+                path TEXT UNIQUE,
+                start INTEGER,
+                end INTEGER,
+                compression INTEGER
+            );
+            ",
+            (),
+        )?;
+
+        for (name, info) in self.files.iter() {
+            conn.execute(
+                "INSERT INTO files (path, start, end, compression) VALUES (?, ?, ?, ?)",
+                (
+                    name,
+                    info.range.start(),
+                    info.range.end(),
+                    info.compression as i32,
+                ),
+            )?;
+        }
+
+        conn.execute("CREATE INDEX idx_files_path ON files (path);", ())?;
+        conn.execute("END", ())?;
+        conn.execute("VACUUM", ())?;
+        Ok(())
+    }
+
+    pub(crate) fn from_zip<R: io::Read + io::Seek>(zipfile: &mut R) -> Result<Self> {
+        let mut archive = zip::ZipArchive::new(zipfile)?;
+
+        let mut index = Index {
+            files: HashMap::with_capacity(archive.len()),
+        };
+
+        for i in 0..archive.len() {
+            let zf = archive.by_index(i)?;
+
+            index.files.insert(
+                zf.name().to_owned(),
+                FileInfo {
+                    range: FileRange::new(
+                        zf.data_start(),
+                        zf.data_start() + zf.compressed_size() - 1,
+                    ),
+                    compression: CompressionAlgorithm::Bzip2,
+                },
+            );
+        }
+        Ok(index)
+    }
 }
 
 /// create an archive index based on a zipfile.
@@ -39,51 +107,9 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
     zipfile: &mut R,
     destination: P,
 ) -> Result<()> {
-    if destination.as_ref().exists() {
-        fs::remove_file(&destination)?;
-    }
-
-    let mut archive = zip::ZipArchive::new(zipfile)?;
-
-    let conn = rusqlite::Connection::open(&destination)?;
-    conn.execute("PRAGMA synchronous = FULL", ())?;
-    conn.execute("BEGIN", ())?;
-    conn.execute(
-        "
-        CREATE TABLE files (
-            id INTEGER PRIMARY KEY,
-            path TEXT UNIQUE,
-            start INTEGER,
-            end INTEGER,
-            compression INTEGER
-        );
-        ",
-        (),
-    )?;
-
-    for i in 0..archive.len() {
-        let zf = archive.by_index(i)?;
-
-        let compression_bzip = CompressionAlgorithm::Bzip2 as i32;
-
-        conn.execute(
-            "INSERT INTO files (path, start, end, compression) VALUES (?, ?, ?, ?)",
-            (
-                zf.name(),
-                zf.data_start(),
-                zf.data_start() + zf.compressed_size() - 1,
-                match zf.compression() {
-                    zip::CompressionMethod::Bzip2 => compression_bzip,
-                    c => bail!("unsupported compression algorithm {} in zip-file", c),
-                },
-            ),
-        )?;
-    }
-
-    conn.execute("CREATE INDEX idx_files_path ON files (path);", ())?;
-    conn.execute("END", ())?;
-    conn.execute("VACUUM", ())?;
-
+    Index::from_zip(zipfile)?
+        .write_sqlite(&destination)
+        .context("error writing SQLite index")?;
     Ok(())
 }
 
@@ -227,7 +253,7 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
 /// > OFFSET   SIZE    DESCRIPTION
 /// >    0      16     Header string: "SQLite format 3\000"
 /// > [...]
-fn is_sqlite_file<P: AsRef<Path>>(archive_index_path: P) -> Result<bool> {
+pub(crate) fn is_sqlite_file<P: AsRef<Path>>(archive_index_path: P) -> Result<bool> {
     let mut f = File::open(archive_index_path)?;
 
     let mut buffer = [0; 16];
@@ -259,6 +285,20 @@ pub(crate) fn find_in_file<P: AsRef<Path>>(
     }
 }
 
+pub(crate) fn convert_to_sqlite_index<P: AsRef<Path>>(path: P) -> Result<TempPath> {
+    let path = path.as_ref();
+    let index: Index = { serde_cbor::from_reader(BufReader::new(File::open(path)?))? };
+
+    // write the new index into a temporary file so reads from ongoing requests
+    // can continue on the old index until the new one is fully written.
+    let tmp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+    index
+        .write_sqlite(&tmp_path)
+        .context("error writing SQLite index")?;
+
+    Ok(tmp_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,29 +310,7 @@ mod tests {
         zipfile: &mut R,
         writer: &mut W,
     ) -> Result<()> {
-        let mut archive = zip::ZipArchive::new(zipfile)?;
-
-        // get file locations
-        let mut files: HashMap<String, FileInfo> = HashMap::with_capacity(archive.len());
-        for i in 0..archive.len() {
-            let zf = archive.by_index(i)?;
-
-            files.insert(
-                zf.name().to_string(),
-                FileInfo {
-                    range: FileRange::new(
-                        zf.data_start(),
-                        zf.data_start() + zf.compressed_size() - 1,
-                    ),
-                    compression: match zf.compression() {
-                        zip::CompressionMethod::Bzip2 => CompressionAlgorithm::Bzip2,
-                        c => bail!("unsupported compression algorithm {} in zip-file", c),
-                    },
-                },
-            );
-        }
-
-        serde_cbor::to_writer(writer, &Index { files }).context("serialization error")
+        serde_cbor::to_writer(writer, &Index::from_zip(zipfile)?).context("serialization error")
     }
 
     fn create_test_archive() -> fs::File {
@@ -310,6 +328,38 @@ mod tests {
         archive.write_all(&objectcontent).unwrap();
         tf = archive.finish().unwrap();
         tf
+    }
+
+    #[test]
+    fn convert_to_sqlite() {
+        let mut tf = create_test_archive();
+        let mut cbor_buf = Vec::new();
+        create_cbor_index(&mut tf, &mut cbor_buf).unwrap();
+        let mut cbor_index_file = tempfile::NamedTempFile::new().unwrap();
+        io::copy(&mut &cbor_buf[..], &mut cbor_index_file).unwrap();
+
+        assert!(!is_sqlite_file(&cbor_index_file).unwrap());
+
+        let original_fi = find_in_file(
+            cbor_index_file.path(),
+            "testfile1",
+            &SqliteConnectionPool::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        let sqlite_index_file = convert_to_sqlite_index(cbor_index_file).unwrap();
+        assert!(is_sqlite_file(&sqlite_index_file).unwrap());
+
+        let migrated_fi = find_in_file(
+            sqlite_index_file,
+            "testfile1",
+            &SqliteConnectionPool::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(migrated_fi, original_fi);
     }
 
     #[test]
