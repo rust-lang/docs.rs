@@ -163,12 +163,10 @@ async fn get_search_results(
             .unwrap()
     });
 
-    #[cfg(not(test))]
-    let host = "https://crates.io";
-    #[cfg(test)]
-    let host = mockito::server_url();
-
-    let url = url::Url::parse(&format!("{host}/api/v1/crates{query_params}"))?;
+    let url = url::Url::parse(&format!(
+        "{}/api/v1/crates{query_params}",
+        config.registry_api_host
+    ))?;
     debug!("fetching search results from {}", url);
 
     // extract the query from the query args.
@@ -756,7 +754,7 @@ mod tests {
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
     use kuchiki::traits::TendrilSink;
-    use mockito::{mock, Matcher};
+    use mockito::Matcher;
     use reqwest::StatusCode;
     use serde_json::json;
     use std::collections::HashSet;
@@ -899,10 +897,16 @@ mod tests {
     #[test]
     fn search_result_passes_cratesio_pagination_links() {
         wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url();
+            });
+
             let web = env.frontend();
             env.fake_release().name("some_random_crate").create()?;
 
-            let _m = mock("GET", "/api/v1/crates")
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
                     Matcher::UrlEncoded("per_page".into(), "30".into()),
@@ -978,11 +982,14 @@ mod tests {
     #[test_case(StatusCode::BAD_GATEWAY)]
     fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(status: StatusCode) {
         wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
                 config.crates_io_api_call_retries = 0;
+                config.registry_api_host = crates_io.url();
             });
 
-            let _m = mock("GET", "/api/v1/crates")
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
                     Matcher::UrlEncoded("per_page".into(), "30".into()),
@@ -1004,10 +1011,16 @@ mod tests {
     #[test]
     fn search_encoded_pagination_passed_to_cratesio() {
         wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url();
+            });
+
             let web = env.frontend();
             env.fake_release().name("some_random_crate").create()?;
 
-            let _m = mock("GET", "/api/v1/crates")
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("some".into(), "dummy".into()),
                     Matcher::UrlEncoded("pagination".into(), "parameters".into()),
@@ -1045,10 +1058,16 @@ mod tests {
     #[test]
     fn search_lucky_with_unknown_crate() {
         wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url();
+            });
+
             let web = env.frontend();
             env.fake_release().name("some_random_crate").create()?;
 
-            let _m = mock("GET", "/api/v1/crates")
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("q".into(), "some_random_".into()),
                     Matcher::UrlEncoded("per_page".into(), "30".into()),
@@ -1086,6 +1105,11 @@ mod tests {
     #[test]
     fn search() {
         wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url();
+            });
+
             let web = env.frontend();
             env.fake_release()
                 .name("some_random_crate")
@@ -1101,7 +1125,8 @@ mod tests {
                 .version("0.0.1")
                 .create()?;
 
-            let _m = mock("GET", "/api/v1/crates")
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
                     Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
                     Matcher::UrlEncoded("per_page".into(), "30".into()),

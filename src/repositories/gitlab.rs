@@ -43,10 +43,19 @@ const GRAPHQL_SINGLE: &str = "query($fullPath: ID!) {
 pub struct GitLab {
     client: HttpClient,
     host: &'static str,
+    endpoint: String,
 }
 
 impl GitLab {
     pub fn new(host: &'static str, access_token: &Option<String>) -> Result<Self> {
+        Self::with_custom_endpoint(host, access_token, format!("https://{}/api/graphql", host))
+    }
+
+    pub fn with_custom_endpoint<E: AsRef<str>>(
+        host: &'static str,
+        access_token: &Option<String>,
+        endpoint: E,
+    ) -> Result<Self> {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
@@ -64,7 +73,11 @@ impl GitLab {
         }
 
         let client = HttpClient::builder().default_headers(headers).build()?;
-        Ok(GitLab { client, host })
+        Ok(GitLab {
+            client,
+            host,
+            endpoint: endpoint.as_ref().to_string(),
+        })
     }
 }
 
@@ -165,14 +178,9 @@ impl GitLab {
         query: &str,
         variables: impl serde::Serialize,
     ) -> Result<(GraphResponse<T>, Option<usize>)> {
-        #[cfg(not(test))]
-        let host = format!("https://{}/api/graphql", self.host);
-        #[cfg(test)]
-        let host = format!("{}/api/graphql", mockito::server_url());
-
         let res = self
             .client
-            .post(host)
+            .post(&self.endpoint)
             .json(&serde_json::json!({
                 "query": query,
                 "variables": variables,
@@ -252,13 +260,25 @@ mod tests {
     use super::GitLab;
     use crate::repositories::updater::{repository_name, RepositoryForge};
     use crate::repositories::RateLimitReached;
-    use mockito::mock;
+
+    fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
+        let server = mockito::Server::new();
+        let updater = GitLab::with_custom_endpoint(
+            "gitlab.com",
+            &None,
+            format!("{}/api/graphql", server.url()),
+        )
+        .expect("GitLab::new failed");
+
+        (server, updater)
+    }
 
     #[test]
     fn test_rate_limit() {
-        let updater = GitLab::new("gitlab.com", &None).expect("GitLab::new failed");
+        let (mut server, updater) = mock_server_and_gitlab();
 
-        let _m1 = mock("POST", "/api/graphql")
+        let _m1 = server
+            .mock("POST", "/api/graphql")
             .with_header("content-type", "application/json")
             .with_header("RateLimit-Remaining", "0")
             .with_body("{}")
@@ -278,9 +298,10 @@ mod tests {
 
     #[test]
     fn not_found() {
-        let updater = GitLab::new("gitlab.com", &None).expect("GitLab::new failed");
+        let (mut server, updater) = mock_server_and_gitlab();
 
-        let _m1 = mock("POST", "/api/graphql")
+        let _m1 = server
+            .mock("POST", "/api/graphql")
             .with_header("content-type", "application/json")
             .with_body(r#"{"data": {"projects": {"nodes": []}}}"#)
             .create();
@@ -296,9 +317,10 @@ mod tests {
 
     #[test]
     fn get_repository_info() {
-        let updater = GitLab::new("gitlab.com", &None).expect("GitLab::new failed");
+        let (mut server, updater) = mock_server_and_gitlab();
 
-        let _m1 = mock("POST", "/api/graphql")
+        let _m1 = server
+            .mock("POST", "/api/graphql")
             .with_header("content-type", "application/json")
             .with_body(
                 r#"{"data": {"project": {"id": "hello", "fullPath": "foo/bar",

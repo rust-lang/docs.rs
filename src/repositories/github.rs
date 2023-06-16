@@ -43,6 +43,7 @@ const GRAPHQL_SINGLE: &str = "query($owner: String!, $repo: String!) {
 }";
 
 pub struct GitHub {
+    endpoint: String,
     client: HttpClient,
     github_updater_min_rate_limit: u32,
 }
@@ -51,6 +52,13 @@ impl GitHub {
     /// Returns `Err` if the access token has invalid syntax (but *not* if it isn't authorized).
     /// Returns `Ok(None)` if there is no access token.
     pub fn new(config: &Config) -> Result<Option<Self>> {
+        Self::with_custom_endpoint(config, "https://api.github.com/graphql")
+    }
+
+    pub fn with_custom_endpoint<E: AsRef<str>>(
+        config: &Config,
+        endpoint: E,
+    ) -> Result<Option<Self>> {
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
@@ -69,6 +77,7 @@ impl GitHub {
 
         Ok(Some(GitHub {
             client,
+            endpoint: endpoint.as_ref().to_owned(),
             github_updater_min_rate_limit: config.github_updater_min_rate_limit,
         }))
     }
@@ -176,16 +185,9 @@ impl GitHub {
         query: &str,
         variables: impl serde::Serialize,
     ) -> Result<GraphResponse<T>> {
-        #[cfg(not(test))]
-        let host = "https://api.github.com/graphql";
-        #[cfg(test)]
-        let host = format!("{}/graphql", mockito::server_url());
-        #[cfg(test)]
-        let host = &host;
-
         Ok(self
             .client
-            .post(host)
+            .post(&self.endpoint)
             .json(&serde_json::json!({
                 "query": query,
                 "variables": variables,
@@ -256,19 +258,28 @@ struct GraphIssues {
 
 #[cfg(test)]
 mod tests {
-    use super::GitHub;
+    use super::{Config, GitHub};
     use crate::repositories::updater::{repository_name, RepositoryForge};
     use crate::repositories::RateLimitReached;
-    use mockito::mock;
+
+    fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {
+        let server = mockito::Server::new();
+        let updater = GitHub::with_custom_endpoint(config, format!("{}/graphql", server.url()))
+            .expect("GitHub::new failed")
+            .unwrap();
+
+        (server, updater)
+    }
 
     #[test]
     fn test_rate_limit_fail() {
         crate::test::wrapper(|env| {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let updater = GitHub::new(&config).expect("GitHub::new failed").unwrap();
+            let (mut server, updater) = mock_server_and_github(&config);
 
-            let _m1 = mock("POST", "/graphql")
+            let _m1 = server
+                .mock("POST", "/graphql")
                 .with_header("content-type", "application/json")
                 .with_body(
                     r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
@@ -288,9 +299,10 @@ mod tests {
         crate::test::wrapper(|env| {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let updater = GitHub::new(&config).expect("GitHub::new failed").unwrap();
+            let (mut server, updater) = mock_server_and_github(&config);
 
-            let _m1 = mock("POST", "/graphql")
+            let _m1 = server
+                .mock("POST", "/graphql")
                 .with_header("content-type", "application/json")
                 .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
                 .create();
@@ -308,9 +320,10 @@ mod tests {
         crate::test::wrapper(|env| {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let updater = GitHub::new(&config).expect("GitHub::new failed").unwrap();
+            let (mut server, updater) = mock_server_and_github(&config);
 
-            let _m1 = mock("POST", "/graphql")
+            let _m1 = server
+                .mock("POST", "/graphql")
                 .with_header("content-type", "application/json")
                 .with_body(
                     r#"{"data": {"nodes": [], "rateLimit": {"remaining": 100000}}, "errors":
@@ -334,9 +347,10 @@ mod tests {
         crate::test::wrapper(|env| {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let updater = GitHub::new(&config).expect("GitHub::new failed").unwrap();
+            let (mut server, updater) = mock_server_and_github(&config);
 
-            let _m1 = mock("POST", "/graphql")
+            let _m1 = server
+                .mock("POST", "/graphql")
                 .with_header("content-type", "application/json")
                 .with_body(
                     r#"{"data": {"repository": {"id": "hello", "nameWithOwner": "foo/bar",

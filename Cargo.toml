@@ -126,7 +126,7 @@ procfs = "0.15.1"
 criterion = "0.5.1"
 kuchiki = "0.8"
 rand = "0.8"
-mockito = "0.31.0"
+mockito = "1.0.2"
 test-case = "3.0.0"
 aws-smithy-client = { version = "0.55.1", features = ["test-util"]}
 aws-smithy-http = "0.55.1"
