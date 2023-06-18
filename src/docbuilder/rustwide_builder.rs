@@ -34,7 +34,6 @@ const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
-const DUMMY_CRATE_PUBLISHER_ID: &str = "2299951"; // pietroalbini
 
 #[derive(Debug)]
 pub enum PackageKind<'a> {
@@ -959,6 +958,8 @@ mod tests {
     use crate::test::{assert_redirect, assert_success, wrapper};
     use serde_json::Value;
 
+    const DUMMY_CRATE_PUBLISHER_ID: &str = "4825";
+
     #[test]
     #[ignore]
     fn test_build_crate() {
@@ -1167,10 +1168,14 @@ mod tests {
             // cache dir doesn't contain doc output
             assert!(!expected_cache_dir.join("doc").exists());
 
+            for chld in std::fs::read_dir(&expected_cache_dir)? {
+                dbg!(&chld);
+            }
+
             // but seems to be a normal cargo target directory,
             // which also means that `build_package` actually used the
             // target directory, and it was moved into the cache afterwards.
-            for expected_file in &["CACHEDIR.TAG", "debug"] {
+            for expected_file in &["docsrs_last_accessed", "debug", ".rustc_info.json"] {
                 assert!(expected_cache_dir.join(expected_file).exists());
             }
 
