@@ -278,8 +278,9 @@ impl Metadata {
         // Pass `RUSTFLAGS` and `RUSTDOCFLAGS` using `cargo --config`, which handles whitespace correctly.
         if !self.rustc_args.is_empty() {
             cargo_args.push("--config".into());
-            let rustflags =
-                toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
+            let rustflags = toml::Value::try_from(&self.rustc_args)
+                .expect("serializing a string should never fail")
+                .to_string();
             cargo_args.push(format!("build.rustflags={rustflags}"));
             cargo_args.push("-Zhost-config".into());
             cargo_args.push("-Ztarget-applies-to-host".into());
@@ -289,8 +290,9 @@ impl Metadata {
 
         if !all_rustdoc_args.is_empty() {
             cargo_args.push("--config".into());
-            let rustdocflags =
-                toml::to_string(&all_rustdoc_args).expect("serializing a string should never fail");
+            let rustdocflags = toml::Value::try_from(&all_rustdoc_args)
+                .expect("serializing a string should never fail")
+                .to_string();
             cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
         }
 
