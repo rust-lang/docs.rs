@@ -34,6 +34,7 @@ const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
+const DUMMY_CRATE_PUBLISHER_ID: &str = "2299951"; // pietroalbini
 
 #[derive(Debug)]
 pub enum PackageKind<'a> {
@@ -1127,6 +1128,42 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_artifact_cache() {
+        wrapper(|env| {
+            let crate_ = DUMMY_CRATE_NAME;
+            let version = DUMMY_CRATE_VERSION;
+            let expected_cache_dir = env
+                .config()
+                .prefix
+                .join("artifact_cache")
+                .join(DUMMY_CRATE_PUBLISHER_ID);
+
+            let mut builder = RustwideBuilder::init(env).unwrap();
+
+            // first build creates the cache
+            assert!(!expected_cache_dir.exists());
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            assert!(expected_cache_dir.exists());
+
+            // cache dir doesn't contain doc output
+            assert!(!expected_cache_dir.join("doc").exists());
+
+            // but seems to be a normal cargo target directory
+            for expected_file in &["CACHEDIR.TAG", "debug"] {
+                assert!(expected_cache_dir.join(expected_file).exists());
+            }
+
+            // do a second build
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            // FIXME: how would I know if the cache was used?
+
+            Ok(())
+        });
     }
 
     #[test]
