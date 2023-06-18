@@ -203,3 +203,127 @@ impl ArtifactCache {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_creates_cache_dir() {
+        let parent = tempfile::tempdir().unwrap();
+
+        let cache_dir = parent.path().join("cache");
+        assert!(!cache_dir.exists());
+        ArtifactCache::new(cache_dir.clone()).unwrap();
+        assert!(cache_dir.exists());
+    }
+
+    #[test]
+    fn test_purge() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.path();
+        let cache = ArtifactCache::new(cache_path.to_owned()).unwrap();
+
+        // put something into the cache
+        for key in &["1", "2", "3"] {
+            cache.touch(key).unwrap();
+        }
+
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 3);
+
+        cache.purge().unwrap();
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 0);
+        assert!(cache_path.exists());
+    }
+
+    #[test]
+    fn test_save_restore() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.path();
+        let cache = ArtifactCache::new(cache_path.to_owned()).unwrap();
+
+        // create a dummy target directory
+        let target_dir = tempfile::tempdir().unwrap();
+        let target_path = target_dir.path();
+
+        let linux_gnu = target_path.join("linux-gnu");
+        fs::create_dir_all(&linux_gnu).unwrap();
+
+        // docs will be deleted while saving
+        let docs = target_path.join("doc");
+        fs::create_dir(&docs).unwrap();
+        fs::write(docs.join("1.html"), b"content").unwrap();
+        let target_docs = linux_gnu.join("doc");
+        fs::create_dir(&target_docs).unwrap();
+        fs::write(target_docs.join("2.html"), b"content").unwrap();
+
+        // other files in the directory will be kept
+        fs::write(target_path.join("file1"), b"content").unwrap();
+        fs::write(linux_gnu.join("file2"), b"content").unwrap();
+
+        cache.save("cache_key", target_path).unwrap();
+
+        // target is gone
+        assert!(!target_path.exists());
+
+        let saved_cache = cache_path.join("cache_key");
+        // doc output is gone
+        assert!(!saved_cache.join("doc").exists());
+        assert!(!saved_cache.join("linux-gnu").join("doc").exists());
+        // the rest is there
+        assert!(saved_cache.join("file1").exists());
+        assert!(saved_cache.join("linux-gnu").join("file2").exists());
+
+        cache.restore_to("cache_key", target_path).unwrap();
+        // target is back
+        assert!(target_path.exists());
+        assert!(target_path.join("file1").exists());
+        assert!(target_path.join("linux-gnu").join("file2").exists());
+        // cache is gone
+        assert!(!saved_cache.exists());
+    }
+
+    #[test]
+    fn test_target_doesnt_exist() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache = ArtifactCache::new(cache_dir.path().to_owned()).unwrap();
+
+        let parent = tempfile::tempdir().unwrap();
+
+        let potential_target = parent.path().join("target");
+        cache.restore_to("cache_key", &potential_target).unwrap();
+
+        assert!(potential_target.exists());
+    }
+
+    #[test]
+    fn test_source_doesnt_exist_errors() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache = ArtifactCache::new(cache_dir.path().to_owned()).unwrap();
+
+        let parent = tempfile::tempdir().unwrap();
+
+        let non_existing_source = parent.path().join("source");
+        assert!(cache.save("cache_key", non_existing_source).is_err());
+    }
+
+    #[test]
+    fn test_clean_disk_space() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.path();
+        let cache = ArtifactCache::new(cache_path.to_owned()).unwrap();
+
+        // put something into the cache
+        for key in &["1", "2", "3"] {
+            cache.touch(key).unwrap();
+        }
+
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 3);
+
+        // will clean everything
+        cache.clear_disk_space(100.0).unwrap();
+
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 0);
+        assert!(cache_path.exists());
+    }
+}
