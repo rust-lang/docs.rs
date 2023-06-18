@@ -1158,19 +1158,10 @@ mod tests {
             // first build creates the cache
             assert!(!expected_cache_dir.exists());
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
-
-            for chld in std::fs::read_dir(expected_cache_dir.parent().unwrap())? {
-                dbg!(&chld);
-            }
-
             assert!(expected_cache_dir.exists());
 
             // cache dir doesn't contain doc output
             assert!(!expected_cache_dir.join("doc").exists());
-
-            for chld in std::fs::read_dir(&expected_cache_dir)? {
-                dbg!(&chld);
-            }
 
             // but seems to be a normal cargo target directory,
             // which also means that `build_package` actually used the
@@ -1179,8 +1170,7 @@ mod tests {
                 assert!(expected_cache_dir.join(expected_file).exists());
             }
 
-            // do a second build,
-            // should not fail
+            // do a second build, should not fail
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             Ok(())
