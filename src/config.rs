@@ -95,6 +95,7 @@ pub struct Config {
 
     // Build params
     pub(crate) build_attempts: u16,
+    pub(crate) use_build_artifact_cache: bool,
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) inside_docker: bool,
     pub(crate) docker_image: Option<String>,
@@ -130,6 +131,7 @@ impl Config {
 
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
+            use_build_artifact_cache: env("DOCSRS_USE_BUILD_ARTIFACT_CACHE", true)?,
 
             crates_io_api_call_retries: env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3)?,
 

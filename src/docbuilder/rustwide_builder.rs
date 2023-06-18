@@ -51,7 +51,7 @@ pub struct RustwideBuilder {
     storage: Arc<Storage>,
     metrics: Arc<Metrics>,
     index: Arc<Index>,
-    artifact_cache: ArtifactCache,
+    artifact_cache: Option<ArtifactCache>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     skip_build_if_exists: bool,
@@ -72,11 +72,17 @@ impl RustwideBuilder {
             builder = builder.sandbox_image(image);
         }
 
-        let artifact_cache = ArtifactCache::new(config.prefix.join("artifact_cache"))?;
+        let artifact_cache = if config.use_build_artifact_cache {
+            Some(ArtifactCache::new(config.prefix.join("artifact_cache"))?)
+        } else {
+            None
+        };
 
         if cfg!(test) {
             builder = builder.fast_init(true);
-            artifact_cache.purge()?;
+            if let Some(ref artifact_cache) = artifact_cache {
+                artifact_cache.purge()?;
+            }
         }
 
         let workspace = builder.init().map_err(FailureError::compat)?;
@@ -209,7 +215,9 @@ impl RustwideBuilder {
 
         let has_changed = old_version.as_deref() != Some(&self.rustc_version);
         if has_changed {
-            self.artifact_cache.purge()?;
+            if let Some(ref artifact_cache) = self.artifact_cache {
+                artifact_cache.purge()?;
+            }
             self.add_essential_files()?;
         }
         Ok(has_changed)
@@ -418,15 +426,16 @@ impl RustwideBuilder {
                     }
                 };
 
-                if let Some(ref published_by) = release_data.published_by {
+                if let (Some(ref artifact_cache), Some(ref published_by)) =
+                    (&self.artifact_cache, release_data.published_by)
+                {
                     info!(
                         host_target_dir=?build.host_target_dir(),
                         published_by_id=published_by.id,
                         published_by_login=published_by.login,
                         "restoring artifact cache",
                     );
-                    if let Err(err) = self
-                        .artifact_cache
+                    if let Err(err) = artifact_cache
                         .restore_to(&published_by.id.to_string(), build.host_target_dir())
                     {
                         warn!(?err, "could not restore artifact cache");
@@ -587,15 +596,16 @@ impl RustwideBuilder {
                         }
                     }
 
-                    if let Some(ref published_by) = release_data.published_by {
+                    if let (Some(artifact_cache), Some(ref published_by)) =
+                        (&self.artifact_cache, release_data.published_by)
+                    {
                         info!(
                             host_target_dir=?build.host_target_dir(),
                             published_by_id=published_by.id,
                             published_by_login=published_by.login,
                             "saving artifact cache",
                         );
-                        if let Err(err) = self
-                            .artifact_cache
+                        if let Err(err) = artifact_cache
                             .save(&published_by.id.to_string(), build.host_target_dir())
                             .context("error saving artifact cache")
                         {
@@ -1147,20 +1157,26 @@ mod tests {
             // first build creates the cache
             assert!(!expected_cache_dir.exists());
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            for chld in std::fs::read_dir(expected_cache_dir.parent().unwrap())? {
+                dbg!(&chld);
+            }
+
             assert!(expected_cache_dir.exists());
 
             // cache dir doesn't contain doc output
             assert!(!expected_cache_dir.join("doc").exists());
 
-            // but seems to be a normal cargo target directory
+            // but seems to be a normal cargo target directory,
+            // which also means that `build_package` actually used the
+            // target directory, and it was moved into the cache afterwards.
             for expected_file in &["CACHEDIR.TAG", "debug"] {
                 assert!(expected_cache_dir.join(expected_file).exists());
             }
 
-            // do a second build
+            // do a second build,
+            // should not fail
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
-
-            // FIXME: how would I know if the cache was used?
 
             Ok(())
         });
