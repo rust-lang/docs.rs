@@ -14,7 +14,7 @@ static LAST_ACCESSED_FILE_NAME: &str = "docsrs_last_accessed";
 /// filesystem where the given `path` lives on.
 /// Return value is between 0 and 1.
 fn free_disk_space_ratio<P: AsRef<Path>>(path: P) -> Result<f32> {
-    let sys = System::new_with_specifics(RefreshKind::new().with_disks());
+    let sys = System::new_with_specifics(RefreshKind::new().with_disks().with_disks_list());
 
     let disk_by_mount_point: HashMap<_, _> =
         sys.disks().iter().map(|d| (d.mount_point(), d)).collect();
@@ -324,6 +324,26 @@ mod tests {
         cache.clear_disk_space(100.0).unwrap();
 
         assert_eq!(fs::read_dir(cache_path).unwrap().count(), 0);
+        assert!(cache_path.exists());
+    }
+
+    #[test]
+    fn test_dont_clean_disk_space() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.path();
+        let cache = ArtifactCache::new(cache_path.to_owned()).unwrap();
+
+        // put something into the cache
+        for key in &["1", "2", "3"] {
+            cache.touch(key).unwrap();
+        }
+
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 3);
+
+        // will clean nothing
+        cache.clear_disk_space(0.0).unwrap();
+
+        assert_eq!(fs::read_dir(cache_path).unwrap().count(), 3);
         assert!(cache_path.exists());
     }
 }
