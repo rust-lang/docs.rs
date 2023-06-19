@@ -2,7 +2,7 @@ use crate::{
     db::types::Feature,
     docbuilder::{BuildResult, DocCoverage},
     error::Result,
-    index::api::{CrateData, CrateOwner, ReleaseData},
+    index::api::{CrateData, GithubUser, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
     web::crate_details::CrateDetails,
@@ -371,7 +371,7 @@ pub fn update_crate_data_in_database(
 /// Adds owners into database
 fn update_owners_in_database(
     conn: &mut Client,
-    owners: &[CrateOwner],
+    owners: &[GithubUser],
     crate_id: i32,
 ) -> Result<()> {
     // Update any existing owner data since it is mutable and could have changed since last
@@ -562,9 +562,10 @@ mod test {
                 },
             )?;
 
-            let owner1 = CrateOwner {
+            let owner1 = GithubUser {
                 avatar: "avatar".into(),
                 login: "login".into(),
+                ..Default::default()
             };
 
             update_owners_in_database(&mut conn, &[owner1.clone()], crate_id)?;
@@ -600,16 +601,18 @@ mod test {
             // set initial owner details
             update_owners_in_database(
                 &mut conn,
-                &[CrateOwner {
+                &[GithubUser {
                     login: "login".into(),
                     avatar: "avatar".into(),
+                    ..Default::default()
                 }],
                 crate_id,
             )?;
 
-            let updated_owner = CrateOwner {
+            let updated_owner = GithubUser {
                 login: "login".into(),
                 avatar: "avatar2".into(),
+                ..Default::default()
             };
             update_owners_in_database(&mut conn, &[updated_owner.clone()], crate_id)?;
 
@@ -645,17 +648,19 @@ mod test {
             // set initial owner details
             update_owners_in_database(
                 &mut conn,
-                &[CrateOwner {
+                &[GithubUser {
                     login: "login".into(),
                     avatar: "avatar".into(),
+                    ..Default::default()
                 }],
                 crate_id,
             )?;
 
-            let new_owners: Vec<CrateOwner> = (1..5)
-                .map(|i| CrateOwner {
+            let new_owners: Vec<GithubUser> = (1..5)
+                .map(|i| GithubUser {
                     login: format!("login{i}"),
                     avatar: format!("avatar{i}"),
+                    ..Default::default()
                 })
                 .collect();
 

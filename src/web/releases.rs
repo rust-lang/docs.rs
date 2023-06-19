@@ -749,7 +749,7 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::index::api::GithubUser;
     use crate::test::{
         assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
     };
@@ -1473,9 +1473,10 @@ mod tests {
             let web = env.frontend();
             env.fake_release()
                 .name("some_random_crate")
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
+                    ..Default::default()
                 })
                 .create()?;
 

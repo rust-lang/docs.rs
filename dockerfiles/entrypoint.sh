@@ -2,7 +2,7 @@
 
 set -euv
 
-export DOCSRS_PREFIX=/opt/docsrs/prefix
+export DOCSRS_PREFIX=${DOCSRS_PREFIX:-"/opt/docsrs/prefix"}
 export DOCSRS_DOCKER=true
 export DOCSRS_LOG=${DOCSRS_LOG-"docs-rs,rustwide=info"}
 export PATH="$PATH:/build/target/release"

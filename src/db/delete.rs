@@ -187,7 +187,7 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::index::api::GithubUser;
     use crate::test::{assert_success, wrapper};
     use postgres::Client;
     use test_case::test_case;
@@ -313,9 +313,10 @@ mod tests {
                 .name("a")
                 .version("1.0.0")
                 .archive_storage(archive_storage)
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "malicious actor".into(),
                     avatar: "https://example.org/malicious".into(),
+                    ..Default::default()
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
@@ -342,9 +343,10 @@ mod tests {
                 .name("a")
                 .version("2.0.0")
                 .archive_storage(archive_storage)
-                .add_owner(CrateOwner {
+                .add_owner(GithubUser {
                     login: "Peter Rabbit".into(),
                     avatar: "https://example.org/peter".into(),
+                    ..Default::default()
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v2)?);
