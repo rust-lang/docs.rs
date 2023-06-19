@@ -95,7 +95,7 @@ pub struct Config {
 
     // some caches do automatic cleanup based on this free disk space goal.
     // Value shoudl be between 0 and 1.
-    pub(crate) free_disk_space_goal: float,
+    pub(crate) free_disk_space_goal: f32,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -134,6 +134,8 @@ impl Config {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
 
         Ok(Self {
+            free_disk_space_goal: env("DOCSRS_FREE_DISK_SPACE_GOAL", 0.2)?,
+
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
             use_build_artifact_cache: env("DOCSRS_USE_BUILD_ARTIFACT_CACHE", true)?,
 
