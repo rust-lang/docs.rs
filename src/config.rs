@@ -93,6 +93,10 @@ pub struct Config {
     /// same for the `static.docs.rs` distribution
     pub cloudfront_distribution_id_static: Option<String>,
 
+    // some caches do automatic cleanup based on this free disk space goal.
+    // Value shoudl be between 0 and 1.
+    pub(crate) free_disk_space_goal: float,
+
     // Build params
     pub(crate) build_attempts: u16,
     pub(crate) use_build_artifact_cache: bool,

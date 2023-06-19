@@ -610,6 +610,13 @@ impl RustwideBuilder {
                         {
                             warn!(?err, "could not save artifact cache");
                         };
+
+                        if let Err(err) = artifact_cache
+                            .clear_disk_space(self.config.free_disk_space_goal)
+                            .context("error freeing disk space on artifact cache")
+                        {
+                            warn!(?err, "could not clear disk space");
+                        }
                     }
 
                     if res.result.successful {
