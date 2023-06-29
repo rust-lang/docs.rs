@@ -332,7 +332,7 @@ pub(crate) async fn crate_details_handler(
             let mut conn = pool.get()?;
             Ok(
                 match_version(&mut conn, &params.name, params.version.as_deref())
-                    .and_then(|m| m.assume_exact())?,
+                    .and_then(|m| m.exact_name_only())?,
             )
         }
     })

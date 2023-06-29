@@ -43,7 +43,7 @@ pub(crate) async fn build_list_handler(
 ) -> AxumResult<impl IntoResponse> {
     let (version, version_or_latest) = match match_version_axum(&pool, &name, Some(&req_version))
         .await?
-        .assume_exact()?
+        .exact_name_only()?
     {
         MatchSemver::Exact((version, _)) => (version.clone(), version),
         MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
@@ -85,7 +85,7 @@ pub(crate) async fn build_list_json_handler(
 ) -> AxumResult<impl IntoResponse> {
     let version = match match_version_axum(&pool, &name, Some(&req_version))
         .await?
-        .assume_exact()?
+        .exact_name_only()?
     {
         MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
         MatchSemver::Semver((version, _)) => {

@@ -17,8 +17,8 @@ pub(crate) async fn status_handler(
 ) -> AxumResult<impl IntoResponse> {
     let (_, id) = match_version_axum(&pool, &name, Some(&req_version))
         .await?
-        .assume_exact()?
-        .assume_exact()?;
+        .exact_name_only()?
+        .exact_version_only()?;
 
     let rustdoc_status: bool = spawn_blocking({
         move || {

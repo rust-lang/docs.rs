@@ -42,7 +42,7 @@ pub(crate) async fn build_features_handler(
     let (version, version_or_latest, is_latest_url) =
         match match_version_axum(&pool, &name, Some(&req_version))
             .await?
-            .assume_exact()?
+            .exact_name_only()?
         {
             MatchSemver::Exact((version, _)) => (version.clone(), version, false),
             MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
