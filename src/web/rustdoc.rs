@@ -874,7 +874,7 @@ pub(crate) async fn download_handler(
 ) -> AxumResult<impl IntoResponse> {
     let (version, _) = match_version_axum(&pool, &name, Some(&req_version))
         .await?
-        .assume_exact()?
+        .exact_name_only()?
         .into_parts();
 
     let archive_path = rustdoc_archive_path(&name, &version);

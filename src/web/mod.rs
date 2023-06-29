@@ -84,7 +84,7 @@ impl MatchVersion {
     /// If the matched version was an exact match to the requested crate name, returns the
     /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
     /// `CrateNotFound`.
-    fn assume_exact(self) -> Result<MatchSemver, AxumNope> {
+    fn exact_name_only(self) -> Result<MatchSemver, AxumNope> {
         if self.corrected_name.is_none() {
             Ok(self.version)
         } else {
@@ -120,7 +120,7 @@ impl MatchSemver {
     /// If the matched version was an exact match to a semver version, returns the
     /// version string and id for the query. If the lookup required a semver match, returns
     /// `VersionNotFound`.
-    fn assume_exact(self) -> Result<(String, i32), AxumNope> {
+    fn exact_version_only(self) -> Result<(String, i32), AxumNope> {
         let MatchSemver::Exact(details) = self else { return Err(AxumNope::VersionNotFound) };
         Ok(details)
     }
@@ -605,7 +605,7 @@ mod test {
     fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
         let version = match_version(&mut db.conn(), "foo", v)
             .ok()?
-            .assume_exact()
+            .exact_name_only()
             .ok()?
             .into_parts()
             .0;
