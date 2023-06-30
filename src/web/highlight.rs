@@ -6,8 +6,8 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-const CODE_SIZE_LIMIT: usize = 2 * 1024 * 1024;
-const LINE_SIZE_LIMIT: usize = 512;
+const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 2 * 1024 * 1024;
+const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;
 
 #[derive(Debug, thiserror::Error)]
 #[error("the code exceeded a highlighting limit")]
@@ -29,7 +29,7 @@ static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
 });
 
 fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
-    if code.len() > CODE_SIZE_LIMIT {
+    if code.len() > TOTAL_CODE_BYTE_LENGTH_LIMIT {
         return Err(LimitsExceeded.into());
     }
 
@@ -40,7 +40,7 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
     );
 
     for line in LinesWithEndings::from(code) {
-        if line.len() > LINE_SIZE_LIMIT {
+        if line.len() > PER_LINE_BYTE_LENGTH_LIMIT {
             return Err(LimitsExceeded.into());
         }
         html_generator.parse_html_for_line_which_includes_newline(line)?;
@@ -81,7 +81,8 @@ pub fn with_lang(lang: Option<&str>, code: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        select_syntax, try_with_lang, with_lang, LimitsExceeded, CODE_SIZE_LIMIT, LINE_SIZE_LIMIT,
+        select_syntax, try_with_lang, with_lang, LimitsExceeded, PER_LINE_BYTE_LENGTH_LIMIT,
+        TOTAL_CODE_BYTE_LENGTH_LIMIT,
     };
 
     #[test]
@@ -106,13 +107,13 @@ mod tests {
                 .unwrap_err()
                 .is::<LimitsExceeded>()
         };
-        assert!(is_limited("a\n".repeat(CODE_SIZE_LIMIT)));
-        assert!(is_limited("aa".repeat(LINE_SIZE_LIMIT)));
+        assert!(is_limited("a\n".repeat(TOTAL_CODE_BYTE_LENGTH_LIMIT)));
+        assert!(is_limited("aa".repeat(PER_LINE_BYTE_LENGTH_LIMIT)));
     }
 
     #[test]
     fn limited_escaped() {
-        let text = "<p>\n".to_string() + "aa".repeat(LINE_SIZE_LIMIT).as_str();
+        let text = "<p>\n".to_string() + "aa".repeat(PER_LINE_BYTE_LENGTH_LIMIT).as_str();
         let highlighted = with_lang(Some("toml"), &text);
         assert!(highlighted.starts_with("&lt;p&gt;\n"));
     }
