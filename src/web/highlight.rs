@@ -6,6 +6,13 @@ use syntect::{
     util::LinesWithEndings,
 };
 
+const CODE_SIZE_LIMIT: usize = 2 * 1024 * 1024;
+const LINE_SIZE_LIMIT: usize = 512;
+
+#[derive(Debug, thiserror::Error)]
+#[error("the code exceeded a highlighting limit")]
+pub struct LimitsExceeded;
+
 static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
     static SYNTAX_DATA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/syntect.packdump"));
 
@@ -22,6 +29,10 @@ static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
 });
 
 fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
+    if code.len() > CODE_SIZE_LIMIT {
+        return Err(LimitsExceeded.into());
+    }
+
     let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
         syntax,
         &SYNTAXES,
@@ -29,6 +40,9 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
     );
 
     for line in LinesWithEndings::from(code) {
+        if line.len() > LINE_SIZE_LIMIT {
+            return Err(LimitsExceeded.into());
+        }
         html_generator.parse_html_for_line_which_includes_newline(line)?;
     }
 
@@ -54,7 +68,11 @@ pub fn with_lang(lang: Option<&str>, code: &str) -> String {
     match try_with_lang(lang, code) {
         Ok(highlighted) => highlighted,
         Err(err) => {
-            log::error!("failed while highlighting code: {err:?}");
+            if err.is::<LimitsExceeded>() {
+                log::debug!("hit limit while highlighting code");
+            } else {
+                log::error!("failed while highlighting code: {err:?}");
+            }
             code.to_owned()
         }
     }
@@ -62,7 +80,7 @@ pub fn with_lang(lang: Option<&str>, code: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::select_syntax;
+    use super::{select_syntax, try_with_lang, LimitsExceeded, CODE_SIZE_LIMIT, LINE_SIZE_LIMIT};
 
     #[test]
     fn custom_filetypes() {
@@ -77,5 +95,16 @@ mod tests {
         let toml = select_syntax(Some("toml"), "");
 
         assert_eq!(select_syntax(Some(".rustfmt.toml"), "").name, toml.name);
+    }
+
+    #[test]
+    fn limits() {
+        let is_limited = |s: String| {
+            try_with_lang(Some("toml"), &s)
+                .unwrap_err()
+                .is::<LimitsExceeded>()
+        };
+        assert!(is_limited("a\n".repeat(CODE_SIZE_LIMIT)));
+        assert!(is_limited("aa".repeat(LINE_SIZE_LIMIT)));
     }
 }
