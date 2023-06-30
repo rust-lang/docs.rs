@@ -73,14 +73,16 @@ pub fn with_lang(lang: Option<&str>, code: &str) -> String {
             } else {
                 log::error!("failed while highlighting code: {err:?}");
             }
-            code.to_owned()
+            tera::escape_html(code)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{select_syntax, try_with_lang, LimitsExceeded, CODE_SIZE_LIMIT, LINE_SIZE_LIMIT};
+    use super::{
+        select_syntax, try_with_lang, with_lang, LimitsExceeded, CODE_SIZE_LIMIT, LINE_SIZE_LIMIT,
+    };
 
     #[test]
     fn custom_filetypes() {
@@ -106,5 +108,12 @@ mod tests {
         };
         assert!(is_limited("a\n".repeat(CODE_SIZE_LIMIT)));
         assert!(is_limited("aa".repeat(LINE_SIZE_LIMIT)));
+    }
+
+    #[test]
+    fn limited_escaped() {
+        let text = "<p>\n".to_string() + "aa".repeat(LINE_SIZE_LIMIT).as_str();
+        let highlighted = with_lang(Some("toml"), &text);
+        assert!(highlighted.starts_with("&lt;p&gt;\n"));
     }
 }
