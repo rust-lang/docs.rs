@@ -116,14 +116,6 @@ impl MatchSemver {
             | MatchSemver::Latest((v, i)) => (v, i),
         }
     }
-
-    /// If the matched version was an exact match to a semver version, returns the
-    /// version string and id for the query. If the lookup required a semver match, returns
-    /// `VersionNotFound`.
-    fn exact_version_only(self) -> Result<(String, i32), AxumNope> {
-        let MatchSemver::Exact(details) = self else { return Err(AxumNope::VersionNotFound) };
-        Ok(details)
-    }
 }
 
 /// Checks the database for crate releases that match the given name and version.
