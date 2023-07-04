@@ -111,7 +111,9 @@ where
             }
             diff::Difference::ReleaseNotInIndex(name, version) => {
                 if !dry_run {
-                    if let Err(err) = delete::delete_version(ctx, name, version) {
+                    if let Err(err) =
+                        delete::delete_version(&mut conn, &storage, &config, name, version)
+                    {
                         warn!("{:?}", err);
                     }
                 }

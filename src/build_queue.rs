@@ -1,5 +1,5 @@
 use crate::cdn;
-use crate::db::{delete_crate, Pool};
+use crate::db::{delete_crate, delete_version, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
@@ -283,7 +283,7 @@ impl BuildQueue {
         changes.reverse();
 
         for change in &changes {
-            if let Some((ref krate, ..)) = change.deleted() {
+            if let Some((ref krate, ..)) = change.crate_deleted() {
                 match delete_crate(&mut conn, &self.storage, &self.config, krate)
                     .with_context(|| format!("failed to delete crate {krate}"))
                 {
@@ -294,6 +294,34 @@ impl BuildQueue {
                     Err(err) => report_error(&err),
                 }
                 if let Err(err) = cdn::queue_crate_invalidation(&mut *conn, &self.config, krate) {
+                    report_error(&err);
+                }
+                continue;
+            }
+
+            if let Some(release) = change.version_deleted() {
+                match delete_version(
+                    &mut conn,
+                    &self.storage,
+                    &self.config,
+                    &release.name,
+                    &release.version,
+                )
+                .with_context(|| {
+                    format!(
+                        "failed to delete version {}-{}",
+                        release.name, release.version
+                    )
+                }) {
+                    Ok(_) => info!(
+                        "release {}-{} was deleted from the index and the database",
+                        release.name, release.version
+                    ),
+                    Err(err) => report_error(&err),
+                }
+                if let Err(err) =
+                    cdn::queue_crate_invalidation(&mut *conn, &self.config, &release.name)
+                {
                     report_error(&err);
                 }
                 continue;
