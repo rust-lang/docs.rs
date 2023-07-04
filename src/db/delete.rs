@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
-use crate::{Config, Context};
+use crate::Config;
 use anyhow::Context as _;
 use fn_error_context::context;
 use postgres::Client;
@@ -55,10 +55,13 @@ pub fn delete_crate(
 }
 
 #[context("error trying to delete release {name}-{version} from database")]
-pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()> {
-    let conn = &mut ctx.pool()?.get()?;
-    let storage = ctx.storage()?;
-
+pub fn delete_version(
+    conn: &mut Client,
+    storage: &Storage,
+    config: &Config,
+    name: &str,
+    version: &str,
+) -> Result<()> {
     let is_library = delete_version_from_database(conn, name, version)?;
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
@@ -70,7 +73,7 @@ pub fn delete_version(ctx: &dyn Context, name: &str, version: &str) -> Result<()
         storage.delete_prefix(&format!("{prefix}/{name}/{version}/"))?;
     }
 
-    let local_archive_cache = &ctx.config()?.local_archive_cache_path;
+    let local_archive_cache = &config.local_archive_cache_path;
     let mut paths = vec![source_archive_path(name, version)];
     if is_library {
         paths.push(rustdoc_archive_path(name, version));
@@ -359,7 +362,7 @@ mod tests {
                 vec!["Peter Rabbit".to_string()]
             );
 
-            delete_version(env, "a", "1.0.0")?;
+            delete_version(&mut db.conn(), &env.storage(), &env.config(), "a", "1.0.0")?;
             assert!(!release_exists(&mut db.conn(), v1)?);
             if archive_storage {
                 // for archive storage the archive and index files

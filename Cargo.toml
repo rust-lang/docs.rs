@@ -34,7 +34,7 @@ clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "0.19", optional = true }
 rayon = "1.6.1"
 num_cpus = "1.15.0"
-crates-index-diff = { version = "19.0.0", features = [ "max-performance" ]}
+crates-index-diff = { version = "20.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
