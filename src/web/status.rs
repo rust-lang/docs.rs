@@ -2,7 +2,7 @@ use super::cache::CachePolicy;
 use crate::{
     db::Pool,
     utils::spawn_blocking,
-    web::{error::AxumResult, match_version_axum},
+    web::{axum_redirect, error::AxumResult, match_version_axum, MatchSemver},
 };
 use axum::{
     extract::{Extension, Path},
@@ -21,10 +21,18 @@ pub(crate) async fn status_handler(
         // We use an async block to emulate a try block so that we can apply the above CORS header
         // and cache policy to both successful and failed responses
         async move {
-            let (version, id) = match_version_axum(&pool, &name, Some(&req_version))
+            let (version, id) = match match_version_axum(&pool, &name, Some(&req_version))
                 .await?
                 .exact_name_only()?
-                .into_parts();
+            {
+                MatchSemver::Exact((version, id)) | MatchSemver::Latest((version, id)) => {
+                    (version, id)
+                }
+                MatchSemver::Semver((version, _)) => {
+                    let redirect = axum_redirect(format!("/crate/{name}/{version}/status.json"))?;
+                    return Ok(redirect.into_response());
+                }
+            };
 
             let rustdoc_status: bool = spawn_blocking({
                 move || {
@@ -42,10 +50,12 @@ pub(crate) async fn status_handler(
             })
             .await?;
 
-            AxumResult::Ok(Json(serde_json::json!({
+            let json = Json(serde_json::json!({
                 "version": version,
                 "doc_status": rustdoc_status,
-            })))
+            }));
+
+            AxumResult::Ok(json.into_response())
         }
         .await,
     )
@@ -54,7 +64,7 @@ pub(crate) async fn status_handler(
 #[cfg(test)]
 mod tests {
     use crate::{
-        test::{assert_cache_control, wrapper},
+        test::{assert_cache_control, assert_redirect, wrapper},
         web::cache::CachePolicy,
     };
     use reqwest::StatusCode;
@@ -63,6 +73,7 @@ mod tests {
     #[test_case("latest")]
     #[test_case("0.1")]
     #[test_case("0.1.0")]
+    #[test_case("=0.1.0"; "exact_version")]
     fn status(version: &str) {
         wrapper(|env| {
             env.fake_release().name("foo").version("0.1.0").create()?;
@@ -88,9 +99,28 @@ mod tests {
         });
     }
 
+    #[test_case("0.1")]
+    #[test_case("*")]
+    fn redirect(version: &str) {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.1.0").create()?;
+
+            let redirect = assert_redirect(
+                &format!("/crate/foo/{version}/status.json"),
+                "/crate/foo/0.1.0/status.json",
+                env.frontend(),
+            )?;
+            assert_cache_control(&redirect, CachePolicy::NoStoreMustRevalidate, &env.config());
+            assert_eq!(redirect.headers()["access-control-allow-origin"], "*");
+
+            Ok(())
+        });
+    }
+
     #[test_case("latest")]
     #[test_case("0.1")]
     #[test_case("0.1.0")]
+    #[test_case("=0.1.0"; "exact_version")]
     fn failure(version: &str) {
         wrapper(|env| {
             env.fake_release()
@@ -124,6 +154,7 @@ mod tests {
     #[test_case("bar", "0.1")]
     #[test_case("bar", "0.1.0")]
     // version not found
+    #[test_case("foo", "=0.1.0"; "exact_version")]
     #[test_case("foo", "0.2")]
     #[test_case("foo", "0.2.0")]
     // invalid semver
@@ -131,7 +162,7 @@ mod tests {
     #[test_case("foo", "0,1,0")]
     fn not_found(krate: &str, version: &str) {
         wrapper(|env| {
-            env.fake_release().name("foo").version("0.1.0").create()?;
+            env.fake_release().name("foo").version("0.1.1").create()?;
 
             let response = env
                 .frontend()

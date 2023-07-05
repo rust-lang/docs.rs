@@ -2149,11 +2149,14 @@ mod test {
                 .archive_storage(archive_storage)
                 .rustdoc_file("tokio/time/index.html")
                 .create()?;
+
             assert_redirect(
                 "/tokio/0.2.21/tokio/time",
                 "/tokio/0.2.21/tokio/time/index.html",
                 env.frontend(),
-            )
+            )?;
+
+            Ok(())
         })
     }
 
