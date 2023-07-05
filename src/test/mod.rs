@@ -149,16 +149,20 @@ fn assert_redirect_common(
 }
 
 /// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
+///
+/// Returns the redirect response
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect_unchecked(
     path: &str,
     expected_target: &str,
     web: &TestFrontend,
-) -> Result<()> {
-    assert_redirect_common(path, expected_target, web).map(|_| ())
+) -> Result<Response> {
+    assert_redirect_common(path, expected_target, web)
 }
 
 /// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
+///
+/// Returns the redirect response
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect_cached_unchecked(
     path: &str,
@@ -166,16 +170,22 @@ pub(crate) fn assert_redirect_cached_unchecked(
     cache_policy: cache::CachePolicy,
     web: &TestFrontend,
     config: &Config,
-) -> Result<()> {
+) -> Result<Response> {
     let redirect_response = assert_redirect_common(path, expected_target, web)?;
     assert_cache_control(&redirect_response, cache_policy, config);
-    Ok(())
+    Ok(redirect_response)
 }
 
 /// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
+///
+/// Returns the redirect response
 #[context("expected redirect from {path} to {expected_target}")]
-pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFrontend) -> Result<()> {
-    assert_redirect_common(path, expected_target, web)?;
+pub(crate) fn assert_redirect(
+    path: &str,
+    expected_target: &str,
+    web: &TestFrontend,
+) -> Result<Response> {
+    let redirect_response = assert_redirect_common(path, expected_target, web)?;
 
     let response = web.get_no_redirect(expected_target).send()?;
     let status = response.status();
@@ -183,11 +193,13 @@ pub(crate) fn assert_redirect(path: &str, expected_target: &str, web: &TestFront
         anyhow::bail!("failed to GET {expected_target}: {status}");
     }
 
-    Ok(())
+    Ok(redirect_response)
 }
 
 /// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect.
 /// Also verifies that the redirect's cache-control header matches the provided cache policy.
+///
+/// Returns the redirect response
 #[context("expected redirect from {path} to {expected_target}")]
 pub(crate) fn assert_redirect_cached(
     path: &str,
@@ -195,7 +207,7 @@ pub(crate) fn assert_redirect_cached(
     cache_policy: cache::CachePolicy,
     web: &TestFrontend,
     config: &Config,
-) -> Result<()> {
+) -> Result<Response> {
     let redirect_response = assert_redirect_common(path, expected_target, web)?;
     assert_cache_control(&redirect_response, cache_policy, config);
 
@@ -205,7 +217,7 @@ pub(crate) fn assert_redirect_cached(
         anyhow::bail!("failed to GET {expected_target}: {status}");
     }
 
-    Ok(())
+    Ok(redirect_response)
 }
 
 pub(crate) struct TestEnvironment {
