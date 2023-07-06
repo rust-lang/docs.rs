@@ -208,7 +208,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
         </a>
 
         {# Build the dropdown list showing available targets #}
-        <ul class="pure-menu-children">
+        <ul class="pure-menu-children" id="platforms">
             {%- for target in metadata.doc_targets -%}
                 {#
                     The crate-detail page is the only page where we want to allow google to follow
