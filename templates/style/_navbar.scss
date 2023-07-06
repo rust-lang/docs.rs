@@ -341,6 +341,16 @@ div.nav-container {
             animation: rotating_text 2s linear infinite;
         }
     }
+
+    #platforms {
+        max-height: 75vh;
+        overflow-y: auto;
+
+        li a {
+            overflow-x: hidden;
+            text-overflow: ellipsis;
+        }
+    }
 }
 
 #nav-search {
