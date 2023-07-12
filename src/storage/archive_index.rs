@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::storage::{compression::CompressionAlgorithm, FileRange};
-use anyhow::Context as _;
+use anyhow::{bail, Context as _};
 use memmap2::MmapOptions;
 use rusqlite::{Connection, OptionalExtension};
 use serde::de::DeserializeSeed;
@@ -92,7 +92,10 @@ impl Index {
                         zf.data_start(),
                         zf.data_start() + zf.compressed_size() - 1,
                     ),
-                    compression: CompressionAlgorithm::Bzip2,
+                    compression: match zf.compression() {
+                        zip::CompressionMethod::Bzip2 => CompressionAlgorithm::Bzip2,
+                        c => bail!("unsupported compression algorithm {} in zip-file", c),
+                    },
                 },
             );
         }
