@@ -550,7 +550,7 @@ impl MetaData {
     }
 
     fn parse_doc_targets(targets: Value) -> Vec<String> {
-        targets
+        let mut targets = targets
             .as_array()
             .map(|array| {
                 array
@@ -558,7 +558,9 @@ impl MetaData {
                     .filter_map(|item| item.as_str().map(|s| s.to_owned()))
                     .collect()
             })
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_else(Vec::new);
+        targets.sort_unstable();
+        targets
     }
 }
 
