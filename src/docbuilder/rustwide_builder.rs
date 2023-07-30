@@ -408,7 +408,7 @@ impl RustwideBuilder {
                         std::fs::remove_file(cargo_lock)?;
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
-                            .args(&["generate-lockfile", "-Zno-index-update"])
+                            .args(&["generate-lockfile"])
                             .run()?;
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
@@ -885,8 +885,38 @@ pub(crate) struct BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_redirect, assert_success, wrapper};
+    use crate::test::{assert_redirect, assert_success, wrapper, TestEnvironment};
     use serde_json::Value;
+
+    fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &str) -> Result<()> {
+        let paths = [
+            format!("cache/index.crates.io-6f17d22bba15001f/{crate_}-{version}.crate"),
+            format!("src/index.crates.io-6f17d22bba15001f/{crate_}-{version}"),
+            format!(
+                "index/index.crates.io-6f17d22bba15001f/.cache/{}/{}/{crate_}",
+                &crate_[0..2],
+                &crate_[2..4]
+            ),
+        ];
+
+        for path in paths {
+            let full_path = env
+                .config()
+                .rustwide_workspace
+                .join("cargo-home/registry")
+                .join(path);
+            if full_path.exists() {
+                info!("deleting {}", full_path.display());
+                if full_path.is_file() {
+                    std::fs::remove_file(full_path)?;
+                } else {
+                    std::fs::remove_dir_all(full_path)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 
     #[test]
     #[ignore]
@@ -1136,22 +1166,7 @@ mod tests {
             env.override_config(|cfg| cfg.include_default_targets = false);
 
             // if the corrected dependency of the crate was already downloaded we need to remove it
-            let crate_file = env.config().rustwide_workspace.join(
-                "cargo-home/registry/cache/github.com-1ecc6299db9ec823/rand_core-0.5.1.crate",
-            );
-            let src_dir = env
-                .config()
-                .rustwide_workspace
-                .join("cargo-home/registry/src/github.com-1ecc6299db9ec823/rand_core-0.5.1");
-
-            if crate_file.exists() {
-                info!("deleting {}", crate_file.display());
-                std::fs::remove_file(crate_file)?;
-            }
-            if src_dir.exists() {
-                info!("deleting {}", src_dir.display());
-                std::fs::remove_dir_all(src_dir)?;
-            }
+            remove_cache_files(env, "rand_core", "0.5.1")?;
 
             // Specific setup required:
             //  * crate has a binary so that it is published with a lockfile
@@ -1162,6 +1177,28 @@ mod tests {
             //  * there is a newer version of the dependency available that correctly builds
             let crate_ = "docs_rs_test_incorrect_lockfile";
             let version = "0.1.2";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_locked_fails_unlocked_needs_new_unknown_deps() {
+        wrapper(|env| {
+            env.override_config(|cfg| cfg.include_default_targets = false);
+
+            // if the corrected dependency of the crate was already downloaded we need to remove it
+            remove_cache_files(env, "value-bag-sval2", "1.4.1")?;
+
+            // Similar to above, this crate fails to build with the published
+            // lockfile, but generating a new working lockfile requires
+            // introducing a completely new dependency (not just version) which
+            // would not have had its details pulled down from the sparse-index.
+            let crate_ = "docs_rs_test_incorrect_lockfile";
+            let version = "0.2.0";
             let mut builder = RustwideBuilder::init(env).unwrap();
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
