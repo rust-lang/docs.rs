@@ -209,31 +209,11 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 
         {# Build the dropdown list showing available targets #}
         <ul class="pure-menu-children" id="platforms">
-            {%- for target in metadata.doc_targets -%}
-                {#
-                    The crate-detail page is the only page where we want to allow google to follow
-                    the target-links. On that page we also don't have to use `/target-redirect/`
-                    because the documentation root page is guaranteed to exist for all targets.
-                #}
-                {%- if use_direct_platform_links -%}
-                    {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/" ~ target ~ "/" ~ inner_path -%}
-                    {%- set target_no_follow = "" -%}
-                {%- else -%}
-                    {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
-                    {%- set target_no_follow = "nofollow" -%}
-                {%- endif -%}
-                {%- if current_target is defined and current_target == target -%}
-                    {%- set current = " current" -%}
-                {%- else -%}
-                    {%- set current = "" -%}
-                {%- endif -%}
-
-                <li class="pure-menu-item">
-                    <a href="{{ target_url | safe }}" class="pure-menu-link{{ current | safe }}" data-fragment="retain" rel="{{ target_no_follow }}">
-                        {{- target -}}
-                    </a>
-                </li>
-            {%- endfor -%}
+            {%- if metadata.doc_targets|length < 6 -%}
+                {%- include "rustdoc/targets.tml" -%}
+            {%- else -%}
+                <span class="rotate">{{ "spinner" | fas }}</span>
+            {%- endif -%}
         </ul>
     </li>{#
     Display the features available in current build

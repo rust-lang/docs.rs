@@ -1,5 +1,7 @@
 use super::{markdown, match_version, MatchSemver, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error, spawn_blocking};
+use crate::web::rustdoc::RustdocHtmlParams;
+use crate::web::{axum_cached_redirect, match_version_axum};
 use crate::{
     db::Pool,
     impl_axum_webpage,
@@ -15,6 +17,7 @@ use crate::{
 use anyhow::{Context, Result};
 use axum::{
     extract::{Extension, Path},
+    http::Uri,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
@@ -23,6 +26,7 @@ use serde::Deserialize;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
+use tracing::{instrument, trace};
 
 // TODO: Add target name and versions
 
@@ -462,6 +466,167 @@ pub(crate) async fn get_all_releases(
     let res = ReleaseList {
         releases,
         crate_name: params.name,
+    };
+    Ok(res.into_response())
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct ShortMetadata {
+    name: String,
+    version_or_latest: String,
+    doc_targets: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct PlatformList {
+    metadata: ShortMetadata,
+    inner_path: String,
+    use_direct_platform_links: bool,
+    current_target: String,
+}
+
+impl_axum_webpage! {
+    PlatformList = "rustdoc/platforms.html",
+    cpu_intensive_rendering = true,
+}
+
+#[tracing::instrument]
+pub(crate) async fn get_all_platforms(
+    Path(params): Path<RustdocHtmlParams>,
+    Extension(pool): Extension<Pool>,
+    uri: Uri,
+) -> AxumResult<AxumResponse> {
+    // since we directly use the Uri-path and not the extracted params from the router,
+    // we have to percent-decode the string here.
+    let original_path = percent_encoding::percent_decode(uri.path().as_bytes())
+        .decode_utf8()
+        .map_err(|_| AxumNope::BadRequest)?;
+    let mut req_path: Vec<&str> = original_path.split('/').collect();
+
+    let release_found = match_version_axum(&pool, &params.name, Some(&params.version)).await?;
+    trace!(?release_found, "found release");
+
+    // Remove the empty start, "releases", the name and the version from the path
+    req_path.drain(..4).for_each(drop);
+
+    // Convenience function to allow for easy redirection
+    #[instrument]
+    fn redirect(
+        name: &str,
+        vers: &str,
+        path: &[&str],
+        cache_policy: CachePolicy,
+    ) -> AxumResult<AxumResponse> {
+        trace!("redirect");
+        // Format and parse the redirect url
+        Ok(axum_cached_redirect(
+            encode_url_path(&format!("/platforms/{}/{}/{}", name, vers, path.join("/"))),
+            cache_policy,
+        )?
+        .into_response())
+    }
+
+    let (version, version_or_latest) = match release_found.version {
+        MatchSemver::Exact((version, _)) => {
+            // Redirect when the requested crate name isn't correct
+            if let Some(name) = release_found.corrected_name {
+                return redirect(&name, &version, &req_path, CachePolicy::NoCaching);
+            }
+
+            (version.clone(), version)
+        }
+
+        MatchSemver::Latest((version, _)) => {
+            // Redirect when the requested crate name isn't correct
+            if let Some(name) = release_found.corrected_name {
+                return redirect(&name, "latest", &req_path, CachePolicy::NoCaching);
+            }
+
+            (version, "latest".to_string())
+        }
+
+        // Redirect when the requested version isn't correct
+        MatchSemver::Semver((v, _)) => {
+            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
+            // versions, redirect the browser to the returned version instead of loading it
+            // immediately
+            return redirect(&params.name, &v, &req_path, CachePolicy::ForeverInCdn);
+        }
+    };
+
+    let (name, doc_targets, releases, default_target): (String, Vec<String>, Vec<Release>, String) =
+        spawn_blocking({
+            let pool = pool.clone();
+            move || {
+                let mut conn = pool.get()?;
+                let query = "
+            SELECT
+                crates.id,
+                crates.name,
+                releases.default_target,
+                releases.doc_targets
+            FROM releases
+            INNER JOIN crates ON releases.crate_id = crates.id
+            WHERE crates.name = $1 AND releases.version = $2;";
+
+                let rows = conn.query(query, &[&params.name, &version])?;
+
+                let krate = if rows.is_empty() {
+                    return Err(AxumNope::CrateNotFound.into());
+                } else {
+                    &rows[0]
+                };
+
+                // get releases, sorted by semver
+                let releases = releases_for_crate(&mut *conn, krate.get("id"))?;
+
+                Ok((
+                    krate.get("name"),
+                    MetaData::parse_doc_targets(krate.get("doc_targets")),
+                    releases,
+                    krate.get("default_target"),
+                ))
+            }
+        })
+        .await?;
+
+    let latest_release = releases
+        .iter()
+        .find(|release| release.version.pre.is_empty() && !release.yanked)
+        .unwrap_or(&releases[0]);
+
+    // The path within this crate version's rustdoc output
+    let (target, inner_path) = {
+        let mut inner_path = req_path.clone();
+
+        let target = if inner_path.len() > 1 && doc_targets.iter().any(|s| s == inner_path[0]) {
+            inner_path.remove(0)
+        } else {
+            ""
+        };
+
+        (target, inner_path.join("/"))
+    };
+
+    let current_target = if latest_release.build_status {
+        if target.is_empty() {
+            default_target
+        } else {
+            target.to_owned()
+        }
+    } else {
+        String::new()
+    };
+
+    let res = PlatformList {
+        metadata: ShortMetadata {
+            name,
+            version_or_latest: version_or_latest.to_string(),
+            doc_targets,
+        },
+        inner_path,
+        use_direct_platform_links: true,
+        current_target,
     };
     Ok(res.into_response())
 }

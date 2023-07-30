@@ -5,13 +5,17 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
     subMenu?.style.setProperty('--menu-x', `${currentMenu.getBoundingClientRect().x}px`);
 }
 
-function generateReleaseList(data, crateName) {
-}
+const loadedMenus = new Set();
 
-let loadReleases = function() {
-    const releaseListElem = document.getElementById('releases-list');
-    // To prevent reloading the list unnecessarily.
-    loadReleases = function() {};
+function loadReleases(menu, id, msg, path, extra) {
+    if (loadedMenus.has(id)) {
+        return;
+    }
+    loadedMenus.add(id);
+    if (!menu.querySelector(".rotate")) {
+        return;
+    }
+    const releaseListElem = document.getElementById(id);
     if (!releaseListElem) {
         // We're not in a documentation page, so no need to do anything.
         return;
@@ -25,11 +29,11 @@ let loadReleases = function() {
         if (xhttp.status === 200) {
             releaseListElem.innerHTML = xhttp.responseText;
         } else {
-            console.error(`Failed to load release list: [${xhttp.status}] ${xhttp.responseText}`);
-            document.getElementById('releases-list').innerHTML = "Failed to load release list";
+            console.error(`Failed to load ${msg}: [${xhttp.status}] ${xhttp.responseText}`);
+            document.getElementById(id).innerHTML = `Failed to load ${msg}`;
         }
     };
-    xhttp.open("GET", `/${crateName}/releases`, true);
+    xhttp.open("GET", `/${path}/${crateName}${extra}`, true);
     xhttp.send();
 };
 
@@ -81,7 +85,18 @@ let loadReleases = function() {
         currentMenu = newMenu;
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
-        loadReleases();
+        if (newMenu.querySelector("#releases-list")) {
+            loadReleases(newMenu, "releases-list", "release list", "releases/list", "");
+        } else if (newMenu.querySelector("#platforms")) {
+            loadReleases(
+                newMenu,
+                "platforms",
+                "platforms list",
+                "platforms",
+                // We get everything except the first crate name.
+                "/" + window.location.pathname.split("/").slice(2).join("/")
+            );
+        }
     }
     function menuOnClick(e) {
         if (this.getAttribute("href") != "#") {
