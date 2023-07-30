@@ -181,7 +181,15 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::crate_details::crate_details_handler),
         )
         .route(
-            "/:name/releases",
+            "/platforms/:name/:version/:target/",
+            get_internal(super::crate_details::get_all_platforms),
+        )
+        .route(
+            "/platforms/:name/:version/:target/*path",
+            get_internal(super::crate_details::get_all_platforms),
+        )
+        .route(
+            "/releases/list/:name",
             get_internal(super::crate_details::get_all_releases),
         )
         .route_with_tsr(
