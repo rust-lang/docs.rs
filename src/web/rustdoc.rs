@@ -668,6 +668,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .render_in_threadpool({
             let metrics = metrics.clone();
             move |templates| {
+                let metadata = krate.metadata.clone();
                 Ok(RustdocPage {
                     latest_path,
                     permalink_path,
@@ -677,8 +678,8 @@ pub(crate) async fn rustdoc_html_server_handler(
                     is_latest_version,
                     is_latest_url,
                     is_prerelease,
-                    metadata: krate.metadata.clone(),
-                    krate: krate.clone(),
+                    metadata,
+                    krate,
                 }
                 .into_response(
                     &blob.content,
