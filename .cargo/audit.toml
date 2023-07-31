@@ -3,9 +3,6 @@ ignore = [
     "RUSTSEC-2020-0036", # failure is officially deprecated/unmaintained
     # https://github.com/rust-lang/docs.rs/issues/1014
 
-    "RUSTSEC-2021-0127", # serde_cbor is unmaintained
-    # https://github.com/rust-lang/docs.rs/issues/1568
-
     "RUSTSEC-2023-0018", # rustwide -> remove_dir_all,TOCTOU / Race Condition 
     # https://github.com/rust-lang/docs.rs/issues/2074
 
