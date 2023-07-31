@@ -90,14 +90,14 @@ impl Index {
     }
 
     #[cfg(feature = "consistency_check")]
-    pub(crate) fn crates(&self) -> Result<crates_index::Index> {
+    pub(crate) fn crates(&self) -> Result<crates_index::GitIndex> {
         tracing::debug!("Opening with `crates_index`");
         // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
         let repo_url = self
             .repository_url
             .as_deref()
             .unwrap_or("https://github.com/rust-lang/crates.io-index");
-        let mut index = crates_index::Index::with_path(&self.path, repo_url)?;
+        let mut index = crates_index::GitIndex::with_path(&self.path, repo_url)?;
         index.update()?;
         Ok(index)
     }
