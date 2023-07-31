@@ -639,6 +639,10 @@ pub fn migrate_old_archive_indexes(
             WHERE 
                 releases.archive_storage = true AND 
                 releases.build_status = true
+
+            ORDER BY 
+                crates.name,
+                releases.id
             ",
             iter::empty::<String>(),
         )?
