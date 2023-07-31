@@ -11,7 +11,7 @@ use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, InstanceMetrics};
-use anyhow::{anyhow, ensure, Context as _};
+use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
 use postgres::fallible_iterator::FallibleIterator;
@@ -28,7 +28,7 @@ use std::{
     sync::Arc,
 };
 use tokio::runtime::Runtime;
-use tracing::{info, instrument, trace};
+use tracing::{error, info, instrument, trace};
 
 const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
@@ -643,10 +643,12 @@ pub fn migrate_old_archive_indexes(
         let version: &str = row.get(1);
         info!("converting archive index for {} {}...", name, version);
 
-        migrate_one(storage, &rustdoc_archive_path(name, version))
-            .context("error converting rustdoc archive index")?;
-        migrate_one(storage, &source_archive_path(name, version))
-            .context("error converting source archive index")?;
+        if let Err(err) = migrate_one(storage, &rustdoc_archive_path(name, version)) {
+            error!("error converting rustdoc archive index: {:?}", err);
+        }
+        if let Err(err) = migrate_one(storage, &source_archive_path(name, version)) {
+            error!("error converting source archive index: {:?}", err);
+        }
     }
     Ok(())
 }
