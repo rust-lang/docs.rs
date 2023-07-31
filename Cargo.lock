@@ -1069,11 +1069,11 @@ dependencies = [
 
 [[package]]
 name = "crates-index"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385938adbefae319f3e8dbcfd7a5bc06dda20733de549c05468a53470a6c7d61"
+checksum = "3feb29cc02fb72a5999ea88eaf38e82fb9ef453a746925d3bf74ebc25940c34c"
 dependencies = [
- "git2",
+ "gix 0.50.1",
  "hex",
  "home",
  "memchr",
@@ -1084,6 +1084,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "smol_str",
+ "thiserror",
  "toml 0.7.6",
 ]
 
@@ -1878,14 +1879,14 @@ dependencies = [
  "gix-pack 0.39.1",
  "gix-path",
  "gix-prompt",
- "gix-protocol",
+ "gix-protocol 0.35.0",
  "gix-ref 0.32.1",
  "gix-refspec 0.13.0",
  "gix-revision 0.17.0",
  "gix-sec",
  "gix-tempfile",
  "gix-trace",
- "gix-transport",
+ "gix-transport 0.33.1",
  "gix-traverse 0.29.0",
  "gix-url 0.20.1",
  "gix-utils",
@@ -1929,6 +1930,7 @@ dependencies = [
  "gix-pack 0.40.2",
  "gix-path",
  "gix-prompt",
+ "gix-protocol 0.36.1",
  "gix-ref 0.33.2",
  "gix-refspec 0.14.1",
  "gix-revision 0.18.1",
@@ -2250,12 +2252,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882695cccf38da4c3cc7ee687bdb412cf25e37932d7f8f2c306112ea712449f1"
 dependencies = [
  "crc32fast",
+ "crossbeam-channel",
  "flate2",
  "gix-hash",
  "gix-trace",
+ "jwalk",
  "libc",
  "once_cell",
+ "parking_lot",
  "prodash",
+ "sha1",
  "sha1_smol",
  "thiserror",
  "walkdir",
@@ -2601,6 +2607,7 @@ dependencies = [
  "parking_lot",
  "smallvec",
  "thiserror",
+ "uluru",
 ]
 
 [[package]]
@@ -2663,7 +2670,25 @@ dependencies = [
  "gix-date",
  "gix-features 0.31.1",
  "gix-hash",
- "gix-transport",
+ "gix-transport 0.33.1",
+ "maybe-async",
+ "nom",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-protocol"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f8cf8b48ad5510a6ea3c8b529f51fd0f31009a2e46579f3a0ed917669035170"
+dependencies = [
+ "bstr",
+ "btoi",
+ "gix-credentials 0.17.1",
+ "gix-date",
+ "gix-features 0.32.1",
+ "gix-hash",
+ "gix-transport 0.34.1",
  "maybe-async",
  "nom",
  "thiserror",
@@ -2859,6 +2884,22 @@ dependencies = [
  "gix-quote",
  "gix-sec",
  "gix-url 0.20.1",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-transport"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99fffe5a95a522200ad47b97c19c9b0c204fc415dffa4a993d727394e6d59ef8"
+dependencies = [
+ "bstr",
+ "gix-command",
+ "gix-features 0.32.1",
+ "gix-packetline",
+ "gix-quote",
+ "gix-sec",
+ "gix-url 0.21.1",
  "thiserror",
 ]
 
