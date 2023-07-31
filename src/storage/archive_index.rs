@@ -288,13 +288,16 @@ pub(crate) fn find_in_file<P: AsRef<Path>>(
     }
 }
 
-pub(crate) fn convert_to_sqlite_index<P: AsRef<Path>>(path: P) -> Result<TempPath> {
+pub(crate) fn convert_to_sqlite_index<P: AsRef<Path>>(
+    path: P,
+    tmpdir: impl AsRef<Path>,
+) -> Result<TempPath> {
     let path = path.as_ref();
     let index: Index = { serde_cbor::from_reader(BufReader::new(File::open(path)?))? };
 
     // write the new index into a temporary file so reads from ongoing requests
     // can continue on the old index until the new one is fully written.
-    let tmp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+    let tmp_path = tempfile::NamedTempFile::new_in(tmpdir)?.into_temp_path();
     index
         .write_sqlite(&tmp_path)
         .context("error writing SQLite index")?;
@@ -351,7 +354,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let sqlite_index_file = convert_to_sqlite_index(cbor_index_file).unwrap();
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let sqlite_index_file = convert_to_sqlite_index(cbor_index_file, &temp_dir).unwrap();
         assert!(is_sqlite_file(&sqlite_index_file).unwrap());
 
         let migrated_fi = find_in_file(

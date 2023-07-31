@@ -588,7 +588,7 @@ pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
 }
 
 #[instrument(skip(storage))]
-fn migrate_one(storage: &Storage, archive_path: &str) -> Result<()> {
+fn migrate_one(storage: &Storage, archive_path: &str, tmpdir: &Path) -> Result<()> {
     // this will also download the index if it doesn't exist locally
     let local_index_filename = storage.get_index_filename(archive_path)?;
 
@@ -599,7 +599,8 @@ fn migrate_one(storage: &Storage, archive_path: &str) -> Result<()> {
 
     info!("converting local index...");
     let remote_index_path = format!("{}.index", &archive_path);
-    let new_index_temp_path = archive_index::convert_to_sqlite_index(&local_index_filename)?;
+    let new_index_temp_path =
+        archive_index::convert_to_sqlite_index(&local_index_filename, tmpdir)?;
 
     // first upload to S3, ongoing requests will still use the local CBOR index
     info!("uplading to S3...");
@@ -621,6 +622,11 @@ pub fn migrate_old_archive_indexes(
     storage: &Storage,
     conn: &mut impl postgres::GenericClient,
 ) -> Result<()> {
+    let tmpdir = storage.config.prefix.join("archive_cache_tmp");
+    if !tmpdir.exists() {
+        fs::create_dir(&tmpdir)?;
+    }
+
     for row in conn
         .query_raw(
             "
@@ -643,10 +649,10 @@ pub fn migrate_old_archive_indexes(
         let version: &str = row.get(1);
         info!("converting archive index for {} {}...", name, version);
 
-        if let Err(err) = migrate_one(storage, &rustdoc_archive_path(name, version)) {
+        if let Err(err) = migrate_one(storage, &rustdoc_archive_path(name, version), &tmpdir) {
             error!("error converting rustdoc archive index: {:?}", err);
         }
-        if let Err(err) = migrate_one(storage, &source_archive_path(name, version)) {
+        if let Err(err) = migrate_one(storage, &source_archive_path(name, version), &tmpdir) {
             error!("error converting source archive index: {:?}", err);
         }
     }
