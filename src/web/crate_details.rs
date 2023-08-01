@@ -4,6 +4,7 @@ use crate::{
     db::Pool,
     impl_axum_webpage,
     repositories::RepositoryStatsUpdater,
+    storage::PathNotFoundError,
     web::{
         cache::CachePolicy,
         encode_url_path,
@@ -11,7 +12,7 @@ use crate::{
     },
     Storage,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use axum::{
     extract::{Extension, Path},
     response::{IntoResponse, Response as AxumResponse},
@@ -90,34 +91,6 @@ pub struct Release {
     pub is_library: bool,
     pub rustdoc_status: bool,
     pub target_name: String,
-}
-
-#[fn_error_context::context("fetching readme for {name} {version}")]
-fn fetch_readme_from_source(
-    storage: &Storage,
-    name: &str,
-    version: &str,
-    archive_storage: bool,
-) -> anyhow::Result<String> {
-    let manifest = storage.fetch_source_file(name, version, "Cargo.toml", archive_storage)?;
-    let manifest = String::from_utf8(manifest.content)
-        .context("parsing Cargo.toml")?
-        .parse::<toml::Value>()
-        .context("parsing Cargo.toml")?;
-    let paths = match manifest.get("package").and_then(|p| p.get("readme")) {
-        Some(toml::Value::Boolean(true)) => vec!["README.md"],
-        Some(toml::Value::Boolean(false)) => vec![],
-        Some(toml::Value::String(path)) => vec![path.as_ref()],
-        _ => vec!["README.md", "README.txt", "README"],
-    };
-    for path in &paths {
-        if let Ok(readme) = storage.fetch_source_file(name, version, path, archive_storage) {
-            let readme = String::from_utf8(readme.content)
-                .with_context(|| format!("parsing {path} content"))?;
-            return Ok(readme);
-        }
-    }
-    bail!("couldn't find readme in stored source, checked {paths:?}")
 }
 
 impl CrateDetails {
@@ -266,11 +239,40 @@ impl CrateDetails {
         Ok(Some(crate_details))
     }
 
-    fn enrich_readme(&mut self, storage: &Storage) -> Result<()> {
-        let readme =
-            fetch_readme_from_source(storage, &self.name, &self.version, self.archive_storage)?;
-        self.readme = Some(readme);
-        Ok(())
+    #[fn_error_context::context("fetching readme for {} {}", self.name, self.version)]
+    fn fetch_readme(&self, storage: &Storage) -> anyhow::Result<Option<String>> {
+        let manifest = storage.fetch_source_file(
+            &self.name,
+            &self.version,
+            "Cargo.toml",
+            self.archive_storage,
+        )?;
+        let manifest = String::from_utf8(manifest.content)
+            .context("parsing Cargo.toml")?
+            .parse::<toml::Value>()
+            .context("parsing Cargo.toml")?;
+        let paths = match manifest.get("package").and_then(|p| p.get("readme")) {
+            Some(toml::Value::Boolean(true)) => vec!["README.md"],
+            Some(toml::Value::Boolean(false)) => vec![],
+            Some(toml::Value::String(path)) => vec![path.as_ref()],
+            _ => vec!["README.md", "README.txt", "README"],
+        };
+        for path in &paths {
+            match storage.fetch_source_file(&self.name, &self.version, path, self.archive_storage) {
+                Ok(readme) => {
+                    let readme = String::from_utf8(readme.content)
+                        .with_context(|| format!("parsing {path} content"))?;
+                    return Ok(Some(readme));
+                }
+                Err(err) if err.is::<PathNotFoundError>() => {
+                    continue;
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
@@ -395,16 +397,17 @@ pub(crate) async fn crate_details_handler(
             &version,
             &version_or_latest,
             Some(&repository_stats_updater),
-        )?;
-        if let Some(ref mut details) = details {
-            if let Err(e) = details.enrich_readme(&storage) {
-                tracing::debug!("{e:?}")
-            }
+        )?
+        .ok_or(AxumNope::VersionNotFound)?;
+
+        match details.fetch_readme(&storage) {
+            Ok(readme) => details.readme = readme.or(details.readme),
+            Err(e) => report_error(&e),
         }
+
         Ok(details)
     })
-    .await?
-    .ok_or(AxumNope::VersionNotFound)?;
+    .await?;
 
     let mut res = CrateDetailsPage { details }.into_response();
     res.extensions_mut()
