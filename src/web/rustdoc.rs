@@ -935,7 +935,7 @@ pub(crate) async fn static_asset_handler(
 mod test {
     use crate::{test::*, web::cache::CachePolicy, Config};
     use anyhow::Context;
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
     use std::collections::BTreeMap;
     use test_case::test_case;
@@ -955,7 +955,7 @@ mod test {
         );
         let data = response.text()?;
         info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
-        let dom = kuchiki::parse_html().one(data);
+        let dom = kuchikiki::parse_html().one(data);
 
         if let Some(elem) = dom
             .select("form > ul > li > a.warn")
@@ -1359,7 +1359,7 @@ mod test {
         fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
-            Ok(kuchiki::parse_html()
+            Ok(kuchikiki::parse_html()
                 .one(data)
                 .select("form > ul > li > .warn")
                 .expect("invalid selector")
@@ -1604,7 +1604,7 @@ mod test {
         ) -> Result<Vec<(String, String, String)>, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
-            let dom = kuchiki::parse_html().one(data);
+            let dom = kuchikiki::parse_html().one(data);
             Ok(dom
                 .select(r#"a[aria-label="Platform"] + ul li a"#)
                 .expect("invalid selector")
@@ -2098,7 +2098,7 @@ mod test {
                 .version("0.18.0")
                 .readme(readme)
                 .create()?;
-            let page = kuchiki::parse_html()
+            let page = kuchikiki::parse_html()
                 .one(env.frontend().get("/crate/strum/0.18.0").send()?.text()?);
             let rendered = page.select_first("#main").expect("missing readme");
             println!("{}", rendered.text_contents());
@@ -2127,7 +2127,7 @@ mod test {
 
             let status = |version| -> Result<_, anyhow::Error> {
                 let page =
-                    kuchiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
+                    kuchikiki::parse_html().one(web.get("/crate/hexponent/0.3.0").send()?.text()?);
                 let selector = format!(r#"ul > li a[href="/crate/hexponent/{version}"]"#);
                 let anchor = page
                     .select(&selector)
@@ -2258,7 +2258,7 @@ mod test {
                 .create()?;
 
             // test rustdoc pages stay on the documentation
-            let page = kuchiki::parse_html()
+            let page = kuchikiki::parse_html()
                 .one(env.frontend().get("/hexponent/releases").send()?.text()?);
             let selector =
                 r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
@@ -2270,7 +2270,7 @@ mod test {
             );
 
             // test /crate pages stay on /crate
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/hexponent/0.3.0/")
                     .send()?
@@ -2297,7 +2297,7 @@ mod test {
                 .rustdoc_file("testing/index.html")
                 .create()?;
 
-            let dom = kuchiki::parse_html().one(
+            let dom = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/testing/0.1.0/testing/")
                     .send()?
@@ -2325,7 +2325,7 @@ mod test {
                 .github_stats("https://git.example.com", 123, 321, 333)
                 .create()?;
 
-            let dom = kuchiki::parse_html().one(
+            let dom = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/testing/0.1.0/testing/")
                     .send()?

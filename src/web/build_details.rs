@@ -98,7 +98,7 @@ pub(crate) async fn build_details_handler(
 #[cfg(test)]
 mod tests {
     use crate::test::{wrapper, FakeBuild};
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
 
     #[test]
@@ -112,7 +112,7 @@ mod tests {
                     .db_build_log("A build log")])
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/foo/0.1.0/builds")
                     .send()?
@@ -123,7 +123,7 @@ mod tests {
             let attrs = node.attributes.borrow();
             let url = attrs.get("href").unwrap();
 
-            let page = kuchiki::parse_html().one(env.frontend().get(url).send()?.text()?);
+            let page = kuchikiki::parse_html().one(env.frontend().get(url).send()?.text()?);
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 
@@ -142,7 +142,7 @@ mod tests {
                 .builds(vec![FakeBuild::default().s3_build_log("A build log")])
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/foo/0.1.0/builds")
                     .send()?
@@ -153,7 +153,7 @@ mod tests {
             let attrs = node.attributes.borrow();
             let url = attrs.get("href").unwrap();
 
-            let page = kuchiki::parse_html().one(env.frontend().get(url).send()?.text()?);
+            let page = kuchikiki::parse_html().one(env.frontend().get(url).send()?.text()?);
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 
@@ -174,7 +174,7 @@ mod tests {
                     .db_build_log("Another build log")])
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/foo/0.1.0/builds")
                     .send()?
@@ -185,7 +185,7 @@ mod tests {
             let attrs = node.attributes.borrow();
             let url = attrs.get("href").unwrap();
 
-            let page = kuchiki::parse_html().one(env.frontend().get(url).send()?.text()?);
+            let page = kuchikiki::parse_html().one(env.frontend().get(url).send()?.text()?);
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 

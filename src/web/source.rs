@@ -320,12 +320,12 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::test::*;
     use crate::web::cache::CachePolicy;
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use test_case::test_case;
 
     fn get_file_list_links(body: &str) -> Vec<String> {
-        let dom = kuchiki::parse_html().one(body);
+        let dom = kuchikiki::parse_html().one(body);
 
         dom.select(".package-menu > ul > li > a")
             .expect("invalid selector")
