@@ -136,12 +136,12 @@ pub(crate) type AxumResult<T> = Result<T, AxumNope>;
 #[cfg(test)]
 mod tests {
     use crate::test::wrapper;
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
 
     #[test]
     fn check_404_page_content_crate() {
         wrapper(|env| {
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate-which-doesnt-exist")
                     .send()?
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn check_404_page_content_resource() {
         wrapper(|env| {
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/resource-which-doesnt-exist.js")
                     .send()?
@@ -188,8 +188,8 @@ mod tests {
     fn check_404_page_content_not_semver_version() {
         wrapper(|env| {
             env.fake_release().name("dummy").create()?;
-            let page =
-                kuchiki::parse_html().one(env.frontend().get("/dummy/not-semver").send()?.text()?);
+            let page = kuchikiki::parse_html()
+                .one(env.frontend().get("/dummy/not-semver").send()?.text()?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")
@@ -208,7 +208,8 @@ mod tests {
     fn check_404_page_content_nonexistent_version() {
         wrapper(|env| {
             env.fake_release().name("dummy").version("1.0.0").create()?;
-            let page = kuchiki::parse_html().one(env.frontend().get("/dummy/2.0").send()?.text()?);
+            let page =
+                kuchikiki::parse_html().one(env.frontend().get("/dummy/2.0").send()?.text()?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")
@@ -231,7 +232,7 @@ mod tests {
                 .version("1.0.0")
                 .yanked(true)
                 .create()?;
-            let page = kuchiki::parse_html().one(env.frontend().get("/dummy/*").send()?.text()?);
+            let page = kuchikiki::parse_html().one(env.frontend().get("/dummy/*").send()?.text()?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")

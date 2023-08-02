@@ -428,7 +428,7 @@ mod tests {
         assert_cache_control, assert_redirect, assert_redirect_cached, wrapper, TestDatabase,
     };
     use anyhow::{Context, Error};
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use std::collections::HashMap;
 
     fn assert_last_successful_build_equals(
@@ -792,7 +792,7 @@ mod tests {
                 .binary(true)
                 .create()?;
 
-            let page = kuchiki::parse_html()
+            let page = kuchikiki::parse_html()
                 .one(env.frontend().get("/crate/binary/0.1.0").send()?.text()?);
             let warning = page.select_first("a.pure-menu-link.warn").unwrap();
 
@@ -910,7 +910,7 @@ mod tests {
                 .features(HashMap::new())
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/library/0.1.0/features")
                     .send()?
@@ -934,7 +934,7 @@ mod tests {
                 .features(features)
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/library/0.1.0/features")
                     .send()?
@@ -958,7 +958,7 @@ mod tests {
                 .features(features)
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/library/0.1.0/features")
                     .send()?
@@ -990,7 +990,7 @@ mod tests {
                 .features(features)
                 .create()?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/library/0.1.0/features")
                     .send()?
@@ -1018,7 +1018,7 @@ mod tests {
                 .conn()
                 .query("UPDATE releases SET features = NULL WHERE id = $1", &[&id])?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/library/0.1.0/features")
                     .send()?
@@ -1044,7 +1044,7 @@ mod tests {
             let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
             assert!(response.status().is_success());
 
-            let platform_links: Vec<(String, String)> = kuchiki::parse_html()
+            let platform_links: Vec<(String, String)> = kuchikiki::parse_html()
                 .one(response.text()?)
                 .select(r#"a[aria-label="Platform"] + ul li a"#)
                 .expect("invalid selector")

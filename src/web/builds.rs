@@ -151,7 +151,7 @@ mod tests {
         web::cache::CachePolicy,
     };
     use chrono::{DateTime, Duration, Utc};
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
 
             let response = env.frontend().get("/crate/foo/0.1.0/builds").send()?;
             assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
-            let page = kuchiki::parse_html().one(response.text()?);
+            let page = kuchikiki::parse_html().one(response.text()?);
 
             let rows: Vec<_> = page
                 .select("ul > li a.release")
@@ -294,7 +294,7 @@ mod tests {
                 ],
             )?;
 
-            let page = kuchiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(
                 env.frontend()
                     .get("/crate/foo/0.1.0/builds")
                     .send()?

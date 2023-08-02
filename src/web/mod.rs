@@ -584,7 +584,7 @@ mod test {
     use super::*;
     use crate::{docbuilder::DocCoverage, test::*, web::match_version};
     use axum::http::StatusCode;
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use serde_json::json;
     use test_case::test_case;
 
@@ -618,7 +618,7 @@ mod test {
 
     fn clipboard_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
         let data = web.get(path).send().unwrap().text().unwrap();
-        let node = kuchiki::parse_html().one(data);
+        let node = kuchikiki::parse_html().one(data);
         node.select("#clipboard").unwrap().count() == 1
     }
 
@@ -647,7 +647,8 @@ mod test {
                 .create()?;
             let web = env.frontend();
 
-            let foo_crate = kuchiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
+            let foo_crate =
+                kuchikiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
             for value in &["60%", "6", "10", "2", "1"] {
                 assert!(foo_crate
                     .select(".pure-menu-item b")
@@ -655,7 +656,7 @@ mod test {
                     .any(|e| dbg!(e.text_contents()).contains(value)));
             }
 
-            let foo_doc = kuchiki::parse_html().one(web.get("/foo/0.0.1/foo").send()?.text()?);
+            let foo_doc = kuchikiki::parse_html().one(web.get("/foo/0.0.1/foo").send()?.text()?);
             assert!(foo_doc
                 .select(".pure-menu-link b")
                 .unwrap()
@@ -834,7 +835,7 @@ mod test {
             release("0.1.0", env);
             let web = env.frontend();
             let text = web.get("/foo/0.1.0/foo").send()?.text()?;
-            let platform = kuchiki::parse_html()
+            let platform = kuchikiki::parse_html()
                 .one(text)
                 .select(r#"ul > li > a[aria-label="Platform"]"#)
                 .unwrap()
@@ -848,7 +849,7 @@ mod test {
                 .add_platform("x86_64-unknown-linux-musl")
                 .create()?;
             let text = web.get("/foo/0.2.0/foo").send()?.text()?;
-            let platform = kuchiki::parse_html()
+            let platform = kuchikiki::parse_html()
                 .one(text)
                 .select(r#"ul > li > a[aria-label="Platform"]"#)
                 .unwrap()
@@ -1028,7 +1029,7 @@ mod test {
             release("0.1.0", env);
             let web = env.frontend();
             let text = web.get("/foo/0.1.0/foo").send()?.text()?;
-            let tabindex = kuchiki::parse_html()
+            let tabindex = kuchikiki::parse_html()
                 .one(text)
                 .select(r#"#nav-search[tabindex="-1"]"#)
                 .unwrap()

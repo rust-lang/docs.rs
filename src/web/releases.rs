@@ -753,7 +753,7 @@ mod tests {
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
-    use kuchiki::traits::TendrilSink;
+    use kuchikiki::traits::TendrilSink;
     use mockito::Matcher;
     use reqwest::StatusCode;
     use serde_json::json;
@@ -930,7 +930,7 @@ mod tests {
             let response = web.get("/releases/search?query=some_random_crate").send()?;
             assert!(response.status().is_success());
 
-            let page = kuchiki::parse_html().one(response.text()?);
+            let page = kuchikiki::parse_html().one(response.text()?);
 
             let other_search_links: Vec<_> = page
                 .select("a")
@@ -1167,7 +1167,7 @@ mod tests {
         let response = web.get(path).send()?;
         assert!(response.status().is_success());
 
-        let page = kuchiki::parse_html().one(response.text()?);
+        let page = kuchikiki::parse_html().one(response.text()?);
 
         Ok(page
             .select("a.release")
@@ -1422,13 +1422,13 @@ mod tests {
 
             cdn::queue_crate_invalidation(&mut *env.db().conn(), &env.config(), "krate_2")?;
 
-            let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
                 .select(".release > strong")
                 .expect("missing heading")
                 .any(|el| el.text_contents().contains("active CDN deployments")));
 
-            let full = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             let items = full
                 .select(".queue-list > li")
                 .expect("missing list items")
@@ -1449,7 +1449,7 @@ mod tests {
             let queue = env.build_queue();
             let web = env.frontend();
 
-            let empty = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
                 .select(".queue-list > strong")
                 .expect("missing heading")
@@ -1464,7 +1464,7 @@ mod tests {
             queue.add_crate("bar", "0.1.0", -10, None)?;
             queue.add_crate("baz", "0.0.1", 10, None)?;
 
-            let full = kuchiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             let items = full
                 .select(".queue-list > li")
                 .expect("missing list items")
@@ -1511,7 +1511,7 @@ mod tests {
             let resp = web.get("").send()?;
             assert!(resp.status().is_success());
 
-            let html = kuchiki::parse_html().one(resp.text()?);
+            let html = kuchikiki::parse_html().one(resp.text()?);
             for link in html.select("a").unwrap() {
                 let link = link.as_node().as_element().unwrap();
 
@@ -1545,7 +1545,7 @@ mod tests {
         let sel = ".pure-menu-horizontal>.pure-menu-list>.pure-menu-item>.pure-menu-link>.title";
         wrapper(|env| {
             let tester = |url| {
-                let page = kuchiki::parse_html()
+                let page = kuchikiki::parse_html()
                     .one(env.frontend().get(url).send().unwrap().text().unwrap());
                 assert_eq!(page.select("#crate-title").unwrap().count(), 1);
                 let not_matching = page
