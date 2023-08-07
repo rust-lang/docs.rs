@@ -121,10 +121,6 @@ mod tests {
             ("/crate/hexponent/0.2.0", "/crate/{name}/{version}"),
             ("/crate/rcc/0.0.0", "/crate/{name}/{version}"),
             (
-                "/crate/rcc/0.0.0/builds.json",
-                "/crate/{name}/{version}/builds.json",
-            ),
-            (
                 "/crate/rcc/0.0.0/status.json",
                 "/crate/{name}/{version}/status.json",
             ),
