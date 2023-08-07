@@ -164,10 +164,7 @@ impl BuildQueue {
             .is_some())
     }
 
-    pub(crate) fn process_next_crate(
-        &self,
-        f: impl FnOnce(&QueuedCrate) -> Result<()>,
-    ) -> Result<()> {
+    fn process_next_crate(&self, f: impl FnOnce(&QueuedCrate) -> Result<()>) -> Result<()> {
         let mut conn = self.db.get()?;
         let mut transaction = conn.transaction()?;
 
@@ -198,11 +195,13 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = f(&to_process).with_context(|| {
-            format!(
-                "Failed to build package {}-{} from queue",
-                to_process.name, to_process.version
-            )
+        let res = self.metrics.build_time.observe_closure_duration(|| {
+            f(&to_process).with_context(|| {
+                format!(
+                    "Failed to build package {}-{} from queue",
+                    to_process.name, to_process.version
+                )
+            })
         });
         self.metrics.total_builds.inc();
         if let Err(err) =
@@ -631,6 +630,7 @@ mod tests {
             let metrics = env.instance_metrics();
             assert_eq!(metrics.total_builds.get(), 9);
             assert_eq!(metrics.failed_builds.get(), 1);
+            assert_eq!(metrics.build_time.get_sample_count(), 9);
 
             // no invalidations were run since we don't have a distribution id configured
             assert!(cdn::queued_or_active_crate_invalidations(&mut *env.db().conn())?.is_empty());
