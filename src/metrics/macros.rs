@@ -22,6 +22,7 @@ macro_rules! metrics {
             pub(crate) recently_accessed_releases: RecentlyAccessedReleases,
             pub(crate) cdn_invalidation_time: prometheus::HistogramVec,
             pub(crate) cdn_queue_time: prometheus::HistogramVec,
+            pub(crate) build_time: prometheus::Histogram,
         }
         impl $name {
             $vis fn new() -> Result<Self, prometheus::Error> {
@@ -61,11 +62,22 @@ macro_rules! metrics {
                 )?;
                 registry.register(Box::new(cdn_queue_time.clone()))?;
 
+                let build_time = prometheus::Histogram::with_opts(
+                    prometheus::HistogramOpts::new(
+                        "build_time",
+                        "time spent building crates",
+                    )
+                    .namespace($namespace)
+                    .buckets($crate::metrics::build_time_histogram_buckets()),
+                )?;
+                registry.register(Box::new(build_time.clone()))?;
+
                 Ok(Self {
                     registry,
                     recently_accessed_releases: RecentlyAccessedReleases::new(),
                     cdn_invalidation_time,
                     cdn_queue_time,
+                    build_time,
                     $(
                         $(#[$meta])*
                         $metric,
