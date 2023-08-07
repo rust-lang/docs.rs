@@ -9,9 +9,7 @@ use crate::{
 use anyhow::Result;
 use axum::{
     extract::{Extension, Path},
-    http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -79,40 +77,6 @@ pub(crate) async fn build_list_handler(
     .into_response())
 }
 
-pub(crate) async fn build_list_json_handler(
-    Path((name, req_version)): Path<(String, String)>,
-    Extension(pool): Extension<Pool>,
-) -> AxumResult<impl IntoResponse> {
-    let version = match match_version_axum(&pool, &name, Some(&req_version))
-        .await?
-        .exact_name_only()?
-    {
-        MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
-        MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{name}/{version}/builds.json"),
-                CachePolicy::ForeverInCdn,
-            )?
-            .into_response());
-        }
-    };
-
-    let builds = spawn_blocking({
-        move || {
-            let mut conn = pool.get()?;
-            get_builds(&mut conn, &name, &version)
-        }
-    })
-    .await?;
-
-    Ok((
-        Extension(CachePolicy::NoStoreMustRevalidate),
-        [(ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
-        Json(builds),
-    )
-        .into_response())
-}
-
 fn get_builds(conn: &mut postgres::Client, name: &str, version: &str) -> Result<Vec<Build>> {
     Ok(conn
         .query(
@@ -150,7 +114,7 @@ mod tests {
         test::{assert_cache_control, wrapper, FakeBuild},
         web::cache::CachePolicy,
     };
-    use chrono::{DateTime, Duration, Utc};
+    use chrono::Duration;
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
 
@@ -190,88 +154,6 @@ mod tests {
             assert!(rows[1].contains("docs.rs 2.0.0"));
             assert!(rows[2].contains("rustc (blabla 2019-01-01)"));
             assert!(rows[2].contains("docs.rs 1.0.0"));
-
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn build_list_json() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("foo")
-                .version("0.1.0")
-                .builds(vec![
-                    FakeBuild::default()
-                        .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
-                    FakeBuild::default()
-                        .successful(false)
-                        .rustc_version("rustc (blabla 2020-01-01)")
-                        .docsrs_version("docs.rs 2.0.0"),
-                    FakeBuild::default()
-                        .rustc_version("rustc (blabla 2021-01-01)")
-                        .docsrs_version("docs.rs 3.0.0"),
-                ])
-                .create()?;
-
-            let response = env.frontend().get("/crate/foo/0.1.0/builds.json").send()?;
-            assert_cache_control(&response, CachePolicy::NoStoreMustRevalidate, &env.config());
-            let value: serde_json::Value = serde_json::from_str(&response.text()?)?;
-
-            assert_eq!(value.pointer("/0/build_status"), Some(&true.into()));
-            assert_eq!(
-                value.pointer("/0/docsrs_version"),
-                Some(&"docs.rs 3.0.0".into())
-            );
-            assert_eq!(
-                value.pointer("/0/rustc_version"),
-                Some(&"rustc (blabla 2021-01-01)".into())
-            );
-            assert!(value.pointer("/0/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/0/build_time").unwrap().clone()
-            )
-            .is_ok());
-
-            assert_eq!(value.pointer("/1/build_status"), Some(&false.into()));
-            assert_eq!(
-                value.pointer("/1/docsrs_version"),
-                Some(&"docs.rs 2.0.0".into())
-            );
-            assert_eq!(
-                value.pointer("/1/rustc_version"),
-                Some(&"rustc (blabla 2020-01-01)".into())
-            );
-            assert!(value.pointer("/1/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/1/build_time").unwrap().clone()
-            )
-            .is_ok());
-
-            assert_eq!(value.pointer("/2/build_status"), Some(&true.into()));
-            assert_eq!(
-                value.pointer("/2/docsrs_version"),
-                Some(&"docs.rs 1.0.0".into())
-            );
-            assert_eq!(
-                value.pointer("/2/rustc_version"),
-                Some(&"rustc (blabla 2019-01-01)".into())
-            );
-            assert!(value.pointer("/2/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/2/build_time").unwrap().clone()
-            )
-            .is_ok());
-
-            assert!(
-                value.pointer("/1/build_time").unwrap().as_str().unwrap()
-                    < value.pointer("/0/build_time").unwrap().as_str().unwrap()
-            );
-            assert!(
-                value.pointer("/2/build_time").unwrap().as_str().unwrap()
-                    < value.pointer("/1/build_time").unwrap().as_str().unwrap()
-            );
 
             Ok(())
         });
@@ -354,15 +236,6 @@ mod tests {
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/builds\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest\""));
-
-            let resp_json = env
-                .frontend()
-                .get("/crate/aquarelle/latest/builds.json")
-                .send()?;
-            assert!(resp_json
-                .url()
-                .as_str()
-                .ends_with("/crate/aquarelle/latest/builds.json"));
 
             Ok(())
         });

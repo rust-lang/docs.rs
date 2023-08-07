@@ -217,10 +217,6 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::builds::build_list_handler),
         )
         .route(
-            "/crate/:name/:version/builds.json",
-            get_internal(super::builds::build_list_json_handler),
-        )
-        .route(
             "/crate/:name/:version/status.json",
             get_internal(super::status::status_handler),
         )
