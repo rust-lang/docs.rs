@@ -62,3 +62,6 @@ pub const BUILD_VERSION: &str = concat!(
 /// Example:
 /// `s3://rust-docs-rs//rustdoc-static/something.css`
 pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
+
+/// Maximum number of targets allowed for a crate to be documented on.
+pub const DEFAULT_MAX_TARGETS: usize = 10;

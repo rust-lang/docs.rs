@@ -93,8 +93,12 @@ macro_rules! impl_axum_webpage {
 
 
                 response.extensions_mut().insert($crate::web::page::web_page::DelayedTemplateRender {
-                    context: ::tera::Context::from_serialize(&self)
-                        .expect("could not create tera context from web-page"),
+                    context: {
+                        let mut c = ::tera::Context::from_serialize(&self)
+                            .expect("could not create tera context from web-page");
+                        c.insert("DEFAULT_MAX_TARGETS", &$crate::DEFAULT_MAX_TARGETS);
+                        c
+                    },
                     template: {
                         let template: fn(&Self) -> ::std::borrow::Cow<'static, str> = $template;
                         template(&self).to_string()

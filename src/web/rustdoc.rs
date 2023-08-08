@@ -317,7 +317,8 @@ impl RustdocPage {
         let is_latest_url = self.is_latest_url;
 
         // Build the page of documentation
-        let ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
+        let mut ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
+        ctx.insert("DEFAULT_MAX_TARGETS", &crate::DEFAULT_MAX_TARGETS);
 
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting

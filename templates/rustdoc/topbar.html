@@ -209,8 +209,8 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 
         {# Build the dropdown list showing available targets #}
         <ul class="pure-menu-children" id="platforms">
-            {%- if metadata.doc_targets|length < 6 -%}
-                {%- include "rustdoc/targets.tml" -%}
+            {%- if metadata.doc_targets|length < DEFAULT_MAX_TARGETS -%}
+                {%- include "rustdoc/platforms.html" -%}
             {%- else -%}
                 <span class="rotate">{{ "spinner" | fas }}</span>
             {%- endif -%}
