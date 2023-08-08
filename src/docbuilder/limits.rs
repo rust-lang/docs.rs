@@ -20,7 +20,7 @@ impl Limits {
             // 3 GB default default
             memory: config.build_default_memory_limit.unwrap_or(3 * GB),
             timeout: Duration::from_secs(15 * 60), // 15 minutes
-            targets: 10,
+            targets: crate::DEFAULT_MAX_TARGETS,
             networking: false,
             max_log_size: 100 * 1024, // 100 KB
         }
