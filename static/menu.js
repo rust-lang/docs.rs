@@ -7,7 +7,7 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
 
 const loadedMenus = new Set();
 
-function loadReleases(menu, id, msg, path, extra) {
+function loadAjaxMenu(menu, id, msg, path, extra) {
     if (loadedMenus.has(id)) {
         return;
     }
@@ -86,9 +86,9 @@ function loadReleases(menu, id, msg, path, extra) {
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
         if (newMenu.querySelector("#releases-list")) {
-            loadReleases(newMenu, "releases-list", "release list", "releases/list", "");
+            loadAjaxMenu(newMenu, "releases-list", "release list", "releases/list", "");
         } else if (newMenu.querySelector("#platforms")) {
-            loadReleases(
+            loadAjaxMenu(
                 newMenu,
                 "platforms",
                 "platforms list",
