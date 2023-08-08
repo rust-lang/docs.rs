@@ -180,18 +180,6 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/crate/:name",
             get_internal(super::crate_details::crate_details_handler),
         )
-        .route(
-            "/platforms/:name/:version/:target/",
-            get_internal(super::crate_details::get_all_platforms),
-        )
-        .route(
-            "/platforms/:name/:version/:target/*path",
-            get_internal(super::crate_details::get_all_platforms),
-        )
-        .route(
-            "/releases/list/:name",
-            get_internal(super::crate_details::get_all_releases),
-        )
         .route_with_tsr(
             "/crate/:name/:version",
             get_internal(super::crate_details::crate_details_handler),
@@ -247,6 +235,22 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         .route(
             "/crate/:name/:version/source/*path",
             get_internal(super::source::source_browser_handler),
+        )
+        .route(
+            "/menus/platforms/:name/:version/:target",
+            get_internal(super::crate_details::get_all_platforms),
+        )
+        .route(
+            "/menus/platforms/:name/:version/:target/",
+            get_internal(super::crate_details::get_all_platforms),
+        )
+        .route(
+            "/menus/platforms/:name/:version/:target/*path",
+            get_internal(super::crate_details::get_all_platforms),
+        )
+        .route(
+            "/menus/releases/:name",
+            get_internal(super::crate_details::get_all_releases),
         )
         .route(
             "/-/rustdoc.static/*path",

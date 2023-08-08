@@ -33,7 +33,7 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
             document.getElementById(id).innerHTML = `Failed to load ${msg}`;
         }
     };
-    xhttp.open("GET", `/${path}/${crateName}${extra}`, true);
+    xhttp.open("GET", `/menus/${path}/${crateName}${extra}`, true);
     xhttp.send();
 };
 
@@ -86,7 +86,7 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
         if (newMenu.querySelector("#releases-list")) {
-            loadAjaxMenu(newMenu, "releases-list", "release list", "releases/list", "");
+            loadAjaxMenu(newMenu, "releases-list", "release list", "releases", "");
         } else if (newMenu.querySelector("#platforms")) {
             loadAjaxMenu(
                 newMenu,
