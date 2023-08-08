@@ -1283,6 +1283,48 @@ mod tests {
         });
     }
 
+    // Ensure that if there are more than a given number of targets, it will not generate them in
+    // the HTML directly (they will be loaded by AJAX if the user opens the menu).
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn platform_menu_ajax() {
+        assert!(crate::DEFAULT_MAX_TARGETS > 2);
+
+        fn check_count(nb_targets: usize, expected: usize) {
+            wrapper(|env| {
+                let mut rel = env
+                    .fake_release()
+                    .name("dummy")
+                    .version("0.4.0")
+                    .rustdoc_file("dummy/index.html")
+                    .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
+                    .default_target("x86_64-unknown-linux-gnu");
+
+                for nb in 0..nb_targets - 1 {
+                    rel = rel.add_target(&format!("x86_64-pc-windows-msvc{nb}"));
+                }
+                rel.create()?;
+
+                let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
+                assert!(response.status().is_success());
+
+                let nb_li = kuchikiki::parse_html()
+                    .one(response.text()?)
+                    .select(r#"#platforms li a"#)
+                    .expect("invalid selector")
+                    .count();
+                assert_eq!(nb_li, expected);
+                Ok(())
+            });
+        }
+
+        // First we check that with 2 releases, the platforms list should be in the HTML.
+        check_count(2, 2);
+        // Then we check the same thing but with number of targets equal
+        // to `DEFAULT_MAX_TARGETS`.
+        check_count(crate::DEFAULT_MAX_TARGETS, 0);
+    }
+
     #[test]
     fn latest_url() {
         wrapper(|env| {
