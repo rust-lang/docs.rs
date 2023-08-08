@@ -496,18 +496,11 @@ pub(crate) async fn get_all_platforms(
     Extension(pool): Extension<Pool>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
-    // since we directly use the Uri-path and not the extracted params from the router,
-    // we have to percent-decode the string here.
-    let original_path = percent_encoding::percent_decode(uri.path().as_bytes())
-        .decode_utf8()
-        .map_err(|_| AxumNope::BadRequest)?;
-    let mut req_path: Vec<&str> = original_path.split('/').collect();
+    let req_path: String = params.path.unwrap_or_default();
+    let req_path: Vec<&str> = req_path.split('/').collect();
 
     let release_found = match_version_axum(&pool, &params.name, Some(&params.version)).await?;
     trace!(?release_found, "found release");
-
-    // Remove the empty start, "releases", the name and the version from the path
-    req_path.drain(..4).for_each(drop);
 
     // Convenience function to allow for easy redirection
     #[instrument]
