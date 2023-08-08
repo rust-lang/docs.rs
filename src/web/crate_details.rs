@@ -1245,12 +1245,15 @@ mod tests {
                 .add_target("x86_64-pc-windows-msvc")
                 .create()?;
 
-            let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
+            let response = env
+                .frontend()
+                .get("/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc")
+                .send()?;
             assert!(response.status().is_success());
 
             let platform_links: Vec<(String, String)> = kuchikiki::parse_html()
                 .one(response.text()?)
-                .select(r#"a[aria-label="Platform"] + ul li a"#)
+                .select(r#"li a"#)
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();

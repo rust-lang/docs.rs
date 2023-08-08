@@ -2259,8 +2259,12 @@ mod test {
                 .create()?;
 
             // test rustdoc pages stay on the documentation
-            let page = kuchikiki::parse_html()
-                .one(env.frontend().get("/hexponent/releases").send()?.text()?);
+            let page = kuchikiki::parse_html().one(
+                env.frontend()
+                    .get("/menus/releases/hexponent")
+                    .send()?
+                    .text()?,
+            );
             let selector =
                 r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
                     .to_string();
