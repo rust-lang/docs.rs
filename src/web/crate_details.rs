@@ -496,6 +496,11 @@ pub(crate) async fn get_all_platforms(
     Extension(pool): Extension<Pool>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
+    let is_crate_root = params
+        .path
+        .as_ref()
+        .map(|path| path == "index.html")
+        .unwrap_or(true);
     let req_path: String = params.path.unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
@@ -618,7 +623,7 @@ pub(crate) async fn get_all_platforms(
             doc_targets,
         },
         inner_path,
-        use_direct_platform_links: true,
+        use_direct_platform_links: is_crate_root,
         current_target,
     };
     Ok(res.into_response())
@@ -1235,25 +1240,10 @@ mod tests {
 
     #[test]
     fn platform_links_are_direct_and_without_nofollow() {
-        wrapper(|env| {
-            env.fake_release()
-                .name("dummy")
-                .version("0.4.0")
-                .rustdoc_file("dummy/index.html")
-                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
-                .default_target("x86_64-unknown-linux-gnu")
-                .add_target("x86_64-pc-windows-msvc")
-                .create()?;
-
-            let response = env
-                .frontend()
-                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc")
-                .send()?;
-            assert!(response.status().is_success());
-
+        fn check_links(response_text: String, ajax: bool, should_contain_redirect: bool) {
             let platform_links: Vec<(String, String)> = kuchikiki::parse_html()
-                .one(response.text()?)
-                .select(r#"li a"#)
+                .one(response_text)
+                .select(&format!(r#"{}li a"#, if ajax { "" } else { "#platforms " }))
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();
@@ -1266,9 +1256,68 @@ mod tests {
             assert_eq!(platform_links.len(), 2);
 
             for (url, rel) in platform_links {
-                assert!(!url.contains("/target-redirect/"));
-                assert_eq!(rel, "");
+                assert_eq!(
+                    url.contains("/target-redirect/"),
+                    should_contain_redirect,
+                    "ajax: {ajax:?}, should_contain_redirect: {should_contain_redirect:?}",
+                );
+                if !should_contain_redirect {
+                    assert_eq!(rel, "");
+                } else {
+                    assert_eq!(rel, "nofollow");
+                }
             }
+        }
+
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .rustdoc_file("dummy/index.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/index.html")
+                .rustdoc_file("x86_64-pc-windows-msvc/dummy/struct.A.html")
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("x86_64-pc-windows-msvc")
+                .create()?;
+
+            let response = env.frontend().get("/dummy/latest/dummy").send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, false, true);
+            // Same test with AJAX endpoint.
+            let response = env
+                .frontend()
+                .get("/-/menus/platforms/dummy/latest/dummy")
+                .send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, true, false);
+
+            let response = env
+                .frontend()
+                .get("/dummy/0.4.0/x86_64-pc-windows-msvc/dummy")
+                .send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, false, true);
+            // Same test with AJAX endpoint.
+            let response = env
+                .frontend()
+                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy")
+                .send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, true, true);
+
+            let response = env
+                .frontend()
+                .get("/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html")
+                .send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, false, true);
+            // Same test with AJAX endpoint.
+            let response = env
+                .frontend()
+                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html")
+                .send()?;
+            assert!(response.status().is_success());
+            check_links(response.text()?, true, true);
 
             Ok(())
         });
