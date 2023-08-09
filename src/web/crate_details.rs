@@ -1256,7 +1256,7 @@ mod tests {
 
             let response = env
                 .frontend()
-                .get("/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc")
+                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc")
                 .send()?;
             assert!(response.status().is_success());
 

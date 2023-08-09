@@ -237,19 +237,19 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::source::source_browser_handler),
         )
         .route(
-            "/menus/platforms/:name/:version/:target",
+            "/-/menus/platforms/:name/:version/:target",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/menus/platforms/:name/:version/:target/",
+            "/-/menus/platforms/:name/:version/:target/",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/menus/platforms/:name/:version/:target/*path",
+            "/-/menus/platforms/:name/:version/:target/*path",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/menus/releases/:name",
+            "/-/menus/releases/:name",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
