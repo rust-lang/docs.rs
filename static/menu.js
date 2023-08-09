@@ -33,7 +33,7 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
             document.getElementById(id).innerHTML = `Failed to load ${msg}`;
         }
     };
-    xhttp.open("GET", `/menus/${path}/${crateName}${extra}`, true);
+    xhttp.open("GET", `/-/menus/${path}/${crateName}${extra}`, true);
     xhttp.send();
 };
 
