@@ -649,8 +649,7 @@ pub fn migrate_old_archive_indexes(
                 crates
                 INNER JOIN releases ON releases.crate_id = crates.id
             WHERE
-                releases.archive_storage = true AND
-                releases.build_status = true
+                releases.archive_storage = true
 
             ORDER BY
                 crates.name,
