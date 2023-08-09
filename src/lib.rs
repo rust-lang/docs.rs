@@ -9,6 +9,7 @@ pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::RustwideBuilder;
 pub use self::index::Index;
 pub use self::metrics::{InstanceMetrics, ServiceMetrics};
+pub use self::storage::migrate_old_archive_indexes;
 pub use self::storage::Storage;
 pub use self::web::{start_background_metrics_webserver, start_web_server};
 
