@@ -592,7 +592,17 @@ pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
 #[instrument(skip(storage))]
 fn migrate_one(storage: &Storage, archive_path: &str, tmpdir: &Path) -> Result<()> {
     // this will also download the index if it doesn't exist locally
-    let local_index_filename = storage.get_index_filename(archive_path)?;
+    let local_index_filename = match storage.get_index_filename(archive_path) {
+        Ok(filename) => filename,
+        Err(err) => {
+            if err.is::<PathNotFoundError>() {
+                info!("index does not exist, skipping");
+                return Ok(());
+            } else {
+                return Err(err);
+            }
+        }
+    };
 
     if archive_index::is_sqlite_file(&local_index_filename)? {
         info!("index already in SQLite format, skipping");
@@ -632,17 +642,17 @@ pub fn migrate_old_archive_indexes(
     for row in conn
         .query_raw(
             "
-            SELECT 
+            SELECT
                 crates.name,
                 releases.version
-            FROM 
+            FROM
                 crates
                 INNER JOIN releases ON releases.crate_id = crates.id
-            WHERE 
-                releases.archive_storage = true AND 
+            WHERE
+                releases.archive_storage = true AND
                 releases.build_status = true
 
-            ORDER BY 
+            ORDER BY
                 crates.name,
                 releases.id
             ",
