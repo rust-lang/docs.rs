@@ -241,12 +241,20 @@ impl CrateDetails {
 
     #[fn_error_context::context("fetching readme for {} {}", self.name, self.version)]
     fn fetch_readme(&self, storage: &Storage) -> anyhow::Result<Option<String>> {
-        let manifest = storage.fetch_source_file(
+        let manifest = match storage.fetch_source_file(
             &self.name,
             &self.version,
             "Cargo.toml",
             self.archive_storage,
-        )?;
+        ) {
+            Ok(manifest) => manifest,
+            Err(err) if err.is::<PathNotFoundError>() => {
+                return Ok(None);
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        };
         let manifest = String::from_utf8(manifest.content)
             .context("parsing Cargo.toml")?
             .parse::<toml::Value>()
