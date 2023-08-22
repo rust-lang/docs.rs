@@ -216,7 +216,7 @@ impl CdnBackend {
         {
             Ok(response) => response,
             Err(SdkError::ServiceError(err)) => {
-                if err.raw().http().status() == http::StatusCode::NOT_FOUND {
+                if err.raw().status() == http::StatusCode::NOT_FOUND {
                     return Ok(None);
                 } else {
                     return Err(err.into_err().into());
