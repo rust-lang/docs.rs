@@ -82,7 +82,7 @@ impl S3Backend {
                 Ok(_) => Ok(true),
                 Err(SdkError::ServiceError(err))
                     if (matches!(err.err(), HeadObjectError::NotFound(_))
-                        || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
+                        || err.raw().status() == http::StatusCode::NOT_FOUND) =>
                 {
                     Ok(false)
                 }
@@ -110,7 +110,7 @@ impl S3Backend {
                     })
                     .unwrap_or(false)),
                 Err(SdkError::ServiceError(err)) => {
-                    if err.raw().http().status() == http::StatusCode::NOT_FOUND {
+                    if err.raw().status() == http::StatusCode::NOT_FOUND {
                         Err(super::PathNotFoundError.into())
                     } else {
                         Err(err.into_err().into())
@@ -145,7 +145,7 @@ impl S3Backend {
             {
                 Ok(_) => Ok(()),
                 Err(SdkError::ServiceError(err)) => {
-                    if err.raw().http().status() == http::StatusCode::NOT_FOUND {
+                    if err.raw().status() == http::StatusCode::NOT_FOUND {
                         Err(super::PathNotFoundError.into())
                     } else {
                         Err(err.into_err().into())
@@ -173,7 +173,7 @@ impl S3Backend {
                 .map_err(|err| match err {
                     SdkError::ServiceError(err)
                         if (matches!(err.err(), GetObjectError::NoSuchKey(_))
-                            || err.raw().http().status() == http::StatusCode::NOT_FOUND) =>
+                            || err.raw().status() == http::StatusCode::NOT_FOUND) =>
                     {
                         super::PathNotFoundError.into()
                     }
