@@ -136,7 +136,11 @@ impl CdnBackend {
         invalidation_id: &str,
         path_patterns: &[&str],
     ) {
-        let CdnBackend::Dummy { ref invalidation_requests, .. } = self else {
+        let CdnBackend::Dummy {
+            ref invalidation_requests,
+            ..
+        } = self
+        else {
             panic!("invalid CDN backend");
         };
 
@@ -559,7 +563,11 @@ mod tests {
     use aws_smithy_http::body::SdkBody;
 
     fn active_invalidations(cdn: &CdnBackend, distribution_id: &str) -> Vec<CdnInvalidation> {
-        let CdnBackend::Dummy {ref invalidation_requests, .. } = cdn  else {
+        let CdnBackend::Dummy {
+            ref invalidation_requests,
+            ..
+        } = cdn
+        else {
             panic!("invalid CDN backend");
         };
 

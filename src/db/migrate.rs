@@ -47,6 +47,7 @@ macro_rules! migration {
                     self.description()
                 );
 
+                #[allow(clippy::redundant_closure_call)]
                 $up_func(transaction)
             }
             fn down(&self, transaction: &mut Transaction) -> Result<(), PostgresError> {
@@ -56,6 +57,7 @@ macro_rules! migration {
                     self.version(),
                     self.description()
                 );
+                #[allow(clippy::redundant_closure_call)]
                 $down_func(transaction)
             }
         }
