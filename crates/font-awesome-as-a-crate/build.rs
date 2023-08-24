@@ -34,7 +34,7 @@ fn write_fontawesome_sprite() {
             dest_file
                 .write_all(
                     format!(
-                        r####"(b"{dirname}",b"{filename}")=>r###"{data}"###,"####,
+                        r####"(b"{dirname}",b"{filename}")=>r#"{data}"#,"####,
                         data = data,
                         dirname = dirname,
                         filename = filename.replace(".svg", ""),

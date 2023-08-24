@@ -120,7 +120,7 @@ mod tests {
         }];
 
         assert_eq!(
-            calculate_diff(db_releases.iter(), vec![].iter()),
+            calculate_diff(db_releases.iter(), [].iter()),
             vec![Difference::CrateNotInIndex("krate".into())]
         );
     }
@@ -142,7 +142,7 @@ mod tests {
         }];
 
         assert_eq!(
-            calculate_diff(vec![].iter(), index_releases.iter()),
+            calculate_diff([].iter(), index_releases.iter()),
             vec![Difference::CrateNotInDb(
                 "krate".into(),
                 vec!["0.0.2".into(), "0.0.3".into()]
