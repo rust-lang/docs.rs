@@ -645,6 +645,7 @@ mod tests {
     use crate::index::api::CrateOwner;
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_cached, wrapper, TestDatabase,
+        TestEnvironment,
     };
     use anyhow::{Context, Error};
     use kuchikiki::traits::TendrilSink;
@@ -1279,6 +1280,25 @@ mod tests {
             }
         }
 
+        fn run_check_links(
+            env: &TestEnvironment,
+            url: &str,
+            extra: &str,
+            should_contain_redirect: bool,
+        ) {
+            let response = env.frontend().get(url).send().unwrap();
+            assert!(response.status().is_success());
+            check_links(response.text().unwrap(), false, should_contain_redirect);
+            // Same test with AJAX endpoint.
+            let response = env
+                .frontend()
+                .get(&format!("/-/menus/platforms{url}{extra}"))
+                .send()
+                .unwrap();
+            assert!(response.status().is_success());
+            check_links(response.text().unwrap(), true, should_contain_redirect);
+        }
+
         wrapper(|env| {
             env.fake_release()
                 .name("dummy")
@@ -1290,55 +1310,15 @@ mod tests {
                 .add_target("x86_64-pc-windows-msvc")
                 .create()?;
 
-            let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, false, false);
-            // Same test with AJAX endpoint.
-            let response = env
-                .frontend()
-                .get("/-/menus/platforms/crate/dummy/0.4.0")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, true, false);
-
-            let response = env.frontend().get("/dummy/latest/dummy").send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, false, true);
-            // Same test with AJAX endpoint.
-            let response = env
-                .frontend()
-                .get("/-/menus/platforms/dummy/latest/dummy/")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, true, true);
-
-            let response = env
-                .frontend()
-                .get("/dummy/0.4.0/x86_64-pc-windows-msvc/dummy")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, false, true);
-            // Same test with AJAX endpoint.
-            let response = env
-                .frontend()
-                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, true, true);
-
-            let response = env
-                .frontend()
-                .get("/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, false, true);
-            // Same test with AJAX endpoint.
-            let response = env
-                .frontend()
-                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html")
-                .send()?;
-            assert!(response.status().is_success());
-            check_links(response.text()?, true, true);
+            run_check_links(env, "/crate/dummy/0.4.0", "", false);
+            run_check_links(env, "/dummy/latest/dummy", "/", true);
+            run_check_links(env, "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy", "/", true);
+            run_check_links(
+                env,
+                "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html",
+                "/",
+                true,
+            );
 
             Ok(())
         });
