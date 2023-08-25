@@ -1196,6 +1196,14 @@ mod tests {
                 .source_file("Cargo.toml", br#"package.readme = "MEREAD""#)
                 .create()?;
 
+            env.fake_release()
+                .name("dummy")
+                .version("0.5.0")
+                .readme_only_database("database readme")
+                .source_file("README.md", b"storage readme")
+                .no_cargo_toml()
+                .create()?;
+
             let check_readme = |path, content| {
                 let resp = env.frontend().get(path).send().unwrap();
                 let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
@@ -1207,6 +1215,10 @@ mod tests {
             check_readme("/crate/dummy/0.3.0", "storage readme");
             check_readme("/crate/dummy/0.4.0", "storage meread");
 
+            let details = CrateDetails::new(&mut *env.db().conn(), "dummy", "0.5.0", "0.5.0", None)
+                .unwrap()
+                .unwrap();
+            assert!(matches!(details.fetch_readme(&env.storage()), Ok(None)));
             Ok(())
         });
     }

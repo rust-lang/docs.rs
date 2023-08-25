@@ -34,6 +34,7 @@ pub(crate) struct FakeRelease<'a> {
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
     doc_coverage: Option<DocCoverage>,
+    no_cargo_toml: bool,
 }
 
 pub(crate) struct FakeBuild {
@@ -96,6 +97,7 @@ impl<'a> FakeRelease<'a> {
             github_stats: None,
             doc_coverage: None,
             archive_storage: false,
+            no_cargo_toml: false,
         }
     }
 
@@ -170,6 +172,11 @@ impl<'a> FakeRelease<'a> {
 
     pub(crate) fn source_file(mut self, path: &'a str, data: &'a [u8]) -> Self {
         self.source_files.push((path, data));
+        self
+    }
+
+    pub(crate) fn no_cargo_toml(mut self) -> Self {
+        self.no_cargo_toml = true;
         self
     }
 
@@ -354,10 +361,11 @@ impl<'a> FakeRelease<'a> {
         let source_tmp = create_temp_dir();
         store_files_into(&self.source_files, source_tmp.path())?;
 
-        if !self
-            .source_files
-            .iter()
-            .any(|&(path, _)| path == "Cargo.toml")
+        if !self.no_cargo_toml
+            && !self
+                .source_files
+                .iter()
+                .any(|&(path, _)| path == "Cargo.toml")
         {
             let MetadataPackage { name, version, .. } = &package;
             let content = format!(
