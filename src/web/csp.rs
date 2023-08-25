@@ -72,6 +72,9 @@ impl Csp {
         // Allow loading any font from the current origin.
         result.push_str("; font-src 'self'");
 
+        // Allow XHR.
+        result.push_str("; connect-src 'self'");
+
         // Only allow scripts with the random nonce attached to them.
         //
         // We can't just allow 'self' here, as users can upload arbitrary .js files as part of
@@ -190,7 +193,7 @@ mod tests {
         assert_eq!(
             Some(format!(
                 "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
-                 style-src 'self'; font-src 'self'; script-src 'nonce-{}'",
+                 style-src 'self'; font-src 'self'; connect-src 'self'; script-src 'nonce-{}'",
                 csp.nonce()
             )),
             csp.render(ContentType::Html)

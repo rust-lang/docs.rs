@@ -496,7 +496,7 @@ pub(crate) async fn get_all_platforms(
     Extension(pool): Extension<Pool>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
-    let is_crate_root = uri.path().starts_with("/crate/");
+    let is_crate_root = uri.path().starts_with("/-/menus/platforms/crate/");
     let req_path: String = params.path.unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
@@ -600,6 +600,11 @@ pub(crate) async fn get_all_platforms(
         };
 
         (target, inner_path.join("/"))
+    };
+    let inner_path = if inner_path.is_empty() {
+        format!("{name}/index.html")
+    } else {
+        format!("{name}/{inner_path}")
     };
 
     let current_target = if latest_release.build_status {
@@ -1293,7 +1298,7 @@ mod tests {
             // Same test with AJAX endpoint.
             let response = env
                 .frontend()
-                .get("/-/menus/platforms/dummy/latest/dummy")
+                .get("/-/menus/platforms/dummy/latest/dummy/")
                 .send()?;
             assert!(response.status().is_success());
             check_links(response.text()?, true, true);
@@ -1307,7 +1312,7 @@ mod tests {
             // Same test with AJAX endpoint.
             let response = env
                 .frontend()
-                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy")
+                .get("/-/menus/platforms/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/")
                 .send()?;
             assert!(response.status().is_success());
             check_links(response.text()?, true, true);
