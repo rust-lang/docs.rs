@@ -357,9 +357,7 @@ pub(crate) struct RustdocHtmlParams {
     // both target and path are only used for matching the route.
     // The actual path is read from the request `Uri` because
     // we have some static filenames directly in the routes.
-    #[allow(dead_code)]
     pub(crate) target: Option<String>,
-    #[allow(dead_code)]
     pub(crate) path: Option<String>,
 }
 
