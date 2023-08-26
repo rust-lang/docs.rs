@@ -17,7 +17,6 @@ use crate::{
 use anyhow::{Context, Result};
 use axum::{
     extract::{Extension, Path},
-    http::Uri,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
@@ -500,12 +499,11 @@ impl_axum_webpage! {
 }
 
 #[tracing::instrument]
-pub(crate) async fn get_all_platforms(
+pub(crate) async fn get_all_platforms_inner(
     Path(params): Path<RustdocHtmlParams>,
     Extension(pool): Extension<Pool>,
-    uri: Uri,
+    is_crate_root: bool,
 ) -> AxumResult<AxumResponse> {
-    let is_crate_root = uri.path().starts_with("/-/menus/platforms/crate/");
     let req_path: String = params.path.unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
@@ -599,16 +597,23 @@ pub(crate) async fn get_all_platforms(
         .unwrap_or(&releases[0]);
 
     // The path within this crate version's rustdoc output
+    let inner;
     let (target, inner_path) = {
         let mut inner_path = req_path.clone();
 
-        let target = if inner_path.len() > 1 && doc_targets.iter().any(|s| s == inner_path[0]) {
-            inner_path.remove(0)
+        let target = if inner_path.len() > 1
+            && doc_targets
+                .iter()
+                .any(|s| Some(s) == params.target.as_ref())
+        {
+            inner_path.remove(0);
+            params.target.as_ref().unwrap()
         } else {
             ""
         };
 
-        (target, inner_path.join("/"))
+        inner = inner_path.join("/");
+        (target, inner.trim_end_matches('/'))
     };
     let inner_path = if inner_path.is_empty() {
         format!("{name}/index.html")
@@ -637,6 +642,21 @@ pub(crate) async fn get_all_platforms(
         current_target,
     };
     Ok(res.into_response())
+}
+
+pub(crate) async fn get_all_platforms_root(
+    Path(mut params): Path<RustdocHtmlParams>,
+    pool: Extension<Pool>,
+) -> AxumResult<AxumResponse> {
+    params.path = None;
+    get_all_platforms_inner(Path(params), pool, true).await
+}
+
+pub(crate) async fn get_all_platforms(
+    params: Path<RustdocHtmlParams>,
+    pool: Extension<Pool>,
+) -> AxumResult<AxumResponse> {
+    get_all_platforms_inner(params, pool, false).await
 }
 
 #[cfg(test)]
@@ -1251,8 +1271,12 @@ mod tests {
 
     #[test]
     fn platform_links_are_direct_and_without_nofollow() {
-        fn check_links(response_text: String, ajax: bool, should_contain_redirect: bool) {
-            let platform_links: Vec<(String, String)> = kuchikiki::parse_html()
+        fn check_links(
+            response_text: String,
+            ajax: bool,
+            should_contain_redirect: bool,
+        ) -> Vec<(String, String, String)> {
+            let platform_links: Vec<(String, String, String)> = kuchikiki::parse_html()
                 .one(response_text)
                 .select(&format!(r#"{}li a"#, if ajax { "" } else { "#platforms " }))
                 .expect("invalid selector")
@@ -1260,13 +1284,13 @@ mod tests {
                     let attributes = el.attributes.borrow();
                     let url = attributes.get("href").expect("href").to_string();
                     let rel = attributes.get("rel").unwrap_or("").to_string();
-                    (url, rel)
+                    (el.text_contents(), url, rel)
                 })
                 .collect();
 
             assert_eq!(platform_links.len(), 2);
 
-            for (url, rel) in platform_links {
+            for (_, url, rel) in &platform_links {
                 assert_eq!(
                     url.contains("/target-redirect/"),
                     should_contain_redirect,
@@ -1278,6 +1302,7 @@ mod tests {
                     assert_eq!(rel, "nofollow");
                 }
             }
+            platform_links
         }
 
         fn run_check_links(
@@ -1286,9 +1311,25 @@ mod tests {
             extra: &str,
             should_contain_redirect: bool,
         ) {
+            run_check_links_redir(
+                env,
+                url,
+                extra,
+                should_contain_redirect,
+                should_contain_redirect,
+            )
+        }
+
+        fn run_check_links_redir(
+            env: &TestEnvironment,
+            url: &str,
+            extra: &str,
+            should_contain_redirect: bool,
+            ajax_should_contain_redirect: bool,
+        ) {
             let response = env.frontend().get(url).send().unwrap();
             assert!(response.status().is_success());
-            check_links(response.text().unwrap(), false, should_contain_redirect);
+            let list1 = check_links(response.text().unwrap(), false, should_contain_redirect);
             // Same test with AJAX endpoint.
             let response = env
                 .frontend()
@@ -1296,7 +1337,18 @@ mod tests {
                 .send()
                 .unwrap();
             assert!(response.status().is_success());
-            check_links(response.text().unwrap(), true, should_contain_redirect);
+            let list2 = check_links(response.text().unwrap(), true, ajax_should_contain_redirect);
+            if should_contain_redirect == ajax_should_contain_redirect {
+                assert_eq!(list1, list2);
+            } else {
+                // If redirects differ, we only check platform names.
+                assert!(
+                    list1.iter().zip(&list2).all(|(a, b)| a.0 == b.0),
+                    "{:?} != {:?}",
+                    list1,
+                    list2,
+                );
+            }
         }
 
         wrapper(|env| {
@@ -1308,7 +1360,15 @@ mod tests {
                 .rustdoc_file("x86_64-pc-windows-msvc/dummy/struct.A.html")
                 .default_target("x86_64-unknown-linux-gnu")
                 .add_target("x86_64-pc-windows-msvc")
+                .source_file("README.md", b"storage readme")
                 .create()?;
+
+            // FIXME: For some reason, there are target-redirects on non-AJAX lists on docs.rs
+            // crate pages other than the "default" one.
+            run_check_links_redir(env, "/crate/dummy/0.4.0/features", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/builds", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/source/", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/source/README.md", "", true, false);
 
             run_check_links(env, "/crate/dummy/0.4.0", "", false);
             run_check_links(env, "/dummy/latest/dummy", "/", true);
