@@ -23,9 +23,12 @@ use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    sync::Arc,
+    time::Instant,
+};
 use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -244,9 +247,19 @@ impl RustwideBuilder {
             .run(|build| {
                 (|| -> Result<()> {
                     let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+                    let deadline = Instant::now()
+                        .checked_add(limits.timeout())
+                        .context("deadline is not representable")?;
 
-                    let res =
-                        self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
+                    let res = self.execute_build(
+                        HOST_TARGET,
+                        true,
+                        build,
+                        &limits,
+                        &metadata,
+                        true,
+                        deadline,
+                    )?;
                     if !res.result.successful {
                         bail!("failed to build dummy crate for {}", self.rustc_version);
                     }
@@ -333,14 +346,14 @@ impl RustwideBuilder {
             return Ok(false);
         }
 
-        self.update_toolchain()?;
-
-        info!("building package {} {}", name, version);
-
         if is_blacklisted(&mut conn, name)? {
             info!("skipping build of {}, crate has been blacklisted", name);
             return Ok(false);
         }
+
+        self.update_toolchain()?;
+
+        info!("building package {} {}", name, version);
 
         let limits = Limits::for_crate(&mut conn, name)?;
         #[cfg(target_os = "linux")]
@@ -388,18 +401,55 @@ impl RustwideBuilder {
                     default_target,
                     other_targets,
                 } = metadata.targets(self.config.include_default_targets);
-                let mut targets = vec![default_target];
-                targets.extend(&other_targets);
+
+                let cargo_args = metadata.cargo_args(&[], &[]);
+                let has_build_std = cargo_args.iter().any(|arg| arg.starts_with("-Zbuild-std"))
+                    || cargo_args
+                        .windows(2)
+                        .any(|args| args[0] == "-Z" && args[1].starts_with("build-std"));
+
+                let other_targets: Vec<_> = other_targets
+                    .into_iter()
+                    .filter(|target| {
+                        // If the explicit target is not a tier one target, we need to install it.
+                        if !docsrs_metadata::DEFAULT_TARGETS.contains(target) && !has_build_std {
+                            // This is a no-op if the target is already installed.
+                            if let Err(e) = self.toolchain.add_target(&self.workspace, target) {
+                                info!("Skipping target {target} since it failed to install: {e}");
+                                return false;
+                            }
+                        }
+                        true
+                    })
+                    // Limit the number of targets so that no one can try to build all 200000 possible targets
+                    .take(limits.targets())
+                    .collect();
+
                 // Fetch this before we enter the sandbox, so networking isn't blocked.
-                build.fetch_build_std_dependencies(&targets)?;
+                build.fetch_build_std_dependencies(&{
+                    let mut targets = other_targets.clone();
+                    targets.push(default_target);
+                    targets
+                })?;
 
                 (|| -> Result<bool> {
+                    let deadline = Instant::now()
+                        .checked_add(limits.timeout())
+                        .context("deadline is not representable")?;
+
                     let mut has_docs = false;
                     let mut successful_targets = Vec::new();
 
                     // Perform an initial build
-                    let mut res =
-                        self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+                    let mut res = self.execute_build(
+                        default_target,
+                        true,
+                        build,
+                        &limits,
+                        &metadata,
+                        false,
+                        deadline,
+                    )?;
 
                     // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                     let cargo_lock = build.host_source_dir().join("Cargo.lock");
@@ -421,6 +471,7 @@ impl RustwideBuilder {
                             &limits,
                             &metadata,
                             false,
+                            deadline,
                         )?;
                     }
 
@@ -448,8 +499,7 @@ impl RustwideBuilder {
                         successful_targets.push(res.target.clone());
 
                         // Then build the documentation for all the targets
-                        // Limit the number of targets so that no one can try to build all 200000 possible targets
-                        for target in other_targets.into_iter().take(limits.targets()) {
+                        for target in other_targets {
                             debug!("building package {} {} for {}", name, version, target);
                             self.build_target(
                                 target,
@@ -458,6 +508,7 @@ impl RustwideBuilder {
                                 local_storage.path(),
                                 &mut successful_targets,
                                 &metadata,
+                                deadline,
                             )?;
                         }
                         let (_, new_alg) = add_path_into_remote_archive(
@@ -572,6 +623,7 @@ impl RustwideBuilder {
         Ok(successful)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_target(
         &self,
         target: &str,
@@ -580,8 +632,10 @@ impl RustwideBuilder {
         local_storage: &Path,
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
+        deadline: Instant,
     ) -> Result<()> {
-        let target_res = self.execute_build(target, false, build, limits, metadata, false)?;
+        let target_res =
+            self.execute_build(target, false, build, limits, metadata, false, deadline)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -600,7 +654,7 @@ impl RustwideBuilder {
         target: &str,
         build: &Build,
         metadata: &Metadata,
-        limits: &Limits,
+        deadline: Instant,
     ) -> Result<Option<DocCoverage>> {
         let rustdoc_flags = vec![
             "--output-format".to_string(),
@@ -623,7 +677,7 @@ impl RustwideBuilder {
             items_with_examples: 0,
         };
 
-        self.prepare_command(build, target, metadata, limits, rustdoc_flags)?
+        self.prepare_command(build, target, metadata, rustdoc_flags, deadline)?
             .process_lines(&mut |line, _| {
                 if line.starts_with('{') && line.ends_with('}') {
                     let parsed = match serde_json::from_str::<HashMap<String, FileCoverage>>(line) {
@@ -650,6 +704,9 @@ impl RustwideBuilder {
         )
     }
 
+    // TODO(Nemo157): Look at pulling out a sub-builder for each crate-build
+    // that holds a lot of this state
+    #[allow(clippy::too_many_arguments)]
     fn execute_build(
         &self,
         target: &str,
@@ -658,6 +715,7 @@ impl RustwideBuilder {
         limits: &Limits,
         metadata: &Metadata,
         create_essential_files: bool,
+        deadline: Instant,
     ) -> Result<FullBuildResult> {
         let cargo_metadata = CargoMetadata::load_from_rustwide(
             &self.workspace,
@@ -682,7 +740,7 @@ impl RustwideBuilder {
         // we have to run coverage before the doc-build because currently it
         // deletes the doc-target folder.
         // https://github.com/rust-lang/cargo/issues/9447
-        let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
+        let doc_coverage = match self.get_coverage(target, build, metadata, deadline) {
             Ok(cov) => cov,
             Err(err) => {
                 info!("error when trying to get coverage: {}", err);
@@ -692,10 +750,11 @@ impl RustwideBuilder {
         };
 
         let successful = logging::capture(&storage, || {
-            self.prepare_command(build, target, metadata, limits, rustdoc_flags)
+            self.prepare_command(build, target, metadata, rustdoc_flags, deadline)
                 .and_then(|command| command.run().map_err(Error::from))
-                .is_ok()
-        });
+        })
+        .map_err(|e| info!("failed build: {e:?}"))
+        .is_ok();
 
         // For proc-macros, cargo will put the output in `target/doc`.
         // Move it to the target-specific directory for consistency with other builds.
@@ -732,9 +791,13 @@ impl RustwideBuilder {
         build: &'ws Build,
         target: &str,
         metadata: &Metadata,
-        limits: &Limits,
         mut rustdoc_flags_extras: Vec<String>,
+        deadline: Instant,
     ) -> Result<Command<'ws, 'pl>> {
+        let timeout = deadline
+            .checked_duration_since(Instant::now())
+            .context("exceeded deadline")?;
+
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
             "--offline".into(),
@@ -783,22 +846,7 @@ impl RustwideBuilder {
         rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
         let cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
 
-        // If the explicit target is not a tier one target, we need to install it.
-        let has_build_std = cargo_args.windows(2).any(|args| {
-            args[0].starts_with("-Zbuild-std")
-                || (args[0] == "-Z" && args[1].starts_with("build-std"))
-        }) || cargo_args.last().unwrap().starts_with("-Zbuild-std");
-        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) && !has_build_std {
-            // This is a no-op if the target is already installed.
-            self.toolchain
-                .add_target(&self.workspace, target)
-                .map_err(FailureError::compat)?;
-        }
-
-        let mut command = build
-            .cargo()
-            .timeout(Some(limits.timeout()))
-            .no_output_timeout(None);
+        let mut command = build.cargo().timeout(Some(timeout)).no_output_timeout(None);
 
         for (key, val) in metadata.environment_variables() {
             command = command.env(key, val);
@@ -885,7 +933,10 @@ pub(crate) struct BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_redirect, assert_success, wrapper, TestEnvironment};
+    use crate::{
+        db::Overrides,
+        test::{assert_redirect, assert_success, wrapper, TestEnvironment},
+    };
     use serde_json::Value;
 
     fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &str) -> Result<()> {
@@ -1214,6 +1265,49 @@ mod tests {
             let version = "1.0.33";
             let mut builder = RustwideBuilder::init(env).unwrap();
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_timeout_skips_some_targets() {
+        wrapper(|env| {
+            let crate_ = "bs58";
+            let version = "0.5.0";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            let get_targets = || -> i32 {
+                env.db()
+                    .conn()
+                    .query_one(
+                        "SELECT json_array_length(releases.doc_targets) FROM releases;",
+                        &[],
+                    )
+                    .unwrap()
+                    .get(0)
+            };
+
+            // Build once to time it and count how many targets are built
+            let start = Instant::now();
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            let timeout = start.elapsed() / 2;
+            let original_targets = get_targets();
+
+            // Build again with half the time and count how many targets are built
+            Overrides::save(
+                &mut env.db().conn(),
+                crate_,
+                Overrides {
+                    memory: None,
+                    targets: Some(original_targets as usize),
+                    timeout: Some(timeout),
+                },
+            )?;
+            assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            let new_targets = get_targets();
+
+            assert!(new_targets < original_targets);
+
             Ok(())
         });
     }
