@@ -174,8 +174,12 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
     transaction.execute("DELETE FROM owner_rels WHERE cid = $1;", &[&crate_id])?;
     let has_library = transaction
         .query_one(
-            "SELECT BOOL_OR(releases.is_library) AS has_library FROM releases",
-            &[],
+            "SELECT 
+                BOOL_OR(releases.is_library) AS has_library 
+            FROM releases
+            WHERE releases.crate_id = $1
+            ",
+            &[&crate_id],
         )?
         .get("has_library");
     transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
