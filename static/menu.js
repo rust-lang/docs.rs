@@ -20,7 +20,14 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
         // We're not in a documentation page, so no need to do anything.
         return;
     }
-    const crateName = window.location.pathname.split('/')[1];
+    const parts = window.location.pathname.split("/");
+    let crateName = parts[1];
+    let version = parts[2];
+    if (crateName === "crate") {
+        crateName = parts[2];
+        version = parts[3];
+        path += "/crate";
+    }
     const xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
         if (xhttp.readyState !== XMLHttpRequest.DONE) {
@@ -33,7 +40,8 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
             document.getElementById(id).innerHTML = `Failed to load ${msg}`;
         }
     };
-    xhttp.open("GET", `/-/menus/${path}/${crateName}${extra}`, true);
+    console.log(extra, path);
+    xhttp.open("GET", `/crate/${crateName}/${version}/menus/${path}${extra}`, true);
     xhttp.send();
 };
 
@@ -88,13 +96,15 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
         if (newMenu.querySelector("#releases-list")) {
             loadAjaxMenu(newMenu, "releases-list", "release list", "releases", "");
         } else if (newMenu.querySelector("#platforms")) {
+            const parts = window.location.pathname.split("/");
+            const startFrom = parts[1] === "crate" ? 4 : 3;
             loadAjaxMenu(
                 newMenu,
                 "platforms",
                 "platforms list",
                 "platforms",
-                // We get everything except the first crate name.
-                "/" + window.location.pathname.split("/").slice(2).join("/")
+                // We get everything except the first crate name and the version.
+                "/" + parts.slice(startFrom).join("/")
             );
         }
     }

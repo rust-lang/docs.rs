@@ -237,51 +237,47 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::source::source_browser_handler),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version",
+            "/crate/:name/:version/menus/platforms/crate/",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/features",
+            "/crate/:name/:version/menus/platforms/crate/features",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/builds",
+            "/crate/:name/:version/menus/platforms/crate/builds",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/builds/*path",
+            "/crate/:name/:version/menus/platforms/crate/builds/*path",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/source/",
+            "/crate/:name/:version/menus/platforms/crate/source/",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/source/*path",
+            "/crate/:name/:version/menus/platforms/crate/source/*path",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/:target",
+            "/crate/:name/:version/menus/platforms/:target",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/-/menus/platforms/crate/:name/:version/:target/*path",
+            "/crate/:name/:version/menus/platforms/:target/*path",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/-/menus/platforms/:name/:version/",
+            "/crate/:name/:version/menus/platforms/",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/-/menus/platforms/:name/:version/:target/",
+            "/crate/:name/:version/menus/platforms/:target/",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/-/menus/platforms/:name/:version/:target/*path",
-            get_internal(super::crate_details::get_all_platforms),
-        )
-        .route(
-            "/-/menus/releases/:name",
+            "/crate/:name/:version/menus/releases",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(

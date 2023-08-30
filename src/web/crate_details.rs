@@ -1307,13 +1307,15 @@ mod tests {
 
         fn run_check_links(
             env: &TestEnvironment,
-            url: &str,
+            url_start: &str,
+            url_end: &str,
             extra: &str,
             should_contain_redirect: bool,
         ) {
             run_check_links_redir(
                 env,
-                url,
+                url_start,
+                url_end,
                 extra,
                 should_contain_redirect,
                 should_contain_redirect,
@@ -1322,18 +1324,30 @@ mod tests {
 
         fn run_check_links_redir(
             env: &TestEnvironment,
-            url: &str,
+            url_start: &str,
+            url_end: &str,
             extra: &str,
             should_contain_redirect: bool,
             ajax_should_contain_redirect: bool,
         ) {
-            let response = env.frontend().get(url).send().unwrap();
+            let response = env
+                .frontend()
+                .get(&format!("{url_start}{url_end}"))
+                .send()
+                .unwrap();
             assert!(response.status().is_success());
             let list1 = check_links(response.text().unwrap(), false, should_contain_redirect);
             // Same test with AJAX endpoint.
+            let (start, extra_name) = if url_start.starts_with("/crate/") {
+                ("", "/crate")
+            } else {
+                ("/crate", "")
+            };
             let response = env
                 .frontend()
-                .get(&format!("/-/menus/platforms{url}{extra}"))
+                .get(&format!(
+                    "{start}{url_start}/menus/platforms{extra_name}{url_end}{extra}"
+                ))
                 .send()
                 .unwrap();
             assert!(response.status().is_success());
@@ -1365,17 +1379,31 @@ mod tests {
 
             // FIXME: For some reason, there are target-redirects on non-AJAX lists on docs.rs
             // crate pages other than the "default" one.
-            run_check_links_redir(env, "/crate/dummy/0.4.0/features", "", true, false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0/builds", "", true, false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0/source/", "", true, false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0/source/README.md", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0", "/features", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0", "/builds", "", true, false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0", "/source/", "", true, false);
+            run_check_links_redir(
+                env,
+                "/crate/dummy/0.4.0",
+                "/source/README.md",
+                "",
+                true,
+                false,
+            );
 
-            run_check_links(env, "/crate/dummy/0.4.0", "", false);
-            run_check_links(env, "/dummy/latest/dummy", "/", true);
-            run_check_links(env, "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy", "/", true);
+            run_check_links(env, "/crate/dummy/0.4.0", "", "/", false);
+            run_check_links(env, "/dummy/latest", "/dummy", "/", true);
             run_check_links(
                 env,
-                "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html",
+                "/dummy/0.4.0",
+                "/x86_64-pc-windows-msvc/dummy",
+                "/",
+                true,
+            );
+            run_check_links(
+                env,
+                "/dummy/0.4.0",
+                "/x86_64-pc-windows-msvc/dummy/struct.A.html",
                 "/",
                 true,
             );

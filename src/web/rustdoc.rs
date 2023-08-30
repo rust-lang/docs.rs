@@ -2259,7 +2259,7 @@ mod test {
             // test rustdoc pages stay on the documentation
             let page = kuchikiki::parse_html().one(
                 env.frontend()
-                    .get("/-/menus/releases/hexponent")
+                    .get("/crate/hexponent/0.3.1/menus/releases")
                     .send()?
                     .text()?,
             );
