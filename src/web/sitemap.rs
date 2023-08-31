@@ -7,6 +7,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         AxumErrorPage,
     },
+    Config,
 };
 use axum::{
     extract::{Extension, Path},
@@ -15,6 +16,7 @@ use axum::{
 };
 use chrono::{DateTime, TimeZone, Utc};
 use serde::Serialize;
+use std::sync::Arc;
 
 /// sitemap index
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -70,9 +72,9 @@ pub(crate) async fn sitemap_handler(
                     MAX(releases.release_time) as release_time
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
-             WHERE 
-                rustdoc_status = true AND 
-                crates.name ILIKE $1 
+             WHERE
+                rustdoc_status = true AND
+                crates.name ILIKE $1
              GROUP BY crates.name, releases.target_name
              ",
             &[&format!("{letter}%")],
@@ -112,6 +114,7 @@ impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub(crate) async fn about_builds_handler(
     Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
     let rustc_version = spawn_blocking(move || {
         let mut conn = pool.get()?;
@@ -121,7 +124,7 @@ pub(crate) async fn about_builds_handler(
 
     Ok(AboutBuilds {
         rustc_version,
-        limits: Limits::default(),
+        limits: Limits::new(&config),
         active_tab: "builds",
     })
 }

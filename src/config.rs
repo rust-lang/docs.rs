@@ -101,6 +101,7 @@ pub struct Config {
     pub(crate) docker_image: Option<String>,
     pub(crate) toolchain: String,
     pub(crate) build_cpu_limit: Option<u32>,
+    pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
     pub(crate) disable_memory_limit: bool,
 }
@@ -203,6 +204,7 @@ impl Config {
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
             toolchain: env("DOCSRS_TOOLCHAIN", "nightly".to_string())?,
             build_cpu_limit: maybe_env("DOCSRS_BUILD_CPU_LIMIT")?,
+            build_default_memory_limit: maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
         })
