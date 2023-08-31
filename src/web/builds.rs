@@ -5,6 +5,7 @@ use crate::{
     impl_axum_webpage,
     utils::spawn_blocking,
     web::{error::AxumResult, match_version_axum, MetaData},
+    Config,
 };
 use anyhow::Result;
 use axum::{
@@ -15,6 +16,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Build {
@@ -40,6 +42,7 @@ impl_axum_webpage! {
 pub(crate) async fn build_list_handler(
     Path((name, req_version)): Path<(String, String)>,
     Extension(pool): Extension<Pool>,
+    Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
     let (version, version_or_latest) = match match_version_axum(&pool, &name, Some(&req_version))
         .await?
@@ -62,7 +65,7 @@ pub(crate) async fn build_list_handler(
         move || {
             let mut conn = pool.get()?;
             Ok((
-                Limits::for_crate(&mut conn, &name)?,
+                Limits::for_crate(&config, &mut conn, &name)?,
                 get_builds(&mut conn, &name, &version)?,
                 MetaData::from_crate(&mut conn, &name, &version, &version_or_latest)?,
             ))

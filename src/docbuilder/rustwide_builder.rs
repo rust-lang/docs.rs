@@ -228,7 +228,7 @@ impl RustwideBuilder {
         info!("building a dummy crate to get essential files");
 
         let mut conn = self.db.get()?;
-        let limits = Limits::for_crate(&mut conn, DUMMY_CRATE_NAME)?;
+        let limits = Limits::for_crate(&self.config, &mut conn, DUMMY_CRATE_NAME)?;
 
         let mut build_dir = self
             .workspace
@@ -342,7 +342,7 @@ impl RustwideBuilder {
             return Ok(false);
         }
 
-        let limits = Limits::for_crate(&mut conn, name)?;
+        let limits = Limits::for_crate(&self.config, &mut conn, name)?;
         #[cfg(target_os = "linux")]
         if !self.config.disable_memory_limit {
             use anyhow::Context;
