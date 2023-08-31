@@ -286,11 +286,16 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             // version
             7,
             // description
-            "Allow memory limits of more than 4 GB",
+            "Allow memory limits of more than 2 GB",
             // upgrade query
             "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE BIGINT;",
             // downgrade query
-            "ALTER TABLE sandbox_overrides ALTER COLUMN max_memory_bytes TYPE INTEGER;"
+            "
+                ALTER TABLE sandbox_overrides
+                    ALTER COLUMN max_memory_bytes
+                    TYPE INTEGER
+                    USING least(max_memory_bytes, 2147483647);
+            "
         ),
         sql_migration!(
             context,

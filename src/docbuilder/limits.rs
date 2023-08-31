@@ -30,7 +30,10 @@ impl Limits {
         let default = Self::new(config);
         let overrides = Overrides::for_crate(conn, name)?.unwrap_or_default();
         Ok(Self {
-            memory: overrides.memory.unwrap_or(default.memory),
+            memory: overrides
+                .memory
+                .unwrap_or(default.memory)
+                .max(default.memory),
             targets: overrides
                 .targets
                 .or(overrides.timeout.map(|_| 1))
@@ -72,10 +75,12 @@ mod test {
         wrapper(|env| {
             let db = env.db();
 
+            let defaults = Limits::new(&env.config());
+
             let krate = "hexponent";
             // limits work if no crate has limits set
             let hexponent = Limits::for_crate(&env.config(), &mut db.conn(), krate)?;
-            assert_eq!(hexponent, Limits::new(&env.config()));
+            assert_eq!(hexponent, defaults);
 
             Overrides::save(
                 &mut db.conn(),
@@ -91,17 +96,17 @@ mod test {
                 hexponent,
                 Limits {
                     targets: 15,
-                    ..Limits::new(&env.config())
+                    ..defaults
                 }
             );
 
             // all limits work
             let krate = "regex";
             let limits = Limits {
-                memory: 100_000,
-                timeout: Duration::from_secs(300),
+                memory: defaults.memory * 2,
+                timeout: defaults.timeout * 2,
                 targets: 1,
-                ..Limits::new(&env.config())
+                ..defaults
             };
             Overrides::save(
                 &mut db.conn(),
@@ -151,6 +156,29 @@ mod test {
 
             let limits = Limits::for_crate(&env.config(), &mut db.conn(), "krate")?;
             assert_eq!(limits.memory, 6 * GB);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn overrides_dont_lower_memory_limit() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let defaults = Limits::new(&env.config());
+
+            Overrides::save(
+                &mut db.conn(),
+                "krate",
+                Overrides {
+                    memory: Some(defaults.memory / 2),
+                    ..Overrides::default()
+                },
+            )?;
+
+            let limits = Limits::for_crate(&env.config(), &mut db.conn(), "krate")?;
+            assert_eq!(limits, defaults);
 
             Ok(())
         });
