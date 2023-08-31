@@ -291,7 +291,7 @@ mod tests {
                  VALUES ($1, $2, $3, $4)",
                 &[
                     &"foo",
-                    &3072i64,
+                    &(6 * 1024 * 1024 * 1024i64),
                     &(Duration::hours(2).num_seconds() as i32),
                     &1,
                 ],
@@ -315,7 +315,7 @@ mod tests {
             let values: Vec<_> = values.iter().map(|v| &**v).collect();
 
             dbg!(&values);
-            assert!(values.contains(&"3 KB"));
+            assert!(values.contains(&"6 GB"));
             assert!(values.contains(&"2 hours"));
             assert!(values.contains(&"100 KB"));
             assert!(values.contains(&"blocked"));
