@@ -53,6 +53,14 @@
 
             <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
                 <h1>{{ metadata.name }}</h1>
+                <div class="info">
+                    There is very little structured metadata to build this page
+                    from currently. You should check the
+                    <a href="/{{ metadata.name }}/{{ metadata.version_or_latest }}/{{ metadata.target_name }}/">main library docs</a>,
+                    <a href="/crate/{{ metadata.name }}/{{ metadata.version_or_latest }}/">readme</a>, or
+                    <a href="/crate/{{ metadata.name }}/{{ metadata.version_or_latest }}/source/Cargo.toml.orig">Cargo.toml</a>
+                    in case the author documented the features in them.
+                </div>
                 {%- if features -%}
                     <p>This version has <b>{{ features | length }}</b> feature flags, <b data-id="default-feature-len">{{ default_len }}</b> of them enabled by <b>default</b>.</p>
                     {%- for feature in features -%}
