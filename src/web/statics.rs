@@ -102,7 +102,7 @@ mod tests {
                 Some(&"text/css".parse().unwrap()),
             );
             assert_eq!(resp.content_length().unwrap(), STYLE_CSS.len() as u64);
-            assert_eq!(resp.text()?, STYLE_CSS);
+            assert_eq!(resp.bytes()?, STYLE_CSS.as_bytes());
 
             Ok(())
         });
