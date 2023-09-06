@@ -18,6 +18,7 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
+use log::warn;
 use postgres::GenericClient;
 use serde::Deserialize;
 use serde::{ser::Serializer, Serialize};
@@ -410,7 +411,7 @@ pub(crate) async fn crate_details_handler(
 
         match details.fetch_readme(&storage) {
             Ok(readme) => details.readme = readme.or(details.readme),
-            Err(e) => report_error(&e),
+            Err(e) => warn!("error fetching readme: {:?}", &e),
         }
 
         Ok(details)
