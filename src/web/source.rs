@@ -7,7 +7,7 @@ use crate::{
         cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
         MatchSemver, MetaData,
     },
-    Storage,
+    AsyncStorage,
 };
 use anyhow::Result;
 use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
@@ -200,7 +200,7 @@ pub(crate) async fn source_browser_handler(
         version,
         path,
     }): Path<SourceBrowserHandlerParams>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
     let v = match_version_axum(&pool, &name, Some(&version)).await?;
@@ -222,14 +222,13 @@ pub(crate) async fn source_browser_handler(
         }
     };
 
-    let blob = spawn_blocking({
+    let archive_storage = spawn_blocking({
         let pool = pool.clone();
-        let path = path.clone();
         let name = name.clone();
         let version = version.clone();
         move || {
             let mut conn = pool.get()?;
-            let archive_storage: bool = conn
+            Ok(conn
                 .query_one(
                     "SELECT archive_storage
                      FROM releases
@@ -239,20 +238,21 @@ pub(crate) async fn source_browser_handler(
                          version = $2",
                     &[&name, &version],
                 )?
-                .get::<_, bool>(0);
-
-            // try to get actual file first
-            // skip if request is a directory
-            Ok(if !path.ends_with('/') {
-                storage
-                    .fetch_source_file(&name, &version, &path, archive_storage)
-                    .ok()
-            } else {
-                None
-            })
+                .get::<_, bool>(0))
         }
     })
     .await?;
+
+    // try to get actual file first
+    // skip if request is a directory
+    let blob = if !path.ends_with('/') {
+        storage
+            .fetch_source_file(&name, &version, &path, archive_storage)
+            .await
+            .ok()
+    } else {
+        None
+    };
 
     let canonical_url = CanonicalUrl::from_path(format!("/crate/{name}/latest/source/{path}"));
 

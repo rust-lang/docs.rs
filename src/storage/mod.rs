@@ -10,7 +10,7 @@ use self::s3::S3Backend;
 use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
-use crate::{db::Pool, Config, InstanceMetrics};
+use crate::{db::Pool, utils::spawn_blocking, Config, InstanceMetrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
@@ -20,16 +20,14 @@ use std::num::NonZeroU64;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
-    fmt, fs,
-    io::{self, Write},
+    fmt, fs, io,
     ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
+use tokio::io::AsyncWriteExt;
 use tokio::runtime::Runtime;
 use tracing::{error, instrument, trace};
-
-const MAX_CONCURRENT_UPLOADS: usize = 1000;
 
 type FileRange = RangeInclusive<u64>;
 
@@ -114,54 +112,53 @@ enum StorageBackend {
     S3(Box<S3Backend>),
 }
 
-pub struct Storage {
+pub struct AsyncStorage {
     backend: StorageBackend,
     config: Arc<Config>,
-    sqlite_pool: SqliteConnectionPool,
+    sqlite_pool: Arc<SqliteConnectionPool>,
 }
 
-impl Storage {
-    pub fn new(
+impl AsyncStorage {
+    pub async fn new(
         pool: Pool,
         metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
-        runtime: Arc<Runtime>,
     ) -> Result<Self> {
-        Ok(Storage {
-            sqlite_pool: SqliteConnectionPool::new(
+        Ok(Self {
+            sqlite_pool: Arc::new(SqliteConnectionPool::new(
                 NonZeroU64::new(config.max_sqlite_pool_size)
                     .ok_or_else(|| anyhow!("invalid sqlite pool size"))?,
-            ),
+            )),
             config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
                 }
                 StorageKind::S3 => {
-                    StorageBackend::S3(Box::new(S3Backend::new(metrics, &config, runtime)?))
+                    StorageBackend::S3(Box::new(S3Backend::new(metrics, &config).await?))
                 }
             },
         })
     }
 
-    pub(crate) fn exists(&self, path: &str) -> Result<bool> {
+    pub(crate) async fn exists(&self, path: &str) -> Result<bool> {
         match &self.backend {
-            StorageBackend::Database(db) => db.exists(path),
-            StorageBackend::S3(s3) => s3.exists(path),
+            StorageBackend::Database(db) => db.exists(path).await,
+            StorageBackend::S3(s3) => s3.exists(path).await,
         }
     }
 
-    pub(crate) fn get_public_access(&self, path: &str) -> Result<bool> {
+    pub(crate) async fn get_public_access(&self, path: &str) -> Result<bool> {
         match &self.backend {
-            StorageBackend::Database(db) => db.get_public_access(path),
-            StorageBackend::S3(s3) => s3.get_public_access(path),
+            StorageBackend::Database(db) => db.get_public_access(path).await,
+            StorageBackend::S3(s3) => s3.get_public_access(path).await,
         }
     }
 
-    pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
+    pub(crate) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
         match &self.backend {
-            StorageBackend::Database(db) => db.set_public_access(path, public),
-            StorageBackend::S3(s3) => s3.set_public_access(path, public),
+            StorageBackend::Database(db) => db.set_public_access(path, public).await,
+            StorageBackend::S3(s3) => s3.set_public_access(path, public).await,
         }
     }
 
@@ -174,13 +171,13 @@ impl Storage {
     }
 
     #[instrument(skip(fetch_time))]
-    pub(crate) fn fetch_rustdoc_file(
+    pub(crate) async fn fetch_rustdoc_file(
         &self,
         name: &str,
         version: &str,
         path: &str,
         archive_storage: bool,
-        fetch_time: Option<&mut RenderingTimesRecorder>,
+        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
         trace!("fetch rustdoc file");
         Ok(if archive_storage {
@@ -189,19 +186,20 @@ impl Storage {
                 path,
                 self.max_file_size_for(path),
                 fetch_time,
-            )?
+            )
+            .await?
         } else {
             if let Some(fetch_time) = fetch_time {
                 fetch_time.step("fetch from storage");
             }
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
             let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.get(&remote_path, self.max_file_size_for(path))?
+            self.get(&remote_path, self.max_file_size_for(path)).await?
         })
     }
 
     #[context("fetching {path} from {name} {version} (archive: {archive_storage})")]
-    pub(crate) fn fetch_source_file(
+    pub(crate) async fn fetch_source_file(
         &self,
         name: &str,
         version: &str,
@@ -214,14 +212,15 @@ impl Storage {
                 path,
                 self.max_file_size_for(path),
                 None,
-            )?
+            )
+            .await?
         } else {
             let remote_path = format!("sources/{name}/{version}/{path}");
-            self.get(&remote_path, self.max_file_size_for(path))?
+            self.get(&remote_path, self.max_file_size_for(path)).await?
         })
     }
 
-    pub(crate) fn rustdoc_file_exists(
+    pub(crate) async fn rustdoc_file_exists(
         &self,
         name: &str,
         version: &str,
@@ -229,19 +228,25 @@ impl Storage {
         archive_storage: bool,
     ) -> Result<bool> {
         Ok(if archive_storage {
-            self.exists_in_archive(&rustdoc_archive_path(name, version), path)?
+            self.exists_in_archive(&rustdoc_archive_path(name, version), path)
+                .await?
         } else {
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
             let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.exists(&remote_path)?
+            self.exists(&remote_path).await?
         })
     }
 
-    pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
-        match self.get_index_filename(archive_path) {
-            Ok(index_filename) => {
-                Ok(archive_index::find_in_file(index_filename, path, &self.sqlite_pool)?.is_some())
-            }
+    pub(crate) async fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
+        match self.get_index_filename(archive_path).await {
+            Ok(index_filename) => Ok({
+                let sqlite_pool = self.sqlite_pool.clone();
+                let path = path.to_owned();
+                spawn_blocking(move || {
+                    Ok(archive_index::find_in_file(index_filename, &path, &sqlite_pool)?.is_some())
+                })
+                .await?
+            }),
             Err(err) => {
                 if err.downcast_ref::<PathNotFoundError>().is_some() {
                     Ok(false)
@@ -252,10 +257,10 @@ impl Storage {
         }
     }
 
-    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+    pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         let mut blob = match &self.backend {
-            StorageBackend::Database(db) => db.get(path, max_size, None),
-            StorageBackend::S3(s3) => s3.get(path, max_size, None),
+            StorageBackend::Database(db) => db.get(path, max_size, None).await,
+            StorageBackend::S3(s3) => s3.get(path, max_size, None).await,
         }?;
         if let Some(alg) = blob.compression {
             blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
@@ -264,7 +269,7 @@ impl Storage {
         Ok(blob)
     }
 
-    pub(super) fn get_range(
+    pub(super) async fn get_range(
         &self,
         path: &str,
         max_size: usize,
@@ -272,8 +277,8 @@ impl Storage {
         compression: Option<CompressionAlgorithm>,
     ) -> Result<Blob> {
         let mut blob = match &self.backend {
-            StorageBackend::Database(db) => db.get(path, max_size, Some(range)),
-            StorageBackend::S3(s3) => s3.get(path, max_size, Some(range)),
+            StorageBackend::Database(db) => db.get(path, max_size, Some(range)).await,
+            StorageBackend::S3(s3) => s3.get(path, max_size, Some(range)).await,
         }?;
         // `compression` represents the compression of the file-stream inside the archive.
         // We don't compress the whole archive, so the encoding of the archive's blob is irrelevant
@@ -285,7 +290,7 @@ impl Storage {
         Ok(blob)
     }
 
-    pub(super) fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
+    pub(super) async fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
         let remote_index_path = format!("{archive_path}.index");
         let local_index_path = self
@@ -294,54 +299,59 @@ impl Storage {
             .join(&remote_index_path);
 
         if !local_index_path.exists() {
-            let index_content = self.get(&remote_index_path, std::usize::MAX)?.content;
+            let index_content = self.get(&remote_index_path, std::usize::MAX).await?.content;
 
-            fs::create_dir_all(
+            tokio::fs::create_dir_all(
                 local_index_path
                     .parent()
                     .ok_or_else(|| anyhow!("index path without parent"))?,
-            )?;
+            )
+            .await?;
 
             // when we don't have a locally cached index and many parallel request
             // we might download the same archive index multiple times here.
             // So we're storing the content into a temporary file before renaming it
             // into the final location.
-            let mut tmpfile =
-                tempfile::NamedTempFile::new_in(&self.config.local_archive_cache_path)?;
-            tmpfile.write_all(&index_content)?;
-            let temp_path = tmpfile.into_temp_path();
-            fs::rename(temp_path, &local_index_path)?;
+            let temp_path = tempfile::NamedTempFile::new_in(&self.config.local_archive_cache_path)?
+                .into_temp_path();
+            let mut file = tokio::fs::File::create(&temp_path).await?;
+            file.write_all(&index_content).await?;
+            tokio::fs::rename(temp_path, &local_index_path).await?;
         }
 
         Ok(local_index_path)
     }
 
-    pub(crate) fn get_from_archive(
+    pub(crate) async fn get_from_archive(
         &self,
         archive_path: &str,
         path: &str,
         max_size: usize,
-        mut fetch_time: Option<&mut RenderingTimesRecorder>,
+        mut fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
         if let Some(ref mut t) = fetch_time {
             t.step("find path in index");
         }
-        let info = archive_index::find_in_file(
-            self.get_index_filename(archive_path)?,
-            path,
-            &self.sqlite_pool,
-        )?
+        let index_filename = self.get_index_filename(archive_path).await?;
+        let info = {
+            let sqlite_pool = self.sqlite_pool.clone();
+            let path = path.to_owned();
+            spawn_blocking(move || archive_index::find_in_file(index_filename, &path, &sqlite_pool))
+                .await
+        }?
         .ok_or(PathNotFoundError)?;
 
         if let Some(t) = fetch_time {
             t.step("range request");
         }
-        let blob = self.get_range(
-            archive_path,
-            max_size,
-            info.range(),
-            Some(info.compression()),
-        )?;
+        let blob = self
+            .get_range(
+                archive_path,
+                max_size,
+                info.range(),
+                Some(info.compression()),
+            )
+            .await?;
         assert_eq!(blob.compression, None);
 
         Ok(Blob {
@@ -353,7 +363,7 @@ impl Storage {
         })
     }
 
-    pub(crate) fn store_all_in_archive(
+    pub(crate) async fn store_all_in_archive(
         &self,
         archive_path: &str,
         root_dir: &Path,
@@ -400,53 +410,32 @@ impl Storage {
         let compressed_index_content =
             compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?;
 
-        self.store_inner(
-            vec![
-                Blob {
-                    path: archive_path.to_string(),
-                    mime: "application/zip".to_owned(),
-                    content: zip_content,
-                    compression: None,
-                    date_updated: Utc::now(),
-                },
-                Blob {
-                    path: remote_index_path,
-                    mime: "application/octet-stream".to_owned(),
-                    content: compressed_index_content,
-                    compression: Some(alg),
-                    date_updated: Utc::now(),
-                },
-            ]
-            .into_iter()
-            .map(Ok),
-        )?;
+        self.store_inner(vec![
+            Blob {
+                path: archive_path.to_string(),
+                mime: "application/zip".to_owned(),
+                content: zip_content,
+                compression: None,
+                date_updated: Utc::now(),
+            },
+            Blob {
+                path: remote_index_path,
+                mime: "application/octet-stream".to_owned(),
+                content: compressed_index_content,
+                compression: Some(alg),
+                date_updated: Utc::now(),
+            },
+        ])
+        .await?;
 
         let file_alg = CompressionAlgorithm::Bzip2;
         Ok((file_paths, file_alg))
     }
 
-    fn transaction<T, F>(&self, f: F) -> Result<T>
-    where
-        F: FnOnce(&mut dyn StorageTransaction) -> Result<T>,
-    {
-        let mut conn;
-        let mut trans: Box<dyn StorageTransaction> = match &self.backend {
-            StorageBackend::Database(db) => {
-                conn = db.start_connection()?;
-                Box::new(conn.start_storage_transaction()?)
-            }
-            StorageBackend::S3(s3) => Box::new(s3.start_storage_transaction()),
-        };
-
-        let res = f(trans.as_mut())?;
-        trans.complete()?;
-        Ok(res)
-    }
-
     // Store all files in `root_dir` into the backend under `prefix`.
     //
     // This returns (map<filename, mime type>, set<compression algorithms>).
-    pub(crate) fn store_all(
+    pub(crate) async fn store_all(
         &self,
         prefix: &Path,
         root_dir: &Path,
@@ -454,7 +443,7 @@ impl Storage {
         let mut file_paths_and_mimes = HashMap::new();
         let mut algs = HashSet::with_capacity(1);
 
-        let blobs = get_file_list(root_dir)?
+        let blobs: Vec<_> = get_file_list(root_dir)?
             .into_iter()
             .filter_map(|file_path| {
                 // Some files have insufficient permissions
@@ -481,20 +470,21 @@ impl Storage {
                     // this field is ignored by the backend
                     date_updated: Utc::now(),
                 })
-            });
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        self.store_inner(blobs)?;
+        self.store_inner(blobs).await?;
         Ok((file_paths_and_mimes, algs))
     }
 
     #[cfg(test)]
-    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
-        self.store_inner(blobs.into_iter().map(Ok))
+    pub(crate) async fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
+        self.store_inner(blobs).await
     }
 
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
-    pub(crate) fn store_one(
+    pub(crate) async fn store_one(
         &self,
         path: impl Into<String>,
         content: impl Into<Vec<u8>>,
@@ -505,52 +495,46 @@ impl Storage {
         let content = compress(&*content, alg)?;
         let mime = detect_mime(&path).to_owned();
 
-        self.store_inner(std::iter::once(Ok(Blob {
+        self.store_inner(vec![Blob {
             path,
             mime,
             content,
             compression: Some(alg),
             // this field is ignored by the backend
             date_updated: Utc::now(),
-        })))?;
+        }])
+        .await?;
 
         Ok(alg)
     }
 
-    fn store_inner(&self, blobs: impl IntoIterator<Item = Result<Blob>>) -> Result<()> {
-        let mut blobs = blobs.into_iter();
-        self.transaction(|trans| {
-            loop {
-                let batch: Vec<_> = blobs
-                    .by_ref()
-                    .take(MAX_CONCURRENT_UPLOADS)
-                    .collect::<Result<_>>()?;
-                if batch.is_empty() {
-                    break;
-                }
-                trans.store_batch(batch)?;
-            }
-            Ok(())
-        })
+    async fn store_inner(&self, batch: Vec<Blob>) -> Result<()> {
+        match &self.backend {
+            StorageBackend::Database(db) => db.store_batch(batch).await,
+            StorageBackend::S3(s3) => s3.store_batch(batch).await,
+        }
     }
 
-    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
-        self.transaction(|trans| trans.delete_prefix(prefix))
+    pub(crate) async fn delete_prefix(&self, prefix: &str) -> Result<()> {
+        match &self.backend {
+            StorageBackend::Database(db) => db.delete_prefix(prefix).await,
+            StorageBackend::S3(s3) => s3.delete_prefix(prefix).await,
+        }
     }
 
     // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
     // we leak the web server, and Drop isn't executed in that case (since the leaked web server
     // still holds a reference to the storage).
     #[cfg(test)]
-    pub(crate) fn cleanup_after_test(&self) -> Result<()> {
+    pub(crate) async fn cleanup_after_test(&self) -> Result<()> {
         if let StorageBackend::S3(s3) = &self.backend {
-            s3.cleanup_after_test()?;
+            s3.cleanup_after_test().await?;
         }
         Ok(())
     }
 }
 
-impl std::fmt::Debug for Storage {
+impl std::fmt::Debug for AsyncStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.backend {
             StorageBackend::Database(_) => write!(f, "database-backed storage"),
@@ -559,10 +543,162 @@ impl std::fmt::Debug for Storage {
     }
 }
 
-trait StorageTransaction {
-    fn store_batch(&mut self, batch: Vec<Blob>) -> Result<()>;
-    fn delete_prefix(&mut self, prefix: &str) -> Result<()>;
-    fn complete(self: Box<Self>) -> Result<()>;
+/// Sync wrapper around `AsyncStorage` for parts of the codebase that are not async.
+pub struct Storage {
+    inner: Arc<AsyncStorage>,
+    runtime: Arc<Runtime>,
+}
+
+#[allow(dead_code)]
+impl Storage {
+    pub fn new(inner: Arc<AsyncStorage>, runtime: Arc<Runtime>) -> Self {
+        Self { inner, runtime }
+    }
+
+    pub(crate) fn exists(&self, path: &str) -> Result<bool> {
+        self.runtime.block_on(self.inner.exists(path))
+    }
+
+    pub(crate) fn get_public_access(&self, path: &str) -> Result<bool> {
+        self.runtime.block_on(self.inner.get_public_access(path))
+    }
+
+    pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
+        self.runtime
+            .block_on(self.inner.set_public_access(path, public))
+    }
+
+    pub(crate) fn fetch_rustdoc_file(
+        &self,
+        name: &str,
+        version: &str,
+        path: &str,
+        archive_storage: bool,
+        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
+    ) -> Result<Blob> {
+        self.runtime.block_on(self.inner.fetch_rustdoc_file(
+            name,
+            version,
+            path,
+            archive_storage,
+            fetch_time,
+        ))
+    }
+
+    pub(crate) fn fetch_source_file(
+        &self,
+        name: &str,
+        version: &str,
+        path: &str,
+        archive_storage: bool,
+    ) -> Result<Blob> {
+        self.runtime.block_on(
+            self.inner
+                .fetch_source_file(name, version, path, archive_storage),
+        )
+    }
+
+    pub(crate) fn rustdoc_file_exists(
+        &self,
+        name: &str,
+        version: &str,
+        path: &str,
+        archive_storage: bool,
+    ) -> Result<bool> {
+        self.runtime.block_on(
+            self.inner
+                .rustdoc_file_exists(name, version, path, archive_storage),
+        )
+    }
+
+    pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
+        self.runtime
+            .block_on(self.inner.exists_in_archive(archive_path, path))
+    }
+
+    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+        self.runtime.block_on(self.inner.get(path, max_size))
+    }
+
+    pub(super) fn get_range(
+        &self,
+        path: &str,
+        max_size: usize,
+        range: FileRange,
+        compression: Option<CompressionAlgorithm>,
+    ) -> Result<Blob> {
+        self.runtime
+            .block_on(self.inner.get_range(path, max_size, range, compression))
+    }
+
+    pub(super) fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
+        self.runtime
+            .block_on(self.inner.get_index_filename(archive_path))
+    }
+
+    pub(crate) fn get_from_archive(
+        &self,
+        archive_path: &str,
+        path: &str,
+        max_size: usize,
+        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
+    ) -> Result<Blob> {
+        self.runtime.block_on(
+            self.inner
+                .get_from_archive(archive_path, path, max_size, fetch_time),
+        )
+    }
+
+    pub(crate) fn store_all_in_archive(
+        &self,
+        archive_path: &str,
+        root_dir: &Path,
+    ) -> Result<(HashMap<PathBuf, String>, CompressionAlgorithm)> {
+        self.runtime
+            .block_on(self.inner.store_all_in_archive(archive_path, root_dir))
+    }
+
+    pub(crate) fn store_all(
+        &self,
+        prefix: &Path,
+        root_dir: &Path,
+    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>)> {
+        self.runtime
+            .block_on(self.inner.store_all(prefix, root_dir))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
+        self.runtime.block_on(self.inner.store_blobs(blobs))
+    }
+
+    // Store file into the backend at the given path (also used to detect mime type), returns the
+    // chosen compression algorithm
+    pub(crate) fn store_one(
+        &self,
+        path: impl Into<String>,
+        content: impl Into<Vec<u8>>,
+    ) -> Result<CompressionAlgorithm> {
+        self.runtime.block_on(self.inner.store_one(path, content))
+    }
+
+    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
+        self.runtime.block_on(self.inner.delete_prefix(prefix))
+    }
+
+    // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
+    // we leak the web server, and Drop isn't executed in that case (since the leaked web server
+    // still holds a reference to the storage).
+    #[cfg(test)]
+    pub(crate) fn cleanup_after_test(&self) -> Result<()> {
+        self.runtime.block_on(self.inner.cleanup_after_test())
+    }
+}
+
+impl std::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "sync wrapper for {:?}", self.inner)
+    }
 }
 
 fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
@@ -846,6 +982,7 @@ mod backend_tests {
         }
 
         let local_index_location = storage
+            .inner
             .config
             .local_archive_cache_path
             .join("folder/test.zip.index");
@@ -950,7 +1087,7 @@ mod backend_tests {
 
     fn test_batched_uploads(storage: &Storage) -> Result<()> {
         let now = Utc::now();
-        let uploads: Vec<_> = (0..=MAX_CONCURRENT_UPLOADS + 1)
+        let uploads: Vec<_> = (0..=100)
             .map(|i| {
                 let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
                 Blob {

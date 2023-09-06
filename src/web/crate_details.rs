@@ -12,7 +12,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
     },
-    Storage,
+    AsyncStorage,
 };
 use anyhow::{Context, Result};
 use axum::{
@@ -244,13 +244,16 @@ impl CrateDetails {
     }
 
     #[fn_error_context::context("fetching readme for {} {}", self.name, self.version)]
-    fn fetch_readme(&self, storage: &Storage) -> anyhow::Result<Option<String>> {
-        let manifest = match storage.fetch_source_file(
-            &self.name,
-            &self.version,
-            "Cargo.toml",
-            self.archive_storage,
-        ) {
+    async fn fetch_readme(&self, storage: &AsyncStorage) -> anyhow::Result<Option<String>> {
+        let manifest = match storage
+            .fetch_source_file(
+                &self.name,
+                &self.version,
+                "Cargo.toml",
+                self.archive_storage,
+            )
+            .await
+        {
             Ok(manifest) => manifest,
             Err(err) if err.is::<PathNotFoundError>() => {
                 return Ok(None);
@@ -270,7 +273,10 @@ impl CrateDetails {
             _ => vec!["README.md", "README.txt", "README"],
         };
         for path in &paths {
-            match storage.fetch_source_file(&self.name, &self.version, path, self.archive_storage) {
+            match storage
+                .fetch_source_file(&self.name, &self.version, path, self.archive_storage)
+                .await
+            {
                 Ok(readme) => {
                     let readme = String::from_utf8(readme.content)
                         .with_context(|| format!("parsing {path} content"))?;
@@ -363,7 +369,7 @@ pub(crate) struct CrateDetailHandlerParams {
 #[tracing::instrument(skip(pool, storage))]
 pub(crate) async fn crate_details_handler(
     Path(params): Path<CrateDetailHandlerParams>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(pool): Extension<Pool>,
     Extension(repository_stats_updater): Extension<Arc<RepositoryStatsUpdater>>,
 ) -> AxumResult<AxumResponse> {
@@ -401,25 +407,23 @@ pub(crate) async fn crate_details_handler(
         }
     };
 
-    let details = spawn_blocking(move || {
+    let mut details = spawn_blocking(move || {
         let mut conn = pool.get()?;
-        let mut details = CrateDetails::new(
+        CrateDetails::new(
             &mut *conn,
             &params.name,
             &version,
             &version_or_latest,
             Some(&repository_stats_updater),
-        )?
-        .ok_or(AxumNope::VersionNotFound)?;
-
-        match details.fetch_readme(&storage) {
-            Ok(readme) => details.readme = readme.or(details.readme),
-            Err(e) => warn!("error fetching readme: {:?}", &e),
-        }
-
-        Ok(details)
+        )
     })
-    .await?;
+    .await?
+    .ok_or(AxumNope::VersionNotFound)?;
+
+    match details.fetch_readme(&storage).await {
+        Ok(readme) => details.readme = readme.or(details.readme),
+        Err(e) => warn!("error fetching readme: {:?}", &e),
+    }
 
     let mut res = CrateDetailsPage { details }.into_response();
     res.extensions_mut()
@@ -1516,7 +1520,11 @@ mod tests {
             let details = CrateDetails::new(&mut *env.db().conn(), "dummy", "0.5.0", "0.5.0", None)
                 .unwrap()
                 .unwrap();
-            assert!(matches!(details.fetch_readme(&env.storage()), Ok(None)));
+            assert!(matches!(
+                env.runtime()
+                    .block_on(details.fetch_readme(&env.async_storage())),
+                Ok(None)
+            ));
             Ok(())
         });
     }

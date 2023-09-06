@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO files (path, mime, content, compression)\n                 VALUES ($1, $2, $3, $4)\n                 ON CONFLICT (path) DO UPDATE\n                    SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e2ecdf53fcd4b328e22164c73aa66fce426521d0f717e67d6cff03b5424ab3f"
+}

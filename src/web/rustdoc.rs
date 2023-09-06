@@ -18,7 +18,7 @@ use crate::{
         page::TemplateData,
         MatchSemver, MetaData,
     },
-    Config, InstanceMetrics, Storage, RUSTDOC_STATIC_STORAGE_PREFIX,
+    AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
 use anyhow::{anyhow, Context as _};
 use axum::{
@@ -66,7 +66,7 @@ pub(crate) struct RustdocRedirectorParams {
 ///
 /// See also https://github.com/rust-lang/docs.rs/pull/1889
 async fn try_serve_legacy_toolchain_asset(
-    storage: Arc<Storage>,
+    storage: Arc<AsyncStorage>,
     config: Arc<Config>,
     path: impl AsRef<str>,
 ) -> AxumResult<AxumResponse> {
@@ -79,11 +79,9 @@ async fn try_serve_legacy_toolchain_asset(
     // since new nightly versions will always put their
     // toolchain specific resources into the new folder,
     // which is reached via the new handler.
-    Ok(
-        spawn_blocking(move || File::from_path(&storage, &path, &config))
-            .await
-            .map(IntoResponse::into_response)?,
-    )
+    Ok(File::from_path(&storage, &path, &config)
+        .await
+        .map(IntoResponse::into_response)?)
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
@@ -92,7 +90,7 @@ async fn try_serve_legacy_toolchain_asset(
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(pool): Extension<Pool>,
     Query(query_pairs): Query<HashMap<String, String>>,
@@ -189,21 +187,15 @@ pub(crate) async fn rustdoc_redirector_handler(
 
             rendering_time.step("fetch from storage");
 
-            match spawn_blocking({
-                let version = version.clone();
-                let storage = storage.clone();
-                let target = target.clone();
-                move || {
-                    storage.fetch_rustdoc_file(
-                        &crate_name,
-                        &version,
-                        &target,
-                        krate.archive_storage,
-                        None, // FIXME: &mut rendering_time, re-add this when storage is async
-                    )
-                }
-            })
-            .await
+            match storage
+                .fetch_rustdoc_file(
+                    &crate_name,
+                    &version,
+                    target,
+                    krate.archive_storage,
+                    Some(&mut rendering_time),
+                )
+                .await
             {
                 Ok(blob) => return Ok(File(blob).into_response()),
                 Err(err) => {
@@ -372,7 +364,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Extension(templates): Extension<Arc<TemplateData>>,
     Extension(pool): Extension<Pool>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
     Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
@@ -508,22 +500,15 @@ pub(crate) async fn rustdoc_html_server_handler(
     rendering_time.step("fetch from storage");
 
     // Attempt to load the file from the database
-    let blob = match spawn_blocking({
-        let params = params.clone();
-        let version = version.clone();
-        let storage = storage.clone();
-        let storage_path = storage_path.clone();
-        move || {
-            storage.fetch_rustdoc_file(
-                &params.name,
-                &version,
-                &storage_path,
-                krate.archive_storage,
-                None, // FIXME: &mut rendering_time, re-add this when storage is async
-            )
-        }
-    })
-    .await
+    let blob = match storage
+        .fetch_rustdoc_file(
+            &params.name,
+            &version,
+            &storage_path,
+            krate.archive_storage,
+            Some(&mut rendering_time),
+        )
+        .await
     {
         Ok(file) => file,
         Err(err) => {
@@ -536,21 +521,9 @@ pub(crate) async fn rustdoc_html_server_handler(
             storage_path.push_str("/index.html");
             req_path.push("index.html");
 
-            return if spawn_blocking({
-                let params = params.clone();
-                let version = version.clone();
-                let storage = storage.clone();
-                let storage_path = storage_path.clone();
-                move || {
-                    storage.rustdoc_file_exists(
-                        &params.name,
-                        &version,
-                        &storage_path,
-                        krate.archive_storage,
-                    )
-                }
-            })
-            .await?
+            return if storage
+                .rustdoc_file_exists(&params.name, &version, &storage_path, krate.archive_storage)
+                .await?
             {
                 redirect(
                     &params.name,
@@ -778,7 +751,7 @@ fn path_for_version(
 pub(crate) async fn target_redirect_handler(
     Path((name, version, req_path)): Path<(String, String, String)>,
     Extension(pool): Extension<Pool>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
 ) -> AxumResult<impl IntoResponse> {
     let release_found = match_version_axum(&pool, &name, Some(&version)).await?;
@@ -832,14 +805,14 @@ pub(crate) async fn target_redirect_handler(
         pieces.join("/")
     };
 
-    let (redirect_path, query_args) = if spawn_blocking({
-        let name = name.clone();
-        let file_path = storage_location_for_path.clone();
-        move || {
-            storage.rustdoc_file_exists(&name, &version, &file_path, crate_details.archive_storage)
-        }
-    })
-    .await?
+    let (redirect_path, query_args) = if storage
+        .rustdoc_file_exists(
+            &name,
+            &version,
+            &storage_location_for_path,
+            crate_details.archive_storage,
+        )
+        .await?
     {
         // Simple case: page exists in the other target & version, so just change these
         (storage_location_for_path, HashMap::new())
@@ -886,7 +859,7 @@ pub(crate) async fn badge_handler(
 pub(crate) async fn download_handler(
     Path((name, req_version)): Path<(String, String)>,
     Extension(pool): Extension<Pool>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
     let (version, _) = match_version_axum(&pool, &name, Some(&req_version))
@@ -896,32 +869,26 @@ pub(crate) async fn download_handler(
 
     let archive_path = rustdoc_archive_path(&name, &version);
 
-    spawn_blocking({
-        let archive_path = archive_path.clone();
-        move || {
-            // not all archives are set for public access yet, so we check if
-            // the access is set and fix it if needed.
-            let archive_is_public = match storage
-                .get_public_access(&archive_path)
-                .context("reading public access for archive")
-            {
-                Ok(is_public) => is_public,
-                Err(err) => {
-                    if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
-                        return Err(AxumNope::ResourceNotFound.into());
-                    } else {
-                        return Err(AxumNope::InternalError(err).into());
-                    }
-                }
-            };
-
-            if !archive_is_public {
-                storage.set_public_access(&archive_path, true)?;
+    // not all archives are set for public access yet, so we check if
+    // the access is set and fix it if needed.
+    let archive_is_public = match storage
+        .get_public_access(&archive_path)
+        .await
+        .context("reading public access for archive")
+    {
+        Ok(is_public) => is_public,
+        Err(err) => {
+            if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
+                return Err(AxumNope::ResourceNotFound);
+            } else {
+                return Err(AxumNope::InternalError(err));
             }
-            Ok(())
         }
-    })
-    .await?;
+    };
+
+    if !archive_is_public {
+        storage.set_public_access(&archive_path, true).await?;
+    }
 
     Ok(super::axum_cached_redirect(
         format!("{}/{}", config.s3_static_root_path, archive_path),
@@ -934,12 +901,12 @@ pub(crate) async fn download_handler(
 /// This serves files from S3, and is pointed to by the `--static-root-path` flag to rustdoc.
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");
 
-    Ok(spawn_blocking(move || File::from_path(&storage, &storage_path, &config)).await?)
+    Ok(File::from_path(&storage, &storage_path, &config).await?)
 }
 
 #[cfg(test)]

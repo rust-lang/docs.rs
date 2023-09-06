@@ -41,6 +41,7 @@ slug = "0.1.1"
 r2d2 = "0.8"
 r2d2_postgres = "0.18"
 r2d2_sqlite = "0.22.0"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "postgres", "chrono" ] }
 url = { version = "2.1.1", features = ["serde"] }
 docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}

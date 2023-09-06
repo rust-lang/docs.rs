@@ -5,7 +5,7 @@ use crate::cdn::CdnBackend;
 use crate::db::{Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
-use crate::storage::{Storage, StorageKind};
+use crate::storage::{AsyncStorage, Storage, StorageKind};
 use crate::web::{build_axum_app, cache, page::TemplateData};
 use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, ServiceMetrics};
 use anyhow::Context as _;
@@ -226,6 +226,7 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
+    async_storage: OnceCell<Arc<AsyncStorage>>,
     cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
     runtime: OnceCell<Arc<Runtime>>,
@@ -259,6 +260,7 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: OnceCell::new(),
             storage: OnceCell::new(),
+            async_storage: OnceCell::new(),
             cdn: OnceCell::new(),
             index: OnceCell::new(),
             instance_metrics: OnceCell::new(),
@@ -349,19 +351,25 @@ impl TestEnvironment {
             .clone()
     }
 
-    pub(crate) fn storage(&self) -> Arc<Storage> {
-        self.storage
+    pub(crate) fn async_storage(&self) -> Arc<AsyncStorage> {
+        self.async_storage
             .get_or_init(|| {
                 Arc::new(
-                    Storage::new(
-                        self.db().pool(),
-                        self.instance_metrics(),
-                        self.config(),
-                        self.runtime(),
-                    )
-                    .expect("failed to initialize the storage"),
+                    self.runtime()
+                        .block_on(AsyncStorage::new(
+                            self.db().pool(),
+                            self.instance_metrics(),
+                            self.config(),
+                        ))
+                        .expect("failed to initialize the async storage"),
                 )
             })
+            .clone()
+    }
+
+    pub(crate) fn storage(&self) -> Arc<Storage> {
+        self.storage
+            .get_or_init(|| Arc::new(Storage::new(self.async_storage(), self.runtime())))
             .clone()
     }
 
@@ -421,7 +429,7 @@ impl TestEnvironment {
 
     pub(crate) fn db(&self) -> &TestDatabase {
         self.db.get_or_init(|| {
-            TestDatabase::new(&self.config(), self.instance_metrics())
+            TestDatabase::new(&self.config(), &self.runtime(), self.instance_metrics())
                 .expect("failed to initialize the db")
         })
     }
@@ -455,6 +463,10 @@ impl Context for TestEnvironment {
 
     fn storage(&self) -> Result<Arc<Storage>> {
         Ok(TestEnvironment::storage(self))
+    }
+
+    fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
+        Ok(TestEnvironment::async_storage(self))
     }
 
     fn cdn(&self) -> Result<Arc<CdnBackend>> {
@@ -492,12 +504,12 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Self> {
+    fn new(config: &Config, runtime: &Runtime, metrics: Arc<InstanceMetrics>) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, metrics, &schema)?;
+        let pool = Pool::new_with_schema(config, runtime, metrics, &schema)?;
 
         let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
         conn.batch_execute(&format!(

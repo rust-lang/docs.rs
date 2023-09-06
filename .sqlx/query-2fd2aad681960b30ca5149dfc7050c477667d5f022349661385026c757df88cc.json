@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                     path, mime, date_updated, compression,\n                     substring(content from $2 for $3) as content\n                 FROM files\n                 WHERE path = $1;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "mime",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "date_updated",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "compression",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "content",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "2fd2aad681960b30ca5149dfc7050c477667d5f022349661385026c757df88cc"
+}

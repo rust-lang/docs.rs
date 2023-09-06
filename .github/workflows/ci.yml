@@ -19,6 +19,48 @@ env:
   SENTRY_ENVIRONMENT: dev
 
 jobs:
+  sqlx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: install
+        run: |
+          rustup override set stable
+          rustup update stable
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --locked
+
+      - name: Launch postgres
+        run: |
+          cp .env.sample .env
+          mkdir -p ${DOCSRS_PREFIX}/public-html
+          docker-compose up -d db
+          # Give the database enough time to start up
+          sleep 5
+          # Make sure the database is actually working
+          psql "${DOCSRS_DATABASE_URL}"
+
+      - name: run database migrations
+        run: cargo run -- database migrate
+
+      - name: install SQLX CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: run sqlx prepare --check
+        run: |
+          cargo sqlx prepare \
+            --database-url $DOCSRS_DATABASE_URL \
+            --workspace \
+            --check \
+            -- --all-targets --all-features
+
+      - name: Clean up the database
+        run: docker-compose down --volumes
+
   build:
     runs-on: ubuntu-latest
     steps:

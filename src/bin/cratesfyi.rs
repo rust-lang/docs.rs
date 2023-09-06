@@ -15,8 +15,8 @@ use docs_rs::utils::{
     remove_crate_priority, set_config, set_crate_priority, ConfigName,
 };
 use docs_rs::{
-    start_background_metrics_webserver, start_web_server, BuildQueue, Config, Context, Index,
-    InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
+    start_background_metrics_webserver, start_web_server, AsyncStorage, BuildQueue, Config,
+    Context, Index, InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
 };
 use humantime::Duration;
 use once_cell::sync::OnceCell;
@@ -764,11 +764,9 @@ impl Context for BinContext {
             self.storage()?,
         );
         fn storage(self) -> Storage = Storage::new(
-            self.pool()?,
-            self.instance_metrics()?,
-            self.config()?,
-            self.runtime()?,
-        )?;
+            self.async_storage()?,
+            self.runtime()?
+       );
         fn cdn(self) -> CdnBackend = CdnBackend::new(
             &self.config()?,
             &self.runtime()?,
@@ -801,8 +799,20 @@ impl Context for BinContext {
         Ok(self
             .pool
             .get_or_try_init::<_, Error>(|| {
-                Ok(Pool::new(&*self.config()?, self.instance_metrics()?)?)
+                Ok(Pool::new(
+                    &*self.config()?,
+                    &*self.runtime()?,
+                    self.instance_metrics()?,
+                )?)
             })?
             .clone())
+    }
+
+    fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
+        Ok(Arc::new(self.runtime()?.block_on(AsyncStorage::new(
+            self.pool()?,
+            self.instance_metrics()?,
+            self.config()?,
+        ))?))
     }
 }
