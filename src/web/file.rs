@@ -3,7 +3,7 @@
 use super::cache::CachePolicy;
 use crate::{
     error::Result,
-    storage::{Blob, Storage},
+    storage::{AsyncStorage, Blob},
     Config,
 };
 
@@ -22,14 +22,18 @@ pub(crate) struct File(pub(crate) Blob);
 
 impl File {
     /// Gets file from database
-    pub(super) fn from_path(storage: &Storage, path: &str, config: &Config) -> Result<File> {
+    pub(super) async fn from_path(
+        storage: &AsyncStorage,
+        path: &str,
+        config: &Config,
+    ) -> Result<File> {
         let max_size = if path.ends_with(".html") {
             config.max_file_size_html
         } else {
             config.max_file_size
         };
 
-        Ok(File(storage.get(path, max_size)?))
+        Ok(File(storage.get(path, max_size).await?))
     }
 }
 
@@ -71,12 +75,14 @@ mod tests {
 
             env.fake_release().create()?;
 
-            let mut file = File::from_path(
-                &env.storage(),
-                "rustdoc/fake-package/1.0.0/fake-package/index.html",
-                &env.config(),
-            )
-            .unwrap();
+            let mut file = env
+                .runtime()
+                .block_on(File::from_path(
+                    &env.async_storage(),
+                    "rustdoc/fake-package/1.0.0/fake-package/index.html",
+                    &env.config(),
+                ))
+                .unwrap();
             file.0.date_updated = now;
 
             let resp = file.into_response();
@@ -118,11 +124,11 @@ mod tests {
                 .create()?;
 
             let file = |path| {
-                File::from_path(
-                    &env.storage(),
+                env.runtime().block_on(File::from_path(
+                    &env.async_storage(),
                     &format!("rustdoc/dummy/0.1.0/{path}"),
                     &env.config(),
-                )
+                ))
             };
             let assert_len = |len, path| {
                 assert_eq!(len, file(path).unwrap().0.content.len());

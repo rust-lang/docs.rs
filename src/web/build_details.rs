@@ -7,8 +7,9 @@ use crate::{
         file::File,
         MetaData,
     },
-    Config, Storage,
+    AsyncStorage, Config,
 };
+use anyhow::Context as _;
 use axum::{
     extract::{Extension, Path},
     response::IntoResponse,
@@ -42,7 +43,7 @@ pub(crate) async fn build_details_handler(
     Path((name, version, id)): Path<(String, String, String)>,
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
-    Extension(storage): Extension<Arc<Storage>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let id: i32 = id.parse().map_err(|_| AxumNope::BuildNotFound)?;
 
@@ -65,14 +66,7 @@ pub(crate) async fn build_details_handler(
             )?
             .ok_or(AxumNope::BuildNotFound)?;
 
-        let output = if let Some(output) = row.get("output") {
-            output
-        } else {
-            let target: String = row.get("default_target");
-            let path = format!("build-logs/{id}/{target}.txt");
-            let file = File::from_path(&storage, &path, &config)?;
-            String::from_utf8(file.0.content)?
-        };
+        let output: Option<String> = row.get("output");
 
         Ok((
             row,
@@ -81,6 +75,15 @@ pub(crate) async fn build_details_handler(
         ))
     })
     .await?;
+
+    let output = if let Some(output) = output {
+        output
+    } else {
+        let target: String = row.get("default_target");
+        let path = format!("build-logs/{id}/{target}.txt");
+        let file = File::from_path(&storage, &path, &config).await?;
+        String::from_utf8(file.0.content).context("non utf8")?
+    };
 
     Ok(BuildDetailsPage {
         metadata,

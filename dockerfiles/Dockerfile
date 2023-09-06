@@ -51,6 +51,7 @@ RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style templates/style
 COPY vendor vendor/
 COPY assets assets/
+COPY .sqlx .sqlx/
 
 RUN cargo build --release
 
