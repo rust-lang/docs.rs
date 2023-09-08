@@ -171,6 +171,7 @@ struct SourcePage {
     file_content: Option<String>,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
+    use_direct_platform_links: bool,
 }
 
 impl_axum_webpage! {
@@ -312,6 +313,7 @@ pub(crate) async fn source_browser_handler(
         file_content,
         canonical_url,
         is_latest_url,
+        use_direct_platform_links: true,
     }
     .into_response())
 }

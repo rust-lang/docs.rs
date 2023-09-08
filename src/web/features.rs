@@ -24,6 +24,7 @@ struct FeaturesPage {
     default_len: usize,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
+    use_direct_platform_links: bool,
 }
 
 impl_axum_webpage! {
@@ -89,6 +90,7 @@ pub(crate) async fn build_features_handler(
         default_len,
         is_latest_url,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
+        use_direct_platform_links: true,
     }
     .into_response())
 }

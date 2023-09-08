@@ -31,6 +31,7 @@ pub(crate) struct BuildDetails {
 struct BuildDetailsPage {
     metadata: MetaData,
     build_details: BuildDetails,
+    use_direct_platform_links: bool,
 }
 
 impl_axum_webpage! {
@@ -91,6 +92,7 @@ pub(crate) async fn build_details_handler(
             build_time: row.get("build_time"),
             output,
         },
+        use_direct_platform_links: true,
     }
     .into_response())
 }
