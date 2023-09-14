@@ -1,14 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-    <title>Docs.rs</title>
-    <subtitle>Recent Rust crates</subtitle>
+<?xml version="1.0" encoding="utf-8"?> {#- -#}
+<feed xmlns="http://www.w3.org/2005/Atom"> {#- -#}
+    <title>Docs.rs</title> {#- -#}
+    <subtitle>Recent Rust crates</subtitle> {#- -#}
 
-    <link href="https://docs.rs/releases/feed" rel="self" />
-    <link href="https://docs.rs/" />
-    <link href="https://pubsubhubbub.appspot.com" rel="hub" />
-    <link href="https://pubsubhubbub.superfeedr.com" rel="hub" />
+    <link href="https://docs.rs/releases/feed" rel="self" /> {#- -#}
+    <link href="https://docs.rs/" /> {#- -#}
+    <link href="https://pubsubhubbub.appspot.com" rel="hub" /> {#- -#}
+    <link href="https://pubsubhubbub.superfeedr.com" rel="hub" /> {#- -#}
 
-    <id>urn:docs-rs:{{ docsrs_version() }}</id>
+    <id>urn:docs-rs:{{ docsrs_version() }}</id> {#- -#}
     <updated>{{ recent_releases[0].build_time | default(value=now()) | date(format="%+") }}</updated>
 
     {%- for release in recent_releases -%}
@@ -18,20 +18,20 @@
             {%- set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
         {%- endif %}
 
-        <entry>
-            <title>{{ release.name }}-{{ release.version }}</title>
+        <entry> {#- -#}
+            <title>{{ release.name }}-{{ release.version }}</title> {#- -#}
 
-            <link href="{{ link | safe }}" />
-            <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id>
-            <updated>{{ release.build_time | date(format="%+") }}</updated>
+            <link href="{{ link | safe }}" /> {#- -#}
+            <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id> {#- -#}
+            <updated>{{ release.build_time | date(format="%+") }}</updated> {#- -#}
 
             <summary>
-                {{ release.description | default(value="") | escape_xml }}
-            </summary>
+                {{- release.description | default(value="") | escape_xml -}}
+            </summary> {#- -#}
 
-            <author>
-                <name>docs.rs</name>
-            </author>
-        </entry>
+            <author> {#- -#}
+                <name>docs.rs</name> {#- -#}
+            </author> {#- -#}
+        </entry> {#- -#}
     {%- endfor %}
-</feed>
+</feed> {#- -#}

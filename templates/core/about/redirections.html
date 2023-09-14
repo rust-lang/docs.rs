@@ -1,67 +1,67 @@
-{% extends "about-base.html" -%}
+{%- extends "about-base.html" -%}
 
 {%- block title -%} Shorthand URLs {%- endblock title -%}
 
 {%- block body -%}
-    <h1>Shorthand URLs</h1>
+    <h1>Shorthand URLs</h1> {#- -#}
 
-    <div class="about-page">
-    <div class="container pure-u-5-6 about">
-        <p>
-            Docs.rs uses semver to parse URLs. You can use this feature to access
-            crates' documentation easily. Example of URL redirections for
-            <code>clap</code> crate:
-        </p>
+    <div class="about-page"> {#- -#}
+    <div class="container pure-u-5-6 about"> {#- -#}
+        <p> {#- -#}
+            Docs.rs uses semver to parse URLs. You can use this feature to access {# -#}
+            crates' documentation easily. Example of URL redirections for {# -#}
+            <code>clap</code> crate: {#- -#}
+        </p> {#- -#}
 
-        <table class="pure-table pure-table-horizontal">
-            <thead>
-                <tr>
-                    <th>URL</th>
-                    <th>Redirects to documentation of</th>
-                </tr>
-            </thead>
+        <table class="pure-table pure-table-horizontal"> {#- -#}
+            <thead> {#- -#}
+                <tr> {#- -#}
+                    <th>URL</th> {#- -#}
+                    <th>Redirects to documentation of</th> {#- -#}
+                </tr> {#- -#}
+            </thead> {#- -#}
 
-            <tbody>
-                <tr>
-                    <td><a href="https://docs.rs/clap">docs.rs/clap</a></td>
-                    <td>Latest version of clap</td>
-                </tr>
+            <tbody> {#- -#}
+                <tr> {#- -#}
+                    <td><a href="https://docs.rs/clap">docs.rs/clap</a></td> {#- -#}
+                    <td>Latest version of clap</td> {#- -#}
+                </tr> {#- -#}
 
-                <tr>
-                    <td>
-                        <a href="https://docs.rs/clap/%7E2">docs.rs/clap/~2</a>
-                    </td>
-                    <td>2.* version</td>
-                </tr>
+                <tr> {#- -#}
+                    <td> {#- -#}
+                        <a href="https://docs.rs/clap/%7E2">docs.rs/clap/~2</a> {#- -#}
+                    </td> {#- -#}
+                    <td>2.* version</td> {#- -#}
+                </tr> {#- -#}
 
-                <tr>
-                    <td>
-                        <a href="https://docs.rs/clap/%7E2.9">docs.rs/clap/~2.9</a>
-                    </td>
-                    <td>2.9.* version</td>
-                </tr>
+                <tr> {#- -#}
+                    <td> {#- -#}
+                        <a href="https://docs.rs/clap/%7E2.9">docs.rs/clap/~2.9</a> {#- -#}
+                    </td> {#- -#}
+                    <td>2.9.* version</td> {#- -#}
+                </tr> {#- -#}
 
-                <tr>
-                    <td>
-                        <a href="https://docs.rs/clap/2.9.3">docs.rs/clap/2.9.3</a>
-                    </td>
-                    <td>
-                        2.9.3 version (you don't need <code>=</code> unlike semver)
-                    </td>
-                </tr>
+                <tr> {#- -#}
+                    <td> {#- -#}
+                        <a href="https://docs.rs/clap/2.9.3">docs.rs/clap/2.9.3</a> {#- -#}
+                    </td> {#- -#}
+                    <td> {#- -#}
+                        2.9.3 version (you don't need <code>=</code> unlike semver) {#- -#}
+                    </td> {#- -#}
+                </tr> {#- -#}
 
-                <tr>
-                    <td>
-                        <a href="https://docs.rs/clap/*">docs.rs/clap/*</a>
-                    </td>
-                    <td>
+                <tr> {#- -#}
+                    <td> {#- -#}
+                        <a href="https://docs.rs/clap/*">docs.rs/clap/*</a> {#- -#}
+                    </td> {#- -#}
+                    <td> {#- -#}
                         Latest version of this page (if it still exists). "latest" or "newest" work as well as
-                        <code>*</code>.
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    <br />
+                        {#- -#} <code>*</code>. {#- -#}
+                    </td> {#- -#}
+                </tr> {#- -#}
+            </tbody> {#- -#}
+        </table> {#- -#}
+    </div> {#- -#}
+    <br> {#- -#}
     </div>
 {%- endblock body %}

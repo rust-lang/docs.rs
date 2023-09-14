@@ -4,62 +4,62 @@
 {%- block title -%}Releases - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Releases", description=description, tab="activity") }}
+    {{- release_macros::header(title="Releases", description=description, tab="activity") -}}
 {%- endblock header -%}
 
 {%- block body -%}
-    <div class="container">
-        <canvas id="releases-activity-chart"></canvas>
+    <div class="container"> {#- -#}
+        <canvas id="releases-activity-chart"></canvas> {#- -#}
     </div>
 {%- endblock body -%}
 
-{# TODO: Do this with tera alone #}
+{#- TODO: Do this with tera alone -#}
 {%- block css -%}
     <link rel="stylesheet" href="/-/static/chartjs/chart.min.css">
 {%- endblock -%}
 {%- block javascript -%}
-    <script nonce="{{ csp_nonce }}" src="/-/static/chartjs/chart.min.js" type="text/javascript"></script>
+    <script nonce="{{ csp_nonce }}" src="/-/static/chartjs/chart.min.js" type="text/javascript"></script> {#- -#}
 
     <script nonce="{{ csp_nonce }}" type="text/javascript">
-        // We're including the CSS file manually to avoid issues with the CSP.
-        Chart.platform.disableCSSInjection = true;
+// We're including the CSS file manually to avoid issues with the CSP.
+Chart.platform.disableCSSInjection = true;
 
-        var ctx = document.getElementById("releases-activity-chart").getContext("2d");
-        new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: {{ dates | json_encode() | safe }},
-                datasets: [
-                    {
-                        label: "Releases",
-                        borderColor: "#4d76ae",
-                        backgroundColor: "#4d76ae",
-                        fill: false,
-                        data: {{ counts | json_encode() | safe }},
-                    },
-                    {
-                        label: "Build Failures",
-                        borderColor: "#434348",
-                        backgroundColor: "#434348",
-                        fill: false,
-                        data: {{ failures | json_encode() | safe }},
-                    },
-                ]
+var ctx = document.getElementById("releases-activity-chart").getContext("2d");
+new Chart(ctx, {
+    type: "line",
+    data: {
+        labels: {{ dates | json_encode() | safe }},
+        datasets: [
+            {
+                label: "Releases",
+                borderColor: "#4d76ae",
+                backgroundColor: "#4d76ae",
+                fill: false,
+                data: {{ counts | json_encode() | safe }},
             },
-            options: {
-                animation: false,
-                tooltips: {
-                    mode: "index",
-                    intersect: false,
-                },
-                scales: {
-                    yAxes: [{
-                        ticks: {
-                            beginAtZero: true,
-                        }
-                    }]
+            {
+                label: "Build Failures",
+                borderColor: "#434348",
+                backgroundColor: "#434348",
+                fill: false,
+                data: {{ failures | json_encode() | safe }},
+            },
+        ]
+    },
+    options: {
+        animation: false,
+        tooltips: {
+            mode: "index",
+            intersect: false,
+        },
+        scales: {
+            yAxes: [{
+                ticks: {
+                    beginAtZero: true,
                 }
-            }
-        });
+            }]
+        }
+    }
+});
     </script>
 {%- endblock javascript -%}

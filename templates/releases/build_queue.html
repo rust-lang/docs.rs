@@ -4,62 +4,62 @@
 {%- block title -%}Queue - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Queue", description=description, tab="queue") }}
+    {{- release_macros::header(title="Queue", description=description, tab="queue") -}}
 {%- endblock header -%}
 
 {%- block body -%}
-    <div class="container">
+    <div class="container"> {#- -#}
         <div class="recent-releases-container">
-            {%- if active_deployments %}
-                <div class="release">
-                    <strong>active CDN deployments</strong>
-                </div>
+            {%- if active_deployments -%}
+                <div class="release"> {#- -#}
+                    <strong>active CDN deployments</strong> {#- -#}
+                </div> {#- -#}
 
-                <div class = "pure-g">
-                    <div class="pure-u-1-2">
+                <div class = "pure-g"> {#- -#}
+                    <div class="pure-u-1-2"> {#- -#}
                         <ol class="queue-list">
-                            {% for krate in active_deployments -%}
-                                <li>
+                            {%- for krate in active_deployments -%}
+                                <li> {#- -#}
                                     <a href="https://docs.rs/{{ krate }}">
-                                        {{ krate }}
-                                    </a>
+                                        {{- krate -}}
+                                    </a> {#- -#}
                                 </li>
                             {%- endfor %}
-                        </ol>
-                    </div>
-                    <div class="pure-u-1-2">
-                        <div class="about">
-                            <p>
-                                After the build finishes it may take up to 20 minutes for all documentation
-                                pages to be up-to-date and available to everybody.
-                            </p>
-                            <p>Especially <code>/latest/</code> URLs might be affected.</p>
-                        </div>
-                    </div>
+                        </ol> {#- -#}
+                    </div> {#- -#}
+                    <div class="pure-u-1-2"> {#- -#}
+                        <div class="about"> {#- -#}
+                            <p> {#- -#}
+                                After the build finishes it may take up to 20 minutes for all documentation {# -#}
+                                pages to be up-to-date and available to everybody. {#- -#}
+                            </p> {#- -#}
+                            <p>Especially <code>/latest/</code> URLs might be affected.</p> {#- -#}
+                        </div> {#- -#}
+                    </div> {#- -#}
                 </div>
             {%- endif %}
 
-            <div class="release">
-                <strong>Build Queue</strong>
-            </div>
+            <div class="release"> {#- -#}
+                <strong>Build Queue</strong> {#- -#}
+            </div> {#- -#}
 
             <ol class="queue-list">
                 {%- if queue -%}
-                    {% for crate in queue -%}
-                        <li>
+                    {%- for crate in queue -%}
+                        <li> {#- -#}
                             <a href="https://crates.io/crates/{{ crate.name }}">
-                                {{ crate.name }} {{ crate.version }}
+                                {{- crate.name }} {{ crate.version -}}
                             </a>
 
-                            {% if crate.priority != 0 -%}
+                            {%- if crate.priority != 0 -%}
                                 (priority: {{ crate.priority }})
                             {%- endif %}
                         </li>
                     {%- endfor %}
-                {%- else %}
+                {%- else -%}
                     <strong>There is nothing in the queue</strong>
-                {%- endif %}
-            </ol>
-        </div>
+                {%- endif -%}
+            </ol> {#- -#}
+        </div> {#- -#}
     </div>
 {%- endblock body -%}

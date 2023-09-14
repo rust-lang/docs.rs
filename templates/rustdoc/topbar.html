@@ -1,182 +1,182 @@
 {%- import "macros.html" as macros -%}
 
-{# The url of the current release, `/crate/:name/:version` #}
+{#- The url of the current release, `/crate/:name/:version` -#}
 {%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest -%}
 
 {%- include "header/topbar_begin.html" -%}{#
 extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 #}<ul class="pure-menu-list">
     {%- if krate -%}
-        <li class="pure-menu-item pure-menu-has-children">
+        <li class="pure-menu-item pure-menu-has-children"> {#- -#}
             <a href="#" class="pure-menu-link crate-name" title="{{ krate.description }}">
-                {{ "cube" | fas }}
-                <span class="title">{{ krate.name }}-{{ krate.version }}</span>
+                {{- "cube" | fas }} {# -#}
+                <span class="title">{{ krate.name }}-{{ krate.version }}</span> {#- -#}
             </a>
 
-            {# Crate details #}
+            {#- Crate details -#}
             <div class="pure-menu-children package-details-menu">
-                {# Crate name, description and license #}
-                <ul class="pure-menu-list menu-item-divided">
-                    <li class="pure-menu-heading" id="crate-title">
-                        {{ krate.name }} {{ krate.version }}
-                        <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span>
+                {#- Crate name, description and license -#}
+                <ul class="pure-menu-list menu-item-divided"> {#- -#}
+                    <li class="pure-menu-heading" id="crate-title"> {#- -#}
+                        {{ krate.name }} {{ krate.version }} {# -#}
+                        <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span> {#- -#}
                     </li>
 
                     {%- if metadata.version_or_latest == "latest" -%}
-                    <li class="pure-menu-item">
+                    <li class="pure-menu-item"> {#- -#}
                         <a href="{{permalink_path | safe}}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
-                            {{ "link" | fas }} Permalink
-                        </a>
+                            {{- "link" | fas }} Permalink {#- -#}
+                        </a> {#- -#}
                     </li>
                     {%- endif -%}
 
-                    <li class="pure-menu-item">
+                    <li class="pure-menu-item"> {#- -#}
                         <a href="{{ crate_url | safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
-                            {{ "cube" | fas(fw=true) }} Docs.rs crate page
-                        </a>
-                    </li>
+                            {{- "cube" | fas(fw=true) }} Docs.rs crate page {#- -#}
+                        </a> {#- -#}
+                    </li> {#- -#}
 
-                    <li class="pure-menu-item">
+                    <li class="pure-menu-item"> {#- -#}
                         <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                            {{ "scale-unbalanced-flip" | fas(fw=true) }} {{ krate.license }}
-                        </a>
-                    </li>
-                </ul>
+                            {{- "scale-unbalanced-flip" | fas(fw=true) }} {{ krate.license -}}
+                        </a> {#- -#}
+                    </li> {#- -#}
+                </ul> {#- -#}
 
-                <div class="pure-g menu-item-divided">
-                    <div class="pure-u-1-2 right-border">
-                        <ul class="pure-menu-list">
+                <div class="pure-g menu-item-divided"> {#- -#}
+                    <div class="pure-u-1-2 right-border"> {#- -#}
+                        <ul class="pure-menu-list"> {#- -#}
                             <li class="pure-menu-heading">Links</li>
 
-                            {# If the crate has a homepage, show a link to it #}
+                            {#- If the crate has a homepage, show a link to it -#}
                             {%- if krate.homepage_url -%}
-                                <li class="pure-menu-item">
+                                <li class="pure-menu-item"> {#- -#}
                                     <a href="{{ krate.homepage_url }}" class="pure-menu-link">
-                                        {{ "house" | fas(fw=true) }} Homepage
-                                    </a>
+                                        {{- "house" | fas(fw=true) }} Homepage {#- -#}
+                                    </a> {#- -#}
                                 </li>
                             {%- endif -%}
 
-                            {# If the crate has external docs, show a link #}
+                            {#- If the crate has external docs, show a link -#}
                             {%- if krate.documentation_url -%}
-                                <li class="pure-menu-item">
+                                <li class="pure-menu-item"> {#- -#}
                                     <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ "file-lines" | far(fw=true) }} Documentation
-                                    </a>
+                                        {{- "file-lines" | far(fw=true) }} Documentation {#- -#}
+                                    </a> {#- -#}
                                 </li>
                             {%- endif -%}
 
-                            {# If a the crate has a repo url, show it #}
+                            {#- If a the crate has a repo url, show it -#}
                             {%- if krate.repository_url -%}
-                                <li class="pure-menu-item">
+                                <li class="pure-menu-item"> {#- -#}
                                     <a href="{{ krate.repository_url }}" class="pure-menu-link">
-                                        {{ "code-branch" | fas(fw=true) }} Repository
-                                    </a>
+                                        {{- "code-branch" | fas(fw=true) }} Repository {#- -#}
+                                    </a> {#- -#}
                                 </li>
                             {%- endif -%}
 
-                            <li class="pure-menu-item">
+                            <li class="pure-menu-item"> {#- -#}
                                 <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
-                                    {{ "cube" | fas(fw=true) }} Crates.io
-                                </a>
+                                    {{- "cube" | fas(fw=true) }} Crates.io {#- -#}
+                                </a> {#- -#}
                             </li>
 
-                            {# A link to the release's source view #}
-                            <li class="pure-menu-item">
+                            {#- A link to the release's source view -#}
+                            <li class="pure-menu-item"> {#- -#}
                                 <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                                    {{ "folder-open" | fas(fw=true) }} Source
-                                </a>
-                            </li>
-                        </ul>
+                                    {{- "folder-open" | fas(fw=true) }} Source {#- -#}
+                                </a> {#- -#}
+                            </li> {#- -#}
+                        </ul> {#- -#}
                     </div>
 
-                    {# Show the crate owners #}
-                    <div class="pure-u-1-2">
-                        <ul class="pure-menu-list">
+                    {#- Show the crate owners -#}
+                    <div class="pure-u-1-2"> {#- -#}
+                        <ul class="pure-menu-list"> {#- -#}
                             <li class="pure-menu-heading">Owners</li>
 
                             {%- for owner in krate.owners -%}
-                                <li class="pure-menu-item">
+                                <li class="pure-menu-item"> {#- -#}
                                     <a href="https://crates.io/users/{{ owner[0] }}" class="pure-menu-link">
-                                        {{ "user" | fas(fw=true) }} {{ owner[0] }}
-                                    </a>
+                                        {{- "user" | fas(fw=true) }} {{ owner[0] -}}
+                                    </a> {#- -#}
                                 </li>
                             {%- endfor -%}
-                        </ul>
-                    </div>
-                </div>
+                        </ul> {#- -#}
+                    </div> {#- -#}
+                </div> {#- -#}
 
-                <div class="pure-g menu-item-divided">
-                    <div class="pure-u-1-2 right-border">
-                        <ul class="pure-menu-list">
+                <div class="pure-g menu-item-divided"> {#- -#}
+                    <div class="pure-u-1-2 right-border"> {#- -#}
+                        <ul class="pure-menu-list"> {#- -#}
                             <li class="pure-menu-heading">Dependencies</li>
 
-                            {# Display all dependencies that the crate has #}
-                            <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
+                            {#- Display all dependencies that the crate has -#}
+                            <li class="pure-menu-item"> {#- -#}
+                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1"> {#- -#}
                                     <ul class="pure-menu-list">
                                         {%- for dep in krate.dependencies -%}
-                                            <li class="pure-menu-item">
+                                            <li class="pure-menu-item"> {#- -#}
                                                 <a href="/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
-                                                    {{ dep[0] }} {{ dep[1] }}
-                                                    <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
-                                                </a>
+                                                    {{- dep[0] }} {{ dep[1] }} {# -#}
+                                                    <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i> {#- -#}
+                                                </a> {#- -#}
                                             </li>
                                         {%- endfor -%}
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+                                    </ul> {#- -#}
+                                </div> {#- -#}
+                            </li> {#- -#}
+                        </ul> {#- -#}
+                    </div> {#- -#}
 
-                    <div class="pure-u-1-2">
-                        <ul class="pure-menu-list">
-                            <li class="pure-menu-heading">Versions</li>
+                    <div class="pure-u-1-2"> {#- -#}
+                        <ul class="pure-menu-list"> {#- -#}
+                            <li class="pure-menu-heading">Versions</li> {#- -#}
 
-                            <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1">
-                                    <span class="rotate">{{ "spinner" | fas }}</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+                            <li class="pure-menu-item"> {#- -#}
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1"> {#- -#}
+                                    <span class="rotate">{{ "spinner" | fas }}</span> {#- -#}
+                                </div> {#- -#}
+                            </li> {#- -#}
+                        </ul> {#- -#}
+                    </div> {#- -#}
                 </div>
                 {%- if krate.documented_items and krate.total_items -%}
-                    {% set percent = krate.documented_items * 100 / krate.total_items %}
-                    <div class="pure-g">
-                        <div class="pure-u-1">
-                            <ul class="pure-menu-list">
-                                <li>
-                                    <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                                        <b>{{ percent | round(precision=2) }}%</b>
-                                        of the crate is documented
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
+                    {%- set percent = krate.documented_items * 100 / krate.total_items -%}
+                    <div class="pure-g"> {#- -#}
+                        <div class="pure-u-1"> {#- -#}
+                            <ul class="pure-menu-list"> {#- -#}
+                                <li> {#- -#}
+                                    <a href="{{ crate_url | safe }}" class="pure-menu-link"> {#- -#}
+                                        <b>{{ percent | round(precision=2) }}%</b> {# -#}
+                                        of the crate is documented {#- -#}
+                                    </a> {#- -#}
+                                </li> {#- -#}
+                            </ul> {#- -#}
+                        </div> {#- -#}
                     </div>
                 {%- endif -%}
-            </div>
+            </div> {#- -#}
         </li>
     {%- else -%}
-        <li class="pure-menu-item">
+        <li class="pure-menu-item"> {#- -#}
             <a href="{{ crate_url | safe }}" class="pure-menu-link crate-name" title="{{ metadata.description }}">
-                {{ "cube" | fas }}
-                <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
-            </a>
+                {{- "cube" | fas }} {# -#}
+                <span class="title">{{ metadata.name }}-{{ metadata.version }}</span> {#- -#}
+            </a> {#- -#}
         </li>
     {%- endif -%}{#
 
     If this is the latest release and it's been yanked, just display a warning #}
     {%- if is_latest_version and metadata.yanked -%}
-        <li class="pure-menu-item">
-            <span class="pure-menu-link warn">
-                {{ "triangle-exclamation" | fas }}
-                <span class="title">This release has been yanked</span>
-            </span>
+        <li class="pure-menu-item"> {#- -#}
+            <span class="pure-menu-link warn"> {#- -#}
+                {{- "triangle-exclamation" | fas -}} {# -#}
+                <span class="title">This release has been yanked</span> {#- -#}
+            </span> {#- -#}
         </li>{#
 
-    If this isn't the most recent stable release, offer a link to the latest #}
+    If this isn't the most recent stable release, offer a link to the latest -#}
     {%- elif not is_latest_version -%}
         {%- if metadata.yanked -%}
             {%- set tooltip = "You are seeing a yanked version of the " ~ metadata.name ~ " crate. Click here to go to the latest version." -%}
@@ -189,40 +189,42 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
             {%- set title = "Go to latest version" -%}
         {%- endif -%}
 
-        <li class="pure-menu-item">
-            <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
-                data-fragment="retain"
+        <li class="pure-menu-item"> {#- -#}
+            <a href="{{ latest_path | safe }}" class="pure-menu-link warn" {# -#}
+                data-fragment="retain" {# -#}
                 title="{{ tooltip }}">
-                {{ "triangle-exclamation" | fas }}
-                <span class="title">{{ title }}</span>
-            </a>
+                {{- "triangle-exclamation" | fas -}} {# -#}
+                <span class="title">{{ title }}</span> {#- -#}
+            </a> {#- -#}
         </li>
     {%- endif -%}
 
-    {# Display the platforms that the release has been built for #}
+    {#- Display the platforms that the release has been built for -#}
     {%- if metadata.doc_targets -%}
-    <li class="pure-menu-item pure-menu-has-children">
+    <li class="pure-menu-item pure-menu-has-children"> {#- -#}
         <a href="#" class="pure-menu-link" aria-label="Platform">
-            {{ "gears" | fas }}
-            <span class="title">Platform</span>
-        </a>
+            {{- "gears" | fas -}}
+            <span class="title">Platform</span> {#- -#}
+        </a> {#- -#}
 
-        {# Build the dropdown list showing available targets #}
+        {#- Build the dropdown list showing available targets -#}
         <ul class="pure-menu-children" id="platforms">
             {%- if metadata.doc_targets|length < DEFAULT_MAX_TARGETS -%}
                 {%- include "rustdoc/platforms.html" -%}
             {%- else -%}
                 <span class="rotate">{{ "spinner" | fas }}</span>
             {%- endif -%}
-        </ul>
-    </li>{#
-    Display the features available in current build
-  #}<li class="pure-menu-item">
-        <a href="{{ crate_url | safe }}/features" title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-            {{ "flag" | fas }}
-            <span class="title">Feature flags</span>
-        </a>
+        </ul> {#- -#}
     </li>
-    {% endif %}
+    {#- Display the features available in current build -#}
+    <li class="pure-menu-item"> {#- -#}
+        <a href="{{ crate_url | safe }}/features" {# -#}
+            title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" {# -#}
+            class="pure-menu-link">
+            {{- "flag" | fas -}} {# -#}
+            <span class="title">Feature flags</span> {#- -#}
+        </a> {#- -#}
+    </li>
+    {%- endif -%}
 </ul>
 {%- include "header/topbar_end.html" -%}

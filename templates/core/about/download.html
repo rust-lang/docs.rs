@@ -1,63 +1,63 @@
-{% extends "about-base.html" -%}
+{%- extends "about-base.html" -%}
 
 {%- block title -%} Download {%- endblock title -%}
 
 {%- block body -%}
-    <h1>Documentation download</h1>
+    <h1>Documentation download</h1> {#- -#}
 
-    <div class="about-page">
-        <div class="container pure-u-5-6 about">
-            <p>
-                docs.rs stores the <code>rustdoc</code> output in a ZIP file.
-            </p>
-            <p>
-                These archives can be used as a base for further processing of
-                the documentation for offline readers like Dash or Zeal.
-                <b>They are not directly usable for offline documentation.</b>
-            </p>
-            <h2>URLs</h2>
-            <p>
-                The download is possible for specific or semantic versions:
-                <ul>
-                    <li>
-                        <a href="https://docs.rs/crate/clap/4.0.4/download">
-                            docs.rs/crate/clap/4.0.4/download
-                        </a>
-                    </li>
-                    <li>
-                        <a href="https://docs.rs/crate/clap/%7E4/download">
-                            docs.rs/crate/clap/~4/download
-                        </a>
-                    </li>
-                </ul>
+    <div class="about-page"> {#- -#}
+        <div class="container pure-u-5-6 about"> {#- -#}
+            <p> {#- -#}
+                docs.rs stores the <code>rustdoc</code> output in a ZIP file. {#- -#}
+            </p> {#- -#}
+            <p> {#- -#}
+                These archives can be used as a base for further processing of {# -#}
+                the documentation for offline readers like Dash or Zeal. {# -#}
+                <b>They are not directly usable for offline documentation.</b> {#- -#}
+            </p> {#- -#}
+            <h2>URLs</h2> {#- -#}
+            <p> {#- -#}
+                The download is possible for specific or semantic versions: {# -#}
+                <ul> {#- -#}
+                    <li> {#- -#}
+                        <a href="https://docs.rs/crate/clap/4.0.4/download"> {#- -#}
+                            docs.rs/crate/clap/4.0.4/download {#- -#}
+                        </a> {#- -#}
+                    </li> {#- -#}
+                    <li> {#- -#}
+                        <a href="https://docs.rs/crate/clap/%7E4/download"> {#- -#}
+                            docs.rs/crate/clap/~4/download {#- -#}
+                        </a> {#- -#}
+                    </li> {#- -#}
+                </ul> {#- -#}
 
-                But also via <a href="https://docs.rs/crate/clap/latest/download">
-                    docs.rs/crate/clap/latest/download
-                </a> to get the latest version.
-            </p>
-            <h2>processing / caveats</h2>
-            <p>
-                To unpack the ZIP file you need any zip utility that supports
-                PKZIP version 4.6 and BZIP2 compression.
-            </p>
-            <p>
-                The archives will contain all the documentation HTML files for all
-                targets and CSS/JS assets that are specific to the build. The default
-                target will be found at the root, and other targets each in its own
-                subfolder.
-            </p>
-            <p>
-                Docs.rs is running rustdoc with <code>--static-root-path "/-/rustdoc.static/"</code>,
-                which leads to all references to static assets breaking if they are not
-                available under that path. Older builds used <code>--static-root-path "/"</code>, which 
-                means you will have to handle both.
-            </p>
-            <p>
-                Since we're also adding <code>--emit=invocation-specific</code> to our build
-                the archives will <i>not</i> contain any static assets that are specific to the
-                toolchain. For now these will have to be downloaded file-by-file directly
-                from docs.rs.
-            </p>
-        </div>
+                But also via <a href="https://docs.rs/crate/clap/latest/download"> {# -#}
+                    docs.rs/crate/clap/latest/download {#- -#}
+                </a> to get the latest version. {#- -#}
+            </p> {#- -#}
+            <h2>processing / caveats</h2> {#- -#}
+            <p> {#- -#}
+                To unpack the ZIP file you need any zip utility that supports {# -#}
+                PKZIP version 4.6 and BZIP2 compression. {#- -#}
+            </p> {#- -#}
+            <p> {#- -#}
+                The archives will contain all the documentation HTML files for all {# -#}
+                targets and CSS/JS assets that are specific to the build. The default {# -#}
+                target will be found at the root, and other targets each in its own {# -#}
+                subfolder. {# -#}
+            </p> {#- -#}
+            <p> {#- -#}
+                Docs.rs is running rustdoc with <code>--static-root-path "/-/rustdoc.static/"</code>, {# -#}
+                which leads to all references to static assets breaking if they are not {# -#}
+                available under that path. Older builds used <code>--static-root-path "/"</code>, which  {# -#}
+                means you will have to handle both. {#- -#}
+            </p> {#- -#}
+            <p> {#- -#}
+                Since we're also adding <code>--emit=invocation-specific</code> to our build {# -#}
+                the archives will <i>not</i> contain any static assets that are specific to the {# -#}
+                toolchain. For now these will have to be downloaded file-by-file directly {# -#}
+                from docs.rs. {# -#}
+            </p> {#- -#}
+        </div> {#- -#}
     </div>
-{%- endblock body %}
+{%- endblock body -%}
