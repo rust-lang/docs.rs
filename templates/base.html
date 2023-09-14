@@ -1,30 +1,30 @@
 {%- import "macros.html" as macros -%}
 
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html> {#- -#}
+<html lang="en"> {#- -#}
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="generator" content="docs.rs {{ docsrs_version() }}">
+    <head> {#- -#}
+        <meta charset="UTF-8"> {#- -#}
+        <meta name="viewport" content="width=device-width, initial-scale=1"> {#- -#}
+        <meta name="generator" content="docs.rs {{ docsrs_version() }}"> {#- #}
         {%- block meta -%}{%- endblock meta -%}
 
-        {# Docs.rs styles #}
-        <link rel="stylesheet" href="/-/static/vendored.css?{{ docsrs_version() | slugify }}" media="all" />
-        <link rel="stylesheet" href="/-/static/style.css?{{ docsrs_version() | slugify }}" media="all" />
+        {# Docs.rs styles -#}
+        <link rel="stylesheet" href="/-/static/vendored.css?{{ docsrs_version() | slugify }}" media="all" /> {#- -#}
+        <link rel="stylesheet" href="/-/static/style.css?{{ docsrs_version() | slugify }}" media="all" /> {#- -#}
 
-        <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+        <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" /> {#- -#}
 
-        <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
+        <title>{%- block title -%} Docs.rs {%- endblock title -%}</title> {#- -#}
 
-        <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
+        <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script> {#- #}
         {%- block css -%}{%- endblock css -%}
 
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ docsrs_version() | slugify }}"></script>
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ docsrs_version() | slugify }}"></script>
-    </head>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ docsrs_version() | slugify }}"></script> {#- -#}
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ docsrs_version() | slugify }}"></script> {#- -#}
+    </head> {#- -#}
 
-    <body class="{% block body_classes %}{% endblock body_classes %}">
+    <body class="{% block body_classes %}{% endblock body_classes %}"> {#- -#}
         {%- block topbar -%}
           {%- include "header/topbar.html" -%}
         {%- endblock topbar -%}
@@ -34,5 +34,5 @@
         {%- block body -%}{%- endblock body -%}
 
         {%- block javascript -%}{%- endblock javascript -%}
-    </body>
+    </body> {#- -#}
 </html>

@@ -1,21 +1,21 @@
-{#
+{#-
     This is the unchanging top bar that is on every single page.
     The only piece of context it can take is `search_query`, which should
     be a string and will populate the search field if it exists
-#}
-<div class="nav-container">
-    <div class="container">
-        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
-            <form action="/releases/search"
-                  method="GET"
+-#}
+<div class="nav-container"> {#- -#}
+    <div class="container"> {#- -#}
+        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation"> {#- -#}
+            <form action="/releases/search" {# -#}
+                  method="GET" {# -#}
                   class="landing-search-form-nav {%
-                  if is_latest_version is defined and not is_latest_version %}not-latest{% endif
-                  %} {% if metadata.yanked %}yanked{% endif %}">
+                  if is_latest_version is defined and not is_latest_version -%}not-latest{%- endif
+                  -%} {%- if metadata.yanked %}yanked{% endif -%}">
 
-                {# The top-left logo and name #}
-                <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
-                    <span title="Docs.rs">{{ "cubes" | fas }}</span>
-                    <span class="title">Docs.rs</span>
-                </a>{#
+                {#- The top-left logo and name -#}
+                <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs"> {#- -#}
+                    <span title="Docs.rs">{{ "cubes" | fas }}</span> {#- -#}
+                    <span class="title">Docs.rs</span> {#- -#}
+                </a>{#-
 
-                #}
+                -#}

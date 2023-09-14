@@ -1,109 +1,109 @@
-{% extends "about-base.html" -%}
+{%- extends "about-base.html" -%}
 
 {%- block title -%} Builds {%- endblock title -%}
 
 {%- block body -%}
     {%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
-    <h1>Builds</h1>
-    <div class="about-page">
-    <div class="container pure-u-5-6 about">
-    <p>
-        Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>.
+    <h1>Builds</h1> {#- -#}
+    <div class="about-page"> {#- -#}
+    <div class="container pure-u-5-6 about"> {#- -#}
+    <p> {#- -#}
+        Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>. {# -#}
 
-        It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>.
-    </p>
+        It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>. {#- -#}
+    </p> {#- -#}
 
-    <p>
-        All crates are built in a sandbox using the nightly release of the Rust compiler.
-        {%- if rustc_version %}
+    <p> {#- -#}
+        All crates are built in a sandbox using the nightly release of the Rust compiler. {# -#}
+        {%- if rustc_version -%}
         The current version in use is <code>{{ rustc_version }}</code>.
         {%- endif -%}
-    </p>
+    </p> {#- -#}
 
-    <h3 id="notes-on-docsrs"> <a href="#notes-on-docsrs">Notes on using Docs.rs</a> </h3>
+    <h3 id="notes-on-docsrs"> <a href="#notes-on-docsrs">Notes on using Docs.rs</a> </h3> {#- -#}
 
-    <h4 id="setting-a-readme"> <a href="#setting-a-readme">Setting a README</a> </h4>
-    <p>
-        The README of a crate is taken from the <code>readme</code> field defined in
-        <code>Cargo.toml</code>. If this field is not set, no README will be displayed.
-    </p>
+    <h4 id="setting-a-readme"> <a href="#setting-a-readme">Setting a README</a> </h4> {#- -#}
+    <p> {#- -#}
+        The README of a crate is taken from the <code>readme</code> field defined in {# -#}
+        <code>Cargo.toml</code>. If this field is not set, no README will be displayed. {#- -#}
+    </p> {#- -#}
 
-    <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
-    <p>
-        To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
-        {% filter highlight(lang="rust") %}{% filter dedent(levels=3) -%}
+    <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4> {#- -#}
+    <p> {#- -#}
+        To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.: {# -#}
+        {%- filter highlight(lang="rust") %}{% filter dedent(levels=3) -%}
             if std::env::var("DOCS_RS").is_ok() {
                 // ... your code here ...
             }
-        {%- endfilter %}{% endfilter %}
-        This approach can be helpful if you need dependencies for building the library, but not for building the documentation.
-    </p>
+        {%- endfilter %}{% endfilter -%}
+        This approach can be helpful if you need dependencies for building the library, but not for building the documentation. {#- -#}
+    </p> {#- -#}
 
-    <h4 id="cross-compiling"> <a href="#cross-compiling">Cross-compiling</a> </h4>
-    <p>
-      All targets other than <code>x86_64-unknown-linux-gnu</code> are cross-compiled. For implementation reasons, this is unlikely to change for the foreseeable future.
-    </p>
+    <h4 id="cross-compiling"> <a href="#cross-compiling">Cross-compiling</a> </h4> {#- -#}
+    <p> {#- -#}
+      All targets other than <code>x86_64-unknown-linux-gnu</code> are cross-compiled. For implementation reasons, this is unlikely to change for the foreseeable future. {#- -#}
+    </p> {#- -#}
 
-    <p>
+    <p> {#- -#}
         You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
-        {% filter highlight(lang="toml") %}{% filter dedent -%}
+        {%- filter highlight(lang="toml") %}{% filter dedent -%}
             [package.metadata.docs.rs]
             rustc-args = ["--cfg", "docsrs"]
-        {%- endfilter %}{% endfilter %}
-        Here, the compiler arguments are set so that <code>#[cfg(docsrs)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
-        This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
-    </p>
+        {%- endfilter %}{% endfilter -%}
+        Here, the compiler arguments are set so that <code>#[cfg(docsrs)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation. {# -#}
+        This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>. {#- -#}
+    </p> {#- -#}
 
     <h4 id="testing-builds-locally"> <a href="#testing-builds-locally">Testing documentation builds locally</a> </h4>
     {%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
-    <p>
-        The Docs.rs <a href="{{ build_subcommand | safe }}">README</a> describes how to build
-        unpublished crate documentation locally using the same build environment as the Docs.rs build agent.
+    <p> {#- -#}
+        The Docs.rs <a href="{{ build_subcommand | safe }}">README</a> describes how to build {# -#}
+        unpublished crate documentation locally using the same build environment as the Docs.rs build agent. {#- -#}
+    </p> {#- -#}
+
+    <h3 id="diagnosing-failed-builds"> <a href="#diagnosing-failed-builds">Diagnosing failed builds</a> </h3> {#- -#}
+
+    <h4 id="missing-dependencies"> <a href="#missing-dependencies">Missing dependencies</a> </h4> {#- -#}
+    <p> {#- -#}
+        Missing dependencies are a common reason for failed builds. {# -#}
+        Docs.rs dependencies are managed through {# -#}
+        <a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>. {# -#}
+        See <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for how to add a dependency. {#- -#}
+    </p> {#- -#}
+
+    <h4 id="read-only-directories"> <a href="#read-only-directories">Write attempt on read-only directories</a> </h4> {#- -#}
+    <p> {#- -#}
+        Most of the sandbox is a read-only file system, including the source directory of your crate and its dependencies. {# -#}
+        If your <code>build.rs</code> generates files that are relevant for documentation, consider writing to the {# -#}
+        <a href="https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates">cargo output directory</a>, {# -#}
+        passed in the environment variable <code>OUT_DIR</code>. {#- -#}
+    </p> {#- -#}
+
+    <h4 id="hitting-resource-limits"> <a href="#hitting-resource-limits">Hitting resource limits</a> </h4> {#- -#}
+    <p> {#- -#}
+        All the builds are executed inside a sandbox with limited resources. The current limits are: {#- -#}
     </p>
 
-    <h3 id="diagnosing-failed-builds"> <a href="#diagnosing-failed-builds">Diagnosing failed builds</a> </h3>
+    {{- macros::crate_limits(limits=limits) -}}
 
-    <h4 id="missing-dependencies"> <a href="#missing-dependencies">Missing dependencies</a> </h4>
-    <p>
-        Missing dependencies are a common reason for failed builds.
-        Docs.rs dependencies are managed through
-        <a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>.
-        See <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for how to add a dependency.
-    </p>
+    <p> {#- -#}
+        If your build fails because it hit one of these limits, please {# -#}
+        <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a> {# -#}
+        to get them increased for your crate. {# -#}
+        Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies: {#- -#}
+        <ul> {#- -#}
+          <li>Network access will not be enabled for any crate.</li> {#- -#}
+          <li>Any crate that requests a time extension will be limited to one target.</li> {#- -#}
+        </ul> {#- -#}
+    </p> {#- -#}
 
-    <h4 id="read-only-directories"> <a href="#read-only-directories">Write attempt on read-only directories</a> </h4>
-    <p>
-        Most of the sandbox is a read-only file system, including the source directory of your crate and its dependencies.
-        If your <code>build.rs</code> generates files that are relevant for documentation, consider writing to the
-        <a href="https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates">cargo output directory</a>,
-        passed in the environment variable <code>OUT_DIR</code>.
-    </p>
+    <h4 id="failures-and-rebuilds"> <a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a> </h4> {#- -#}
+    <p> {#- -#}
+        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>. {# -#}
+        Some build failures can be fixed by Docs.rs, e.g., by issuing a rebuild after a bug in Docs.rs has been fixed. {# -#}
+    </p> {#- -#}
 
-    <h4 id="hitting-resource-limits"> <a href="#hitting-resource-limits">Hitting resource limits</a> </h4>
-    <p>
-        All the builds are executed inside a sandbox with limited resources. The current limits are:
-    </p>
-
-    {{ macros::crate_limits(limits=limits) }}
-
-    <p>
-        If your build fails because it hit one of these limits, please
-        <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
-        to get them increased for your crate.
-        Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies:
-        <ul>
-          <li>Network access will not be enabled for any crate.</li>
-          <li>Any crate that requests a time extension will be limited to one target.</li>
-        </ul>
-    </p>
-
-    <h4 id="failures-and-rebuilds"> <a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a> </h4>
-    <p>
-        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>.
-        Some build failures can be fixed by Docs.rs, e.g., by issuing a rebuild after a bug in Docs.rs has been fixed.
-    </p>
-
+    </div> {#- -#}
+    <br> {#- -#}
     </div>
-    <br />
-    </div>
-{%- endblock body %}
+{%- endblock body -%}

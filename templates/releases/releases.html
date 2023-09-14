@@ -4,15 +4,15 @@
 {%- block title -%}{{ title | default(value="Releases - Docs.rs")}}{%- endblock title -%}
 
 {%- block header -%}
-    {# These all have defaults so searches work #}
-    {{
+    {#- These all have defaults so searches work -#}
+    {{-
         release_macros::header(
             title=title | default(value="Releases"),
             description=description | default(value=""),
             tab=release_type,
             owner=owner | default(value=false)
         )
-    }}
+    -}}
 {%- endblock header -%}
 
 {%- block body_classes -%}
@@ -20,62 +20,61 @@ centered
 {%- endblock body_classes -%}
 
 {%- block body -%}
-    <div class="container">
-        <div class="recent-releases-container">
+    <div class="container"> {#- -#}
+        <div class="recent-releases-container"> {#- -#}
             <ul>
-                {# TODO: If there are no releases, then display a message that says so #}
+                {#- TODO: If there are no releases, then display a message that says so -#}
                 {%- for release in releases -%}
                     {%- if release.rustdoc_status -%}
-                        {% set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
+                        {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
                     {%- else -%}
-                        {% set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+                        {%- set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
                     {%- endif -%}
 
-                    <li>
-                        <a href="{{ link | safe }}" class="release">
-                            <div class="pure-g">
+                    <li> {#- -#}
+                        <a href="{{ link | safe }}" class="release"> {#- -#}
+                            <div class="pure-g"> {#- -#}
                                 <div class="pure-u-1 pure-u-sm-6-24 pure-u-md-5-24 name">
-                                    {{ release.name }}-{{ release.version }}
-                                </div>
+                                    {{- release.name }}-{{ release.version -}}
+                                </div> {#- -#}
 
                                 <div class="pure-u-1 pure-u-sm-14-24 pure-u-md-16-24 description">
-                                    {{ release.description }}
+                                    {{- release.description -}}
                                 </div>
 
-                                {% if release_type == 'owner' -%}
-                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
+                                {%- if release_type == 'owner' -%}
+                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {# -#}
                                         title="Published {{ release.build_time | timeformat(relative=true) }}">
-                                        {{ release.stars }}
-                                        {{ "star" | fas }}
+                                        {{- release.stars }} {{ "star" | fas -}}
                                     </div>
                                 {%- else -%}
-                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
+                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {# -#}
                                         title="{{ release.build_time | date(format='%FT%TZ') }}">
-                                        {{ release.build_time | timeformat(relative=true) }}
+                                        {{- release.build_time | timeformat(relative=true) -}}
                                     </div>
                                 {%- endif %}
-                            </div>
-                        </a>
+                            </div> {#- -#}
+                        </a> {#- -#}
                     </li>
                 {%- endfor -%}
-            </ul>
+            </ul> {#- -#}
 
             <div class="pagination">
-                {% block pagination %}
+                {%- block pagination -%}
                     {%- if show_previous_page -%}
                         <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number - 1 }}{{ query | default(value='') }}">
-                            {{ "arrow-left" | fas }} Previous Page
+                            {{- "arrow-left" | fas }} Previous Page {#- -#}
                         </a>
                     {%- endif -%}
 
                     {%- if show_next_page -%}
-                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number + 1 }}{{ query | default(value='') }}">
-                            Next Page {{ "arrow-right" | fas }}
+                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number + 1 }}{{ query | default(value='') }}"> {#- -#}
+                            Next Page {{ "arrow-right" | fas -}}
                         </a>
                     {%- endif -%}
-                {% endblock pagination %}
-            </div>
-        </div>
+                {%- endblock pagination -%}
+            </div> {#- -#}
+        </div> {#- -#}
     </div>
 {%- endblock body -%}
 

@@ -1,12 +1,11 @@
-{# Get the current global alert #}
+{#- Get the current global alert -#}
 {%- set global_alert = global_alert() -%}
 
-{# If there is a global alert, render it #}
+{#- If there is a global alert, render it -#}
 {%- if global_alert -%}
-    <li class="pure-menu-item">
+    <li class="pure-menu-item"> {#- -#}
         <a href="{{ global_alert.url | safe }}" class="pure-menu-link {{ global_alert.css_class }}">
-            {{ global_alert.fa_icon | fas }}
-            {{ global_alert.text }}
-        </a>
-    </li>
+            {{- global_alert.fa_icon | fas }} {{ global_alert.text -}}
+        </a> {#- -#}
+    </li> {#- -#}
 {%- endif -%}

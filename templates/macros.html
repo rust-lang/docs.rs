@@ -1,84 +1,84 @@
-{#
+{#-
     Creates a list entry for active tabs. When the active tab is the same as `expected`, it will show the current tab as active.
     * `expected` A string that represents the current tab, when `active_tab == expected` the current will be shown as active
     * `href` A string used as the tab's link
     * `text` A string used as the tab's text
-#}
-{% macro active_link(expected, href, text) %}
-    <li class="pure-menu-item">
+-#}
+{%- macro active_link(expected, href, text) -%}
+    <li class="pure-menu-item"> {#- -#}
         <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
-            {# safe: allow passing in HTML #}
-            {{ text | safe }}
-        </a>
+            {#- safe: allow passing in HTML -#}
+            {{- text | safe -}}
+        </a> {#- -#}
     </li>
-{% endmacro active_link %}
+{%- endmacro active_link -%}
 
-{#
+{#-
     Creates a list entry
     * `href` A string used as the tab's link
     * `text` A string used as the tab's text
     * `target` An optional target
     * `extra_classes` Optional extra css classes
-#}
-{% macro menu_link(href, text, target="", extra_classes="") %}
-    <li class="pure-menu-item">
+-#}
+{%- macro menu_link(href, text, target="", extra_classes="") -%}
+    <li class="pure-menu-item"> {#- -#}
         <a class="pure-menu-link {{ extra_classes }}" href="{{ href }}" {% if target != "" -%} target="{{ target }}" {%- endif %}>
-            {{ text }}
-        </a>
+            {{- text -}}
+        </a> {#- -#}
     </li>
-{% endmacro active_link %}
+{%- endmacro active_link -%}
 
-{#
+{#-
     Creates a formatted table showing the resource limits of a crate
     * `limits` A non-null `Limits` struct
-#}
-{% macro crate_limits(limits) %}
-    <table class="pure-table pure-table-horizontal">
-        <tbody>
-            <tr>
-                <td>Available RAM</td>
-                <td>{{ limits.memory | filesizeformat }}</td>
-            </tr>
+-#}
+{%- macro crate_limits(limits) -%}
+    <table class="pure-table pure-table-horizontal"> {#- -#}
+        <tbody> {#- -#}
+            <tr> {#- -#}
+                <td>Available RAM</td> {#- -#}
+                <td>{{ limits.memory | filesizeformat }}</td> {#- -#}
+            </tr> {#- -#}
 
-            <tr>
-                <td>Maximum rustdoc execution time</td>
-                <td>{{ limits.timeout.secs | timeformat }}</td>
-            </tr>
+            <tr> {#- -#}
+                <td>Maximum rustdoc execution time</td> {#- -#}
+                <td>{{ limits.timeout.secs | timeformat }}</td> {#- -#}
+            </tr> {#- -#}
 
-            <tr>
-                <td>Maximum size of a build log</td>
-                <td>{{ limits.max_log_size | filesizeformat }}</td>
-            </tr>
+            <tr> {#- -#}
+                <td>Maximum size of a build log</td> {#- -#}
+                <td>{{ limits.max_log_size | filesizeformat }}</td> {#- -#}
+            </tr> {#- -#}
 
-            <tr>
-                <td>Network access</td>
+            <tr> {#- -#}
+                <td>Network access</td> {#- -#}
                 <td>
                     {%- if limits.networking -%}
                         allowed
                     {%- else -%}
                         blocked
                     {%- endif -%}
-                </td>
-            </tr>
+                </td> {#- -#}
+            </tr> {#- -#}
 
-            <tr>
-                <td>Maximum number of build targets</td>
-                <td>{{ limits.targets }}</td>
-            </tr>
-        </tbody>
+            <tr> {#- -#}
+                <td>Maximum number of build targets</td> {#- -#}
+                <td>{{ limits.targets }}</td> {#- -#}
+            </tr> {#- -#}
+        </tbody> {#- -#}
     </table>
-{% endmacro crate_limits %}
+{%- endmacro crate_limits -%}
 
-{# Constructs a title based on the given crate name and version #}
-{% macro doc_title(name, version) %}
+{#- Constructs a title based on the given crate name and version -#}
+{%- macro doc_title(name, version) -%}
     {%- if name -%}
         {{ name }} {{ version | default(value="") }} - Docs.rs
     {%- else -%}
         Docs.rs
     {%- endif -%}
-{% endmacro doc_title %}
+{%- endmacro doc_title -%}
 
-{#
+{#-
     Constructs a list of a crate's releases
     * `name` The crate's name as a string
     * `releases` A list of crate releases where each release has the following fields:
@@ -88,51 +88,51 @@
         * `is_library` A boolean that's true if the crate is a library and false if it's a binary
     * `target` The target platform (empty string if the default or a `/crate` page)
     * `inner_path` The current rustdoc page (empty string if a `/crate` page)
-#}
-{% macro releases_list(name, releases, target, inner_path) %}
+-#}
+{%- macro releases_list(name, releases, target, inner_path) -%}
     {%- for release in releases -%}
-        {# The url for the release, `/crate/:name/:version` #}
-        {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
-        {% if inner_path == "" %} {# /crate #}
+        {#- The url for the release, `/crate/:name/:version` -#}
+        {#- NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) -#}
+        {%- if inner_path == "" -%} {#- /crate -#}
             {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
             {%- set retain_fragment = false -%}
-        {% else %}
+        {%- else -%}
             {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version ~ "/target-redirect/" ~ target ~ inner_path -%}
             {%- set retain_fragment = true -%}
-        {% endif %}
-        {# The release's name and version, `:name-:version` #}
+        {%- endif -%}
+        {#- The release's name and version, `:name-:version` -#}
         {%- set release_name = name ~ "-" ~ release.version -%}
 
         {%- if not release.is_library -%}
-            {# If the release isn't a library, then display that warning #}
+            {#- If the release isn't a library, then display that warning -#}
             {%- set warning = release_name ~ " is not a library" -%}
         {%- elif release.yanked and release.build_status -%}
-            {# If the release has been yanked and failed to build, display a warning #}
+            {#- If the release has been yanked and failed to build, display a warning -#}
             {%- set warning = release_name ~ " is yanked" -%}
         {%- elif release.yanked and not release.build_status -%}
-            {# If the release has been yanked and failed to build, display a warning #}
+            {#- If the release has been yanked and failed to build, display a warning -#}
             {%- set warning = release_name ~ " is yanked and docs.rs failed to build it" -%}
         {%- elif not release.build_status -%}
-            {# If the release failed to build, display a warning #}
+            {#- If the release failed to build, display a warning -#}
             {%- set warning = "docs.rs failed to build " ~ release_name -%}
         {%- else -%}
             {%- set warning = false -%}
         {%- endif -%}
 
-        <li class="pure-menu-item">
-            <a
+        <li class="pure-menu-item"> {#- -#}
+            <a {# -#}
                 href="{{ release_url | safe }}"
-                {# We only want crawlers to crawl the /latest/ URLs, not /1.2.3/ URLs. #}
-                rel="nofollow"
+                {#- We only want crawlers to crawl the /latest/ URLs, not /1.2.3/ URLs. -#}
+                rel="nofollow" {# -#}
                 class="pure-menu-link{% if warning %} warn{% endif %}"
-                {% if warning %} title="{{ warning }}"{% endif %}
-                {% if retain_fragment %}data-fragment="retain"{% endif %}
+                {%- if warning %} title="{{ warning }}"{%- endif -%}
+                {%- if retain_fragment %} data-fragment="retain"{%- endif -%}
             >
-                {% if warning %}
-                    {{ "triangle-exclamation" | fas(fw=true) }}
-                {% endif %}
-                {{ release.version }}
-            </a>
+                {%- if warning -%}
+                    {{- "triangle-exclamation" | fas(fw=true) }} {# -#}
+                {%- endif -%}
+                {{- release.version -}}
+            </a> {#- -#}
         </li>
     {%- endfor -%}
-{% endmacro releases_list %}
+{%- endmacro releases_list -%}

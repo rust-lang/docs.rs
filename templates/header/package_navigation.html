@@ -1,4 +1,4 @@
-{#
+{#-
     The standard package navigation menu
 
     * `title` A possibly-null string. If it is null, `metadata.name metadata.version` will be used as the title
@@ -11,79 +11,78 @@
 
     Note: `false` here is acting as a pseudo-null value since you can't directly construct null values
            and tera requires all parameters without defaults to be filled
-#}
-{% macro package_navigation(title=false, metadata, active_tab) %}
-    <div class="docsrs-package-container">
-        <div class="container">
+-#}
+{%- macro package_navigation(title=false, metadata, active_tab) -%}
+    <div class="docsrs-package-container"> {#- -#}
+        <div class="container"> {#- -#}
             <div class="description-container">
-                {# The partial path of the crate, `:name/:release` #}
+                {#- The partial path of the crate, `:name/:release` -#}
                 {%- set crate_path = metadata.name ~ "/" ~ metadata.version_or_latest -%}
 
-                {# If docs are built, show a button for them #}
+                {#- If docs are built, show a button for them -#}
 
-                {# Page title #}
+                {#- Page title -#}
                 <h1 id="crate-title">
                     {%- if title -%}
-                        {{ title }}
+                        {{- title -}}
                     {%- else -%}
-                        {{ metadata.name }} {{ metadata.version }}
+                        {{- metadata.name }} {{ metadata.version }} {# -#}
                         <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span>
                     {%- endif -%}
                 </h1>
 
-                {# Page description #}
+                {#- Page description -#}
                 <div class="description">
                     {%- if metadata.description -%}
-                        {{ metadata.description }}
+                        {{- metadata.description -}}
                     {%- endif -%}
-                </div>
+                </div> {#- -#}
 
-
-                <div class="pure-menu pure-menu-horizontal">
+                <div class="pure-menu pure-menu-horizontal"> {#- -#}
                     <ul class="pure-menu-list">
-                        {# The crate information tab #}
-                        <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
+                        {#- The crate information tab -#}
+                        <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}" {# -#}
                                 class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                                {{ "cube" | fas(fw=true) }}
-                                <span class="title"> Crate</span>
-                            </a>
+                                {{- "cube" | fas(fw=true) -}}
+                                <span class="title"> Crate</span> {#- -#}
+                            </a> {#- -#}
                         </li>
 
-                        {# The source view tab #}
-                        <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/source/"
+                        {#- The source view tab -#}
+                        <li class="pure-menu-item"> {#- -#}
+                            <a href="/crate/{{ crate_path | safe }}/source/" {# -#}
                                 class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                                {{ "folder-open" | far(fw=true) }}
-                                <span class="title"> Source</span>
-                            </a>
+                                {{- "folder-open" | far(fw=true) -}}
+                                <span class="title"> Source</span> {#- -#}
+                            </a> {#- -#}
                         </li>
 
-                        {# The builds tab #}
-                        <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/builds"
+                        {#- The builds tab -#}
+                        <li class="pure-menu-item"> {#- -#}
+                            <a href="/crate/{{ crate_path | safe }}/builds" {# -#}
                                 class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
-                                {{ "gears" | fas }}
-                                <span class="title"> Builds</span>
-                            </a>
+                                {{- "gears" | fas -}}
+                                <span class="title"> Builds</span> {#- -#}
+                            </a> {#- -#}
                         </li>
 
-                        {# The features tab #}
-                        <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/features"
+                        {#- The features tab -#}
+                        <li class="pure-menu-item"> {#- -#}
+                            <a href="/crate/{{ crate_path | safe }}/features" {# -#}
                                class="pure-menu-link{% if active_tab == 'features' %} pure-menu-active{% endif %}">
-                                {{ "flag" | fas }}
-                                <span class="title">Feature flags</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                                {{- "flag" | fas -}}
+                                <span class="title">Feature flags</span> {#- -#}
+                            </a> {#- -#}
+                        </li> {#- -#}
+                    </ul> {#- -#}
+                </div> {#- -#}
             </div>
 
             {%- if metadata.rustdoc_status -%}
                 <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="doc-link">
-                    {{ "book" | fas(fw=true) }} Documentation
+                    {{- "book" | fas(fw=true) }} Documentation {#- -#}
                 </a>
             {%- endif -%}
-        </div>
+        </div> {#- -#}
     </div>
-{% endmacro package_navigation %}
+{%- endmacro package_navigation -%}

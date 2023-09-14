@@ -2,7 +2,7 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
+    {{- macros::doc_title(name=metadata.name, version=metadata.version) -}}
 {%- endblock title -%}
 
 {%- block body_classes -%}
@@ -20,27 +20,27 @@ centered
 {%- endblock topbar -%}
 
 {%- block header -%}
-    {{ navigation::package_navigation(metadata=metadata, active_tab="builds") }}
+    {{- navigation::package_navigation(metadata=metadata, active_tab="builds") -}}
 {%- endblock header -%}
 
 {%- block body -%}
-    <div class="container">
-        <div class="recent-releases-container">
-            <div class="release">
-                <strong>Build #{{ build_details.id }} {{ build_details.build_time | date(format="%+") }}</strong>
+    <div class="container"> {#- -#}
+        <div class="recent-releases-container"> {#- -#}
+            <div class="release"> {#- -#}
+                <strong>Build #{{ build_details.id }} {{ build_details.build_time | date(format="%+") }}</strong> {#- -#}
             </div>
 
             {%- filter dedent -%}
-                <pre>
-                    # rustc version
-                    {{ build_details.rustc_version }}
-                    # docs.rs version
-                    {{ build_details.docsrs_version }}
+                <pre> {#- -#}
+# rustc version
+{{ build_details.rustc_version }}
+# docs.rs version
+{{ build_details.docsrs_version }}
 
-                    # build log
-                    {{ build_details.output }}
+# build log
+{{ build_details.output -}}
                 </pre>
             {%- endfilter -%}
-        </div>
-    </div>
+        </div> {#- -#}
+    </div> {#- -#}
 {%- endblock body -%}

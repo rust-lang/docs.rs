@@ -1,15 +1,15 @@
 {%- extends "releases/releases.html" -%}
 
-{% block pagination %}
+{%- block pagination -%}
     {%- if previous_page_link -%}
         <a class="pure-button pure-button-normal" href="{{ previous_page_link|safe }}">
-            {{ "arrow-left" | fas }} Previous Page
+            {{- "arrow-left" | fas }} Previous Page {#- -#}
         </a>
     {%- endif -%}
 
     {%- if next_page_link -%}
-        <a class="pure-button pure-button-normal" href="{{ next_page_link|safe }}">
-            Next Page {{ "arrow-right" | fas }}
+        <a class="pure-button pure-button-normal" href="{{ next_page_link|safe }}"> {#- -#}
+            Next Page {{ "arrow-right" | fas -}}
         </a>
     {%- endif -%}
-{% endblock pagination %}
+{%- endblock pagination -%}
