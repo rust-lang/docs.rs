@@ -285,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-cloudfront"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e65dde305bba537166024c0c9cd4472acb0f3c681e1a352df794ff989da69d14"
+checksum = "9c36bec5eb200e5547be5aaa88de7c47d9ddc9af6b1f476a3420d5cb8420eebd"
 dependencies = [
  "aws-credential-types",
  "aws-http",
@@ -309,9 +309,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a531d010f9f556bf65eb3bcd8d24f1937600ab6940fede4d454cd9b1f031fb34"
+checksum = "a0e60de95f48718e0e581d014f2cca1d3fb5641e9cf06d8cb7c3bc740a98757b"
 dependencies = [
  "aws-credential-types",
  "aws-http",
@@ -690,9 +690,9 @@ dependencies = [
 
 [[package]]
 name = "axum-extra"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a93e433be9382c737320af3924f7d5fc6f89c155cf2bf88949d8f5126fab283f"
+checksum = "4ab90e7b70bea63a153137162affb6a0bce26b584c24a4c7885509783e2cf30b"
 dependencies = [
  "axum",
  "axum-core",
@@ -4315,9 +4315,9 @@ dependencies = [
 
 [[package]]
 name = "moka"
-version = "0.11.3"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa6e72583bf6830c956235bff0d5afec8cf2952f579ebad18ae7821a917d950f"
+checksum = "8dc65d4615c08c8a13d91fd404b5a2a4485ba35b4091e3315cf8798d280c2f29"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-epoch",
@@ -4325,7 +4325,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "rustc_version",
- "scheduled-thread-pool",
  "skeptic",
  "smallvec",
  "tagptr",
