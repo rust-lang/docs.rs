@@ -776,7 +776,6 @@ impl RustwideBuilder {
         const UNCONDITIONAL_ARGS: &[&str] = &[
             "--static-root-path", "/-/rustdoc.static/",
             "--cap-lints", "warn",
-            "--disable-per-crate-search",
             "--extern-html-root-takes-precedence",
         ];
 
