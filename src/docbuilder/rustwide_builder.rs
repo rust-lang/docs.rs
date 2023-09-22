@@ -222,9 +222,6 @@ impl RustwideBuilder {
         self.rustc_version = self.detect_rustc_version()?;
 
         let has_changed = old_version.as_deref() != Some(&self.rustc_version);
-        if has_changed {
-            self.add_essential_files()?;
-        }
         Ok(has_changed)
     }
 
@@ -331,7 +328,6 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<bool> {
-        self.update_toolchain()?;
         let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
             .map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
@@ -347,8 +343,6 @@ impl RustwideBuilder {
         kind: PackageKind<'_>,
     ) -> Result<bool> {
         let mut conn = self.db.get()?;
-
-        self.update_toolchain()?;
 
         info!("building package {} {}", name, version);
 
