@@ -441,6 +441,14 @@ impl BuildSubcommand {
                 rustwide_builder()?
                     .update_toolchain()
                     .context("failed to update toolchain")?;
+
+                rustwide_builder()?
+                    .purge_caches()
+                    .context("failed to purge caches")?;
+
+                rustwide_builder()?
+                    .add_essential_files()
+                    .context("failed to add essential files")?;
             }
 
             Self::AddEssentialFiles => {
