@@ -17,34 +17,33 @@ impl DatabaseBackend {
     }
 
     pub(super) async fn exists(&self, path: &str) -> Result<bool> {
-        Ok(sqlx::query!(
+        Ok(sqlx::query_scalar!(
             r#"SELECT COUNT(*) > 0 as "has_count!" FROM files WHERE path = $1"#,
             path
         )
         .fetch_one(&self.pool)
-        .await?
-        .has_count)
+        .await?)
     }
 
     pub(super) async fn get_public_access(&self, path: &str) -> Result<bool> {
-        match sqlx::query!(
-            "SELECT public 
-             FROM files 
+        match sqlx::query_scalar!(
+            "SELECT public
+             FROM files
              WHERE path = $1",
             path
         )
         .fetch_optional(&self.pool)
         .await?
         {
-            Some(row) => Ok(row.public),
+            Some(public) => Ok(public),
             None => Err(super::PathNotFoundError.into()),
         }
     }
 
     pub(super) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
         if sqlx::query!(
-            "UPDATE files 
-             SET public = $2 
+            "UPDATE files
+             SET public = $2
              WHERE path = $1",
             path,
             public,
