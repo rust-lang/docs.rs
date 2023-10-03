@@ -1050,7 +1050,7 @@ mod tests {
             )?;
 
             assert_eq!(links.len(), 1);
-            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/",);
+            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/",);
             Ok(())
         })
     }
@@ -1097,7 +1097,7 @@ mod tests {
             )?;
 
             assert_eq!(links.len(), 1);
-            assert_eq!(links[0], "/some_random_crate/1.0.0/some_random_crate/");
+            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
             Ok(())
         })
     }
@@ -1157,8 +1157,8 @@ mod tests {
             //   might not have it yet, or the doc-build might be in progress.
             // * ranking/order from crates.io result is preserved
             // * version used is the highest semver following our own "latest version" logic
-            assert_eq!(links[0], "/some_random_crate/2.0.0/some_random_crate/");
-            assert_eq!(links[1], "/and_another_one/0.0.1/and_another_one/");
+            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
+            assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
             Ok(())
         })
     }
