@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::Acquire;
 
 use super::{Blob, FileRange};
@@ -69,7 +70,16 @@ impl DatabaseBackend {
         // https://www.postgresql.org/message-id/162867790712200946i7ba8eb92v908ac595c0c35aee%40mail.gmail.com
         let max_size = max_size.min(std::i32::MAX as usize) as i32;
 
-        let (path, mime, date_updated, compression, content, is_too_big) = if let Some(r) = range {
+        struct Result {
+            path: String,
+            mime: String,
+            date_updated: DateTime<Utc>,
+            compression: Option<i32>,
+            content: Option<Vec<u8>>,
+            is_too_big: bool,
+        }
+
+        let result = if let Some(r) = range {
             // when we only want to get a range we can validate already if the range is small enough
             if (r.end() - r.start() + 1) > max_size as u64 {
                 return Err(std::io::Error::new(
@@ -80,10 +90,12 @@ impl DatabaseBackend {
             }
             let range_start = i32::try_from(*r.start())?;
 
-            sqlx::query!(
+            sqlx::query_as!(
+                Result,
                 r#"SELECT
                      path, mime, date_updated, compression,
-                     substring(content from $2 for $3) as content
+                     substring(content from $2 for $3) as content,
+                     FALSE as "is_too_big!"
                  FROM files
                  WHERE path = $1;"#,
                 path,
@@ -92,21 +104,12 @@ impl DatabaseBackend {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or(super::PathNotFoundError)
-            .map(|row| {
-                (
-                    row.path,
-                    row.mime,
-                    row.date_updated,
-                    row.compression,
-                    row.content,
-                    false,
-                )
-            })?
+            .ok_or(super::PathNotFoundError)?
         } else {
             // The size limit is checked at the database level, to avoid receiving data altogether if
             // the limit is exceeded.
-            sqlx::query!(
+            sqlx::query_as!(
+                Result,
                 r#"SELECT
                      path, mime, date_updated, compression,
                      (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
@@ -118,20 +121,10 @@ impl DatabaseBackend {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or(super::PathNotFoundError)
-            .map(|row| {
-                (
-                    row.path,
-                    row.mime,
-                    row.date_updated,
-                    row.compression,
-                    row.content,
-                    row.is_too_big,
-                )
-            })?
+            .ok_or(super::PathNotFoundError)?
         };
 
-        if is_too_big {
+        if result.is_too_big {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 crate::error::SizeLimitReached,
@@ -139,15 +132,15 @@ impl DatabaseBackend {
             .into());
         }
 
-        let compression = compression.map(|i| {
+        let compression = result.compression.map(|i| {
             i.try_into()
                 .expect("invalid compression algorithm stored in database")
         });
         Ok(Blob {
-            path,
-            mime,
-            date_updated,
-            content: content.unwrap_or_default(),
+            path: result.path,
+            mime: result.mime,
+            date_updated: result.date_updated,
+            content: result.content.unwrap_or_default(),
             compression,
         })
     }
