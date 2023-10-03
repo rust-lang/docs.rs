@@ -1,14 +1,15 @@
 use crate::web::highlight;
 use comrak::{
-    adapters::SyntaxHighlighterAdapter, ComrakExtensionOptions, ComrakOptions, ComrakPlugins,
-    ComrakRenderPlugins,
+    adapters::SyntaxHighlighterAdapter, ExtensionOptions, Options, Plugins, RenderPlugins,
 };
 use std::collections::HashMap;
 
 #[derive(Debug)]
 struct CodeAdapter<F>(F);
 
-impl<F: Fn(Option<&str>, &str) -> String> SyntaxHighlighterAdapter for CodeAdapter<F> {
+impl<F: Fn(Option<&str>, &str) -> String + Send + Sync> SyntaxHighlighterAdapter
+    for CodeAdapter<F>
+{
     fn write_highlighted(
         &self,
         output: &mut dyn std::io::Write,
@@ -66,28 +67,29 @@ fn write_opening_tag(
 
 fn render_with_highlighter(
     text: &str,
-    highlighter: impl Fn(Option<&str>, &str) -> String,
+    highlighter: impl Fn(Option<&str>, &str) -> String + Send + Sync,
 ) -> String {
-    comrak::markdown_to_html_with_plugins(
-        text,
-        &ComrakOptions {
-            extension: ComrakExtensionOptions {
-                superscript: true,
-                table: true,
-                autolink: true,
-                tasklist: true,
-                strikethrough: true,
-                ..ComrakExtensionOptions::default()
-            },
-            ..ComrakOptions::default()
-        },
-        &ComrakPlugins {
-            render: ComrakRenderPlugins {
-                codefence_syntax_highlighter: Some(&CodeAdapter(highlighter)),
-                ..Default::default()
-            },
-        },
-    )
+    let mut extension = ExtensionOptions::default();
+    extension.superscript = true;
+    extension.table = true;
+    extension.autolink = true;
+    extension.tasklist = true;
+    extension.strikethrough = true;
+
+    let options = Options {
+        extension,
+        ..Default::default()
+    };
+
+    let code_adapter = CodeAdapter(highlighter);
+
+    let mut render = RenderPlugins::default();
+    render.codefence_syntax_highlighter = Some(&code_adapter);
+
+    let mut plugins = Plugins::default();
+    plugins.render = render;
+
+    comrak::markdown_to_html_with_plugins(text, &options, &plugins)
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
@@ -99,11 +101,11 @@ pub fn render(text: &str) -> String {
 mod test {
     use super::render_with_highlighter;
     use indoc::indoc;
-    use std::cell::RefCell;
+    use std::sync::Mutex;
 
     #[test]
     fn ignore_info_string_attributes() {
-        let highlighted = RefCell::new(vec![]);
+        let highlighted = Mutex::new(vec![]);
 
         let output = render_with_highlighter(
             indoc! {"
@@ -116,16 +118,16 @@ mod test {
                 ```
             "},
             |lang, code| {
-                highlighted
-                    .borrow_mut()
-                    .push((lang.map(str::to_owned), code.to_owned()));
+                let mut highlighted = highlighted.lock().unwrap();
+                highlighted.push((lang.map(str::to_owned), code.to_owned()));
                 code.to_owned()
             },
         );
 
         assert!(output.matches(r#"<code class="language-rust">"#).count() == 2);
+        let highlighted = highlighted.lock().unwrap();
         assert_eq!(
-            highlighted.borrow().as_slice(),
+            highlighted.as_slice(),
             [
                 (Some("rust".into()), "ignore::commas();\n".into()),
                 (Some("rust".into()), "ignore::spaces();\n".into())
