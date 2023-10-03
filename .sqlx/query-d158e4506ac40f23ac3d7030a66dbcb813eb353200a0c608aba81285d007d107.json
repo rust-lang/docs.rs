@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE files \n             SET public = $2 \n             WHERE path = $1",
+  "query": "UPDATE files\n             SET public = $2\n             WHERE path = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "90fc356a5cb3894c1597befbdc5702c7434a770fe8d4d55c562e4ad7558b7f5d"
+  "hash": "d158e4506ac40f23ac3d7030a66dbcb813eb353200a0c608aba81285d007d107"
 }

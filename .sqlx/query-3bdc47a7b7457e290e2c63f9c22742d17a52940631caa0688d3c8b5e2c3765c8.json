@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                     path, mime, date_updated, compression,\n                     substring(content from $2 for $3) as content\n                 FROM files\n                 WHERE path = $1;",
+  "query": "SELECT\n                     path, mime, date_updated, compression,\n                     substring(content from $2 for $3) as content,\n                     FALSE as \"is_too_big!\"\n                 FROM files\n                 WHERE path = $1;",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "content",
         "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_too_big!",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -41,8 +46,9 @@
       false,
       false,
       true,
+      null,
       null
     ]
   },
-  "hash": "2fd2aad681960b30ca5149dfc7050c477667d5f022349661385026c757df88cc"
+  "hash": "3bdc47a7b7457e290e2c63f9c22742d17a52940631caa0688d3c8b5e2c3765c8"
 }
