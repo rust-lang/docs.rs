@@ -99,7 +99,6 @@ pub struct Config {
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) inside_docker: bool,
     pub(crate) docker_image: Option<String>,
-    pub(crate) toolchain: String,
     pub(crate) build_cpu_limit: Option<u32>,
     pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
@@ -113,7 +112,6 @@ impl Config {
             ("CRATESFYI_DATABASE_URL", "DOCSRS_DATABASE_URL"),
             ("CRATESFYI_GITHUB_ACCESSTOKEN", "DOCSRS_GITHUB_ACCESSTOKEN"),
             ("CRATESFYI_RUSTWIDE_WORKSPACE", "DOCSRS_RUSTWIDE_WORKSPACE"),
-            ("CRATESFYI_TOOLCHAIN", "DOCSRS_TOOLCHAIN"),
             ("DOCS_RS_DOCKER", "DOCSRS_DOCKER"),
             ("DOCS_RS_LOCAL_DOCKER_IMAGE", "DOCSRS_DOCKER_IMAGE"),
             ("DOCS_RS_BULID_CPU_LIMIT", "DOCSRS_BULID_CPU_LIMIT"),
@@ -202,7 +200,6 @@ impl Config {
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-            toolchain: env("DOCSRS_TOOLCHAIN", "nightly".to_string())?,
             build_cpu_limit: maybe_env("DOCSRS_BUILD_CPU_LIMIT")?,
             build_default_memory_limit: maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,

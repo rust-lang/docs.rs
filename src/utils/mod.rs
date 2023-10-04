@@ -56,6 +56,7 @@ pub enum ConfigName {
     RustcVersion,
     LastSeenIndexReference,
     QueueLocked,
+    Toolchain,
 }
 
 pub fn set_config(

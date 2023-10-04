@@ -8,8 +8,8 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
-    copy_dir_all, parse_rustc_version, queue_builder, report_error, set_config, CargoMetadata,
-    ConfigName,
+    copy_dir_all, get_config, parse_rustc_version, queue_builder, report_error, set_config,
+    CargoMetadata, ConfigName,
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
@@ -32,6 +32,21 @@ const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
+
+fn get_configured_toolchain(conn: &mut Client) -> Result<Toolchain> {
+    let name: String = get_config(conn, ConfigName::Toolchain)?.unwrap_or_else(|| "nightly".into());
+
+    // If the toolchain is all hex, assume it references an artifact from
+    // CI, for instance an `@bors try` build.
+    let re = Regex::new(r"^[a-fA-F0-9]+$").unwrap();
+    if re.is_match(&name) {
+        debug!("using CI build {}", &name);
+        Ok(Toolchain::ci(&name, false))
+    } else {
+        debug!("using toolchain {}", &name);
+        Ok(Toolchain::dist(&name))
+    }
+}
 
 pub enum PackageKind<'a> {
     Local(&'a Path),
@@ -75,22 +90,13 @@ impl RustwideBuilder {
             .purge_all_build_dirs()
             .map_err(FailureError::compat)?;
 
-        // If the toolchain is all hex, assume it references an artifact from
-        // CI, for instance an `@bors try` build.
-        let re = Regex::new(r"^[a-fA-F0-9]+$").unwrap();
-        let toolchain = if re.is_match(&config.toolchain) {
-            debug!("using CI build {}", &config.toolchain);
-            Toolchain::ci(&config.toolchain, false)
-        } else {
-            debug!("using toolchain {}", &config.toolchain);
-            Toolchain::dist(&config.toolchain)
-        };
+        let pool = context.pool()?;
 
         Ok(RustwideBuilder {
             workspace,
-            toolchain,
+            toolchain: get_configured_toolchain(&mut *pool.get()?)?,
             config,
-            db: context.pool()?,
+            db: pool,
             storage: context.storage()?,
             metrics: context.instance_metrics()?,
             index: context.index()?,
@@ -119,6 +125,8 @@ impl RustwideBuilder {
     }
 
     pub fn update_toolchain(&mut self) -> Result<bool> {
+        self.toolchain = get_configured_toolchain(&mut *self.db.get()?)?;
+
         // For CI builds, a lot of the normal update_toolchain things don't apply.
         // CI builds are only for one platform (https://forge.rust-lang.org/infra/docs/rustc-ci.html#try-builds)
         // so we only try installing for the current platform. If that's not a match,
