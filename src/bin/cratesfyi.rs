@@ -12,7 +12,7 @@ use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
     get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-    remove_crate_priority, set_crate_priority, ConfigName,
+    remove_crate_priority, set_config, set_crate_priority, ConfigName,
 };
 use docs_rs::{
     start_background_metrics_webserver, start_web_server, BuildQueue, Config, Context, Index,
@@ -383,6 +383,10 @@ enum BuildSubcommand {
     /// Adds essential files for the installed version of rustc
     AddEssentialFiles,
 
+    SetToolchain {
+        toolchain_name: String,
+    },
+
     /// Locks the daemon, preventing it from building new crates
     Lock,
 
@@ -457,6 +461,15 @@ impl BuildSubcommand {
                 rustwide_builder()?
                     .add_essential_files()
                     .context("failed to add essential files")?;
+            }
+
+            Self::SetToolchain { toolchain_name } => {
+                let mut conn = ctx
+                    .pool()?
+                    .get()
+                    .context("failed to get a database connection")?;
+                set_config(&mut conn, ConfigName::Toolchain, toolchain_name)
+                    .context("failed to set toolchain in database")?;
             }
 
             Self::Lock => build_queue.lock().context("Failed to lock")?,
