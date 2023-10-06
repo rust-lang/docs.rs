@@ -230,10 +230,22 @@ impl RustwideBuilder {
         let mut conn = self.db.get()?;
         let limits = Limits::for_crate(&self.config, &mut conn, DUMMY_CRATE_NAME)?;
 
+        // FIXME: for now, purge all build dirs before each build.
+        // Currently we have some error situations where the build directory wouldn't be deleted
+        // after the build failed:
+        // https://github.com/rust-lang/docs.rs/issues/820
+        // This should be solved in a better way, likely refactoring the whole builder structure,
+        // but for now we chose this simple way to prevent that the build directory remains can
+        // fill up disk space.
+        // This also prevents having multiple builders using the same rustwide workspace,
+        // which we don't do. Currently our separate builders use a separate rustwide workspace.
+        self.workspace
+            .purge_all_build_dirs()
+            .map_err(FailureError::compat)?;
+
         let mut build_dir = self
             .workspace
             .build_dir(&format!("essential-files-{rustc_version}"));
-        build_dir.purge().map_err(FailureError::compat)?;
 
         // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
@@ -288,7 +300,6 @@ impl RustwideBuilder {
             })
             .map_err(|e| e.compat())?;
 
-        build_dir.purge().map_err(FailureError::compat)?;
         krate
             .purge_from_cache(&self.workspace)
             .map_err(FailureError::compat)?;
@@ -363,8 +374,20 @@ impl RustwideBuilder {
             }
         }
 
+        // FIXME: for now, purge all build dirs before each build.
+        // Currently we have some error situations where the build directory wouldn't be deleted
+        // after the build failed:
+        // https://github.com/rust-lang/docs.rs/issues/820
+        // This should be solved in a better way, likely refactoring the whole builder structure,
+        // but for now we chose this simple way to prevent that the build directory remains can
+        // fill up disk space.
+        // This also prevents having multiple builders using the same rustwide workspace,
+        // which we don't do. Currently our separate builders use a separate rustwide workspace.
+        self.workspace
+            .purge_all_build_dirs()
+            .map_err(FailureError::compat)?;
+
         let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
-        build_dir.purge().map_err(FailureError::compat)?;
 
         let is_local = matches!(kind, PackageKind::Local(_));
         let krate = match kind {
@@ -564,7 +587,6 @@ impl RustwideBuilder {
             })
             .map_err(|e| e.compat())?;
 
-        build_dir.purge().map_err(FailureError::compat)?;
         krate
             .purge_from_cache(&self.workspace)
             .map_err(FailureError::compat)?;
