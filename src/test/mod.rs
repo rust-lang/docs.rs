@@ -18,6 +18,7 @@ use reqwest::{
 };
 use std::thread::{self, JoinHandle};
 use std::{
+    fmt::Write as _,
     fs,
     net::{SocketAddr, TcpListener},
     panic,
@@ -508,7 +509,7 @@ impl TestDatabase {
         crate::db::migrate(None, &mut conn)?;
 
         // Move all sequence start positions 10000 apart to avoid overlapping primary keys
-        let query: String = conn
+        let query = conn
             .query(
                 "
                     SELECT relname
@@ -523,11 +524,15 @@ impl TestDatabase {
             .into_iter()
             .map(|row| row.get(0))
             .enumerate()
-            .map(|(i, sequence): (_, String)| {
+            .fold(String::new(), |mut query, (i, sequence): (_, String)| {
                 let offset = (i + 1) * 10000;
-                format!(r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#)
-            })
-            .collect();
+                write!(
+                    query,
+                    r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#
+                )
+                .expect("could not write to string");
+                query
+            });
         conn.batch_execute(&query)?;
 
         Ok(TestDatabase { pool, schema })
