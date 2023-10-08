@@ -181,7 +181,7 @@ impl CommandLine {
                 let build_queue = ctx.build_queue()?;
                 let config = ctx.config()?;
                 let rustwide_builder = RustwideBuilder::init(&ctx)?;
-                queue_builder(rustwide_builder, build_queue, config)?;
+                queue_builder(&ctx, rustwide_builder, build_queue, config)?;
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely

@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -49,6 +50,30 @@ fn get_configured_toolchain(conn: &mut Client) -> Result<Toolchain> {
     }
 }
 
+fn build_workspace(context: &dyn Context) -> Result<Workspace> {
+    let config = context.config()?;
+
+    let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
+        .running_inside_docker(config.inside_docker);
+    if let Some(custom_image) = &config.docker_image {
+        let image = match SandboxImage::local(custom_image) {
+            Ok(i) => i,
+            Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
+            Err(err) => return Err(err.into()),
+        };
+        builder = builder.sandbox_image(image);
+    }
+    if cfg!(test) {
+        builder = builder.fast_init(true);
+    }
+
+    let workspace = builder.init().map_err(FailureError::compat)?;
+    workspace
+        .purge_all_build_dirs()
+        .map_err(FailureError::compat)?;
+    Ok(workspace)
+}
+
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
@@ -65,35 +90,16 @@ pub struct RustwideBuilder {
     index: Arc<Index>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
+    workspace_initialize_time: Instant,
 }
 
 impl RustwideBuilder {
     pub fn init(context: &dyn Context) -> Result<Self> {
         let config = context.config()?;
-
-        let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
-            .running_inside_docker(config.inside_docker);
-        if let Some(custom_image) = &config.docker_image {
-            let image = match SandboxImage::local(custom_image) {
-                Ok(i) => i,
-                Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
-                Err(err) => return Err(err.into()),
-            };
-            builder = builder.sandbox_image(image);
-        }
-        if cfg!(test) {
-            builder = builder.fast_init(true);
-        }
-
-        let workspace = builder.init().map_err(FailureError::compat)?;
-        workspace
-            .purge_all_build_dirs()
-            .map_err(FailureError::compat)?;
-
         let pool = context.pool()?;
 
         Ok(RustwideBuilder {
-            workspace,
+            workspace: build_workspace(context)?,
             toolchain: get_configured_toolchain(&mut *pool.get()?)?,
             config,
             db: pool,
@@ -102,7 +108,22 @@ impl RustwideBuilder {
             index: context.index()?,
             rustc_version: String::new(),
             repository_stats_updater: context.repository_stats_updater()?,
+            workspace_initialize_time: Instant::now(),
         })
+    }
+
+    pub fn reinitialize_workspace_if_interval_passed(
+        &mut self,
+        context: &dyn Context,
+    ) -> Result<()> {
+        let interval = context.config()?.build_workspace_reinitialization_interval;
+        if self.workspace_initialize_time.elapsed() >= interval {
+            info!("start reinitialize workspace again");
+            self.workspace = build_workspace(context)?;
+            self.workspace_initialize_time = Instant::now();
+        }
+
+        Ok(())
     }
 
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
@@ -1262,6 +1283,35 @@ mod tests {
         wrapper(|env| {
             assert!(RustwideBuilder::init(env)?
                 .build_local_package(Path::new("tests/crates/build-std"))?);
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_workspace_reinitialize_at_once() {
+        wrapper(|env| {
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.reinitialize_workspace_if_interval_passed(env)?;
+            assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_workspace_reinitialize_after_interval() {
+        use std::thread::sleep;
+        use std::time::Duration;
+        wrapper(|env: &TestEnvironment| {
+            env.override_config(|cfg: &mut Config| {
+                cfg.build_workspace_reinitialization_interval = Duration::from_secs(1)
+            });
+            let mut builder = RustwideBuilder::init(env)?;
+            assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
+            sleep(Duration::from_secs(1));
+            builder.reinitialize_workspace_if_interval_passed(env)?;
+            assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
             Ok(())
         })
     }

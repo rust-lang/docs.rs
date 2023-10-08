@@ -93,6 +93,7 @@ pub struct Config {
     pub cloudfront_distribution_id_web: Option<String>,
     /// same for the `static.docs.rs` distribution
     pub cloudfront_distribution_id_static: Option<String>,
+    pub(crate) build_workspace_reinitialization_interval: Duration,
 
     // Build params
     pub(crate) build_attempts: u16,
@@ -208,6 +209,10 @@ impl Config {
             build_default_memory_limit: maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
+            build_workspace_reinitialization_interval: Duration::from_secs(env(
+                "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
+                86400,
+            )?),
         })
     }
 }

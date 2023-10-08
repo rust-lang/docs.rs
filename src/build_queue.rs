@@ -4,8 +4,9 @@ use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::{get_config, get_crate_priority, report_error, retry, set_config, ConfigName};
+use crate::Context;
 use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
-use anyhow::Context;
+use anyhow::Context as _;
 use fn_error_context::context;
 
 use tracing::{debug, error, info};
@@ -431,7 +432,11 @@ impl BuildQueue {
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
     ///
     /// Note that this will return `Ok(true)` even if the package failed to build.
-    pub(crate) fn build_next_queue_package(&self, builder: &mut RustwideBuilder) -> Result<bool> {
+    pub(crate) fn build_next_queue_package(
+        &self,
+        context: &dyn Context,
+        builder: &mut RustwideBuilder,
+    ) -> Result<bool> {
         let mut processed = false;
         self.process_next_crate(|krate| {
             processed = true;
@@ -441,6 +446,19 @@ impl BuildQueue {
                 .as_ref()
                 .map(|r| PackageKind::Registry(r.as_str()))
                 .unwrap_or(PackageKind::CratesIo);
+
+            if let Err(err) = retry(
+                || {
+                    builder
+                        .reinitialize_workspace_if_interval_passed(context)
+                        .context("Reinitialize workspace failed, locking queue")
+                },
+                3,
+            ) {
+                report_error(&err);
+                self.lock()?;
+                return Err(err);
+            }
 
             match retry(
                 || {
