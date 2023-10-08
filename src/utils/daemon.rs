@@ -138,8 +138,9 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
     let rustwide_builder = RustwideBuilder::init(&*context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
-        .spawn(move || {
-            queue_builder(rustwide_builder, build_queue, config).unwrap();
+        .spawn({
+            let context = context.clone();
+            move || queue_builder(&*context, rustwide_builder, build_queue, config).unwrap()
         })
         .unwrap();
 
