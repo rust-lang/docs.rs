@@ -33,7 +33,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
-use tracing::{debug, instrument, trace};
+use tracing::{debug, error, instrument, trace};
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -540,6 +540,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 let params = params.clone();
                 let version = version.clone();
                 let storage = storage.clone();
+                let storage_path = storage_path.clone();
                 move || {
                     storage.rustdoc_file_exists(
                         &params.name,
@@ -571,6 +572,17 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )?
                 .into_response())
             } else {
+                if storage_path == format!("{}/index.html", krate.target_name) {
+                    error!(
+                        krate = params.name,
+                        version,
+                        original_path = original_path.as_ref(),
+                        storage_path,
+                        "Couldn't find crate documentation root on storage.
+                        Something is wrong with the build."
+                    )
+                }
+
                 Err(AxumNope::ResourceNotFound)
             };
         }
