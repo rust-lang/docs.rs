@@ -97,6 +97,7 @@ pub struct Config {
     // Build params
     pub(crate) build_attempts: u16,
     pub(crate) rustwide_workspace: PathBuf,
+    pub(crate) temp_dir: PathBuf,
     pub(crate) inside_docker: bool,
     pub(crate) docker_image: Option<String>,
     pub(crate) build_cpu_limit: Option<u32>,
@@ -127,6 +128,7 @@ impl Config {
         }
 
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
+        let temp_dir = prefix.join("tmp");
 
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
@@ -195,6 +197,8 @@ impl Config {
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
             )?,
+
+            temp_dir,
 
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,
