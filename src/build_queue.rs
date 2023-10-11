@@ -176,13 +176,41 @@ impl BuildQueue {
         // available one.
         let to_process = match transaction
             .query_opt(
-                "SELECT id, name, version, priority, registry
-                 FROM queue
-                 WHERE attempt < $1
-                 ORDER BY priority ASC, attempt ASC, id ASC
+                "SELECT
+                    id,
+                    name,
+                    version,
+                    priority,
+                    registry
+                 FROM
+                    queue
+                 WHERE
+                    attempt < $1 AND
+                    (
+                        SELECT
+                            CASE
+                                WHEN MAX(b.build_time) IS NULL then TRUE
+                                WHEN MAX(b.build_time) < (NOW() - make_interval(secs => $2)) then TRUE
+                                ELSE FALSE
+                            END
+                        FROM
+                            crates AS c
+                            LEFT OUTER JOIN releases AS r ON c.id = r.crate_id
+                            LEFT OUTER JOIN builds AS b on b.rid = r.id
+                        WHERE
+                            c.name = queue.name AND
+                            r.version = queue.version
+                    ) = TRUE
+                 ORDER BY
+                    priority ASC,
+                    attempt ASC,
+                    id ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED",
-                &[&self.max_attempts],
+                 FOR UPDATE OF queue SKIP LOCKED",
+                &[
+                    &self.max_attempts,
+                    &self.config.delay_between_build_attempts.as_secs_f64(),
+                ],
             )?
             .map(|row| QueuedCrate {
                 id: row.get("id"),
@@ -484,6 +512,8 @@ impl BuildQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test::FakeBuild;
+    use chrono::Utc;
 
     #[test]
     fn test_add_duplicate_doesnt_fail_last_priority_wins() {
@@ -698,6 +728,63 @@ mod tests {
                 Ok(())
             })?;
             assert_eq!(queue.pending_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_time_between_builds_attempts_ok_with_delay() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.delay_between_build_attempts = std::time::Duration::from_secs(120);
+            });
+
+            let queue = env.build_queue();
+
+            queue.add_crate("foo", "0.1.0", 0, None)?;
+
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_time(Utc::now() - chrono::Duration::seconds(600))
+                ])
+                .create()?;
+            assert_eq!(queue.prioritized_count()?, 1);
+            queue.process_next_crate(|krate| {
+                assert_eq!("foo", krate.name);
+                Ok(())
+            })?;
+            assert_eq!(queue.prioritized_count()?, 0);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_time_between_builds_attempts_too_short_for_delay() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.delay_between_build_attempts = std::time::Duration::from_secs(120);
+            });
+
+            let queue = env.build_queue();
+
+            queue.add_crate("foo", "0.1.0", 0, None)?;
+
+            env.fake_release()
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_time(Utc::now() - chrono::Duration::seconds(60))
+                ])
+                .create()?;
+            assert_eq!(queue.prioritized_count()?, 1);
+            queue.process_next_crate(|_| {
+                unreachable!();
+            })?;
+            assert_eq!(queue.prioritized_count()?, 1);
 
             Ok(())
         });

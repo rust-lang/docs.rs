@@ -103,6 +103,7 @@ pub struct Config {
     pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
     pub(crate) disable_memory_limit: bool,
+    pub(crate) delay_between_build_attempts: Duration,
 }
 
 impl Config {
@@ -204,6 +205,10 @@ impl Config {
             build_default_memory_limit: maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
+            delay_between_build_attempts: Duration::from_secs(env(
+                "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
+                120,
+            )?),
         })
     }
 }
