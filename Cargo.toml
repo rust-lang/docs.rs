@@ -97,7 +97,6 @@ tower-http = { version = "0.4.0", features = ["fs", "trace", "timeout", "catch-p
 mime = "0.3.16"
 percent-encoding = "2.2.0"
 
-# NOTE: if you change this, also double-check that the comment in `queue_builder::remove_tempdirs` is still accurate.
 tempfile = "3.1.0"
 fn-error-context = "0.2.0"
 

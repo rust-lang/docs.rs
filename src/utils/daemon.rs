@@ -134,11 +134,12 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
 
     // build new crates every minute
     let build_queue = context.build_queue()?;
+    let config = context.config()?;
     let rustwide_builder = RustwideBuilder::init(&*context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn(move || {
-            queue_builder(rustwide_builder, build_queue).unwrap();
+            queue_builder(rustwide_builder, build_queue, config).unwrap();
         })
         .unwrap();
 

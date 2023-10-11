@@ -8,8 +8,8 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
-    copy_dir_all, get_config, parse_rustc_version, queue_builder, report_error, set_config,
-    CargoMetadata, ConfigName,
+    copy_dir_all, get_config, parse_rustc_version, report_error, set_config, CargoMetadata,
+    ConfigName,
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
@@ -24,6 +24,7 @@ use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -407,9 +408,8 @@ impl RustwideBuilder {
         };
         krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 
-        let local_storage = tempfile::Builder::new()
-            .prefix(queue_builder::TEMPDIR_PREFIX)
-            .tempdir()?;
+        fs::create_dir_all(&self.config.temp_dir)?;
+        let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))

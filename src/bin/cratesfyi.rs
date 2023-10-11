@@ -181,8 +181,9 @@ impl CommandLine {
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
                 let build_queue = ctx.build_queue()?;
+                let config = ctx.config()?;
                 let rustwide_builder = RustwideBuilder::init(&ctx)?;
-                queue_builder(rustwide_builder, build_queue)?;
+                queue_builder(rustwide_builder, build_queue, config)?;
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
