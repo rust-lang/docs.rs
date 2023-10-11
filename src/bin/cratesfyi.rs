@@ -48,11 +48,16 @@ fn main() {
                 }
             }))
             .init();
+
         Some(sentry::init((
             sentry_dsn,
             sentry::ClientOptions {
                 release: Some(docs_rs::BUILD_VERSION.into()),
                 attach_stacktrace: true,
+                traces_sample_rate: env::var("SENTRY_TRACES_SAMPLE_RATE")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0.0),
                 ..Default::default()
             }
             .add_integration(sentry_panic::PanicIntegration::default()),
