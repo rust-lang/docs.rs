@@ -1,6 +1,6 @@
 use super::{Blob, FileRange};
 use crate::{Config, InstanceMetrics};
-use anyhow::Error;
+use anyhow::{Context as _, Error};
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
     error::SdkError,
@@ -97,12 +97,9 @@ impl S3Backend {
         {
             Ok(tags) => Ok(tags
                 .tag_set()
-                .map(|tags| {
-                    tags.iter()
-                        .filter(|tag| tag.key() == Some(PUBLIC_ACCESS_TAG))
-                        .any(|tag| tag.value() == Some(PUBLIC_ACCESS_VALUE))
-                })
-                .unwrap_or(false)),
+                .iter()
+                .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
+                .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE)),
             Err(SdkError::ServiceError(err)) => {
                 if err.raw().status() == http::StatusCode::NOT_FOUND {
                     Err(super::PathNotFoundError.into())
@@ -126,11 +123,16 @@ impl S3Backend {
                         Tag::builder()
                             .key(PUBLIC_ACCESS_TAG)
                             .value(PUBLIC_ACCESS_VALUE)
-                            .build(),
+                            .build()
+                            .context("could not build tag")?,
                     )
                     .build()
+                    .context("could not build tags")?
             } else {
-                Tagging::builder().build()
+                Tagging::builder()
+                    .set_tag_set(Some(vec![]))
+                    .build()
+                    .context("could not build tags")?
             })
             .send()
             .await
@@ -259,11 +261,12 @@ impl S3Backend {
                             .into_iter()
                             .filter_map(|obj| {
                                 obj.key()
-                                    .map(|k| ObjectIdentifier::builder().key(k).build())
+                                    .and_then(|k| ObjectIdentifier::builder().key(k).build().ok())
                             })
                             .collect(),
                     ))
-                    .build();
+                    .build()
+                    .context("could not build delete request")?;
 
                 let resp = self
                     .client

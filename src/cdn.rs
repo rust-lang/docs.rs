@@ -236,7 +236,7 @@ impl CdnBackend {
         let patterns = invalidation
             .invalidation_batch()
             .and_then(|batch| batch.paths())
-            .and_then(|paths| paths.items())
+            .map(|paths| paths.items())
             .unwrap_or_default()
             .to_vec();
 
@@ -251,21 +251,18 @@ impl CdnBackend {
             distribution_id: distribution_id.to_owned(),
             invalidation_id: invalidation_id.to_owned(),
             path_patterns: patterns,
-            completed: invalidation
-                .status()
-                .map(|status| match status {
-                    "InProgress" => false,
-                    "Completed" => true,
-                    _ => {
-                        report_error(&anyhow!(
-                            "got unknown cloudfront invalidation status: {} in {:?}",
-                            status,
-                            invalidation
-                        ));
-                        true
-                    }
-                })
-                .unwrap_or(true),
+            completed: match invalidation.status() {
+                "InProgress" => false,
+                "Completed" => true,
+                _ => {
+                    report_error(&anyhow!(
+                        "got unknown cloudfront invalidation status: {} in {:?}",
+                        invalidation.status(),
+                        invalidation
+                    ));
+                    true
+                }
+            },
         }))
     }
 
@@ -287,10 +284,12 @@ impl CdnBackend {
                         Paths::builder()
                             .quantity(path_patterns.len().try_into().unwrap())
                             .set_items(Some(path_patterns))
-                            .build(),
+                            .build()
+                            .context("could not build path items")?,
                     )
                     .caller_reference(caller_reference)
-                    .build(),
+                    .build()
+                    .context("could not build invalidation batch")?,
             )
             .send()
             .await?
@@ -299,7 +298,6 @@ impl CdnBackend {
                 anyhow!("missing invalidation information in create-invalidation result")
             })?
             .id()
-            .ok_or_else(|| anyhow!("missing invalidation ID in create-invalidation result"))?
             .to_owned())
     }
 }
@@ -315,11 +313,11 @@ pub(crate) fn handle_queued_invalidation_requests(
 
     let mut active_invalidations = Vec::new();
     for row in conn.query(
-        "SELECT 
-             DISTINCT cdn_reference 
+        "SELECT
+             DISTINCT cdn_reference
          FROM cdn_invalidation_queue
-         WHERE 
-             cdn_reference IS NOT NULL AND 
+         WHERE
+             cdn_reference IS NOT NULL AND
              cdn_distribution_id = $1
         ",
         &[&distribution_id],
@@ -350,9 +348,9 @@ pub(crate) fn handle_queued_invalidation_requests(
     let now = Utc::now();
     for row in conn.query(
         "DELETE FROM cdn_invalidation_queue
-         WHERE 
-             cdn_distribution_id = $1 AND 
-             created_in_cdn IS NOT NULL AND 
+         WHERE
+             cdn_distribution_id = $1 AND
+             created_in_cdn IS NOT NULL AND
              NOT (cdn_reference = ANY($2))
          RETURNING created_in_cdn
         ",
@@ -391,7 +389,7 @@ pub(crate) fn handle_queued_invalidation_requests(
 
     for row in transaction.query(
         "SELECT id, path_pattern, queued
-         FROM cdn_invalidation_queue 
+         FROM cdn_invalidation_queue
          WHERE cdn_distribution_id = $1 AND created_in_cdn IS NULL
          ORDER BY queued, id
          LIMIT $2
@@ -424,11 +422,11 @@ pub(crate) fn handle_queued_invalidation_requests(
     {
         Ok(invalidation) => {
             transaction.execute(
-                "UPDATE cdn_invalidation_queue 
-                 SET 
+                "UPDATE cdn_invalidation_queue
+                 SET
                      created_in_cdn = CURRENT_TIMESTAMP,
                      cdn_reference = $1
-                 WHERE 
+                 WHERE
                      id = ANY($2)",
                 &[&invalidation.invalidation_id, &queued_entry_ids],
             )?;
@@ -495,13 +493,13 @@ pub(crate) fn queued_or_active_crate_invalidations(
         .query(
             r#"
              SELECT
-                crate, 
-                cdn_distribution_id, 
-                path_pattern, 
+                crate,
+                cdn_distribution_id,
+                path_pattern,
                 queued,
                 created_in_cdn,
                 cdn_reference
-             FROM cdn_invalidation_queue 
+             FROM cdn_invalidation_queue
              ORDER BY queued, id"#,
             &[],
         )?
@@ -535,9 +533,9 @@ pub(crate) fn queued_or_active_crate_invalidation_count_by_distribution(
         conn.query(
             r#"
              SELECT
-                cdn_distribution_id, 
+                cdn_distribution_id,
                 count(*)
-             FROM cdn_invalidation_queue 
+             FROM cdn_invalidation_queue
              GROUP BY cdn_distribution_id"#,
             &[],
         )?
@@ -557,10 +555,8 @@ mod tests {
         config::{Credentials, Region},
         Client, Config,
     };
-    use aws_smithy_client::{
-        erase::DynConnector, http_connector::HttpConnector, test_connection::TestConnection,
-    };
-    use aws_smithy_http::body::SdkBody;
+    use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
 
     fn active_invalidations(cdn: &CdnBackend, distribution_id: &str) -> Vec<CdnInvalidation> {
         let CdnBackend::Dummy {
@@ -592,7 +588,7 @@ mod tests {
                  crate, cdn_distribution_id, path_pattern, queued, created_in_cdn, cdn_reference
              ) VALUES (
                  'dummy',
-                 $1, 
+                 $1,
                  '/doesnt_matter',
                  CURRENT_TIMESTAMP,
                  CURRENT_TIMESTAMP,
@@ -941,9 +937,7 @@ mod tests {
         });
     }
 
-    async fn get_mock_config(
-        http_connector: impl Into<HttpConnector>,
-    ) -> aws_sdk_cloudfront::Config {
+    async fn get_mock_config(http_client: StaticReplayClient) -> aws_sdk_cloudfront::Config {
         let cfg = aws_config::from_env()
             .region(Region::new("eu-central-1"))
             .credentials_provider(Credentials::new(
@@ -953,7 +947,7 @@ mod tests {
                 None,
                 "dummy",
             ))
-            .http_connector(http_connector)
+            .http_client(http_client)
             .load()
             .await;
 
@@ -962,7 +956,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalidate_path() {
-        let conn = TestConnection::new(vec![(
+        let conn = StaticReplayClient::new(vec![ReplayEvent::new(
             http::Request::builder()
                 .header("content-type", "application/xml")
                 .uri(http::uri::Uri::from_static(
@@ -995,7 +989,7 @@ mod tests {
                 ))
                 .unwrap(),
         )]);
-        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
+        let client = Client::from_conf(get_mock_config(conn.clone()).await);
 
         CdnBackend::create_cloudfront_invalidation(
             &client,
@@ -1006,13 +1000,13 @@ mod tests {
         .await
         .expect("error creating invalidation");
 
-        assert_eq!(conn.requests().len(), 1);
+        assert_eq!(conn.actual_requests().count(), 1);
         conn.assert_requests_match(&[]);
     }
 
     #[tokio::test]
     async fn get_invalidation_info_doesnt_exist() {
-        let conn = TestConnection::new(vec![(
+        let conn = StaticReplayClient::new(vec![ReplayEvent::new(
             http::Request::builder()
                 .header("content-type", "application/xml")
                 .uri(http::uri::Uri::from_static(
@@ -1025,7 +1019,7 @@ mod tests {
                 .body(SdkBody::empty())
                 .unwrap(),
         )]);
-        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
+        let client = Client::from_conf(get_mock_config(conn.clone()).await);
 
         assert!(CdnBackend::get_cloudfront_invalidation_status(
             &client,
@@ -1039,7 +1033,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_invalidation_info_completed() {
-        let conn = TestConnection::new(vec![(
+        let conn = StaticReplayClient::new(vec![ReplayEvent::new(
             http::Request::builder()
                 .header("content-type", "application/xml")
                 .uri(http::uri::Uri::from_static(
@@ -1064,7 +1058,7 @@ mod tests {
                      </Invalidation>"#
                 )).unwrap(),
         )]);
-        let client = Client::from_conf(get_mock_config(DynConnector::new(conn.clone())).await);
+        let client = Client::from_conf(get_mock_config(conn.clone()).await);
 
         assert_eq!(
             CdnBackend::get_cloudfront_invalidation_status(
