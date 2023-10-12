@@ -301,8 +301,16 @@ impl Storage {
                     .parent()
                     .ok_or_else(|| anyhow!("index path without parent"))?,
             )?;
-            let mut file = fs::File::create(&local_index_path)?;
-            file.write_all(&index_content)?;
+
+            // when we don't have a locally cached index and many parallel request
+            // we might download the same archive index multiple times here.
+            // So we're storing the content into a temporary file before renaming it
+            // into the final location.
+            let mut tmpfile =
+                tempfile::NamedTempFile::new_in(&self.config.local_archive_cache_path)?;
+            tmpfile.write_all(&index_content)?;
+            let temp_path = tmpfile.into_temp_path();
+            fs::rename(temp_path, &local_index_path)?;
         }
 
         Ok(local_index_path)
