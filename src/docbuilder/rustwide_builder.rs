@@ -3,7 +3,7 @@ use crate::db::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
     add_path_into_remote_archive, update_crate_data_in_database, Pool,
 };
-use crate::docbuilder::{crates::crates_from_path, Limits};
+use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
@@ -64,7 +64,6 @@ pub struct RustwideBuilder {
     index: Arc<Index>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
-    skip_build_if_exists: bool,
 }
 
 impl RustwideBuilder {
@@ -102,12 +101,7 @@ impl RustwideBuilder {
             index: context.index()?,
             rustc_version: String::new(),
             repository_stats_updater: context.repository_stats_updater()?,
-            skip_build_if_exists: false,
         })
-    }
-
-    pub fn set_skip_build_if_exists(&mut self, should: bool) {
-        self.skip_build_if_exists = should;
     }
 
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
@@ -314,22 +308,6 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    pub fn build_world(&mut self) -> Result<()> {
-        crates_from_path(
-            &self.config.registry_index_path.clone(),
-            &mut |name, version| {
-                let registry_url = self.config.registry_url.clone();
-                let package_kind = registry_url
-                    .as_ref()
-                    .map(|r| PackageKind::Registry(r.as_str()))
-                    .unwrap_or(PackageKind::CratesIo);
-                if let Err(err) = self.build_package(name, version, package_kind) {
-                    warn!("failed to build package {} {}: {}", name, version, err);
-                }
-            },
-        )
-    }
-
     pub fn build_local_package(&mut self, path: &Path) -> Result<bool> {
         self.update_toolchain()?;
         let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
@@ -347,10 +325,6 @@ impl RustwideBuilder {
         kind: PackageKind<'_>,
     ) -> Result<bool> {
         let mut conn = self.db.get()?;
-
-        if !self.should_build(&mut conn, name, version)? {
-            return Ok(false);
-        }
 
         self.update_toolchain()?;
 
@@ -857,23 +831,6 @@ impl RustwideBuilder {
 
         info!("copy {} to {}", source.display(), dest.display());
         copy_dir_all(source, dest).map_err(Into::into)
-    }
-
-    fn should_build(&self, conn: &mut Client, name: &str, version: &str) -> Result<bool> {
-        if self.skip_build_if_exists {
-            // Check whether no successful builds are present in the database.
-            Ok(conn
-                .query(
-                    "SELECT 1 FROM crates, releases, builds
-                     WHERE crates.id = releases.crate_id AND releases.id = builds.rid
-                       AND crates.name = $1 AND releases.version = $2
-                       AND builds.build_status = TRUE;",
-                    &[&name, &version],
-                )?
-                .is_empty())
-        } else {
-            Ok(true)
-        }
     }
 
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {

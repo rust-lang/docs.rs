@@ -97,10 +97,6 @@ enum Toggle {
 )]
 enum CommandLine {
     Build {
-        /// Skips building documentation if documentation exists
-        #[arg(name = "SKIP_IF_EXISTS", short = 's', long = "skip")]
-        skip_if_exists: bool,
-
         #[command(subcommand)]
         subcommand: BuildSubcommand,
     },
@@ -155,10 +151,7 @@ impl CommandLine {
         let ctx = BinContext::new();
 
         match self {
-            Self::Build {
-                skip_if_exists,
-                subcommand,
-            } => subcommand.handle_args(ctx, skip_if_exists)?,
+            Self::Build { subcommand } => subcommand.handle_args(ctx)?,
             Self::StartRegistryWatcher {
                 metric_server_socket_addr,
                 repository_stats_updater,
@@ -355,9 +348,6 @@ impl PrioritySubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum BuildSubcommand {
-    /// Builds documentation of every crate
-    World,
-
     /// Builds documentation for a crate
     Crate {
         /// Crate name
@@ -395,22 +385,12 @@ enum BuildSubcommand {
 }
 
 impl BuildSubcommand {
-    fn handle_args(self, ctx: BinContext, skip_if_exists: bool) -> Result<()> {
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         let build_queue = ctx.build_queue()?;
 
-        let rustwide_builder = || -> Result<RustwideBuilder> {
-            let mut builder = RustwideBuilder::init(&ctx)?;
-            builder.set_skip_build_if_exists(skip_if_exists);
-            Ok(builder)
-        };
+        let rustwide_builder = || -> Result<RustwideBuilder> { RustwideBuilder::init(&ctx) };
 
         match self {
-            Self::World => {
-                rustwide_builder()?
-                    .build_world()
-                    .context("Failed to build world")?;
-            }
-
             Self::Crate {
                 crate_name,
                 crate_version,
