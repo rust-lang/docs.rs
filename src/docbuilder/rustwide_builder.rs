@@ -935,6 +935,7 @@ mod tests {
             storage.store_one(&old_source_file, Vec::new())?;
 
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             // check release record in the db (default and other targets)
@@ -1060,6 +1061,7 @@ mod tests {
             storage.store_one(&old_source_file, Vec::new())?;
 
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(!builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             // check release record in the db (default and other targets)
@@ -1107,6 +1109,7 @@ mod tests {
             let crate_ = "thiserror-impl";
             let version = "1.0.26";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             let storage = env.storage();
@@ -1130,6 +1133,7 @@ mod tests {
             let crate_ = "windows-win";
             let version = "2.4.1";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             if builder.toolchain.as_ci().is_some() {
                 return Ok(());
             }
@@ -1179,6 +1183,7 @@ mod tests {
             let crate_ = "docs_rs_test_incorrect_lockfile";
             let version = "0.1.2";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             Ok(())
@@ -1201,6 +1206,7 @@ mod tests {
             let crate_ = "docs_rs_test_incorrect_lockfile";
             let version = "0.2.0";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             Ok(())
@@ -1214,6 +1220,7 @@ mod tests {
             let crate_ = "proc-macro2";
             let version = "1.0.33";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
             Ok(())
         });
@@ -1226,6 +1233,7 @@ mod tests {
             let crate_ = "serde";
             let version = "1.0.152";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             let mut conn = env.db().conn();
@@ -1252,6 +1260,7 @@ mod tests {
             let crate_ = "stylish-core";
             let version = "0.1.1";
             let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
 
             let mut conn = env.db().conn();
@@ -1275,8 +1284,9 @@ mod tests {
     #[ignore]
     fn test_build_std() {
         wrapper(|env| {
-            assert!(RustwideBuilder::init(env)?
-                .build_local_package(Path::new("tests/crates/build-std"))?);
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
+            assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
             Ok(())
         })
     }
@@ -1286,6 +1296,7 @@ mod tests {
     fn test_workspace_reinitialize_at_once() {
         wrapper(|env| {
             let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
             builder.reinitialize_workspace_if_interval_passed(env)?;
             assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
             Ok(())
@@ -1302,6 +1313,7 @@ mod tests {
                 cfg.build_workspace_reinitialization_interval = Duration::from_secs(1)
             });
             let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
             assert!(builder.build_local_package(Path::new("tests/crates/build-std"))?);
             sleep(Duration::from_secs(1));
             builder.reinitialize_workspace_if_interval_passed(env)?;
