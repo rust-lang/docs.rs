@@ -2,12 +2,10 @@ mod archive_index;
 mod compression;
 mod database;
 mod s3;
-mod sqlite_pool;
 
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
-use self::sqlite_pool::SqliteConnectionPool;
 use crate::error::Result;
 use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, utils::spawn_blocking, Config, InstanceMetrics};
@@ -16,7 +14,6 @@ use chrono::{DateTime, Utc};
 use fn_error_context::context;
 use path_slash::PathExt;
 use std::io::BufReader;
-use std::num::NonZeroU64;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -114,7 +111,6 @@ enum StorageBackend {
 pub struct AsyncStorage {
     backend: StorageBackend,
     config: Arc<Config>,
-    sqlite_pool: Arc<SqliteConnectionPool>,
 }
 
 impl AsyncStorage {
@@ -124,10 +120,6 @@ impl AsyncStorage {
         config: Arc<Config>,
     ) -> Result<Self> {
         Ok(Self {
-            sqlite_pool: Arc::new(SqliteConnectionPool::new(
-                NonZeroU64::new(config.max_sqlite_pool_size)
-                    .ok_or_else(|| anyhow!("invalid sqlite pool size"))?,
-            )),
             config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
@@ -239,10 +231,9 @@ impl AsyncStorage {
     pub(crate) async fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
         match self.get_index_filename(archive_path).await {
             Ok(index_filename) => Ok({
-                let sqlite_pool = self.sqlite_pool.clone();
                 let path = path.to_owned();
                 spawn_blocking(move || {
-                    Ok(archive_index::find_in_file(index_filename, &path, &sqlite_pool)?.is_some())
+                    Ok(archive_index::find_in_file(index_filename, &path)?.is_some())
                 })
                 .await?
             }),
@@ -333,10 +324,8 @@ impl AsyncStorage {
         }
         let index_filename = self.get_index_filename(archive_path).await?;
         let info = {
-            let sqlite_pool = self.sqlite_pool.clone();
             let path = path.to_owned();
-            spawn_blocking(move || archive_index::find_in_file(index_filename, &path, &sqlite_pool))
-                .await
+            spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
         }?
         .ok_or(PathNotFoundError)?;
 

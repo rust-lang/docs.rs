@@ -1559,7 +1559,6 @@ dependencies = [
  "prometheus",
  "r2d2",
  "r2d2_postgres",
- "r2d2_sqlite",
  "rand 0.8.5",
  "rayon",
  "regex",
@@ -4407,17 +4406,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "r2d2_sqlite"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99f31323d6161385f385046738df520e0e8694fa74852d35891fc0be08348ddc"
-dependencies = [
- "r2d2",
- "rusqlite",
- "uuid",
-]
-
-[[package]]
 name = "rand"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6355,7 +6343,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
 dependencies = [
  "getrandom 0.2.10",
- "rand 0.8.5",
  "serde",
 ]
 
