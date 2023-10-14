@@ -1,10 +1,8 @@
 use crate::error::Result;
 use crate::storage::{compression::CompressionAlgorithm, FileRange};
 use anyhow::{bail, Context as _};
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::{fs, io, path::Path};
-
-use super::sqlite_pool::SqliteConnectionPool;
 
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct FileInfo {
@@ -77,8 +75,8 @@ pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
 fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<FileInfo>> {
     let mut stmt = conn.prepare(
         "
-        SELECT start, end, compression 
-        FROM files 
+        SELECT start, end, compression
+        FROM files
         WHERE path = ?
         ",
     )?;
@@ -104,11 +102,12 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
 pub(crate) fn find_in_file<P: AsRef<Path>>(
     archive_index_path: P,
     search_for: &str,
-    pool: &SqliteConnectionPool,
 ) -> Result<Option<FileInfo>> {
-    pool.with_connection(archive_index_path, |connection| {
-        find_in_sqlite_index(connection, search_for)
-    })
+    let connection = Connection::open_with_flags(
+        archive_index_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    find_in_sqlite_index(&connection, search_for)
 }
 
 #[cfg(test)]
@@ -141,19 +140,13 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new().unwrap().into_temp_path();
         create(&mut tf, &tempfile).unwrap();
 
-        let fi = find_in_file(&tempfile, "testfile1", &SqliteConnectionPool::default())
-            .unwrap()
-            .unwrap();
+        let fi = find_in_file(&tempfile, "testfile1").unwrap().unwrap();
 
         assert_eq!(fi.range, FileRange::new(39, 459));
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
 
-        assert!(find_in_file(
-            &tempfile,
-            "some_other_file",
-            &SqliteConnectionPool::default(),
-        )
-        .unwrap()
-        .is_none());
+        assert!(find_in_file(&tempfile, "some_other_file",)
+            .unwrap()
+            .is_none());
     }
 }
