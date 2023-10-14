@@ -174,8 +174,8 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
     transaction.execute("DELETE FROM owner_rels WHERE cid = $1;", &[&crate_id])?;
     let has_library = transaction
         .query_one(
-            "SELECT 
-                BOOL_OR(releases.is_library) AS has_library 
+            "SELECT
+                BOOL_OR(releases.is_library) AS has_library
             FROM releases
             WHERE releases.crate_id = $1
             ",
@@ -249,6 +249,7 @@ mod tests {
                 assert!(env.storage().rustdoc_file_exists(
                     pkg,
                     version,
+                    0,
                     &format!("{pkg}/index.html"),
                     archive_storage
                 )?);
@@ -266,6 +267,7 @@ mod tests {
             assert!(env.storage().rustdoc_file_exists(
                 "package-2",
                 "1.0.0",
+                0,
                 "package-2/index.html",
                 archive_storage
             )?);
@@ -282,12 +284,14 @@ mod tests {
                 assert!(!env.storage().rustdoc_file_exists(
                     "package-1",
                     "1.0.0",
+                    0,
                     "package-1/index.html",
                     archive_storage
                 )?);
                 assert!(!env.storage().rustdoc_file_exists(
                     "package-1",
                     "2.0.0",
+                    0,
                     "package-1/index.html",
                     archive_storage
                 )?);
@@ -329,6 +333,7 @@ mod tests {
             assert!(env.storage().rustdoc_file_exists(
                 "a",
                 "1.0.0",
+                0,
                 "a/index.html",
                 archive_storage
             )?);
@@ -358,6 +363,7 @@ mod tests {
             assert!(env.storage().rustdoc_file_exists(
                 "a",
                 "2.0.0",
+                0,
                 "a/index.html",
                 archive_storage
             )?);
@@ -386,6 +392,7 @@ mod tests {
                 assert!(!env.storage().rustdoc_file_exists(
                     "a",
                     "1.0.0",
+                    0,
                     "a/index.html",
                     archive_storage
                 )?);
@@ -394,6 +401,7 @@ mod tests {
             assert!(env.storage().rustdoc_file_exists(
                 "a",
                 "2.0.0",
+                0,
                 "a/index.html",
                 archive_storage
             )?);

@@ -161,11 +161,22 @@ impl AsyncStorage {
         }
     }
 
+    /// Fetch a rustdoc file from our blob storage.
+    /// * `name` - the crate name
+    /// * `version` - the crate version
+    /// * `latest_build_id` - the id of the most recent build. used purely to invalidate the local archive
+    ///   index cache, when `archive_storage` is `true.` Without it we wouldn't know that we have
+    ///   to invalidate the locally cached file after a rebuild.
+    /// * `path` - the wanted path inside the documentation.
+    /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
+    ///    where we can fetch the requested path from inside the ZIP file.
+    /// * `fetch_time` - used to collect metrics when using the storage inside web server handlers.
     #[instrument(skip(fetch_time))]
     pub(crate) async fn fetch_rustdoc_file(
         &self,
         name: &str,
         version: &str,
+        latest_build_id: i32,
         path: &str,
         archive_storage: bool,
         fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
@@ -174,6 +185,7 @@ impl AsyncStorage {
         Ok(if archive_storage {
             self.get_from_archive(
                 &rustdoc_archive_path(name, version),
+                latest_build_id,
                 path,
                 self.max_file_size_for(path),
                 fetch_time,
@@ -200,6 +212,7 @@ impl AsyncStorage {
         Ok(if archive_storage {
             self.get_from_archive(
                 &source_archive_path(name, version),
+                0, // we assume the source archive can't ever change for a release
                 path,
                 self.max_file_size_for(path),
                 None,
@@ -215,11 +228,12 @@ impl AsyncStorage {
         &self,
         name: &str,
         version: &str,
+        latest_build_id: i32,
         path: &str,
         archive_storage: bool,
     ) -> Result<bool> {
         Ok(if archive_storage {
-            self.exists_in_archive(&rustdoc_archive_path(name, version), path)
+            self.exists_in_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
                 .await?
         } else {
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
@@ -228,8 +242,16 @@ impl AsyncStorage {
         })
     }
 
-    pub(crate) async fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
-        match self.get_index_filename(archive_path).await {
+    pub(crate) async fn exists_in_archive(
+        &self,
+        archive_path: &str,
+        latest_build_id: i32,
+        path: &str,
+    ) -> Result<bool> {
+        match self
+            .download_archive_index(archive_path, latest_build_id)
+            .await
+        {
             Ok(index_filename) => Ok({
                 let path = path.to_owned();
                 spawn_blocking(move || {
@@ -280,13 +302,17 @@ impl AsyncStorage {
         Ok(blob)
     }
 
-    pub(super) async fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
+    pub(super) async fn download_archive_index(
+        &self,
+        archive_path: &str,
+        latest_build_id: i32,
+    ) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
         let remote_index_path = format!("{archive_path}.index");
         let local_index_path = self
             .config
             .local_archive_cache_path
-            .join(&remote_index_path);
+            .join(format!("{archive_path}.{latest_build_id}.index"));
 
         if !local_index_path.exists() {
             let index_content = self.get(&remote_index_path, std::usize::MAX).await?.content;
@@ -315,6 +341,7 @@ impl AsyncStorage {
     pub(crate) async fn get_from_archive(
         &self,
         archive_path: &str,
+        latest_build_id: i32,
         path: &str,
         max_size: usize,
         mut fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
@@ -322,7 +349,9 @@ impl AsyncStorage {
         if let Some(ref mut t) = fetch_time {
             t.step("find path in index");
         }
-        let index_filename = self.get_index_filename(archive_path).await?;
+        let index_filename = self
+            .download_archive_index(archive_path, latest_build_id)
+            .await?;
         let info = {
             let path = path.to_owned();
             spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
@@ -360,7 +389,7 @@ impl AsyncStorage {
             spawn_blocking({
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
-                let local_archive_cache_path = self.config.local_archive_cache_path.clone();
+                let temp_dir = self.config.temp_dir.clone();
 
                 move || {
                     let mut file_paths = HashMap::new();
@@ -394,8 +423,9 @@ impl AsyncStorage {
 
                     let remote_index_path = format!("{}.index", &archive_path);
 
-                    let local_index_path = local_archive_cache_path.join(&remote_index_path);
-                    fs::create_dir_all(local_index_path.parent().unwrap())?;
+                    fs::create_dir_all(&temp_dir)?;
+                    let local_index_path =
+                        tempfile::NamedTempFile::new_in(&temp_dir)?.into_temp_path();
                     archive_index::create(
                         &mut io::Cursor::new(&mut zip_content),
                         &local_index_path,
@@ -584,6 +614,7 @@ impl Storage {
         &self,
         name: &str,
         version: &str,
+        latest_build_id: i32,
         path: &str,
         archive_storage: bool,
         fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
@@ -591,6 +622,7 @@ impl Storage {
         self.runtime.block_on(self.inner.fetch_rustdoc_file(
             name,
             version,
+            latest_build_id,
             path,
             archive_storage,
             fetch_time,
@@ -614,18 +646,29 @@ impl Storage {
         &self,
         name: &str,
         version: &str,
+        latest_build_id: i32,
         path: &str,
         archive_storage: bool,
     ) -> Result<bool> {
-        self.runtime.block_on(
-            self.inner
-                .rustdoc_file_exists(name, version, path, archive_storage),
-        )
+        self.runtime.block_on(self.inner.rustdoc_file_exists(
+            name,
+            version,
+            latest_build_id,
+            path,
+            archive_storage,
+        ))
     }
 
-    pub(crate) fn exists_in_archive(&self, archive_path: &str, path: &str) -> Result<bool> {
-        self.runtime
-            .block_on(self.inner.exists_in_archive(archive_path, path))
+    pub(crate) fn exists_in_archive(
+        &self,
+        archive_path: &str,
+        latest_build_id: i32,
+        path: &str,
+    ) -> Result<bool> {
+        self.runtime.block_on(
+            self.inner
+                .exists_in_archive(archive_path, latest_build_id, path),
+        )
     }
 
     pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
@@ -643,22 +686,32 @@ impl Storage {
             .block_on(self.inner.get_range(path, max_size, range, compression))
     }
 
-    pub(super) fn get_index_filename(&self, archive_path: &str) -> Result<PathBuf> {
-        self.runtime
-            .block_on(self.inner.get_index_filename(archive_path))
+    pub(super) fn download_index(
+        &self,
+        archive_path: &str,
+        latest_build_id: i32,
+    ) -> Result<PathBuf> {
+        self.runtime.block_on(
+            self.inner
+                .download_archive_index(archive_path, latest_build_id),
+        )
     }
 
     pub(crate) fn get_from_archive(
         &self,
         archive_path: &str,
+        latest_build_id: i32,
         path: &str,
         max_size: usize,
         fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
-        self.runtime.block_on(
-            self.inner
-                .get_from_archive(archive_path, path, max_size, fetch_time),
-        )
+        self.runtime.block_on(self.inner.get_from_archive(
+            archive_path,
+            latest_build_id,
+            path,
+            max_size,
+            fetch_time,
+        ))
     }
 
     pub(crate) fn store_all_in_archive(
@@ -976,7 +1029,7 @@ mod backend_tests {
     fn test_exists_without_remote_archive(storage: &Storage) -> Result<()> {
         // when remote and local index don't exist, any `exists_in_archive`  should
         // return `false`
-        assert!(!storage.exists_in_archive("some_archive_name", "some_file_name")?);
+        assert!(!storage.exists_in_archive("some_archive_name", 0, "some_file_name")?);
         Ok(())
     }
 
@@ -997,14 +1050,11 @@ mod backend_tests {
             .inner
             .config
             .local_archive_cache_path
-            .join("folder/test.zip.index");
-
-        assert!(!local_index_location.exists());
+            .join("folder/test.zip.0.index");
 
         let (stored_files, compression_alg) =
             storage.store_all_in_archive("folder/test.zip", dir.path())?;
 
-        assert!(local_index_location.exists());
         assert!(storage.exists("folder/test.zip.index")?);
 
         assert_eq!(compression_alg, CompressionAlgorithm::Bzip2);
@@ -1023,24 +1073,26 @@ mod backend_tests {
         );
 
         // delete the existing index to test the download of it
-        fs::remove_file(&local_index_location)?;
+        if local_index_location.exists() {
+            fs::remove_file(&local_index_location)?;
+        }
 
         // the first exists-query will download and store the index
         assert!(!local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", "Cargo.toml")?);
+        assert!(storage.exists_in_archive("folder/test.zip", 0, "Cargo.toml",)?);
 
         // the second one will use the local index
         assert!(local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", "src/main.rs")?);
+        assert!(storage.exists_in_archive("folder/test.zip", 0, "src/main.rs",)?);
 
         let file =
-            storage.get_from_archive("folder/test.zip", "Cargo.toml", std::usize::MAX, None)?;
+            storage.get_from_archive("folder/test.zip", 0, "Cargo.toml", std::usize::MAX, None)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
         let file =
-            storage.get_from_archive("folder/test.zip", "src/main.rs", std::usize::MAX, None)?;
+            storage.get_from_archive("folder/test.zip", 0, "src/main.rs", std::usize::MAX, None)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");

@@ -191,6 +191,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                 .fetch_rustdoc_file(
                     &crate_name,
                     &version,
+                    krate.latest_build_id.unwrap_or(0),
                     target,
                     krate.archive_storage,
                     Some(&mut rendering_time),
@@ -504,6 +505,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .fetch_rustdoc_file(
             &params.name,
             &version,
+            krate.latest_build_id.unwrap_or(0),
             &storage_path,
             krate.archive_storage,
             Some(&mut rendering_time),
@@ -522,7 +524,13 @@ pub(crate) async fn rustdoc_html_server_handler(
             req_path.push("index.html");
 
             return if storage
-                .rustdoc_file_exists(&params.name, &version, &storage_path, krate.archive_storage)
+                .rustdoc_file_exists(
+                    &params.name,
+                    &version,
+                    krate.latest_build_id.unwrap_or(0),
+                    &storage_path,
+                    krate.archive_storage,
+                )
                 .await?
             {
                 redirect(
@@ -809,6 +817,7 @@ pub(crate) async fn target_redirect_handler(
         .rustdoc_file_exists(
             &name,
             &version,
+            crate_details.latest_build_id.unwrap_or(0),
             &storage_location_for_path,
             crate_details.archive_storage,
         )
