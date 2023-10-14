@@ -83,7 +83,8 @@ impl BuildQueue {
              ON CONFLICT (name, version) DO UPDATE
                 SET priority = EXCLUDED.priority,
                     registry = EXCLUDED.registry,
-                    attempt = 0
+                    attempt = 0,
+                    last_attempt = NULL
             ;",
             &[&name, &version, &priority, &registry],
         )?;
@@ -179,11 +180,16 @@ impl BuildQueue {
             .query_opt(
                 "SELECT id, name, version, priority, registry
                  FROM queue
-                 WHERE attempt < $1
+                 WHERE
+                    attempt < $1 AND
+                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
                  ORDER BY priority ASC, attempt ASC, id ASC
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED",
-                &[&self.max_attempts],
+                &[
+                    &self.max_attempts,
+                    &self.config.delay_between_build_attempts.as_secs_f64(),
+                ],
             )?
             .map(|row| QueuedCrate {
                 id: row.get("id"),
@@ -219,7 +225,12 @@ impl BuildQueue {
                 // Increase attempt count
                 let attempt: i32 = transaction
                     .query_one(
-                        "UPDATE queue SET attempt = attempt + 1 WHERE id = $1 RETURNING attempt;",
+                        "UPDATE queue
+                         SET
+                            attempt = attempt + 1,
+                            last_attempt = NOW()
+                         WHERE id = $1
+                         RETURNING attempt;",
                         &[&to_process.id],
                     )?
                     .get(0);
@@ -502,6 +513,8 @@ impl BuildQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{DateTime, Utc};
+    use std::time::Duration;
 
     #[test]
     fn test_add_duplicate_doesnt_fail_last_priority_wins() {
@@ -531,8 +544,8 @@ mod tests {
             let mut conn = env.db().conn();
             conn.execute(
                 "
-                INSERT INTO queue (name, version, priority, attempt )
-                VALUES ('failed_crate', '0.1.1', 0, 99)",
+                INSERT INTO queue (name, version, priority, attempt, last_attempt )
+                VALUES ('failed_crate', '0.1.1', 0, 99, NOW())",
                 &[],
             )?;
 
@@ -544,7 +557,7 @@ mod tests {
 
             let row = conn
                 .query_opt(
-                    "SELECT priority, attempt
+                    "SELECT priority, attempt, last_attempt
                      FROM queue
                      WHERE name = $1 AND version = $2",
                     &[&"failed_crate", &"0.1.1"],
@@ -552,6 +565,7 @@ mod tests {
                 .unwrap();
             assert_eq!(row.get::<_, i32>(0), 9);
             assert_eq!(row.get::<_, i32>(1), 0);
+            assert!(row.get::<_, Option<DateTime<Utc>>>(2).is_none());
             Ok(())
         })
     }
@@ -575,12 +589,59 @@ mod tests {
     }
 
     #[test]
+    fn test_wait_between_build_attempts() {
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.build_attempts = 99;
+                config.delay_between_build_attempts = Duration::from_secs(1);
+            });
+
+            let queue = env.build_queue();
+
+            queue.add_crate("krate", "1.0.0", 0, None)?;
+
+            // first let it fail
+            queue.process_next_crate(|krate| {
+                assert_eq!(krate.name, "krate");
+                anyhow::bail!("simulate a failure");
+            })?;
+
+            queue.process_next_crate(|_| {
+                // this can't happen since we didn't wait between attempts
+                unreachable!();
+            })?;
+
+            {
+                // fake the build-attempt timestamp so it's older
+                let mut conn = env.db().conn();
+                conn.execute(
+                    "UPDATE queue SET last_attempt = $1",
+                    &[&(Utc::now() - chrono::Duration::seconds(60))],
+                )?;
+            }
+
+            let mut handled = false;
+            // now we can process it again
+            queue.process_next_crate(|krate| {
+                assert_eq!(krate.name, "krate");
+                handled = true;
+                Ok(())
+            })?;
+
+            assert!(handled);
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn test_add_and_process_crates() {
         const MAX_ATTEMPTS: u16 = 3;
 
         crate::test::wrapper(|env| {
             env.override_config(|config| {
                 config.build_attempts = MAX_ATTEMPTS;
+                config.delay_between_build_attempts = Duration::ZERO;
             });
 
             let queue = env.build_queue();
@@ -775,6 +836,7 @@ mod tests {
         crate::test::wrapper(|env| {
             env.override_config(|config| {
                 config.build_attempts = MAX_ATTEMPTS;
+                config.delay_between_build_attempts = Duration::ZERO;
             });
             let queue = env.build_queue();
 

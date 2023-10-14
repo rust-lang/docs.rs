@@ -896,6 +896,15 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TYPE feature DROP ATTRIBUTE optional_dependency;",
             "ALTER TYPE feature ADD ATTRIBUTE optional_dependency BOOL;"
         ),
+        sql_migration!(
+            context,
+            39,
+            "Added last_attempt column to build queue",
+            // upgrade query
+            "ALTER TABLE queue ADD COLUMN last_attempt TIMESTAMP WITH TIME ZONE;",
+            // downgrade query
+            "ALTER TABLE queue DROP COLUMN last_attempt;"
+        ),
     ];
 
     for migration in migrations {

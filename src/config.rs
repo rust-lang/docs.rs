@@ -97,6 +97,7 @@ pub struct Config {
 
     // Build params
     pub(crate) build_attempts: u16,
+    pub(crate) delay_between_build_attempts: Duration,
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) temp_dir: PathBuf,
     pub(crate) inside_docker: bool,
@@ -133,6 +134,10 @@ impl Config {
 
         Ok(Self {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
+            delay_between_build_attempts: Duration::from_secs(env::<u64>(
+                "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
+                60,
+            )?),
 
             crates_io_api_call_retries: env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3)?,
 
