@@ -2236,12 +2236,13 @@ mod test {
                 .create()?;
 
             // test rustdoc pages stay on the documentation
-            let page = kuchikiki::parse_html().one(
-                env.frontend()
-                    .get("/crate/hexponent/0.3.1/menus/releases")
-                    .send()?
-                    .text()?,
-            );
+            let releases_response = env
+                .frontend()
+                .get("/crate/hexponent/0.3.1/menus/releases")
+                .send()?;
+            assert!(releases_response.status().is_success());
+            assert_cache_control(&releases_response, CachePolicy::ForeverInCdn, &env.config());
+            let page = kuchikiki::parse_html().one(releases_response.text()?);
             let selector =
                 r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
                     .to_string();
