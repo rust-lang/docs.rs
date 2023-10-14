@@ -443,6 +443,7 @@ struct ReleaseList {
 
 impl_axum_webpage! {
     ReleaseList = "rustdoc/releases.html",
+    cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
 
@@ -499,6 +500,7 @@ struct PlatformList {
 
 impl_axum_webpage! {
     PlatformList = "rustdoc/platforms.html",
+    cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
 
@@ -1337,6 +1339,7 @@ mod tests {
                 .send()
                 .unwrap();
             assert!(response.status().is_success());
+            assert_cache_control(&response, CachePolicy::ForeverInCdn, &env.config());
             let list2 = check_links(response.text().unwrap(), true, should_contain_redirect);
             assert_eq!(list1, list2);
         }
