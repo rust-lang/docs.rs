@@ -993,15 +993,20 @@ mod tests {
             assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
             // default target was built and is accessible
-            assert!(storage.exists_in_archive(&doc_archive, &format!("{crate_path}/index.html"))?);
+            assert!(storage.exists_in_archive(
+                &doc_archive,
+                0,
+                &format!("{crate_path}/index.html"),
+            )?);
             assert_success(&format!("/{crate_}/{version}/{crate_path}"), web)?;
 
             // source is also packaged
-            assert!(storage.exists_in_archive(&source_archive, "src/lib.rs")?);
+            assert!(storage.exists_in_archive(&source_archive, 0, "src/lib.rs",)?);
             assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs"), web)?;
 
             assert!(!storage.exists_in_archive(
                 &doc_archive,
+                0,
                 &format!("{default_target}/{crate_path}/index.html"),
             )?);
 
@@ -1035,6 +1040,7 @@ mod tests {
                     }
                     let target_docs_present = storage.exists_in_archive(
                         &doc_archive,
+                        0,
                         &format!("{target}/{crate_path}/index.html"),
                     )?;
 
@@ -1152,8 +1158,11 @@ mod tests {
 
             let target = "x86_64-unknown-linux-gnu";
             let crate_path = crate_.replace('-', "_");
-            let target_docs_present = storage
-                .exists_in_archive(&doc_archive, &format!("{target}/{crate_path}/index.html"))?;
+            let target_docs_present = storage.exists_in_archive(
+                &doc_archive,
+                0,
+                &format!("{target}/{crate_path}/index.html"),
+            )?;
 
             let web = env.frontend();
             let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");

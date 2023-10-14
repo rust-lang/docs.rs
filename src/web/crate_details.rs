@@ -43,6 +43,7 @@ pub struct CrateDetails {
     rustdoc: Option<String>, // this is description_long in database
     release_time: DateTime<Utc>,
     build_status: bool,
+    pub latest_build_id: Option<i32>,
     last_successful_build: Option<String>,
     pub rustdoc_status: bool,
     pub archive_storage: bool,
@@ -118,6 +119,15 @@ impl CrateDetails {
                 releases.description_long,
                 releases.release_time,
                 releases.build_status,
+                (
+                    SELECT id
+                    FROM builds
+                    WHERE
+                        builds.rid = releases.id AND
+                        builds.build_status = TRUE
+                    ORDER BY build_time DESC
+                    LIMIT 1
+                ) AS latest_build_id,
                 releases.rustdoc_status,
                 releases.archive_storage,
                 releases.repository_url,
@@ -147,12 +157,9 @@ impl CrateDetails {
             LEFT JOIN repositories ON releases.repository_id = repositories.id
             WHERE crates.name = $1 AND releases.version = $2;";
 
-        let rows = conn.query(query, &[&name, &version])?;
-
-        let krate = if rows.is_empty() {
-            return Ok(None);
-        } else {
-            &rows[0]
+        let krate = match conn.query_opt(query, &[&name, &version])? {
+            Some(row) => row,
+            None => return Ok(None),
         };
 
         let crate_id: i32 = krate.get("crate_id");
@@ -195,6 +202,7 @@ impl CrateDetails {
             rustdoc: krate.get("description_long"),
             release_time: krate.get("release_time"),
             build_status: krate.get("build_status"),
+            latest_build_id: krate.get("latest_build_id"),
             last_successful_build: None,
             rustdoc_status: krate.get("rustdoc_status"),
             archive_storage: krate.get("archive_storage"),
