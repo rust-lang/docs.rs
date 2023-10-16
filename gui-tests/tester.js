@@ -123,7 +123,6 @@ async function main(argv) {
     try {
         // This is more convenient that setting fields one by one.
         let args = [
-            "--no-screenshot-comparison",
             "--no-sandbox",
         ];
         if (typeof process.env.SERVER_URL !== 'undefined') {
@@ -166,14 +165,15 @@ async function main(argv) {
         opts["jobs"] = 1;
         console.log("`--no-headless` option is active, disabling concurrency for running tests.");
     }
-
-    console.log(`Running ${files.length} docs.rs GUI (${opts["jobs"]} concurrently) ...`);
+    let jobs = opts["jobs"];
 
     if (opts["jobs"] < 1) {
+        jobs = files.length;
         process.setMaxListeners(files.length + 1);
     } else if (headless) {
         process.setMaxListeners(opts["jobs"] + 1);
     }
+    console.log(`Running ${files.length} docs.rs GUI (${jobs} concurrently) ...`);
 
     const tests_queue = [];
     let results = {
@@ -185,7 +185,7 @@ async function main(argv) {
     for (let i = 0; i < files.length; ++i) {
         const file_name = files[i];
         const testPath = path.join(__dirname, file_name);
-        const callback = runTest(testPath, options)
+        const callback = runTest(testPath, {"options": options})
             .then(out => {
                 const [output, nb_failures] = out;
                 results[nb_failures === 0 ? "successful" : "failed"].push({
