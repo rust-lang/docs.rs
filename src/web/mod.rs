@@ -363,9 +363,10 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Resu
     context.storage()?;
     context.repository_stats_updater()?;
 
+    let app = build_axum_app(context, template_data)?.into_make_service();
     context.runtime()?.block_on(async {
         axum::Server::bind(&axum_addr)
-            .serve(build_axum_app(context, template_data)?.into_make_service())
+            .serve(app)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
         Ok::<(), Error>(())
