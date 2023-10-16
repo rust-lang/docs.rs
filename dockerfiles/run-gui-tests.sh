@@ -16,7 +16,7 @@ docker-compose build web
 if [ ! -f .env ]
 then
 cp .env.sample .env
-source .env
+. .env
 fi
 
 docker-compose up -d web
@@ -32,5 +32,4 @@ sleep 5
 # status="docker run . -v `pwd`:/build/out:ro gui_tests"
 docker-compose run gui_tests
 status=$?
-kill -9 $SERVER_PID
 exit $status
