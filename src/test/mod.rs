@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{AsyncStorage, Storage, StorageKind};
 use crate::web::{build_axum_app, cache, page::TemplateData};
-use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, ServiceMetrics};
+use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi, ServiceMetrics};
 use anyhow::Context as _;
 use fn_error_context::context;
 use once_cell::unsync::OnceCell;
@@ -229,6 +229,7 @@ pub(crate) struct TestEnvironment {
     async_storage: OnceCell<Arc<AsyncStorage>>,
     cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
+    registry_api: OnceCell<Arc<RegistryApi>>,
     runtime: OnceCell<Arc<Runtime>>,
     instance_metrics: OnceCell<Arc<InstanceMetrics>>,
     service_metrics: OnceCell<Arc<ServiceMetrics>>,
@@ -263,6 +264,7 @@ impl TestEnvironment {
             async_storage: OnceCell::new(),
             cdn: OnceCell::new(),
             index: OnceCell::new(),
+            registry_api: OnceCell::new(),
             instance_metrics: OnceCell::new(),
             service_metrics: OnceCell::new(),
             frontend: OnceCell::new(),
@@ -406,11 +408,22 @@ impl TestEnvironment {
         self.index
             .get_or_init(|| {
                 Arc::new(
-                    Index::new(
-                        self.config().registry_index_path.clone(),
+                    Index::new(self.config().registry_index_path.clone())
+                        .expect("failed to initialize the index"),
+                )
+            })
+            .clone()
+    }
+
+    pub(crate) fn registry_api(&self) -> Arc<RegistryApi> {
+        self.registry_api
+            .get_or_init(|| {
+                Arc::new(
+                    RegistryApi::new(
+                        self.config().registry_api_host.clone(),
                         self.config().crates_io_api_call_retries,
                     )
-                    .expect("failed to initialize the index"),
+                    .expect("failed to initialize the registry api"),
                 )
             })
             .clone()
@@ -487,6 +500,10 @@ impl Context for TestEnvironment {
 
     fn index(&self) -> Result<Arc<Index>> {
         Ok(self.index())
+    }
+
+    fn registry_api(&self) -> Result<Arc<RegistryApi>> {
+        Ok(self.registry_api())
     }
 
     fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>> {

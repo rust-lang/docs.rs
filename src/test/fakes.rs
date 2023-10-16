@@ -2,7 +2,7 @@ use super::TestDatabase;
 
 use crate::docbuilder::{BuildResult, DocCoverage};
 use crate::error::Result;
-use crate::index::api::{CrateData, CrateOwner, ReleaseData};
+use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
 use crate::utils::{Dependency, MetadataPackage, Target};
 use anyhow::Context;

@@ -2,7 +2,7 @@ use crate::{
     db::types::Feature,
     docbuilder::{BuildResult, DocCoverage},
     error::Result,
-    index::api::{CrateData, CrateOwner, ReleaseData},
+    registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
     web::crate_details::CrateDetails,

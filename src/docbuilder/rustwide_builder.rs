@@ -13,7 +13,7 @@ use crate::utils::{
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
-use crate::{Config, Context, Index, InstanceMetrics, Storage};
+use crate::{Config, Context, InstanceMetrics, RegistryApi, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
@@ -87,7 +87,7 @@ pub struct RustwideBuilder {
     db: Pool,
     storage: Arc<Storage>,
     metrics: Arc<InstanceMetrics>,
-    index: Arc<Index>,
+    registry_api: Arc<RegistryApi>,
     rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     workspace_initialize_time: Instant,
@@ -105,7 +105,7 @@ impl RustwideBuilder {
             db: pool,
             storage: context.storage()?,
             metrics: context.instance_metrics()?,
-            index: context.index()?,
+            registry_api: context.registry_api()?,
             rustc_version: String::new(),
             repository_stats_updater: context.repository_stats_updater()?,
             workspace_initialize_time: Instant::now(),
@@ -519,8 +519,7 @@ impl RustwideBuilder {
 
                     let release_data = if !is_local {
                         match self
-                            .index
-                            .api()
+                            .registry_api
                             .get_release_data(name, version)
                             .with_context(|| {
                                 format!("could not fetch releases-data for {name}-{version}")
@@ -565,7 +564,7 @@ impl RustwideBuilder {
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
                     if !is_local {
-                        match self.index.api().get_crate_data(name) {
+                        match self.registry_api.get_crate_data(name) {
                             Ok(crate_data) => {
                                 update_crate_data_in_database(&mut conn, name, &crate_data)?
                             }

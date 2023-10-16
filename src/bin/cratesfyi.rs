@@ -16,7 +16,8 @@ use docs_rs::utils::{
 };
 use docs_rs::{
     start_background_metrics_webserver, start_web_server, AsyncStorage, BuildQueue, Config,
-    Context, Index, InstanceMetrics, PackageKind, RustwideBuilder, ServiceMetrics, Storage,
+    Context, Index, InstanceMetrics, PackageKind, RegistryApi, RustwideBuilder, ServiceMetrics,
+    Storage,
 };
 use humantime::Duration;
 use once_cell::sync::OnceCell;
@@ -537,12 +538,10 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateCrateRegistryFields { name } => {
-                let index = ctx.index()?;
-
                 db::update_crate_data_in_database(
                     &mut *ctx.conn()?,
                     &name,
-                    &index.api().get_crate_data(&name)?,
+                    &ctx.registry_api()?.get_crate_data(&name)?,
                 )?;
             }
 
@@ -719,6 +718,7 @@ struct BinContext {
     service_metrics: OnceCell<Arc<ServiceMetrics>>,
     instance_metrics: OnceCell<Arc<InstanceMetrics>>,
     index: OnceCell<Arc<Index>>,
+    registry_api: OnceCell<Arc<RegistryApi>>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
     runtime: OnceCell<Arc<Runtime>>,
 }
@@ -734,6 +734,7 @@ impl BinContext {
             service_metrics: OnceCell::new(),
             instance_metrics: OnceCell::new(),
             index: OnceCell::new(),
+            registry_api: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
             runtime: OnceCell::new(),
         }
@@ -783,10 +784,14 @@ impl Context for BinContext {
             let config = self.config()?;
             let path = config.registry_index_path.clone();
             if let Some(registry_url) = config.registry_url.clone() {
-                Index::from_url(path, registry_url, config.crates_io_api_call_retries)
+                Index::from_url(path, registry_url)
             } else {
-                Index::new(path, config.crates_io_api_call_retries)
+                Index::new(path)
             }?
+        };
+        fn registry_api(self) -> RegistryApi = {
+            let config = self.config()?;
+            RegistryApi::new(config.registry_api_host.clone(), config.crates_io_api_call_retries)?
         };
         fn repository_stats_updater(self) -> RepositoryStatsUpdater = {
             let config = self.config()?;
