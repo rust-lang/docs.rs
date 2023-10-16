@@ -13,8 +13,8 @@ const APP_USER_AGENT: &str = concat!(
 );
 
 #[derive(Debug)]
-pub struct Api {
-    api_base: Option<Url>,
+pub struct RegistryApi {
+    api_base: Url,
     max_retries: u32,
     client: reqwest::blocking::Client,
 }
@@ -47,8 +47,8 @@ pub struct CrateOwner {
     pub(crate) login: String,
 }
 
-impl Api {
-    pub(super) fn new(api_base: Option<Url>, max_retries: u32) -> Result<Self> {
+impl RegistryApi {
+    pub fn new(api_base: Url, max_retries: u32) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
             (ACCEPT, HeaderValue::from_static("application/json")),
@@ -65,12 +65,6 @@ impl Api {
             client,
             max_retries,
         })
-    }
-
-    fn api_base(&self) -> Result<Url> {
-        self.api_base
-            .clone()
-            .with_context(|| anyhow!("index is missing an api base url"))
     }
 
     pub fn get_crate_data(&self, name: &str) -> Result<CrateData> {
@@ -100,7 +94,7 @@ impl Api {
         version: &str,
     ) -> Result<(DateTime<Utc>, bool, i32)> {
         let url = {
-            let mut url = self.api_base()?;
+            let mut url = self.api_base.clone();
             url.path_segments_mut()
                 .map_err(|()| anyhow!("Invalid API url"))?
                 .extend(&["api", "v1", "crates", name, "versions"]);
@@ -142,7 +136,7 @@ impl Api {
     /// Fetch owners from the registry's API
     fn get_owners(&self, name: &str) -> Result<Vec<CrateOwner>> {
         let url = {
-            let mut url = self.api_base()?;
+            let mut url = self.api_base.clone();
             url.path_segments_mut()
                 .map_err(|()| anyhow!("Invalid API url"))?
                 .extend(&["api", "v1", "crates", name, "owners"]);

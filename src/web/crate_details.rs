@@ -666,7 +666,7 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::registry_api::CrateOwner;
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_cached, wrapper, TestDatabase,
         TestEnvironment,

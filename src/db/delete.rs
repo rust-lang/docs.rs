@@ -194,7 +194,7 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::registry_api::CrateOwner;
     use crate::test::{assert_success, wrapper};
     use postgres::Client;
     use test_case::test_case;

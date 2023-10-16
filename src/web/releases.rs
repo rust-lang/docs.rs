@@ -163,10 +163,9 @@ async fn get_search_results(
             .unwrap()
     });
 
-    let url = url::Url::parse(&format!(
-        "{}/api/v1/crates{query_params}",
-        config.registry_api_host
-    ))?;
+    let url = config
+        .registry_api_host
+        .join(&format!("/api/v1/crates{query_params}"))?;
     debug!("fetching search results from {}", url);
 
     // extract the query from the query args.
@@ -747,7 +746,7 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::api::CrateOwner;
+    use crate::registry_api::CrateOwner;
     use crate::test::{
         assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
     };
@@ -899,7 +898,7 @@ mod tests {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
-                config.registry_api_host = crates_io.url();
+                config.registry_api_host = crates_io.url().parse().unwrap();
             });
 
             let web = env.frontend();
@@ -985,7 +984,7 @@ mod tests {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
                 config.crates_io_api_call_retries = 0;
-                config.registry_api_host = crates_io.url();
+                config.registry_api_host = crates_io.url().parse().unwrap();
             });
 
             let _m = crates_io
@@ -1013,7 +1012,7 @@ mod tests {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
-                config.registry_api_host = crates_io.url();
+                config.registry_api_host = crates_io.url().parse().unwrap();
             });
 
             let web = env.frontend();
@@ -1060,7 +1059,7 @@ mod tests {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
-                config.registry_api_host = crates_io.url();
+                config.registry_api_host = crates_io.url().parse().unwrap();
             });
 
             let web = env.frontend();
@@ -1107,7 +1106,7 @@ mod tests {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
-                config.registry_api_host = crates_io.url();
+                config.registry_api_host = crates_io.url().parse().unwrap();
             });
 
             let web = env.frontend();

@@ -2,13 +2,14 @@ use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
 use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
 use tracing::trace;
+use url::Url;
 
 #[derive(Debug)]
 pub struct Config {
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
-    pub registry_api_host: String,
+    pub registry_api_host: Url,
 
     // Database connection params
     pub(crate) database_url: String,
@@ -140,7 +141,10 @@ impl Config {
 
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
-            registry_api_host: env("DOCSRS_REGISTRY_API_HOST", "https://crates.io".into())?,
+            registry_api_host: env(
+                "DOCSRS_REGISTRY_API_HOST",
+                "https://crates.io".parse().unwrap(),
+            )?,
             prefix: prefix.clone(),
 
             database_url: require_env("DOCSRS_DATABASE_URL")?,
