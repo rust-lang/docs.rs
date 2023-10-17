@@ -9,7 +9,6 @@ use axum::{
 };
 use futures_util::future::{BoxFuture, FutureExt};
 use http::header::CONTENT_LENGTH;
-use serde::Serialize;
 use std::sync::Arc;
 use tera::Context;
 
@@ -109,13 +108,6 @@ macro_rules! impl_axum_webpage {
             }
         }
     };
-}
-
-#[derive(Serialize)]
-struct TemplateContext<'a, T> {
-    csp_nonce: &'a str,
-    #[serde(flatten)]
-    page: &'a T,
 }
 
 /// adding this to the axum response extensions will lead
