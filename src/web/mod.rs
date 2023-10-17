@@ -343,10 +343,7 @@ pub fn start_background_metrics_webserver(
 
 #[instrument(skip_all)]
 pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Result<(), Error> {
-    let template_data = Arc::new(TemplateData::new(
-        &mut *context.pool()?.get()?,
-        context.config()?.render_threads,
-    )?);
+    let template_data = Arc::new(TemplateData::new(context.config()?.render_threads)?);
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 

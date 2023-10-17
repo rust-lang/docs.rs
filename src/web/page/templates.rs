@@ -1,15 +1,11 @@
-use crate::{
-    error::Result,
-    utils::{get_config, ConfigName},
-};
+use crate::error::Result;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use path_slash::PathExt;
-use postgres::Client;
 use serde_json::Value;
 use std::{collections::HashMap, fmt, path::PathBuf, sync::Arc};
 use tera::{Result as TeraResult, Tera};
-use tracing::{error, trace};
+use tracing::trace;
 use walkdir::WalkDir;
 
 const TEMPLATES_DIRECTORY: &str = "templates";
@@ -31,11 +27,11 @@ pub(crate) struct TemplateData {
 }
 
 impl TemplateData {
-    pub(crate) fn new(conn: &mut Client, num_threads: usize) -> Result<Self> {
+    pub(crate) fn new(num_threads: usize) -> Result<Self> {
         trace!("Loading templates");
 
         let data = Self {
-            templates: load_templates(conn)?,
+            templates: load_templates()?,
             rendering_threadpool: rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
                 .thread_name(move |idx| format!("docsrs-render {idx}"))
@@ -77,15 +73,7 @@ impl TemplateData {
     }
 }
 
-fn load_rustc_resource_suffix(conn: &mut Client) -> Result<String> {
-    if let Some(vers_str) = get_config::<String>(conn, ConfigName::RustcVersion)? {
-        return crate::utils::parse_rustc_version(vers_str);
-    }
-
-    anyhow::bail!("failed to parse the rustc version");
-}
-
-fn load_templates(conn: &mut Client) -> Result<Tera> {
+fn load_templates() -> Result<Tera> {
     // This uses a custom function to find the templates in the filesystem instead of Tera's
     // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
     // application and running the tests.
@@ -114,19 +102,6 @@ fn load_templates(conn: &mut Client) -> Result<Tera> {
         &mut tera,
         "docsrs_version",
         Value::String(crate::BUILD_VERSION.into()),
-    );
-    // This function will return the resource suffix of the latest nightly used to build
-    // documentation on docs.rs, or ??? if no resource suffix was found.
-    ReturnValue::add_function_to(
-        &mut tera,
-        "rustc_resource_suffix",
-        Value::String(load_rustc_resource_suffix(conn).unwrap_or_else(|err| {
-            error!("Failed to load rustc resource suffix: {:?}", err);
-            // This is not fatal because the server might be started before essential files are
-            // generated during development. Returning "???" provides a degraded UX, but allows the
-            // server to start every time.
-            String::from("???")
-        })),
     );
 
     // Custom filters
@@ -376,10 +351,8 @@ mod tests {
 
     #[test]
     fn test_templates_are_valid() {
-        crate::test::wrapper(|env| {
-            let db = env.db();
-
-            let tera = load_templates(&mut db.conn()).unwrap();
+        crate::test::wrapper(|_| {
+            let tera = load_templates().unwrap();
             tera.check_macro_files().unwrap();
 
             Ok(())
