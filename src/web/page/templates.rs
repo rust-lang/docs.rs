@@ -262,30 +262,12 @@ impl fmt::Display for IconType {
 
 impl tera::Filter for IconType {
     fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-        let mut aria_hidden = true;
         let icon_name = tera::escape_html(value.as_str().expect("Icons only take strings"));
         let class = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
             "fa-svg fa-svg-fw"
         } else {
             "fa-svg"
         };
-        let aria_label = args
-            .get("aria-label")
-            .and_then(|l| l.as_str())
-            .map(|label| {
-                aria_hidden = false;
-                format!(r#" aria_label="{}""#, tera::escape_html(label))
-            })
-            .unwrap_or_default();
-        let id = args
-            .get("id")
-            .and_then(|l| l.as_str())
-            .map(|id| format!(r#" id="{}""#, tera::escape_html(id)))
-            .unwrap_or_default();
-        aria_hidden = args
-            .get("aria-hidden")
-            .and_then(|l| l.as_bool())
-            .unwrap_or(aria_hidden);
 
         let type_ = match self {
             IconType::Strong => font_awesome_as_a_crate::Type::Solid,
@@ -294,17 +276,14 @@ impl tera::Filter for IconType {
         };
 
         let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
+        let (space, class_extra) = match args.get("extra").and_then(|s| s.as_str()) {
+            Some(extra) => (" ", extra),
+            None => ("", ""),
+        };
 
         let icon = format!(
-            "<span \
-                class=\"{class} {class_extra}\" \
-                aria-hidden=\"{aria_hidden}\"{aria_label}{id}>{icon_file_string}</span>",
-            icon_file_string = icon_file_string,
-            class = class,
-            class_extra = args.get("extra").and_then(|s| s.as_str()).unwrap_or(""),
-            aria_hidden = aria_hidden,
-            aria_label = aria_label,
-            id = id,
+            "\
+<span class=\"{class}{space}{class_extra}\" aria-hidden=\"true\">{icon_file_string}</span>"
         );
 
         Ok(Value::String(icon))
