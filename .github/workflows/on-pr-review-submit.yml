@@ -1,16 +1,15 @@
 on:
-  pull_request_target:
-    branches:
-      - master
-    types: [opened, reopened, review_requested]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   update-labels:
+    if: github.event.review.state == 'changes_requested'
     runs-on: ubuntu-latest
     steps:
       - uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: S-waiting-on-review
+          labels: S-waiting-on-author
       - uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: S-waiting-on-author
+          labels: S-waiting-on-review
