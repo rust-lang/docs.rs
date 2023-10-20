@@ -2,7 +2,7 @@ mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
 use crate::cdn::CdnBackend;
-use crate::db::{Pool, PoolClient};
+use crate::db::{AsyncPoolClient, Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{AsyncStorage, Storage, StorageKind};
@@ -298,6 +298,7 @@ impl TestEnvironment {
 
         // Use less connections for each test compared to production.
         config.max_pool_size = 4;
+        config.max_legacy_pool_size = 4;
         config.min_pool_idle = 0;
 
         // Use the database for storage, as it's faster than S3.
@@ -569,6 +570,13 @@ impl TestDatabase {
 
     pub(crate) fn pool(&self) -> Pool {
         self.pool.clone()
+    }
+
+    pub(crate) async fn async_conn(&self) -> AsyncPoolClient {
+        self.pool
+            .get_async()
+            .await
+            .expect("failed to get a connection out of the pool")
     }
 
     pub(crate) fn conn(&self) -> PoolClient {

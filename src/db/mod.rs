@@ -9,7 +9,7 @@ pub use self::{
     file::{add_path_into_database, add_path_into_remote_archive},
     migrate::migrate,
     overrides::Overrides,
-    pool::{Pool, PoolClient, PoolError},
+    pool::{AsyncPoolClient, Pool, PoolClient, PoolError},
 };
 
 mod add_package;

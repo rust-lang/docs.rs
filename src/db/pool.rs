@@ -4,7 +4,7 @@ use futures_util::{future::BoxFuture, stream::BoxStream};
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 use sqlx::{postgres::PgPoolOptions, Executor};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing::debug;
 
@@ -56,22 +56,29 @@ impl Pool {
             .database_url
             .parse()
             .map_err(PoolError::InvalidDatabaseUrl)?;
+
+        let acquire_timeout = Duration::from_secs(30);
+        let max_lifetime = Duration::from_secs(30 * 60);
+        let idle_timeout = Duration::from_secs(10 * 60);
+
         let manager = PostgresConnectionManager::new(url, NoTls);
         let pool = r2d2::Pool::builder()
-            .max_size(config.max_pool_size)
+            .max_size(config.max_legacy_pool_size)
             .min_idle(Some(config.min_pool_idle))
+            .max_lifetime(Some(max_lifetime))
+            .connection_timeout(acquire_timeout)
+            .idle_timeout(Some(idle_timeout))
             .connection_customizer(Box::new(SetSchema::new(schema)))
             .build(manager)
             .map_err(PoolError::PoolCreationFailed)?;
 
         let _guard = runtime.enter();
         let async_pool = PgPoolOptions::new()
-            // FIXME: these pool sizes would have to be validated before the pool is used in
-            // a production setting.
-            // Currently we only use it for the storage DB backend, which is only used for local
-            // & unit-testing.
             .max_connections(config.max_pool_size)
-            // .min_connections(config.min_pool_idle)
+            .min_connections(config.min_pool_idle)
+            .max_lifetime(max_lifetime)
+            .acquire_timeout(acquire_timeout)
+            .idle_timeout(idle_timeout)
             .after_connect({
                 let schema = schema.to_owned();
                 move |conn, _meta| {
@@ -102,7 +109,7 @@ impl Pool {
             pool,
             async_pool,
             metrics,
-            max_size: config.max_pool_size,
+            max_size: config.max_legacy_pool_size + config.max_pool_size,
         })
     }
 
