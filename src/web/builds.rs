@@ -9,9 +9,10 @@ use crate::{
     impl_axum_webpage,
     utils::spawn_blocking,
     web::{
+        crate_details::CrateDetails,
         error::AxumResult,
         extractors::{DbConnection, Path},
-        match_version, MetaData, ReqVersion,
+        filters, match_version, MetaData, ReqVersion,
     },
     BuildQueue, Config,
 };
@@ -26,6 +27,7 @@ use axum_extra::{
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
 use http::StatusCode;
+use rinja::Template;
 use semver::Version;
 use serde::Serialize;
 use serde_json::json;
@@ -41,17 +43,32 @@ pub(crate) struct Build {
     errors: Option<String>,
 }
 
+#[derive(Template)]
+#[template(path = "crate/builds.html")]
 #[derive(Debug, Clone, Serialize)]
 struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
     limits: Limits,
     canonical_url: CanonicalUrl,
-    use_direct_platform_links: bool,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    BuildsPage = "crate/builds.html",
+impl_axum_webpage! { BuildsPage }
+
+impl BuildsPage {
+    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
+        None
+    }
+    pub(crate) fn permalink_path(&self) -> &str {
+        ""
+    }
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        Some(&self.metadata)
+    }
+    pub(crate) fn use_direct_platform_links(&self) -> bool {
+        true
+    }
 }
 
 pub(crate) async fn build_list_handler(
@@ -75,7 +92,7 @@ pub(crate) async fn build_list_handler(
         builds: get_builds(&mut conn, &name, &version).await?,
         limits: Limits::for_crate(&config, &mut conn, &name).await?,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
-        use_direct_platform_links: true,
+        csp_nonce: String::new(),
     }
     .into_response())
 }
@@ -606,9 +623,9 @@ mod tests {
             let values: Vec<_> = values.iter().map(|v| &**v).collect();
 
             dbg!(&values);
-            assert!(values.contains(&"6 GB"));
+            assert!(values.contains(&"6.44 GB"));
             assert!(values.contains(&"2 hours"));
-            assert!(values.contains(&"100 kB"));
+            assert!(values.contains(&"102.40 kB"));
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
 

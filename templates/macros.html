@@ -6,9 +6,9 @@
 #}
 {% macro active_link(expected, href, text) %}
     <li class="pure-menu-item">
-        <a class="pure-menu-link {% if active_tab == expected %} pure-menu-active {% endif %}" href="{{ href }}">
+        <a class="pure-menu-link {% if active_tab == *expected %} pure-menu-active {% endif %}" href="{{ href }}">
             {# safe: allow passing in HTML #}
-            {{ text | safe }}
+            {{ text|safe }}
         </a>
     </li>
 {% endmacro active_link %}
@@ -20,9 +20,9 @@
     * `target` An optional target
     * `extra_classes` Optional extra css classes
 #}
-{% macro menu_link(href, text, target="") %}
+{% macro menu_link(href, text, target) %}
     <li class="pure-menu-item">
-        <a class="pure-menu-link" href="{{ href }}" {% if target != "" -%} target="{{ target }}" {%- endif %}>
+        <a class="pure-menu-link" href="{{ href }}" {% if !target.is_empty() -%} target="{{ target }}" {%- endif %}>
             {{ text }}
         </a>
     </li>
@@ -37,17 +37,17 @@
         <tbody>
             <tr>
                 <td>Available RAM</td>
-                <td>{{ limits.memory | filesizeformat }}</td>
+                <td>{{ limits.memory|filesizeformat }}</td>
             </tr>
 
             <tr>
                 <td>Maximum rustdoc execution time</td>
-                <td>{{ limits.timeout.secs | timeformat }}</td>
+                <td>{{ limits.timeout.as_secs_f32()|format_secs }}</td>
             </tr>
 
             <tr>
                 <td>Maximum size of a build log</td>
-                <td>{{ limits.max_log_size | filesizeformat }}</td>
+                <td>{{ limits.max_log_size|filesizeformat }}</td>
             </tr>
 
             <tr>
@@ -71,8 +71,8 @@
 
 {# Constructs a title based on the given crate name and version #}
 {% macro doc_title(name, version) %}
-    {%- if name -%}
-        {{ name }} {{ version | default(value="") }} - Docs.rs
+    {%- if !name.is_empty() -%}
+        {{ name }} {{ version }} - Docs.rs
     {%- else -%}
         Docs.rs
     {%- endif -%}
@@ -96,58 +96,87 @@
     {%- for release in releases -%}
         {# The url for the release, `/crate/:name/:version` #}
         {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
-        {% if release.build_status == "failure" %}
-            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
-            {%- set retain_fragment = false -%}
-        {% elif inner_path == "" %} {# /crate #}
-            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
-            {%- set retain_fragment = false -%}
+        {% set release_url %}
+        {%- set retain_fragment = !inner_path.is_empty() -%}
+        {% if inner_path.is_empty() %} {# /crate #}
+            {%- set release_url = "/crate/{}/{}"|format(name, release.version) -%}
         {% else %}
-            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version ~ "/target-redirect/" ~ target ~ inner_path -%}
-            {%- set retain_fragment = true -%}
+            {%- set release_url = "/crate/{}/{}/target-redirect/{}{}"|format(name, release.version, target, inner_path) -%}
         {% endif %}
         {# The release's name and version, `:name-:version` #}
-        {%- set release_name = name ~ "-" ~ release.version -%}
+        {%- set release_name = "{}-{}"|format(name, release.version) -%}
+        {%- set warning -%}
+        {%- set title -%}
+        {%- set yanked = release.yanked.unwrap_or_default() -%}
 
-        {%- if release.is_library == false -%}
+        {%- if !release.is_library.unwrap_or_default() -%}
             {# If the release isn't a library, then display that warning #}
-            {%- set warning = release_name ~ " is not a library" -%}
-        {%- elif release.yanked == true and release.build_status == "success" -%}
-            {# If the release has been yanked and successfully built, display a warning #}
-            {%- set warning = release_name ~ " is yanked" -%}
-        {%- elif release.yanked == true and release.build_status == "failure" -%}
+            {%- set warning = true -%}
+            {%- set title = "{} is not a library"|format(release_name) -%}
+        {%- elif yanked && release.build_status == "success" -%}
             {# If the release has been yanked and failed to build, display a warning #}
-            {%- set warning = release_name ~ " is yanked and docs.rs failed to build it" -%}
+            {%- set warning = true -%}
+            {%- set title = "{} is yanked"|format(release_name) -%}
+        {%- elif yanked && release.build_status == "failure" -%}
+            {# If the release has been yanked and failed to build, display a warning #}
+            {%- set warning = true -%}
+            {%- set title = "{} is yanked and docs.rs failed to build it"|format(release_name) -%}
         {%- elif release.build_status == "failure" -%}
             {# If the release failed to build, display a warning #}
-            {%- set warning = "docs.rs failed to build " ~ release_name -%}
+            {%- set warning = true -%}
+            {%- set title = "docs.rs failed to build {}"|format(release_name) -%}
         {%- elif release.build_status == "in_progress" -%}
-            {%- set title = release_name ~ " is currently being built" -%}
+            {%- set warning = false -%}
+            {%- set title = "{} is currently being built"|format(release_name) -%}
         {%- else -%}
             {%- set warning = false -%}
-        {%- endif -%}
-
-        {%- if warning -%}
-            {%- set title = warning -%}
+            {%- set title = String::new() -%}
         {%- endif -%}
 
         <li class="pure-menu-item">
             <a
-                href="{{ release_url | safe }}"
+                href="{{ release_url|safe }}"
                 {# We only want crawlers to crawl the /latest/ URLs, not /1.2.3/ URLs. #}
                 rel="nofollow"
                 class="pure-menu-link{% if warning %} warn{% endif %}"
-                {% if title %} title="{{ title }}"{% endif %}
+                {% if !title.is_empty() %} title="{{ title }}"{% endif %}
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
                 {% if warning %}
-                    {{ "triangle-exclamation" | fas }}
+                    {{ "triangle-exclamation"|fas(false, false, "")|safe }}
                 {% endif %}
                 {% if release.build_status == "in_progress" %}
-                    {{ "gear" | fas(fw=true, spin=true) }}
+                    {{ "gear"|fas(true, true, "")|safe }}
                 {% endif %}
                 {{ release.version }}
             </a>
         </li>
     {%- endfor -%}
 {% endmacro releases_list %}
+
+{% macro dependencies_list(link_prefix, dependencies, if_empty) %}
+    {% if let Some(serde_json::Value::Array(deps)) = dependencies %}
+        {%- for dependency in deps -%}
+            {%- if let serde_json::Value::Array(dep) = dependency -%}
+                <li class="pure-menu-item">
+                    {%- set first = dep[0].as_str().unwrap() -%}
+                    {%- set second = dep[1].as_str().unwrap() -%}
+                    <a href="{{ link_prefix|safe }}/{{ first|safe }}/{{ second|safe }}" class="pure-menu-link">
+                        {{ first|safe }} {{ second|safe }}
+                        {% if let Some(serde_json::Value::String(third)) = dep.get(2) %}
+                            <i class="dependencies {{ third|safe }}">{{ third|safe }}</i>
+                            {% if let Some(serde_json::Value::Bool(true)) = dep.get(3) %}
+                                <i>optional</i>
+                            {% endif %}
+                        {% else %}
+                            <i class="dependencies"></i>
+                        {% endif %}
+                    </a>
+                </li>
+            {% endif %}
+        {%- endfor -%}
+        {%- if deps.is_empty() -%}
+            {{ if_empty|safe }}
+        {%- endif -%}
+    {% endif %}
+{% endmacro dependencies_list %}

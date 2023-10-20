@@ -258,21 +258,21 @@ pub(crate) async fn rustdoc_redirector_handler(
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct RustdocPage {
-    latest_path: String,
-    permalink_path: String,
-    latest_version: String,
-    target: String,
-    inner_path: String,
+pub struct RustdocPage {
+    pub latest_path: String,
+    pub permalink_path: String,
+    pub latest_version: String,
+    pub target: String,
+    pub inner_path: String,
     // true if we are displaying the latest version of the crate, regardless
     // of whether the URL specifies a version number or the string "latest."
-    is_latest_version: bool,
+    pub is_latest_version: bool,
     // true if the URL specifies a version using the string "latest."
-    is_latest_url: bool,
-    is_prerelease: bool,
-    krate: CrateDetails,
-    metadata: MetaData,
-    current_target: String,
+    pub is_latest_url: bool,
+    pub is_prerelease: bool,
+    pub krate: CrateDetails,
+    pub metadata: MetaData,
+    pub current_target: String,
 }
 
 impl RustdocPage {
@@ -280,20 +280,15 @@ impl RustdocPage {
         self,
         rustdoc_html: &[u8],
         max_parse_memory: usize,
-        templates: &TemplateData,
         metrics: &InstanceMetrics,
         config: &Config,
         file_path: &str,
     ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
 
-        // Build the page of documentation
-        let mut ctx = tera::Context::from_serialize(self).context("error creating tera context")?;
-        ctx.insert("DEFAULT_MAX_TARGETS", &crate::DEFAULT_MAX_TARGETS);
-
         // Extract the head and body of the rustdoc file so that we can insert it into our own html
         // while logging OOM errors from html rewriting
-        let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, ctx, templates) {
+        let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, &self) {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
                 metrics.html_rewrite_ooms.inc();
 
@@ -318,6 +313,20 @@ impl RustdocPage {
             Html(html),
         )
             .into_response())
+    }
+
+    // Used for template rendering.
+    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
+        Some(&self.krate)
+    }
+
+    // Used for template rendering.
+    pub(crate) fn permalink_path(&self) -> &str {
+        &self.permalink_path
+    }
+
+    pub(crate) fn use_direct_platform_links(&self) -> bool {
+        !self.latest_path.contains("/target-redirect/")
     }
 }
 
@@ -605,7 +614,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     templates
         .render_in_threadpool({
             let metrics = metrics.clone();
-            move |templates| {
+            move || {
                 let metadata = krate.metadata.clone();
                 Ok(RustdocPage {
                     latest_path,
@@ -623,7 +632,6 @@ pub(crate) async fn rustdoc_html_server_handler(
                 .into_response(
                     &blob.content,
                     config.max_parse_memory,
-                    templates,
                     &metrics,
                     &config,
                     &storage_path,

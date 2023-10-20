@@ -10,12 +10,12 @@
                   method="GET"
                   id="nav-search-form"
                   class="landing-search-form-nav {%
-                  if is_latest_version is defined and not is_latest_version %}not-latest{% endif
-                  %} {% if metadata.yanked %}yanked{% endif %}">
+                  if !is_latest_version %}not-latest{% endif
+                  %} {% if let Some(meta) = get_metadata() %}{% if meta.yanked.unwrap_or_default() %}yanked{% endif %}{% endif %}">
 
                 {# The top-left logo and name #}
                 <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
-                    <span title="Docs.rs">{{ "cubes" | fas }}</span>
+                    <span title="Docs.rs">{{ "cubes"|fas(false, false, "")|safe }}</span>
                     <span class="title">Docs.rs</span>
                 </a>{#
 

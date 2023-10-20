@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tracing::instrument;
 use url::Url;
 
@@ -57,6 +58,15 @@ pub struct CrateOwner {
 pub enum OwnerKind {
     User,
     Team,
+}
+
+impl fmt::Display for OwnerKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::User => f.write_str("user"),
+            Self::Team => f.write_str("team"),
+        }
+    }
 }
 
 impl RegistryApi {

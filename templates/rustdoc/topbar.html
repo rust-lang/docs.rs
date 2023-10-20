@@ -1,34 +1,29 @@
+{# The url of the current release, `/crate/:name/:version` #}
 {%- import "macros.html" as macros -%}
 
-{# The url of the current release, `/crate/:name/:version` #}
-{%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.req_version -%}
-{%- if current_target -%}
-  {%- set rest_menu_url = "/" ~ current_target ~ "/" ~ inner_path -%}
-{%- else -%}
-  {%- set rest_menu_url = "" -%}
-{%- endif -%}
-{%- set platform_menu_url = crate_url ~ "/menus/platforms" ~ rest_menu_url -%}
-{%- set releases_menu_url = crate_url ~ "/menus/releases" ~ rest_menu_url -%}
-
-{%- include "header/topbar_begin.html" -%}{#
-extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
-#}<ul class="pure-menu-list">
+{% set search_query = Some(String::new()) %}
+{%- include "header/topbar_begin.html" -%}
+{%- set crate_url = "/crate/{}/{}"|format(metadata.name, metadata.req_version) -%}
+{%- set rest_menu_url = current_target|rest_menu_url(inner_path) -%}
+{%- set platform_menu_url = "{}/menus/platforms{}"|format(crate_url, rest_menu_url) -%}
+{%- set releases_menu_url = "{}/menus/releases{}"|format(crate_url, rest_menu_url) -%}
+<ul class="pure-menu-list">
     <script id="crate-metadata" type="application/json">
         {# the only text that needs escaping in a <script> is `</`, none of the
             values below can include that sequence #}
         {
-            "name": {{ metadata.name | json_encode() | safe }},
-            "version": {{ metadata.version | json_encode() | safe }}
+            "name": {{ metadata.name|json_encode|safe }},
+            "version": {{ metadata.version|json_encode|safe }}
         }
     </script>
-    {%- if krate -%}
+    {%- if let Some(krate) = self.krate() -%}
         <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link crate-name" title="{{ krate.description }}">
-                {{ "cube" | fas }}
+            <a href="#" class="pure-menu-link crate-name" title="{{ krate.description.as_deref().unwrap_or_default() }}">
+                {{ "cube"|fas(false, false, "")|safe }}
                 <span class="title">{{ krate.name }}-{{ krate.version }}</span>
             </a>
 
-            {# Crate details #}
+            {#- Crate details -#}
             <div class="pure-menu-children package-details-menu">
                 {# Crate name, description and license #}
                 <ul class="pure-menu-list menu-item-divided">
@@ -37,23 +32,23 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                         <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span>
                     </li>
 
-                    {%- if metadata.req_version == "latest" -%}
+                    {%- if metadata.req_version|to_string == "latest" -%}
                     <li class="pure-menu-item">
-                        <a href="{{permalink_path | safe}}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
-                            {{ "link" | fas }} Permalink
+                        <a href="{{permalink_path()|safe}}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
+                            {{ "link"|fas(false, false, "")|safe }} Permalink
                         </a>
                     </li>
                     {%- endif -%}
 
                     <li class="pure-menu-item">
-                        <a href="{{ crate_url | safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
-                            {{ "cube" | fas }} Docs.rs crate page
+                        <a href="{{ crate_url|safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
+                            {{ "cube"|fas(false, false, "")|safe }} Docs.rs crate page
                         </a>
                     </li>
 
                     <li class="pure-menu-item">
-                        <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                            {{ "scale-unbalanced-flip" | fas }} {{ krate.license }}
+                        <a href="{{ crate_url|safe }}" class="pure-menu-link">
+                            {{ "scale-unbalanced-flip"|fas(false, false, "")|safe }} {{ krate.license.as_deref().unwrap_or_default() }}
                         </a>
                     </li>
                 </ul>
@@ -64,56 +59,56 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             <li class="pure-menu-heading">Links</li>
 
                             {# If the crate has a homepage, show a link to it #}
-                            {%- if krate.homepage_url -%}
+                            {%- if let Some(homepage_url) = krate.homepage_url -%}
                                 <li class="pure-menu-item">
-                                    <a href="{{ krate.homepage_url }}" class="pure-menu-link">
-                                        {{ "house" | fas }} Homepage
+                                    <a href="{{ homepage_url }}" class="pure-menu-link">
+                                        {{ "house"|fas(false, false, "")|safe }} Homepage
                                     </a>
                                 </li>
                             {%- endif -%}
 
                             {# If the crate has external docs, show a link #}
-                            {%- if krate.documentation_url -%}
+                            {%- if let Some(documentation_url) = krate.documentation_url -%}
                                 <li class="pure-menu-item">
-                                    <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ "file-lines" | far }} Documentation
+                                    <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
+                                        {{ "file-lines"|far(false, false, "")|safe }} Documentation
                                     </a>
                                 </li>
                             {%- endif -%}
 
                             {# If a the crate has a repo url, show it #}
-                            {%- if krate.repository_url -%}
+                            {%- if let Some(repository_url) = krate.repository_url -%}
                                 <li class="pure-menu-item">
-                                    <a href="{{ krate.repository_url }}" class="pure-menu-link">
-                                        {{ "code-branch" | fas }} Repository
+                                    <a href="{{ repository_url }}" class="pure-menu-link">
+                                        {{ "code-branch"|fas(false, false, "")|safe }} Repository
                                     </a>
                                 </li>
                             {%- endif -%}
 
                             <li class="pure-menu-item">
                                 <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
-                                    {{ "cube" | fas }} crates.io
+                                    {{ "cube"|fas(false, false, "")|safe }} Crates.io
                                 </a>
                             </li>
 
                             {# A link to the release's source view #}
                             <li class="pure-menu-item">
-                                <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                                    {{ "folder-open" | fas }} Source
+                                <a href="{{ crate_url|safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
+                                    {{ "folder-open"|fas(false, false, "")|safe }} Source
                                 </a>
                             </li>
                         </ul>
                     </div>
 
-                    {# Show the crate owners #}
+                    {#- Show the crate owners -#}
                     <div class="pure-u-1-2">
                         <ul class="pure-menu-list" id="topbar-owners">
                             <li class="pure-menu-heading">Owners</li>
 
                             {%- for owner in krate.owners -%}
                                 <li class="pure-menu-item">
-                                    <a href="https://crates.io/{{ owner[2] }}s/{{ owner[0] }}" class="pure-menu-link">
-                                        {{ "user" | fas }} {{ owner[0] }}
+                                    <a href="https://crates.io/{{ owner.2 }}s/{{ owner.0 }}" class="pure-menu-link">
+                                        {{ "user"|fas(false, false, "")|safe }} {{ owner.0 }}
                                     </a>
                                 </li>
                             {%- endfor -%}
@@ -130,17 +125,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             <li class="pure-menu-item">
                                 <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
                                     <ul class="pure-menu-list">
-                                        {%- for dep in krate.dependencies -%}
-                                            <li class="pure-menu-item">
-                                                <a href="/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
-                                                    {{ dep[0] }} {{ dep[1] }}
-                                                    <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
-                                                    {%- if dep[3] -%}
-                                                    <i> optional </i>
-                                                    {%- endif -%}
-                                                </a>
-                                            </li>
-                                        {%- endfor -%}
+                                        {% call macros::dependencies_list(link_prefix="", dependencies=krate.dependencies, if_empty="") %}
                                     </ul>
                                 </div>
                             </li>
@@ -152,21 +137,23 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             <li class="pure-menu-heading">Versions</li>
 
                             <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="{{ releases_menu_url }}" >
-                                    <span class="rotate">{{ "spinner" | fas }}</span>
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="{{ releases_menu_url }}">
+                                    <span class="rotate">{{ "spinner"|fas(false, false, "")|safe }}</span>
                                 </div>
                             </li>
                         </ul>
                     </div>
                 </div>
-                {%- if krate.documented_items and krate.total_items -%}
-                    {% set percent = krate.documented_items * 100 / krate.total_items %}
+                {%- if let (Some(documented), Some(total)) = (krate.documented_items, krate.total_items) -%}
+                    {% set documented = documented|as_f32 %}
+                    {% set total = total|as_f32 %}
+                    {% set percent = documented * 100f32 / total %}
                     <div class="pure-g">
                         <div class="pure-u-1">
                             <ul class="pure-menu-list">
                                 <li>
-                                    <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                                        <b>{{ percent | round(precision=2) }}%</b>
+                                    <a href="{{ crate_url|safe }}" class="pure-menu-link">
+                                        <b>{{ percent|round(2) }}%</b>
                                         of the crate is documented
                                     </a>
                                 </li>
@@ -178,69 +165,75 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
         </li>
     {%- else -%}
         <li class="pure-menu-item">
-            <a href="{{ crate_url | safe }}" class="pure-menu-link crate-name" title="{{ metadata.description }}">
-                {{ "cube" | fas }}
+            <a href="{{ crate_url|safe }}" class="pure-menu-link crate-name" {% if let Some(description) = metadata.description %}title="{{description}}"{% endif %}>
+                {{ "cube"|fas(false, false, "")|safe }}
                 <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>
         </li>
-    {%- endif -%}{#
+    {%- endif -%}
 
-    If this is the latest release and it's been yanked, just display a warning #}
-    {%- if is_latest_version and metadata.yanked -%}
+    {#- If this is the latest release and it's been yanked, just display a warning -#}
+    {%- set yanked = metadata.yanked.unwrap_or_default() -%}
+    {%- if is_latest_version && yanked -%}
         <li class="pure-menu-item">
             <span class="pure-menu-link warn">
-                {{ "triangle-exclamation" | fas }}
+                {{ "triangle-exclamation"|fas(false, false, "")|safe }}
                 <span class="title">This release has been yanked</span>
             </span>
-        </li>{#
+        </li>
 
-    If this isn't the most recent stable release, offer a link to the latest #}
-    {%- elif not is_latest_version -%}
-        {%- if metadata.yanked -%}
-            {%- set tooltip = "You are seeing a yanked version of the " ~ metadata.name ~ " crate. Click here to go to the latest version." -%}
+    {#- If this isn't the most recent stable release, offer a link to the latest -#}
+    {%- elif !is_latest_version -%}
+        {% set tooltip %}
+        {% set title %}
+        {%- if yanked -%}
+            {%- set tooltip = "You are seeing a yanked version of the {} crate. Click here to go to the latest version."|format(metadata.name) -%}
             {%- set title = "This release has been yanked, go to latest version" -%}
         {%- elif is_prerelease -%}
-            {%- set tooltip = "You are seeing a pre-release version of the " ~ metadata.name ~ " crate. Click here to go to the latest stable version." -%}
+            {%- set tooltip = "You are seeing a pre-release version of the {} crate. Click here to go to the latest stable version."|format(metadata.name) -%}
             {%- set title = "Go to latest stable release" -%}
         {%- else -%}
-            {%- set tooltip = "You are seeing an outdated version of the " ~ metadata.name ~ " crate. Click here to go to the latest version." -%}
+            {%- set tooltip = "You are seeing an outdated version of the {} crate. Click here to go to the latest version."|format(metadata.name) -%}
             {%- set title = "Go to latest version" -%}
         {%- endif -%}
 
         <li class="pure-menu-item">
-            <a href="{{ latest_path | safe }}" class="pure-menu-link warn"
+            <a href="{{ latest_path|safe }}" class="pure-menu-link warn"
                 data-fragment="retain"
                 title="{{ tooltip }}">
-                {{ "triangle-exclamation" | fas }}
+                {{ "triangle-exclamation"|fas(false, false, "")|safe }}
                 <span class="title">{{ title }}</span>
             </a>
         </li>
     {%- endif -%}
 
-    {# Display the platforms that the release has been built for #}
-    {%- if metadata.doc_targets -%}
-    <li class="pure-menu-item pure-menu-has-children">
-        <a href="#" class="pure-menu-link" aria-label="Platform">
-            {{ "gears" | fas }}
-            <span class="title">Platform</span>
-        </a>
+    {#- Display the platforms that the release has been built for -#}
+    {%- if let Some(doc_targets) = metadata.doc_targets -%}
+        {%- if !doc_targets.is_empty() -%}
+            <li class="pure-menu-item pure-menu-has-children">
+                <a href="#" class="pure-menu-link" aria-label="Platform">
+                    {{ "gears"|fas(false, false, "")|safe }}
+                    <span class="title">Platform</span>
+                </a>
 
-        {# Build the dropdown list showing available targets #}
-        <ul class="pure-menu-children" id="platforms" data-url="{{ platform_menu_url }}" >
-            {%- if metadata.doc_targets|length < DEFAULT_MAX_TARGETS -%}
-                {%- include "rustdoc/platforms.html" -%}
-            {%- else -%}
-                <span class="rotate">{{ "spinner" | fas }}</span>
-            {%- endif -%}
-        </ul>
-    </li>{#
-    Display the features available in current build
-  #}<li class="pure-menu-item">
-        <a href="{{ crate_url | safe }}/features" title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-            {{ "flag" | fas }}
-            <span class="title">Feature flags</span>
-        </a>
-    </li>
+                {# Build the dropdown list showing available targets #}
+                <ul class="pure-menu-children" id="platforms" data-url="{{ platform_menu_url }}">
+                    {%- if doc_targets.len() < crate::DEFAULT_MAX_TARGETS -%}
+                        {%- set use_direct_platform_links = use_direct_platform_links() -%}
+                        {%- include "rustdoc/platforms.html" -%}
+                    {%- else -%}
+                        <span class="rotate">{{ "spinner"|fas(false, false, "")|safe }}</span>
+                    {%- endif -%}
+                </ul>
+            </li>
+            {#- Display the features available in current build -#}
+            <li class="pure-menu-item">
+                <a href="{{ crate_url|safe }}/features" title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
+                    {{ "flag"|fas(false, false, "")|safe }}
+                    <span class="title">Feature flags</span>
+                </a>
+            </li>
+        {% endif %}
     {% endif %}
 </ul>
 {%- include "header/topbar_end.html" -%}

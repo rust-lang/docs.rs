@@ -10,7 +10,9 @@ use crate::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        match_version, ReqVersion,
+        match_version,
+        page::templates::filters,
+        MetaData, ReqVersion,
     },
     BuildQueue, Config, InstanceMetrics,
 };
@@ -23,6 +25,7 @@ use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use once_cell::sync::Lazy;
+use rinja::Template;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -44,12 +47,12 @@ const RELEASES_IN_FEED: i64 = 150;
 pub struct Release {
     pub(crate) name: String,
     pub(crate) version: String,
-    description: Option<String>,
-    target_name: Option<String>,
-    rustdoc_status: bool,
+    pub(crate) description: Option<String>,
+    pub(crate) target_name: Option<String>,
+    pub(crate) rustdoc_status: bool,
     pub(crate) build_time: Option<DateTime<Utc>>,
-    stars: i32,
-    has_unyanked_releases: Option<bool>,
+    pub(crate) stars: i32,
+    pub(crate) has_unyanked_releases: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -296,39 +299,59 @@ async fn get_search_results(
     })
 }
 
+#[derive(Template)]
+#[template(path = "core/home.html")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct HomePage {
     recent_releases: Vec<Release>,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    HomePage = "core/home.html",
+    HomePage,
     cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
+}
+
+impl HomePage {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
 }
 
 pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
 
-    Ok(HomePage { recent_releases })
+    Ok(HomePage {
+        recent_releases,
+        csp_nonce: String::new(),
+    })
 }
 
+#[derive(Template)]
+#[template(path = "releases/feed.xml")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ReleaseFeed {
     recent_releases: Vec<Release>,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    ReleaseFeed  = "releases/feed.xml",
+    ReleaseFeed,
     content_type = "application/xml",
 }
 
 pub(crate) async fn releases_feed_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true).await?;
-    Ok(ReleaseFeed { recent_releases })
+    Ok(ReleaseFeed {
+        recent_releases,
+        csp_nonce: String::new(),
+    })
 }
 
+#[derive(Template)]
+#[template(path = "releases/releases.html")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct ViewReleases {
     releases: Vec<Release>,
@@ -338,10 +361,15 @@ struct ViewReleases {
     show_previous_page: bool,
     page_number: i64,
     owner: Option<String>,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    ViewReleases = "releases/releases.html",
+impl_axum_webpage! { ViewReleases }
+
+impl ViewReleases {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
@@ -352,6 +380,29 @@ pub(crate) enum ReleaseType {
     RecentFailures,
     Failures,
     Search,
+}
+
+impl<'a> PartialEq<&'a str> for ReleaseType {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+impl PartialEq<str> for ReleaseType {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl ReleaseType {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Recent => "recent",
+            Self::Stars => "stars",
+            Self::RecentFailures => "recent_failures",
+            Self::Failures => "failures",
+            Self::Search => "search",
+        }
+    }
 }
 
 pub(crate) async fn releases_handler(
@@ -403,6 +454,7 @@ pub(crate) async fn releases_handler(
         show_previous_page,
         page_number,
         owner: None,
+        csp_nonce: String::new(),
     })
 }
 
@@ -442,11 +494,12 @@ pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl 
     .map_err(|_| AxumNope::OwnerNotFound)
 }
 
+#[derive(Template)]
+#[template(path = "releases/search_results.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(super) struct Search {
     pub(super) title: String,
-    #[serde(rename = "releases")]
-    pub(super) results: Vec<Release>,
+    pub(super) releases: Vec<Release>,
     pub(super) search_query: Option<String>,
     pub(super) search_sort_by: Option<String>,
     pub(super) previous_page_link: Option<String>,
@@ -455,20 +508,28 @@ pub(super) struct Search {
     pub(super) release_type: ReleaseType,
     #[serde(skip)]
     pub(super) status: http::StatusCode,
+    pub(super) csp_nonce: String,
 }
 
 impl Default for Search {
     fn default() -> Self {
         Self {
             title: String::default(),
-            results: Vec::default(),
+            releases: Vec::default(),
             search_query: None,
             previous_page_link: None,
             next_page_link: None,
             search_sort_by: None,
             release_type: ReleaseType::Search,
             status: http::StatusCode::OK,
+            csp_nonce: String::new(),
         }
+    }
+}
+
+impl Search {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
     }
 }
 
@@ -527,7 +588,7 @@ async fn redirect_to_random_crate(
 }
 
 impl_axum_webpage! {
-    Search = "releases/search_results.html",
+    Search,
     status = |search| search.status,
 }
 
@@ -655,7 +716,7 @@ pub(crate) async fn search_handler(
 
     Ok(Search {
         title,
-        results: search_result.results,
+        releases: search_result.results,
         search_query: Some(executed_query),
         search_sort_by: Some(sort_by),
         next_page_link: search_result
@@ -669,17 +730,24 @@ pub(crate) async fn search_handler(
     .into_response())
 }
 
+#[derive(Template)]
+#[template(path = "releases/activity.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseActivity {
     description: &'static str,
     dates: Vec<String>,
     counts: Vec<i64>,
     failures: Vec<i64>,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    ReleaseActivity = "releases/activity.html",
+impl ReleaseActivity {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
 }
+
+impl_axum_webpage! { ReleaseActivity }
 
 pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let rows: Vec<_> = sqlx::query!(
@@ -732,18 +800,26 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
             .collect(),
         counts: rows.iter().map(|rows| rows.counts).collect(),
         failures: rows.iter().map(|rows| rows.failures).collect(),
+        csp_nonce: String::new(),
     })
 }
 
+#[derive(Template)]
+#[template(path = "releases/build_queue.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     active_deployments: Vec<String>,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    BuildQueuePage = "releases/build_queue.html",
+impl_axum_webpage! { BuildQueuePage }
+
+impl BuildQueuePage {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
 }
 
 pub(crate) async fn build_queue_handler(
@@ -780,6 +856,7 @@ pub(crate) async fn build_queue_handler(
         description: "crate documentation scheduled to build & deploy",
         queue,
         active_deployments,
+        csp_nonce: String::new(),
     })
 }
 

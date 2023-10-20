@@ -1,19 +1,49 @@
 use crate::error::Result;
+use crate::web::rustdoc::RustdocPage;
+use crate::web::MetaData;
 use anyhow::Context;
-use chrono::{DateTime, Utc};
-use path_slash::PathExt;
-use serde_json::Value;
-use std::{collections::HashMap, fmt, path::PathBuf, sync::Arc};
-use tera::{Result as TeraResult, Tera};
+use rinja::Template;
+use std::{fmt, ops::Deref, sync::Arc};
 use tracing::trace;
-use walkdir::WalkDir;
 
-const TEMPLATES_DIRECTORY: &str = "templates";
+macro_rules! rustdoc_page {
+    ($name:ident, $path:literal $(, $meta:ident)?) => {
+        #[derive(Template)]
+        #[template(path = $path)]
+        pub struct $name<'a> {
+            inner: &'a RustdocPage,
+        }
+
+        impl<'a> $name<'a> {
+            pub fn new(inner: &'a RustdocPage) -> Self {
+                Self { inner }
+            }
+
+            $(
+                pub(crate) fn $meta(&self) -> Option<&MetaData> {
+                    Some(&self.inner.metadata)
+                }
+            )?
+        }
+
+        impl<'a> Deref for $name<'a> {
+            type Target = RustdocPage;
+
+            fn deref(&self) -> &Self::Target {
+                self.inner
+            }
+        }
+    };
+}
+
+rustdoc_page!(Head, "rustdoc/head.html");
+rustdoc_page!(Vendored, "rustdoc/vendored.html");
+rustdoc_page!(Body, "rustdoc/body.html");
+rustdoc_page!(Topbar, "rustdoc/topbar.html", get_metadata);
 
 /// Holds all data relevant to templating
 #[derive(Debug)]
 pub(crate) struct TemplateData {
-    pub templates: Tera,
     /// rendering threadpool for CPU intensive rendering.
     /// When the app is shut down, the pool won't wait
     /// for pending tasks in this pool.
@@ -31,7 +61,6 @@ impl TemplateData {
         trace!("Loading templates");
 
         let data = Self {
-            templates: load_templates()?,
             rendering_threadpool: rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
                 .thread_name(move |idx| format!("docsrs-render {idx}"))
@@ -51,12 +80,11 @@ impl TemplateData {
     /// Use this instead of `spawn_blocking` so we don't block tokio.
     pub(crate) async fn render_in_threadpool<F, R>(self: &Arc<Self>, render_fn: F) -> Result<R>
     where
-        F: FnOnce(&TemplateData) -> Result<R> + Send + 'static,
+        F: FnOnce() -> Result<R> + Send + 'static,
         R: Send + 'static,
     {
         let (send, recv) = tokio::sync::oneshot::channel();
         self.rendering_threadpool.spawn({
-            let templates = self.clone();
             move || {
                 // the job may have been queued on the thread-pool for a while,
                 // if the request was closed in the meantime the receiver should have
@@ -64,7 +92,7 @@ impl TemplateData {
                 if !send.is_closed() {
                     // `.send` only fails when the receiver is dropped while we were rendering,
                     // at which point we don't need the result any more.
-                    let _ = send.send(render_fn(&templates));
+                    let _ = send.send(render_fn());
                 }
             }
         });
@@ -73,106 +101,62 @@ impl TemplateData {
     }
 }
 
-fn load_templates() -> Result<Tera> {
-    // This uses a custom function to find the templates in the filesystem instead of Tera's
-    // builtin way (passing a glob expression to Tera::new), speeding up the startup of the
-    // application and running the tests.
-    //
-    // The problem with Tera's template loading code is, it walks all the files in the current
-    // directory and matches them against the provided glob expression. Unfortunately this means
-    // Tera will walk all the rustwide workspaces, the git repository and a bunch of other
-    // unrelated data, slowing down the search a lot.
-    //
-    // TODO: remove this when https://github.com/Gilnaa/globwalk/issues/29 is fixed
-    let mut tera = Tera::default();
-    let template_files = find_templates_in_filesystem(TEMPLATES_DIRECTORY)
-        .with_context(|| format!("failed to search {TEMPLATES_DIRECTORY:?} for tera templates"))?;
-    tera.add_template_files(template_files).with_context(|| {
-        format!("failed while loading tera templates in {TEMPLATES_DIRECTORY:?}")
-    })?;
+pub mod filters {
+    use super::IconType;
+    use chrono::{DateTime, Utc};
+    use std::borrow::Cow;
+    use std::fmt;
 
-    // This function will return any global alert, if present.
-    ReturnValue::add_function_to(
-        &mut tera,
-        "global_alert",
-        serde_json::to_value(crate::GLOBAL_ALERT)?,
-    );
-    // This function will return the current version of docs.rs.
-    ReturnValue::add_function_to(
-        &mut tera,
-        "docsrs_version",
-        Value::String(crate::BUILD_VERSION.into()),
-    );
-
-    // Custom filters
-    tera.register_filter("timeformat", timeformat);
-    tera.register_filter("dbg", dbg);
-    tera.register_filter("dedent", dedent);
-    tera.register_filter("fas", IconType::Strong);
-    tera.register_filter("far", IconType::Regular);
-    tera.register_filter("fab", IconType::Brand);
-    tera.register_filter("highlight", Highlight);
-
-    Ok(tera)
-}
-
-fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<String>)>> {
-    let root = std::fs::canonicalize(base)?;
-
-    let mut files = Vec::new();
-    for entry in WalkDir::new(&root) {
-        let entry = entry?;
-        let path = entry.path();
-
-        if !entry.metadata()?.is_file() {
-            continue;
+    // Copied from `tera`.
+    pub fn escape_html(input: &str) -> rinja::Result<Cow<'_, str>> {
+        if !input.chars().any(|c| "&<>\"'/".contains(c)) {
+            return Ok(Cow::Borrowed(input));
+        }
+        let mut output = String::with_capacity(input.len() * 2);
+        for c in input.chars() {
+            match c {
+                '&' => output.push_str("&amp;"),
+                '<' => output.push_str("&lt;"),
+                '>' => output.push_str("&gt;"),
+                '"' => output.push_str("&quot;"),
+                '\'' => output.push_str("&#x27;"),
+                '/' => output.push_str("&#x2F;"),
+                _ => output.push(c),
+            }
         }
 
-        // Strip the root directory from the path and use it as the template name.
-        let name = path
-            .strip_prefix(&root)
-            .with_context(|| format!("{} is not a child of {}", path.display(), root.display()))?
-            .to_slash()
-            .with_context(|| anyhow::anyhow!("failed to normalize {}", path.display()))?;
-        files.push((path.to_path_buf(), Some(name.to_string())));
+        // Not using shrink_to_fit() on purpose
+        Ok(Cow::Owned(output))
     }
 
-    Ok(files)
-}
-
-/// Simple function that returns the pre-defined value.
-struct ReturnValue {
-    name: &'static str,
-    value: Value,
-}
-
-impl ReturnValue {
-    fn add_function_to(tera: &mut Tera, name: &'static str, value: Value) {
-        tera.register_function(name, Self { name, value })
+    // Copied from `tera`.
+    pub fn escape_xml(input: &str) -> rinja::Result<Cow<'_, str>> {
+        if !input.chars().any(|c| "&<>\"'".contains(c)) {
+            return Ok(Cow::Borrowed(input));
+        }
+        let mut output = String::with_capacity(input.len() * 2);
+        for c in input.chars() {
+            match c {
+                '&' => output.push_str("&amp;"),
+                '<' => output.push_str("&lt;"),
+                '>' => output.push_str("&gt;"),
+                '"' => output.push_str("&quot;"),
+                '\'' => output.push_str("&apos;"),
+                _ => output.push(c),
+            }
+        }
+        Ok(Cow::Owned(output))
     }
-}
 
-impl tera::Function for ReturnValue {
-    fn call(&self, args: &HashMap<String, Value>) -> TeraResult<Value> {
-        debug_assert!(args.is_empty(), "{} takes no args", self.name);
-        Ok(self.value.clone())
+    /// Prettily format a timestamp
+    // TODO: This can be replaced by chrono
+    pub fn timeformat(value: &DateTime<Utc>) -> rinja::Result<String> {
+        Ok(crate::web::duration_to_str(*value))
     }
-}
 
-/// Prettily format a timestamp
-// TODO: This can be replaced by chrono
-#[allow(clippy::unnecessary_wraps)]
-fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    let fmt = if let Some(Value::Bool(true)) = args.get("relative") {
-        let value = DateTime::parse_from_rfc3339(value.as_str().unwrap())
-            .unwrap()
-            .with_timezone(&Utc);
-
-        super::super::duration_to_str(value)
-    } else {
+    pub fn format_secs(mut value: f32) -> rinja::Result<String> {
         const TIMES: &[&str] = &["seconds", "minutes", "hours"];
 
-        let mut value = value.as_f64().unwrap();
         let mut chosen_time = &TIMES[0];
 
         for time in &TIMES[1..] {
@@ -190,56 +174,115 @@ fn timeformat(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value>
             value.truncate(value.len() - 2);
         }
 
-        format!("{value} {chosen_time}")
-    };
+        Ok(format!("{value} {chosen_time}"))
+    }
 
-    Ok(Value::String(fmt))
-}
+    /// Dedent a string by removing all leading whitespace
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn dedent<T: std::fmt::Display, I: Into<Option<i32>>>(
+        value: T,
+        levels: I,
+    ) -> rinja::Result<String> {
+        let string = value.to_string();
 
-/// Print a tera value to stdout
-#[allow(clippy::unnecessary_wraps)]
-fn dbg(value: &Value, _args: &HashMap<String, Value>) -> TeraResult<Value> {
-    println!("{value:?}");
-
-    Ok(value.clone())
-}
-
-/// Dedent a string by removing all leading whitespace
-#[allow(clippy::unnecessary_wraps)]
-fn dedent(value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-    let string = value.as_str().expect("dedent takes a string");
-
-    let unindented = if let Some(levels) = args
-        .get("levels")
-        .map(|l| l.as_i64().expect("`levels` must be an integer"))
-    {
-        string
-            .lines()
-            .map(|mut line| {
-                for _ in 0..levels {
-                    // `.strip_prefix` returns `Some(suffix without prefix)` if it's successful. If it fails
-                    // to strip the prefix (meaning there's less than `levels` levels of indentation),
-                    // we can just quit early
-                    if let Some(suffix) = line.strip_prefix("    ") {
-                        line = suffix;
-                    } else {
-                        break;
+        let unindented = if let Some(levels) = levels.into() {
+            string
+                .lines()
+                .map(|mut line| {
+                    for _ in 0..levels {
+                        // `.strip_prefix` returns `Some(suffix without prefix)` if it's successful. If it fails
+                        // to strip the prefix (meaning there's less than `levels` levels of indentation),
+                        // we can just quit early
+                        if let Some(suffix) = line.strip_prefix("    ") {
+                            line = suffix;
+                        } else {
+                            break;
+                        }
                     }
-                }
 
-                line
-            })
-            .collect::<Vec<&str>>()
-            .join("\n")
-    } else {
-        string
-            .lines()
-            .map(|l| l.trim_start())
-            .collect::<Vec<&str>>()
-            .join("\n")
-    };
+                    line
+                })
+                .collect::<Vec<&str>>()
+                .join("\n")
+        } else {
+            string
+                .lines()
+                .map(|l| l.trim_start())
+                .collect::<Vec<&str>>()
+                .join("\n")
+        };
 
-    Ok(Value::String(unindented))
+        Ok(unindented)
+    }
+
+    pub fn fas(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
+        IconType::Strong.render(value, fw, spin, extra)
+    }
+
+    pub fn far(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
+        IconType::Regular.render(value, fw, spin, extra)
+    }
+
+    pub fn fab(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
+        IconType::Brand.render(value, fw, spin, extra)
+    }
+
+    pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<String> {
+        let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
+        Ok(format!("<pre><code>{}</code></pre>", highlighted_code))
+    }
+
+    pub fn slugify<T: AsRef<str>>(code: T) -> rinja::Result<String> {
+        Ok(slug::slugify(code.as_ref()))
+    }
+
+    pub fn round(value: &f32, precision: u32) -> rinja::Result<String> {
+        let multiplier = if precision == 0 {
+            1.0
+        } else {
+            10.0_f32.powi(precision as _)
+        };
+        Ok(((multiplier * *value).round() / multiplier).to_string())
+    }
+
+    pub fn date(value: &DateTime<Utc>, format: &str) -> rinja::Result<String> {
+        Ok(format!("{}", value.format(format)))
+    }
+
+    pub fn opt_date(value: &Option<DateTime<Utc>>, format: &str) -> rinja::Result<String> {
+        if let Some(value) = value {
+            date(value, format)
+        } else {
+            Ok(String::new())
+        }
+    }
+
+    pub fn unwrap<T: fmt::Display>(value: &Option<T>) -> rinja::Result<&T> {
+        Ok(value.as_ref().expect("`unwrap` filter failed"))
+    }
+
+    pub fn split_first<'a>(value: &'a str, pat: &str) -> rinja::Result<Option<&'a str>> {
+        Ok(value.split(pat).next())
+    }
+
+    pub fn to_string<T: fmt::Display>(value: &T) -> rinja::Result<String> {
+        Ok(value.to_string())
+    }
+
+    pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> rinja::Result<String> {
+        Ok(serde_json::to_string(value).expect("`encode_json` failed"))
+    }
+
+    pub fn as_f32(value: &i32) -> rinja::Result<f32> {
+        Ok(*value as f32)
+    }
+
+    pub fn rest_menu_url(current_target: &str, inner_path: &str) -> rinja::Result<String> {
+        if current_target.is_empty() {
+            return Ok(String::new());
+        }
+        Ok(format!("/{current_target}/{inner_path}"))
+    }
 }
 
 enum IconType {
@@ -260,10 +303,8 @@ impl fmt::Display for IconType {
     }
 }
 
-impl tera::Filter for IconType {
-    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-        let icon_name = tera::escape_html(value.as_str().expect("Icons only take strings"));
-
+impl IconType {
+    fn render(self, icon_name: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
         let type_ = match self {
             IconType::Strong => font_awesome_as_a_crate::Type::Solid,
             IconType::Regular => font_awesome_as_a_crate::Type::Regular,
@@ -272,15 +313,14 @@ impl tera::Filter for IconType {
 
         let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
 
-        let mut classes = vec!["fa-svg", "fa-svg-fw"];
-        if args
-            .get("spin")
-            .and_then(|spin| spin.as_bool())
-            .unwrap_or(false)
-        {
+        let mut classes = vec!["fa-svg"];
+        if fw {
+            classes.push("fa-svg-fw");
+        }
+        if spin {
             classes.push("fa-svg-spin");
-        };
-        if let Some(extra) = args.get("extra").and_then(|s| s.as_str()) {
+        }
+        if !extra.is_empty() {
             classes.push(extra);
         }
         let icon = format!(
@@ -289,55 +329,6 @@ impl tera::Filter for IconType {
             class = classes.join(" "),
         );
 
-        Ok(Value::String(icon))
-    }
-
-    fn is_safe(&self) -> bool {
-        true
-    }
-}
-
-struct Highlight;
-
-impl tera::Filter for Highlight {
-    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
-        let code = value.as_str().ok_or_else(|| {
-            let msg = format!( "Filter `highlight` was called on an incorrect value: got `{value}` but expected a string");
-            tera::Error::msg(msg)
-        })?;
-        let lang = args
-            .get("lang")
-            .and_then(|lang| {
-                if lang.is_null() {
-                    None
-                } else {
-                    Some(lang.as_str().ok_or_else(|| {
-                        let msg = format!("Filter `highlight` received an incorrect type for arg `{lang}`: got `{lang}` but expected a string");
-                        tera::Error::msg(msg)
-                    }))
-                }
-            })
-            .transpose()?;
-        let highlighted = crate::web::highlight::with_lang(lang, code);
-        Ok(format!("<pre><code>{highlighted}</code></pre>").into())
-    }
-
-    fn is_safe(&self) -> bool {
-        true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_templates_are_valid() {
-        crate::test::wrapper(|_| {
-            let tera = load_templates().unwrap();
-            tera.check_macro_files().unwrap();
-
-            Ok(())
-        });
+        Ok(icon)
     }
 }

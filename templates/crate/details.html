@@ -1,8 +1,8 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=details.name, version=details.version) }}
+    {% call macros::doc_title(name=details.name, version=details.version) %}
 {%- endblock title -%}
 
 {%- block meta -%}
@@ -10,24 +10,18 @@
 {%- endblock meta -%}
 
 {%- block topbar -%}
-    {%- set metadata = details.metadata -%}
-    {%- set latest_version = "" -%}
-    {%- set latest_path = "" -%}
-    {%- set target = "" -%}
-    {%- if metadata.target_name -%}
-        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-    {%- else -%}
-        {%- set inner_path = "" -%}
-    {%- endif -%}
-    {%- set is_latest_version = true -%}
-    {%- set is_prerelease = false -%}
-    {%- set use_direct_platform_links = true -%}
-    {%- include "rustdoc/topbar.html" -%}
+  {%- set current_target = String::new() -%}
+  {%- set metadata = details.metadata -%}
+  {%- set latest_path = "" -%}
+  {%- set inner_path = details.metadata.target_name_url() -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
     {# Set the active tab to the `crate` tab #}
-    {{ navigation::package_navigation(metadata=details.metadata, active_tab="crate") }}
+    {% call navigation::package_navigation(metadata=details.metadata, active_tab="crate") %}
 {%- endblock header -%}
 
 {%- block body -%}
@@ -36,57 +30,59 @@
             <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
-                        {%- if details.documented_items and details.total_items -%}
-                            {% set percent = details.documented_items * 100 / details.total_items %}
+                        {%- if let (Some(documented), Some(total)) = (details.documented_items, details.total_items) -%}
+                            {% set documented_f32 = documented|as_f32 %}
+                            {% set total_f32 = total|as_f32 %}
+                            {% set percent = documented_f32 * 100f32 / total_f32 %}
                             <li class="pure-menu-heading">Coverage</li>
-                            <li class="pure-menu-item text-center"><b>{{ percent | round(precision=2) }}%</b><br>
-                                <span class="documented-info"><b>{{ details.documented_items }}</b> out of <b>{{ details.total_items }}</b> items documented</span>
-                                {%- if details.total_items_needing_examples and details.items_with_examples -%}
-                                    <span class="documented-info"><b>{{ details.items_with_examples }}</b> out of <b>{{ details.total_items_needing_examples }}</b> items with examples</span>
+                            <li class="pure-menu-item text-center"><b>{{ percent|round(2) }}%</b><br>
+                                <span class="documented-info"><b>{{ documented }}</b> out of <b>{{ total }}</b> items documented</span>
+                                {%- if let (Some(needing_examples), Some(with_examples)) = (details.total_items_needing_examples, details.items_with_examples) -%}
+                                    <span class="documented-info"><b>{{ with_examples }}</b> out of <b>{{ needing_examples }}</b> items with examples</span>
                                 {%- endif -%}
                             </li>
                         {%- endif -%}
                         <li class="pure-menu-heading">Links</li>
 
                         {# If the crate has a homepage, show it #}
-                        {%- if details.homepage_url -%}
+                        {%- if let Some(homepage_url) = details.homepage_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.homepage_url }}" class="pure-menu-link">
-                                    {{ "house" | fas }} Homepage
+                                <a href="{{ homepage_url }}" class="pure-menu-link">
+                                    {{ "house"|fas(false, false, "")|safe }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
 
                         {# If the crate has a custom doc url, show it #}
-                        {%- if details.documentation_url -%}
+                        {%- if let Some(documentation_url) = details.documentation_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ "file-lines" | far }} Documentation
+                                <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
+                                    {{ "file-lines"|far(false, false, "")|safe }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
 
                         {# If the release has a repository, show it #}
-                        {%- if details.repository_url -%}
+                        {%- if let Some(repository_url) = details.repository_url -%}
                             <li class="pure-menu-item">
-                                <a href="{{ details.repository_url }}" class="pure-menu-link">
+                                <a href="{{ repository_url }}" class="pure-menu-link">
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
-                                    {%- if details.repository_metadata -%}
-                                        {{ "code-branch" | fab }}
-                                        {% if details.repository_metadata.name %}
-                                            {{details.repository_metadata.name}}
+                                    {%- if let Some(repository_metadata) = details.repository_metadata -%}
+                                        {{ "code-branch"|fab(false, false, "") }}
+                                        {% if let Some(name) = repository_metadata.name %}
+                                            {{name}}
                                         {% else %}
                                             Repository
                                         {% endif %}
                                         <br>
-                                        {{ "star" | fas(extra="left-margin") }} {{ details.repository_metadata.stars }}
-                                        {{ "code-branch" | fas }} {{ details.repository_metadata.forks }}
-                                        {{ "circle-exclamation" | fas }} {{ details.repository_metadata.issues }}
+                                        {{ "star"|fas(false, false, "left-margin")|safe }} {{ repository_metadata.stars }}
+                                        {{ "code-branch"|fas(false, false, "")|safe }} {{ repository_metadata.forks }}
+                                        {{ "circle-exclamation"|fas(false, false, "")|safe }} {{ repository_metadata.issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        {{ "code-branch" | fas }} Repository
+                                        {{ "code-branch"|fas(false, false, "")|safe }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -96,7 +92,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
                                 title="See {{ details.name }} on crates.io">
-                                {{ "cube" | fas }} crates.io
+                                {{ "cube"|fas(false, false, "")|safe }} crates.io
                             </a>
                         </li>
 
@@ -105,21 +101,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# List all dependencies that the current release has #}
-                                    {%- if details.dependencies -%}
-                                        {%- for dep in details.dependencies -%}
-                                            <li class="pure-menu-item">
-                                                <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
-                                                    {{ dep[0] }} {{ dep[1] }}
-                                                    <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
-                                                    {%- if dep[3] -%}
-                                                        <i> optional </i>
-                                                    {%- endif -%}
-                                                </a>
-                                            </li>
-                                        {%- endfor -%}
-                                    {%- else -%}
-                                        &mdash;
-                                    {%- endif -%}
+                                    {% call macros::dependencies_list(link_prefix="/crate", dependencies=details.dependencies, if_empty="&mdash;") %}
                                 </ul>
                             </div>
                         </li>
@@ -129,7 +111,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {{ macros::releases_list(name=details.name, releases=details.releases, target="", inner_path="") }}
+                                    {% call macros::releases_list(name=details.name, releases=details.releases, target="", inner_path="") %}
                                 </ul>
                             </div>
                         </li>
@@ -138,8 +120,8 @@
                         <li class="pure-menu-heading">Owners</li>
                         <li class="pure-menu-item">
                             {%- for owner in details.owners -%}
-                                <a href="https://crates.io/users/{{ owner[0] }}">
-                                    <img src="{{ owner[1] }}" alt="{{ owner[0] }}" class="owner">
+                                <a href="https://crates.io/users/{{ owner.0 }}">
+                                    <img src="{{ owner.1 }}" alt="{{ owner.0 }}" class="owner">
                                 </a>
                             {%- endfor -%}
                         </li>
@@ -149,13 +131,13 @@
 
             <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
                 {# If the release is not a library #}
-                {%- if details.is_library == false -%}
+                {%- if details.is_library == Some(false) -%}
                     <div class="warning">
                         {{ details.name }}-{{ details.version }} is not a library.
                     </div>
 
                 {# If the release has been yanked and is a library #}
-                {%- elif details.metadata.yanked == true -%}
+                {%- elif details.metadata.yanked.unwrap_or_default() -%}
                     <div class="warning">
                         {{ details.name }}-{{ details.version }} has been yanked.
                     </div>
@@ -163,7 +145,7 @@
                 {# If the build succeeded, isn't yanked and is a library #}
                 {%- elif details.build_status == "success" -%}
                     {# If there are no docs display a warning #}
-                    {%- if not details.rustdoc_status -%}
+                    {%- if !details.rustdoc_status.unwrap_or_default() -%}
                         <div class="warning">{{ details.name }}-{{ details.version }} doesn't have any documentation.</div>
                     {%- endif -%}
 
@@ -183,28 +165,28 @@
                     </div>
                 {%- elif details.build_status == "in_progress" -%}
                     <div class="info">
-                        {{ "gear" | fas(spin=true) }}
+                        {{ "gear"|fas(false, true, "")|safe }}
                         Build is in progress, it will be available soon
                     </div>
                 {%- endif -%}
 
                 {# If there is one, display the next most recent successful build #}
-                {%- if details.last_successful_build -%}
+                {%- if let Some(last_successful_build) = details.last_successful_build -%}
                     <div class="info">
                         Visit the last successful build:
-                        <a href="/crate/{{ details.name }}/{{ details.last_successful_build }}">
-                            {{ details.name }}-{{ details.last_successful_build }}
+                        <a href="/crate/{{ details.name }}/{{ last_successful_build }}">
+                            {{ details.name }}-{{ last_successful_build }}
                         </a>
                     </div>
                 {%- endif -%}
 
                 {# If there's a readme, display it #}
-                {%- if details.readme -%}
-                    {{ details.readme | safe }}
+                {%- if let Some(readme) = details.readme -%}
+                    {{ crate::web::markdown::render(readme)|safe }}
 
                 {# If there's not a readme then attempt to display the long description #}
-                {%- elif details.rustdoc -%}
-                    {{ details.rustdoc | safe }}
+                {%- elif let Some(rustdoc) = details.rustdoc -%}
+                    {{ rustdoc|safe }}
                 {%- endif -%}
             </div>
         </div>

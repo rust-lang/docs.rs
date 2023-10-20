@@ -10,62 +10,63 @@
                     #}<li class="pure-menu-item pure-menu-has-children">
                         <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
                         <ul class="pure-menu-children">
-                            {{ macros::menu_link(
+                            {% call macros::menu_link(
                                 href="/about",
-                                text="About docs.rs"
-                            ) }}
-                            {{ macros::menu_link(
+                                text="About docs.rs",
+                                target="",
+                            ) %}
+                            {% call macros::menu_link(
                                 href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs",
                                 text="Privacy policy",
                                 target="_blank"
-                            ) }}
-                            {{ macros::menu_link(
+                            ) %}
+                            {% call macros::menu_link(
                                 href="https://www.rust-lang.org/",
                                 text="Rust website",
                                 target="_blank"
-                            ) }}
-                            {{ macros::menu_link(
+                            ) %}
+                            {% call macros::menu_link(
                                 href="https://doc.rust-lang.org/book/",
                                 text="The Book",
                                 target="_blank"
-                            ) }}
+                            ) %}
 
-                            {{ macros::menu_link(
+                            {% call macros::menu_link(
                                 href="https://doc.rust-lang.org/std/",
                                 text="Standard Library API Reference",
                                 target="_blank"
-                            ) }}
+                            ) %}
 
-                            {{ macros::menu_link(
+                            {% call macros::menu_link(
                                 href="https://doc.rust-lang.org/rust-by-example/",
                                 text="Rust by Example",
                                 target="_blank"
-                            ) }}
+                            ) %}
 
-                            {{ macros::menu_link(
+                            {% call macros::menu_link(
                                 href="https://doc.rust-lang.org/cargo/guide/",
                                 text="The Cargo Guide",
                                 target="_blank"
-                            ) }}
+                            ) %}
 
-                            {{ macros::menu_link(
+                            {% call macros::menu_link(
                                 href="https://doc.rust-lang.org/nightly/clippy",
                                 text="Clippy Documentation",
                                 target="_blank"
-                            ) }}
+                            ) %}
                         </ul>
                     </li>
                 </ul>
                 {# The search bar #}
                 <div id="search-input-nav">
                     <label for="nav-search">
-                        {{ "magnifying-glass" | fas }}
+                        {{ "magnifying-glass"|fas(false, false, "")|safe }}
                     </label>
 
                     {# If there is a search query, put it in the search bar #}
                     {# The tabindex="-1" is used to prevent it to be the first input focused on the page when using the browser shortcut #}
                     <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
-                        placeholder="Find crate" {%- if search_query %} value="{{ search_query }}" {%- endif %}>
+                        placeholder="Find crate" {%- if let Some(query) = search_query %}{% if !query.is_empty() %} value="{{ query }}" {%- endif %}{% endif %}>
                 </div>
             </form>
         </div>

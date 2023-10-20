@@ -1,33 +1,45 @@
-{%- extends "releases/releases.html" -%}
+{% extends "releases/releases.html" %}
+{%- import "releases/header.html" as release_macros -%}
+
+{%- block header -%}
+    {% call release_macros::search_header(title=title) %}
+{%- endblock header -%}
+
+{%- block topbar -%}
+    {% set is_latest_version = true %}
+    {% let search_query = self.search_query %}
+    {%- include "header/topbar.html" -%}
+{%- endblock topbar -%}
 
 {% block sort_by %}
 <div id="search-select-nav"> 
     <div class="item-end">
         <span>Sort by</span>
         <label for="nav-sort">
-            {{ "list" | fas }}
+            {{ "list"|fas(false, false, "")|safe }}
         </label>
+        {% set search_sort_by_val = search_sort_by.as_deref().unwrap_or_default() %}
         <select form="nav-search-form" name="sort" id="nav-sort" aria-label="Find crate by the sort by select-box"  tabindex="-1">
-            <option value="relevance" {%- if search_sort_by and search_sort_by == "relevance" %} selected="selected" {%- endif %}>Relevance</option>
-            <option value="downloads" {%- if search_sort_by and search_sort_by == "downloads" %} selected="selected" {%- endif %}>All-Time Downloads</option>
-            <option value="recent-downloads" {%- if search_sort_by and search_sort_by == "recent-downloads" %} selected="selected" {%- endif %}>Recent Downloads</option>
-            <option value="recent-updates" {%- if search_sort_by and search_sort_by == "recent-updates" %} selected="selected" {%- endif %}>Recent Updates</option>
-            <option value="new" {%- if search_sort_by and search_sort_by == "new" %} selected="selected" {%- endif %}>Newly Added</option>
+            <option value="relevance" {%- if search_sort_by_val == "relevance" %} selected="selected" {%- endif %}>Relevance</option>
+            <option value="downloads" {%- if search_sort_by_val == "downloads" %} selected="selected" {%- endif %}>All-Time Downloads</option>
+            <option value="recent-downloads" {%- if search_sort_by_val == "recent-downloads" %} selected="selected" {%- endif %}>Recent Downloads</option>
+            <option value="recent-updates" {%- if search_sort_by_val == "recent-updates" %} selected="selected" {%- endif %}>Recent Updates</option>
+            <option value="new" {%- if search_sort_by_val == "new" %} selected="selected" {%- endif %}>Newly Added</option>
         </select>
     </div>
 </div>
 {% endblock sort_by %}
 
 {% block pagination %}
-    {%- if previous_page_link -%}
+    {%- if let Some(previous_page_link) = previous_page_link -%}
         <a class="pure-button pure-button-normal" href="{{ previous_page_link|safe }}">
-            {{ "arrow-left" | fas }} Previous Page
+            {{ "arrow-left"|fas(false, false, "")|safe }} Previous Page
         </a>
     {%- endif -%}
 
-    {%- if next_page_link -%}
+    {%- if let Some(next_page_link) = next_page_link -%}
         <a class="pure-button pure-button-normal" href="{{ next_page_link|safe }}">
-            Next Page {{ "arrow-right" | fas }}
+            Next Page {{ "arrow-right"|fas(false, false, "")|safe }}
         </a>
     {%- endif -%}
 {% endblock pagination %}

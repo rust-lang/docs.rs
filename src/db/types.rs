@@ -45,6 +45,16 @@ impl sqlx::postgres::PgHasArrayType for BuildStatus {
     }
 }
 
+impl<'a> PartialEq<&'a str> for BuildStatus {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            Self::Success => *other == "success",
+            Self::Failure => *other == "failure",
+            Self::InProgress => *other == "in_progress",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

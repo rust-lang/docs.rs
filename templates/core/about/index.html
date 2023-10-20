@@ -1,4 +1,4 @@
-{% extends "about-base.html" -%}
+{% extends "about-base.html" %}
 
 {%- block title -%} About Docs.rs {%- endblock title -%}
 
@@ -10,7 +10,7 @@
     <div class="container pure-u-5-6 about">
         <p>
             Docs.rs is an
-            <a href="{{ docsrs_repo | safe }}">open source</a>
+            <a href="{{ docsrs_repo|safe }}">open source</a>
             documentation host for crates of the
             <a href="https://www.rust-lang.org/">Rust Programming Language</a>.
             All libraries published to <a href="https://crates.io">crates.io</a>
@@ -20,7 +20,7 @@
 
         <p>
             The source code of Docs.rs is available on
-            <a href="{{ docsrs_repo | safe }}">GitHub</a>. If
+            <a href="{{ docsrs_repo|safe }}">GitHub</a>. If
             you ever encounter an issue, don't hesitate to report it! (And
             thanks in advance!)
         </p>
@@ -35,7 +35,7 @@
         </ol>
 
         <h3 id="version"> <a href="#version">Version</a> </h3>
-        <p>Currently running Docs.rs version is: <strong>{{ docsrs_version() }}</strong></p>
+        <p>Currently running Docs.rs version is: <strong>{{ crate::BUILD_VERSION }}</strong></p>
 
         <h3 id="builds"> <a href="#builds">Builds</a> </h3>
         <p>Summaries of the documentation build processes <a href="/releases">are available at /releases/</a>.</p>
@@ -58,7 +58,7 @@
         <h3 id="contact"> <a href="#contact">Contact</a> </h3>
         {%- set governance_link = "https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" -%}
         <p>
-            Docs.rs is run and maintained by the <a href="{{ governance_link | safe }}">Docs.rs team</a>.
+            Docs.rs is run and maintained by the <a href="{{ governance_link|safe }}">Docs.rs team</a>.
             You can find us in #t-docs-rs on <a href="https://rust-lang.zulipchat.com/#narrow/stream/356853-t-docs-rs">Zulip</a>.
         </p>
 

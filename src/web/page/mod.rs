@@ -1,4 +1,4 @@
-mod templates;
+pub(crate) mod templates;
 pub(crate) mod web_page;
 
 pub(crate) use templates::TemplateData;
