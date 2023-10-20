@@ -100,7 +100,8 @@ tempfile = "3.1.0"
 fn-error-context = "0.2.0"
 
 # Templating
-tera = { version = "1.5.0", features = ["builtins"] }
+# tera = { version = "1.5.0", features = ["builtins"] }
+rinja = { path = "/home/imperio/rust/rinja/rinja" }
 walkdir = "2"
 
 # Date and Time utilities

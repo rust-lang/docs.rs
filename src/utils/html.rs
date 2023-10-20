@@ -1,7 +1,8 @@
-use crate::web::page::TemplateData;
+use crate::web::page::templates::{Body, Head, Topbar, Vendored};
+use crate::web::rustdoc::RustdocPage;
 use lol_html::element;
 use lol_html::errors::RewritingError;
-use tera::Context;
+use rinja::Template;
 
 /// Rewrite a rustdoc page to have the docs.rs topbar
 ///
@@ -12,17 +13,15 @@ use tera::Context;
 pub(crate) fn rewrite_lol(
     html: &[u8],
     max_allowed_memory_usage: usize,
-    ctx: Context,
-    templates: &TemplateData,
+    data: &RustdocPage,
 ) -> Result<Vec<u8>, RewritingError> {
     use lol_html::html_content::{ContentType, Element};
     use lol_html::{HtmlRewriter, MemorySettings, Settings};
 
-    let templates = &templates.templates;
-    let tera_head = templates.render("rustdoc/head.html", &ctx).unwrap();
-    let tera_vendored_css = templates.render("rustdoc/vendored.html", &ctx).unwrap();
-    let tera_body = templates.render("rustdoc/body.html", &ctx).unwrap();
-    let tera_rustdoc_topbar = templates.render("rustdoc/topbar.html", &ctx).unwrap();
+    let head_html = Head::new(data).render().unwrap();
+    let vendored_html = Vendored::new(data).render().unwrap();
+    let body_html = Body::new(data).render().unwrap();
+    let topbar_html = Topbar::new(data).render().unwrap();
 
     // Before: <body> ... rustdoc content ... </body>
     // After:
@@ -46,12 +45,12 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.set_attribute("tabindex", "-1")?;
         // Change the `body` to a `div`
         rustdoc_body_class.set_tag_name("div")?;
-        // Prepend the tera content
-        rustdoc_body_class.prepend(&tera_body, ContentType::Html);
+        // Prepend the rinja content
+        rustdoc_body_class.prepend(&body_html, ContentType::Html);
         // Wrap the transformed body and topbar into a <body> element
         rustdoc_body_class.before(r#"<body class="rustdoc-page">"#, ContentType::Html);
         // Insert the topbar outside of the rustdoc div
-        rustdoc_body_class.before(&tera_rustdoc_topbar, ContentType::Html);
+        rustdoc_body_class.before(&topbar_html, ContentType::Html);
         // Finalize body with </body>
         rustdoc_body_class.after("</body>", ContentType::Html);
 
@@ -62,7 +61,7 @@ pub(crate) fn rewrite_lol(
         element_content_handlers: vec![
             // Append `style.css` stylesheet after all head elements.
             element!("head", |head: &mut Element| {
-                head.append(&tera_head, ContentType::Html);
+                head.append(&head_html, ContentType::Html);
                 Ok(())
             }),
             element!("body", body_handler),
@@ -81,7 +80,7 @@ pub(crate) fn rewrite_lol(
             element!(
                 "link[rel='stylesheet'][href*='rustdoc-']",
                 |rustdoc_css: &mut Element| {
-                    rustdoc_css.before(&tera_vendored_css, ContentType::Html);
+                    rustdoc_css.before(&vendored_html, ContentType::Html);
                     Ok(())
                 }
             ),

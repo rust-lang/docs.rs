@@ -1,28 +1,24 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
+    {% call macros::doc_title(name=file_list.metadata.name, version=file_list.metadata.version) %}
 {%- endblock title -%}
 
 {%- block topbar -%}
-    {%- set metadata = metadata -%}
-    {%- set latest_version = "" -%}
-    {%- set latest_path = "" -%}
-    {%- set target = "" -%}
-    {%- if metadata.target_name -%}
-        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-    {%- else -%}
-        {%- set inner_path = "" -%}
-    {%- endif -%}
-    {%- set is_latest_version = true -%}
-    {%- set is_prerelease = false -%}
-    {%- include "rustdoc/topbar.html" -%}
+  {%- set metadata = file_list.metadata -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = metadata.target_name.target_name_url() -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
     {# Set the active tab to the `source` tab #}
-    {{ navigation::package_navigation(metadata=metadata, active_tab="source") }}
+    {% call navigation::package_navigation(title=false, metadata=file_list.metadata, active_tab="source") %}
 {%- endblock header -%}
 
 {%- block body_classes -%}
@@ -32,74 +28,75 @@
 {%- block body -%}
     <div class="container package-page-container small-bottom-pad">
         <div class="pure-g">
-            <div id="side-menu" class="pure-u-1 {% if file_content or is_file_too_large %}pure-u-sm-7-24 pure-u-md-5-24 {% endif %}{% if file_content %}source-view{% endif %}">
+            <div id="side-menu" class="pure-u-1 {% if file_content || is_file_too_large %}pure-u-sm-7-24 pure-u-md-5-24 {% endif %}{% if file_content %}source-view{% endif %}">
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
                         {# If we are displaying a file, we also add a button to hide the file sidebar #}
                         {% if file_content %}
                             <li class="pure-menu-item toggle-source">
-                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left" | fas }}</span><span class="right">{{ "chevron-right" | fas(fw=true) }}</span> <span class="text">Hide files</span></button>
+                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left"|fas(false, false, "") }}</span><span class="right">{{ "chevron-right"|fas(false, false, "") }}</span> <span class="text">Hide files</span></button>
                             </li>
                         {% endif %}
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ "folder-open" | far }} <span class="text">..</span></a>
+                                <a href="../" class="pure-menu-link">{{ "folder-open"|far(false, false, "") }} <span class="text">..</span></a>
                             </li>
                         {%- endif -%}
 
                         {%- for file in file_list.files -%}
                             <li class="pure-menu-item">
-                                    {#
-                                        Show a link to the file with a fancy icon. If the file is a directory,
-                                        `/` is appended to show the contents of the folder
-                                    #}
-                                <a href="./{{ file.name }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
-                                        {# Directories #}
+                                {#
+                                    Show a link to the file with a fancy icon. If the file is a directory,
+                                    `/` is appended to show the contents of the folder
+                                #}
+                                <a href="./{{ file.name }}{% if file.mime == "dir" %}/{% endif %}" class="pure-menu-link">
+                                    {# Directories #}
+>>>>>>> b327b356... Replace tera with askama
                                     {%- if file.mime == "dir" -%}
-                                        {{ "folder-open" | far }}
+                                        {{ "folder-open"|far(false, false, "") }}
 
-                                        {# Rust files #}
-                                    {%- elif file.mime == "text/rust" -%}
-                                        {{ "rust" | fab }}
+                                    {# Rust files #}
+                                    {%- else if file.mime == "text/rust" -%}
+                                        {{ "rust"|fab(false, false, "") }}
 
-                                        {# Cargo.lock #}
-                                    {%- elif file.mime == "text/plain" and file.name == "Cargo.lock" -%}
-                                        {{ "lock" | fas }}
+                                    {# Cargo.lock #}
+                                    {%- else if file.mime == "text/plain" && file.name == "Cargo.lock" -%}
+                                        {{ "lock"|fas(false, false, "") }}
 
-                                        {# Markdown files #}
-                                    {% elif file.mime == "text/markdown" %}
-                                        {{ "markdown" | fab }}
+                                    {# Markdown files #}
+                                    {% else if file.mime == "text/markdown" %}
+                                        {{ "markdown"|fab(false, false, "") }}
 
-                                        {# .gitignore #}
-                                    {% elif file.mime == "text/plain" and file.name == ".gitignore" %}
-                                        {{ "git-alt" | fab }}
+                                    {# .gitignore #}
+                                    {% else if file.mime == "text/plain" && file.name == ".gitignore" %}
+                                        {{ "git-alt"|fab(false, false, "") }}
 
-                                        {#
-                                            More ideas
-                                                FontAwesome v5:
-                                                    ".application/x-bzip"
-                                                    | "application/gzip"
-                                                    | "application/x-bzip2"
-                                                    | "application/vnd.rar"
-                                                    | "application/x-tar"
-                                                    | "application/zip"
-                                                    | "application/x-7z-compressed" => https://fontawesome.com/icons/file-archive
-                                                    "text/javascript" => https://fontawesome.com/icons/js
-                                                    "application/java-archive" => https://fontawesome.com/icons/java
-                                                DevOpticons (https://github.com/file-icons/DevOpicons):
-                                                    "text/rust" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#Rust
-                                                    "text/css" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#CSS3,%20Full
-                                                    "text/html" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#HTML5
-                                        #}
+                                    {#
+                                        More ideas
+                                            FontAwesome v5:
+                                                ".application/x-bzip"
+                                               |"application/gzip"
+                                               |"application/x-bzip2"
+                                               |"application/vnd.rar"
+                                               |"application/x-tar"
+                                               |"application/zip"
+                                               |"application/x-7z-compressed" => https://fontawesome.com/icons/file-archive
+                                                "text/javascript" => https://fontawesome.com/icons/js
+                                                "application/java-archive" => https://fontawesome.com/icons/java
+                                            DevOpticons (https://github.com/file-icons/DevOpicons):
+                                                "text/rust" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#Rust
+                                                "text/css" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#CSS3,%20Full
+                                                "text/html" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#HTML5
+                                    #}
 
-                                        {# Text files or files which mime starts with `text` #}
-                                    {%- elif file.mime == "text/plain" or file.mime | split(pat="/") | first == "text" -%}
-                                        {{ "file-alt" | far }}
+                                    {# Text files or files which mime starts with `text` #}
+                                    {%- else if file.mime == "text/plain" || file.mime|split_first("/") == Some("text") -%}
+                                        {{ "file-alt"|far(false, false, "") }}
 
                                         {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ "file-archive" | far }}
+                                        {{ "file-archive"|far(false, false, "") }}
                                     {%- endif -%}
 
                                     <span class="text">{{ file.name }}</span>
@@ -124,7 +121,7 @@
             {# If the file has content, then display it in a codeblock #}
             {%- if file_content -%}
                 <div id="source-code" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
-                    {{- file_content | highlight(lang=file.name) -}}
+                    {{- file_content|highlight(file.name) -}}
                 </div>
             {%- endif -%}
         </div>
@@ -133,6 +130,6 @@
 
 {%- block javascript -%}
     {% if file_content %}
-        <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ docsrs_version() | slugify }}"></script>
+        <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ crate::BUILD_VERSION|slugify }}"></script>
     {% endif %}
 {%- endblock javascript -%}

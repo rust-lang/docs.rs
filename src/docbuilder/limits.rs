@@ -6,11 +6,11 @@ const GB: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Limits {
-    memory: usize,
-    targets: usize,
-    timeout: Duration,
-    networking: bool,
-    max_log_size: usize,
+    pub memory: usize,
+    pub targets: usize,
+    pub timeout: Duration,
+    pub networking: bool,
+    pub max_log_size: usize,
 }
 
 impl Limits {
