@@ -11,27 +11,27 @@ centered
                 <h1 id="crate-title" class="no-description">Docs.rs documentation</h1>
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
-                        {% set text = "circle-info" | fas(fw=true) %}
+                        {% set text = "circle-info" | fas %}
                         {% set text = text ~ ' <span class="title">About</span>' %}
                         {{ macros::active_link(expected="index", href="/about", text=text) }}
 
-                        {% set text = "fonticons" | fab(fw=true) %}
+                        {% set text = "fonticons" | fab %}
                         {% set text = text ~ ' <span class="title">Badges</span>' %}
                         {{ macros::active_link(expected="badges", href="/about/badges", text=text) }}
 
-                        {% set text = "gears" | fas(fw=true) %}
+                        {% set text = "gears" | fas %}
                         {% set text = text ~ ' <span class="title">Builds</span>' %}
                         {{ macros::active_link(expected="builds", href="/about/builds", text=text) }}
 
-                        {% set text = "table" | fas(fw=true) %}
+                        {% set text = "table" | fas %}
                         {% set text = text ~ ' <span class="title">Metadata</span>' %}
                         {{ macros::active_link(expected="metadata", href="/about/metadata", text=text) }}
 
-                        {% set text = "road" | fas(fw=true) %}
+                        {% set text = "road" | fas %}
                         {% set text = text ~ ' <span class="title">Shorthand URLs</span>' %}
                         {{ macros::active_link(expected="redirections", href="/about/redirections", text=text) }}
 
-                        {% set text = "download" | fas(fw=true) %}
+                        {% set text = "download" | fas %}
                         {% set text = text ~ ' <span class="title">Download</span>' %}
                         {{ macros::active_link(expected="download", href="/about/download", text=text) }}
                     </ul>
