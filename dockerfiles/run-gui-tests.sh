@@ -7,10 +7,9 @@ docker-compose up -d db s3
 
 # We add the information we need.
 cargo run -- database migrate
-docker-compose run web build crate sysinfo 0.23.4
-docker-compose run web build crate sysinfo 0.23.5
-docker-compose run web build add-essential-files
-docker-compose build web
+cargo run -- build crate sysinfo 0.23.4
+cargo run -- build crate sysinfo 0.23.5
+cargo run -- build add-essential-files
 
 # In case we don't have a `.env`, we create one.
 if [ ! -f .env ]
@@ -19,15 +18,10 @@ cp .env.sample .env
 . .env
 fi
 
-docker-compose up -d web
-
 cargo run -- start-web-server &
 SERVER_PID=$!
 
 docker build . -f dockerfiles/Dockerfile-gui-tests -t gui_tests
-
-echo "Sleeping a bit to be sure the web server will be started..."
-sleep 5
 
 # status="docker run . -v `pwd`:/build/out:ro gui_tests"
 docker-compose run gui_tests

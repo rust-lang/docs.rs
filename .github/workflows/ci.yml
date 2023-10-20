@@ -127,6 +127,31 @@ jobs:
             $f || exit 1
           done
 
+      - name: Clean up the database
+        run: docker-compose down --volumes
+
+  GUIs_test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: get test binaries from cache
+        uses: actions/download-artifact@v3
+        with:
+          name: test-binaries-${{ github.sha }}
+          path: ./test-binaries/
+
+      - name: Launch postgres and min.io
+        run: |
+          cp .env.sample .env
+          mkdir -p ${DOCSRS_PREFIX}/public-html
+          docker-compose up -d db s3
+          # Give the database enough time to start up
+          sleep 5
+          # Make sure the database is actually working
+          psql "${DOCSRS_DATABASE_URL}"
+
       - name: Run GUI tests
         run: ./dockerfiles/run-gui-tests.sh
 
