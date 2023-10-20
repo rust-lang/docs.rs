@@ -19,9 +19,10 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
-use chrono::{DateTime, NaiveDate, Utc};
-use postgres::Client;
+use chrono::{DateTime, Utc};
+use futures_util::stream::TryStreamExt;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str;
 use std::sync::Arc;
@@ -60,8 +61,8 @@ impl Default for Order {
     }
 }
 
-pub(crate) fn get_releases(
-    conn: &mut Client,
+pub(crate) async fn get_releases(
+    conn: &mut sqlx::PgConnection,
     page: i64,
     limit: i64,
     order: Order,
@@ -103,19 +104,22 @@ pub(crate) fn get_releases(
         }
     );
 
-    Ok(conn
-        .query(query.as_str(), &[&limit, &offset, &filter_failed])?
-        .into_iter()
-        .map(|row| Release {
+    Ok(sqlx::query(query.as_str())
+        .bind(limit)
+        .bind(offset)
+        .bind(filter_failed)
+        .fetch(conn)
+        .map_ok(|row| Release {
             name: row.get(0),
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
             rustdoc_status: row.get(4),
             build_time: row.get(5),
-            stars: row.get::<_, Option<i32>>(6).unwrap_or(0),
+            stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
         })
-        .collect())
+        .try_collect()
+        .await?)
 }
 
 struct SearchResult {
@@ -208,49 +212,44 @@ async fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let crates: HashMap<String, Release> = spawn_blocking({
-        let names = names.clone();
-        move || {
-            let mut conn = pool.get()?;
-            Ok(conn
-                .query(
-                    "SELECT
-                         crates.name,
-                         releases.version,
-                         releases.description,
-                         builds.build_time,
-                         releases.target_name,
-                         releases.rustdoc_status,
-                         repositories.stars
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
+    let crates: HashMap<String, Release> = sqlx::query!(
+        r#"SELECT
+               crates.name,
+               releases.version,
+               releases.description,
+               builds.build_time,
+               releases.target_name,
+               releases.rustdoc_status,
+               repositories.stars as "stars?"
 
-                     FROM crates
-                     INNER JOIN releases ON crates.latest_version_id = releases.id
-                     INNER JOIN builds ON releases.id = builds.rid
-                     LEFT JOIN repositories ON releases.repository_id = repositories.id
+           FROM crates
+           INNER JOIN releases ON crates.latest_version_id = releases.id
+           INNER JOIN builds ON releases.id = builds.rid
+           LEFT JOIN repositories ON releases.repository_id = repositories.id
 
-                     WHERE crates.name = ANY($1)",
-                    &[&*names],
-                )?
-                .into_iter()
-                .map(|row| {
-                    let stars: Option<_> = row.get("stars");
-                    let name: String = row.get("name");
-                    (
-                        name.clone(),
-                        Release {
-                            name,
-                            version: row.get("version"),
-                            description: row.get("description"),
-                            build_time: row.get("build_time"),
-                            target_name: row.get("target_name"),
-                            rustdoc_status: row.get("rustdoc_status"),
-                            stars: stars.unwrap_or(0),
-                        },
-                    )
-                })
-                .collect())
-        }
+           WHERE crates.name = ANY($1)"#,
+        &names[..],
+    )
+    .fetch(&mut *conn)
+    .map_ok(|row| {
+        (
+            row.name.clone(),
+            Release {
+                name: row.name,
+                version: row.version,
+                description: row.description,
+                build_time: row.build_time,
+                target_name: Some(row.target_name),
+                rustdoc_status: row.rustdoc_status,
+                stars: row.stars.unwrap_or(0),
+            },
+        )
     })
+    .try_collect()
     .await?;
 
     Ok(SearchResult {
@@ -278,11 +277,13 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn home_page(Extension(pool): Extension<Pool>) -> AxumResult<impl IntoResponse> {
-    let recent_releases = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true)
-    })
-    .await?;
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
+
+    let recent_releases =
+        get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
 
     Ok(HomePage { recent_releases })
 }
@@ -300,12 +301,13 @@ impl_axum_webpage! {
 pub(crate) async fn releases_feed_handler(
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
-    let recent_releases = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true)
-    })
-    .await?;
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
 
+    let recent_releases =
+        get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true).await?;
     Ok(ReleaseFeed { recent_releases })
 }
 
@@ -339,6 +341,11 @@ pub(crate) async fn releases_handler(
     page: Option<i64>,
     release_type: ReleaseType,
 ) -> AxumResult<impl IntoResponse> {
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
+
     let page_number = page.unwrap_or(1);
 
     let (description, release_order, latest_only) = match release_type {
@@ -360,16 +367,13 @@ pub(crate) async fn releases_handler(
         }
     };
 
-    let releases = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        get_releases(
-            &mut conn,
-            page_number,
-            RELEASES_IN_RELEASES,
-            release_order,
-            latest_only,
-        )
-    })
+    let releases = get_releases(
+        &mut conn,
+        page_number,
+        RELEASES_IN_RELEASES,
+        release_order,
+        latest_only,
+    )
     .await?;
 
     // Show next and previous page buttons
@@ -464,45 +468,45 @@ async fn redirect_to_random_crate(
     // on the amount of crates with > 100 GH stars over the amount of all crates.
     //
     // If random-crate-searches end up being empty, increase that value.
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
 
-    let row = spawn_blocking({
-        move || {
-            let mut conn = pool.get()?;
-            Ok(conn.query_opt(
-                "WITH params AS (
-                    -- get maximum possible id-value in crates-table
-                    SELECT last_value AS max_id FROM crates_id_seq
-                )
-                SELECT
-                    crates.name,
-                    releases.version,
-                    releases.target_name
-                FROM (
-                    -- generate random numbers in the ID-range.
-                    SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
-                    FROM params, generate_series(1, $1)
-                ) AS r
-                INNER JOIN crates ON r.id = crates.id
-                INNER JOIN releases ON crates.latest_version_id = releases.id
-                INNER JOIN repositories ON releases.repository_id = repositories.id
-                WHERE
-                    releases.rustdoc_status = TRUE AND
-                    repositories.stars >= 100
-                LIMIT 1",
-                &[&(config.random_crate_search_view_size as i32)],
-            )?)
-        }
-    })
-    .await?;
+    let row = sqlx::query!(
+        "WITH params AS (
+            -- get maximum possible id-value in crates-table
+            SELECT last_value AS max_id FROM crates_id_seq
+        )
+        SELECT
+            crates.name,
+            releases.version,
+            releases.target_name
+        FROM (
+            -- generate random numbers in the ID-range.
+            SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id
+            FROM params, generate_series(1, $1)
+        ) AS r
+        INNER JOIN crates ON r.id = crates.id
+        INNER JOIN releases ON crates.latest_version_id = releases.id
+        INNER JOIN repositories ON releases.repository_id = repositories.id
+        WHERE
+            releases.rustdoc_status = TRUE AND
+            repositories.stars >= 100
+        LIMIT 1",
+        config.random_crate_search_view_size as i32,
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .context("error fetching random crate")?;
 
     if let Some(row) = row {
-        let name: String = row.get("name");
-        let version: String = row.get("version");
-        let target_name: String = row.get("target_name");
-
         metrics.im_feeling_lucky_searches.inc();
 
-        Ok(axum_redirect(format!("/{name}/{version}/{target_name}/"))?)
+        Ok(axum_redirect(format!(
+            "/{}/{}/{}/",
+            row.name, row.version, row.target_name
+        ))?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
         Err(AxumNope::NoResults)
@@ -641,57 +645,55 @@ impl_axum_webpage! {
 pub(crate) async fn activity_handler(
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
-    let data = spawn_blocking(move ||  {
-        let mut conn = pool.get()?;
-        Ok(conn.query(
-            "
-            WITH dates AS (
-                -- we need this series so that days in the statistic that don't have any releases are included
-                SELECT generate_series(
-                        CURRENT_DATE - INTERVAL '30 days',
-                        CURRENT_DATE - INTERVAL '1 day',
-                        '1 day'::interval
-                    )::date AS date_
-            ),
-            release_stats AS (
-                SELECT
-                    release_time::date AS date_,
-                    COUNT(*) AS counts,
-                    SUM(CAST((is_library = TRUE AND build_status = FALSE) AS INT)) AS failures
-                FROM
-                    releases
-                WHERE
-                    release_time >= CURRENT_DATE - INTERVAL '30 days' AND
-                    release_time < CURRENT_DATE
-                GROUP BY
-                    release_time::date
-            )
-            SELECT
-                dates.date_ AS date,
-                COALESCE(rs.counts, 0) AS counts,
-                COALESCE(rs.failures, 0) AS failures
-            FROM
-                dates
-                LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
+    let mut conn = pool
+        .get_async()
+        .await
+        .context("can't get pool connection")?;
 
-            ORDER BY
-                dates.date_
-            ",
-            &[],
-        )?.into_iter()
-            .map(|row| (row.get(0), row.get(1), row.get(2)))
-            .collect::<Vec<(NaiveDate, i64, i64)>>()
-            )
-    }).await?;
+    let rows: Vec<_> = sqlx::query!(
+        r#"WITH dates AS (
+               -- we need this series so that days in the statistic that don't have any releases are included
+               SELECT generate_series(
+                       CURRENT_DATE - INTERVAL '30 days',
+                       CURRENT_DATE - INTERVAL '1 day',
+                       '1 day'::interval
+                   )::date AS date_
+           ),
+           release_stats AS (
+               SELECT
+                   release_time::date AS date_,
+                   COUNT(*) AS counts,
+                   SUM(CAST((is_library = TRUE AND build_status = FALSE) AS INT)) AS failures
+               FROM
+                   releases
+               WHERE
+                   release_time >= CURRENT_DATE - INTERVAL '30 days' AND
+                   release_time < CURRENT_DATE
+               GROUP BY
+                   release_time::date
+           )
+           SELECT
+               dates.date_ AS "date!",
+               COALESCE(rs.counts, 0) AS "counts!",
+               COALESCE(rs.failures, 0) AS "failures!"
+           FROM
+               dates
+               LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
+
+               ORDER BY
+                   dates.date_
+        "#)
+        .fetch(&mut *conn)
+        .try_collect().await.context("error fetching data")?;
 
     Ok(ReleaseActivity {
         description: "Monthly release activity",
-        dates: data
+        dates: rows
             .iter()
-            .map(|&d| d.0.format("%d %b").to_string())
+            .map(|row| row.date.format("%d %b").to_string())
             .collect(),
-        counts: data.iter().map(|&d| d.1).collect(),
-        failures: data.iter().map(|&d| d.2).collect(),
+        counts: rows.iter().map(|rows| rows.counts).collect(),
+        failures: rows.iter().map(|rows| rows.failures).collect(),
     })
 }
 
@@ -777,7 +779,12 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = get_releases(&mut db.conn(), 1, 10, Order::GithubStars, true).unwrap();
+            let releases = env
+                .runtime()
+                .block_on(async move {
+                    get_releases(&mut *db.async_conn().await, 1, 10, Order::GithubStars, true).await
+                })
+                .unwrap();
             assert_eq!(
                 vec![
                     "bar", // 20 stars
