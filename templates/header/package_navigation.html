@@ -44,7 +44,7 @@
                         {# The crate information tab #}
                         <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
                                 class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                                {{ "cube" | fas(fw=true) }}
+                                {{ "cube" | fas }}
                                 <span class="title"> Crate</span>
                             </a>
                         </li>
@@ -53,7 +53,7 @@
                         <li class="pure-menu-item">
                             <a href="/crate/{{ crate_path | safe }}/source/"
                                 class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                                {{ "folder-open" | far(fw=true) }}
+                                {{ "folder-open" | far }}
                                 <span class="title"> Source</span>
                             </a>
                         </li>
@@ -81,7 +81,7 @@
 
             {%- if metadata.rustdoc_status -%}
                 <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="doc-link">
-                    {{ "book" | fas(fw=true) }} Documentation
+                    {{ "book" | fas }} Documentation
                 </a>
             {%- endif -%}
         </div>

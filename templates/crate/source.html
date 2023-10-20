@@ -34,13 +34,13 @@
                         {# If we are displaying a file, we also add a button to hide the file sidebar #}
                         {% if file_content %}
                             <li class="pure-menu-item toggle-source">
-                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left" | fas(fw=true) }}</span><span class="right">{{ "chevron-right" | fas(fw=true) }}</span> <span class="text">Hide files</span></button>
+                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left" | fas }}</span><span class="right">{{ "chevron-right" | fas(fw=true) }}</span> <span class="text">Hide files</span></button>
                             </li>
                         {% endif %}
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ "folder-open" | far(fw=true) }} <span class="text">..</span></a>
+                                <a href="../" class="pure-menu-link">{{ "folder-open" | far }} <span class="text">..</span></a>
                             </li>
                         {%- endif -%}
 
@@ -53,23 +53,23 @@
                                 <a href="./{{ file.name }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
                                     {# Directories #}
                                     {%- if file.mime == "dir" -%}
-                                        {{ "folder-open" | far(fw=true) }}
+                                        {{ "folder-open" | far }}
 
                                     {# Rust files #}
                                     {%- elif file.mime == "text/rust" -%}
-                                        {{ "rust" | fab(fw=true) }}
+                                        {{ "rust" | fab }}
 
                                     {# Cargo.lock #}
                                     {%- elif file.mime == "text/plain" and file.name == "Cargo.lock" -%}
-                                        {{ "lock" | fas(fw=true) }}
+                                        {{ "lock" | fas }}
 
                                     {# Markdown files #}
                                     {% elif file.mime == "text/markdown" %}
-                                        {{ "markdown" | fab(fw=true) }}
+                                        {{ "markdown" | fab }}
 
                                     {# .gitignore #}
                                     {% elif file.mime == "text/plain" and file.name == ".gitignore" %}
-                                        {{ "git-alt" | fab(fw=true) }}
+                                        {{ "git-alt" | fab }}
 
                                     {#
                                         More ideas
@@ -91,11 +91,11 @@
 
                                     {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" or file.mime | split(pat="/") | first == "text" -%}
-                                        {{ "file-alt" | far(fw=true) }}
+                                        {{ "file-alt" | far }}
 
                                     {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ "file-archive" | far(fw=true) }}
+                                        {{ "file-archive" | far }}
                                     {%- endif -%}
 
                                     <span class="text">{{ file.name }}</span>

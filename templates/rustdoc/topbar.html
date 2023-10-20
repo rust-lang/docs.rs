@@ -32,13 +32,13 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url | safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
-                            {{ "cube" | fas(fw=true) }} Docs.rs crate page
+                            {{ "cube" | fas }} Docs.rs crate page
                         </a>
                     </li>
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url | safe }}" class="pure-menu-link">
-                            {{ "scale-unbalanced-flip" | fas(fw=true) }} {{ krate.license }}
+                            {{ "scale-unbalanced-flip" | fas }} {{ krate.license }}
                         </a>
                     </li>
                 </ul>
@@ -52,7 +52,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- if krate.homepage_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.homepage_url }}" class="pure-menu-link">
-                                        {{ "house" | fas(fw=true) }} Homepage
+                                        {{ "house" | fas }} Homepage
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -61,7 +61,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- if krate.documentation_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ "file-lines" | far(fw=true) }} Documentation
+                                        {{ "file-lines" | far }} Documentation
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -70,21 +70,21 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- if krate.repository_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ krate.repository_url }}" class="pure-menu-link">
-                                        {{ "code-branch" | fas(fw=true) }} Repository
+                                        {{ "code-branch" | fas }} Repository
                                     </a>
                                 </li>
                             {%- endif -%}
 
                             <li class="pure-menu-item">
                                 <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
-                                    {{ "cube" | fas(fw=true) }} Crates.io
+                                    {{ "cube" | fas }} Crates.io
                                 </a>
                             </li>
 
                             {# A link to the release's source view #}
                             <li class="pure-menu-item">
                                 <a href="{{ crate_url | safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                                    {{ "folder-open" | fas(fw=true) }} Source
+                                    {{ "folder-open" | fas }} Source
                                 </a>
                             </li>
                         </ul>
@@ -98,7 +98,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             {%- for owner in krate.owners -%}
                                 <li class="pure-menu-item">
                                     <a href="https://crates.io/users/{{ owner[0] }}" class="pure-menu-link">
-                                        {{ "user" | fas(fw=true) }} {{ owner[0] }}
+                                        {{ "user" | fas }} {{ owner[0] }}
                                     </a>
                                 </li>
                             {%- endfor -%}

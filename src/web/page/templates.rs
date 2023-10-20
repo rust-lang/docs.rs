@@ -263,11 +263,6 @@ impl fmt::Display for IconType {
 impl tera::Filter for IconType {
     fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
         let icon_name = tera::escape_html(value.as_str().expect("Icons only take strings"));
-        let class = if args.get("fw").and_then(|fw| fw.as_bool()).unwrap_or(false) {
-            "fa-svg fa-svg-fw"
-        } else {
-            "fa-svg"
-        };
 
         let type_ = match self {
             IconType::Strong => font_awesome_as_a_crate::Type::Solid,
@@ -283,7 +278,7 @@ impl tera::Filter for IconType {
 
         let icon = format!(
             "\
-<span class=\"{class}{space}{class_extra}\" aria-hidden=\"true\">{icon_file_string}</span>"
+<span class=\"fa-svg fa-svg-fw{space}{class_extra}\" aria-hidden=\"true\">{icon_file_string}</span>"
         );
 
         Ok(Value::String(icon))
