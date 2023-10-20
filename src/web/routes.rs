@@ -12,6 +12,7 @@ use axum::{
 use axum_extra::routing::RouterExt;
 use std::convert::Infallible;
 use tracing::{debug, instrument};
+use askama::Template;
 
 const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
 
@@ -299,13 +300,19 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         .route(
             "/-/storage-change-detection.html",
             get_internal(|| async {
+                #[derive(Template)]
+                #[template(path = "storage-change-detection.html")]
                 #[derive(Debug, Clone, serde::Serialize)]
-                struct StorageChangeDetection {}
+                struct StorageChangeDetection {
+                    csp_nonce: String,
+                }
                 crate::impl_axum_webpage!(
-                    StorageChangeDetection = "storage-change-detection.html",
+                    StorageChangeDetection,
                     cache_policy = |_| CachePolicy::ForeverInCdnAndBrowser,
                 );
-                StorageChangeDetection {}
+                StorageChangeDetection {
+                    csp_nonce: String::new(),
+                }
             }),
         )
         .route_with_tsr(

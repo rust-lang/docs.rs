@@ -12,12 +12,12 @@
     Note: `false` here is acting as a pseudo-null value since you can't directly construct null values
            and tera requires all parameters without defaults to be filled
 #}
-{% macro package_navigation(title=false, metadata, active_tab) %}
+{% macro package_navigation(title, metadata, active_tab) %}
     <div class="docsrs-package-container">
         <div class="container">
             <div class="description-container">
                 {# The partial path of the crate, `:name/:release` #}
-                {%- set crate_path = metadata.name ~ "/" ~ metadata.req_version -%}
+                {%- set crate_path = "{}/{}"|format(metadata.name, metadata.req_version) -%}
 
                 {# If docs are built, show a button for them #}
 
@@ -42,36 +42,36 @@
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
                         {# The crate information tab #}
-                        <li class="pure-menu-item"><a href="/crate/{{ crate_path | safe }}"
+                        <li class="pure-menu-item"><a href="/crate/{{ crate_path|safe }}"
                                 class="pure-menu-link{% if active_tab == 'crate' %} pure-menu-active{% endif %}">
-                                {{ "cube" | fas }}
+                                {{ "cube"|fas }}
                                 <span class="title"> Crate</span>
                             </a>
                         </li>
 
                         {# The source view tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/source/"
+                            <a href="/crate/{{ crate_path|safe }}/source/"
                                 class="pure-menu-link{% if active_tab == 'source' %} pure-menu-active{% endif %}">
-                                {{ "folder-open" | far }}
+                                {{ "folder-open"|far }}
                                 <span class="title"> Source</span>
                             </a>
                         </li>
 
                         {# The builds tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/builds"
+                            <a href="/crate/{{ crate_path|safe }}/builds"
                                 class="pure-menu-link{% if active_tab == 'builds' %} pure-menu-active{% endif %}">
-                                {{ "gears" | fas }}
+                                {{ "gears"|fas }}
                                 <span class="title"> Builds</span>
                             </a>
                         </li>
 
                         {# The features tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path | safe }}/features"
+                            <a href="/crate/{{ crate_path|safe }}/features"
                                class="pure-menu-link{% if active_tab == 'features' %} pure-menu-active{% endif %}">
-                                {{ "flag" | fas }}
+                                {{ "flag"|fas }}
                                 <span class="title">Feature flags</span>
                             </a>
                         </li>
@@ -80,8 +80,8 @@
             </div>
 
             {%- if metadata.rustdoc_status -%}
-                <a href="/{{ crate_path | safe }}/{{ metadata.target_name }}/" class="doc-link">
-                    {{ "book" | fas }} Documentation
+                <a href="/{{ crate_path|safe }}/{{ metadata.target_name }}/" class="doc-link">
+                    {{ "book"|fas }} Documentation
                 </a>
             {%- endif -%}
         </div>

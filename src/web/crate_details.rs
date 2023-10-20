@@ -14,6 +14,7 @@ use crate::{
     AsyncStorage,
 };
 use anyhow::{anyhow, Context, Result};
+use askama::Template;
 use axum::{
     extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
@@ -383,13 +384,17 @@ pub(crate) async fn releases_for_crate(
     Ok(releases)
 }
 
+
+#[derive(Template)]
+#[template(path = "crate/details.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct CrateDetailsPage {
     details: CrateDetails,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    CrateDetailsPage = "crate/details.html",
+    CrateDetailsPage,
     cpu_intensive_rendering = true,
 }
 
@@ -429,7 +434,7 @@ pub(crate) async fn crate_details_handler(
         Err(e) => warn!("error fetching readme: {:?}", &e),
     }
 
-    let mut res = CrateDetailsPage { details }.into_response();
+    let mut res = CrateDetailsPage { details, csp_nonce: String::new() }.into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if req_version.is_latest() {
             CachePolicy::ForeverInCdn
@@ -439,16 +444,19 @@ pub(crate) async fn crate_details_handler(
     Ok(res.into_response())
 }
 
+#[derive(Template)]
+#[template(path = "rustdoc/releases.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseList {
     releases: Vec<Release>,
     crate_name: String,
     inner_path: String,
     target: String,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    ReleaseList = "rustdoc/releases.html",
+    ReleaseList,
     cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
@@ -513,6 +521,7 @@ pub(crate) async fn get_all_releases(
         target,
         inner_path,
         crate_name: params.name,
+        csp_nonce: String::new(),
     };
     Ok(res.into_response())
 }
@@ -525,16 +534,19 @@ struct ShortMetadata {
     doc_targets: Vec<String>,
 }
 
+#[derive(Template)]
+#[template(path = "rustdoc/platforms.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct PlatformList {
     metadata: ShortMetadata,
     inner_path: String,
     use_direct_platform_links: bool,
     current_target: String,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    PlatformList = "rustdoc/platforms.html",
+    PlatformList,
     cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
@@ -635,6 +647,7 @@ pub(crate) async fn get_all_platforms_inner(
         inner_path,
         use_direct_platform_links: is_crate_root,
         current_target,
+        csp_nonce: String::new()
     };
     Ok(res.into_response())
 }
