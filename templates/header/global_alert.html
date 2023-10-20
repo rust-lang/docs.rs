@@ -1,12 +1,12 @@
 {# Get the current global alert #}
-{%- set global_alert = global_alert() -%}
 
 {# If there is a global alert, render it #}
-{%- if global_alert -%}
-    <li class="pure-menu-item">
-        <a href="{{ global_alert.url | safe }}" class="pure-menu-link {{ global_alert.css_class }}">
-            {{ global_alert.fa_icon | fas }}
-            {{ global_alert.text }}
-        </a>
-    </li>
-{%- endif -%}
+{%- match crate::GLOBAL_ALERT -%}
+    {% when Some with (global_alert) %}
+        <li class="pure-menu-item">
+            <a href="{{ global_alert.url|safe }}" class="pure-menu-link {{ global_alert.css_class }}">
+                {{ global_alert.fa_icon|fas }}
+                {{ global_alert.text }}
+            </a>
+        </li>
+{% endmatch %}

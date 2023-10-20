@@ -10,6 +10,7 @@ use crate::{
     Config,
 };
 use anyhow::Result;
+use askama::Template;
 use axum::{
     extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
 };
@@ -27,6 +28,8 @@ pub(crate) struct Build {
     build_time: DateTime<Utc>,
 }
 
+#[derive(Template)]
+#[template(path = "crate/builds.html")]
 #[derive(Debug, Clone, Serialize)]
 struct BuildsPage {
     metadata: MetaData,
@@ -34,11 +37,10 @@ struct BuildsPage {
     limits: Limits,
     canonical_url: CanonicalUrl,
     use_direct_platform_links: bool,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    BuildsPage = "crate/builds.html",
-}
+impl_axum_webpage! { BuildsPage }
 
 pub(crate) async fn build_list_handler(
     Path((name, req_version)): Path<(String, ReqVersion)>,
@@ -62,6 +64,7 @@ pub(crate) async fn build_list_handler(
         limits: Limits::for_crate(&config, &mut conn, &name).await?,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
         use_direct_platform_links: true,
+        csp_nonce: String::new(),
     }
     .into_response())
 }

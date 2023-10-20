@@ -4,21 +4,21 @@
         the target-links. On that page we also don't have to use `/target-redirect/`
         because the documentation root page is guaranteed to exist for all targets.
     #}
+    {%- set target_no_follow = "" -%}
+    {%- set target_url = String::new() -%}
     {%- if use_direct_platform_links -%}
-        {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.req_version ~ "/" ~ target ~ "/" ~ inner_path -%}
-        {%- set target_no_follow = "" -%}
+        {%- set target_url = "/{}/{}/{}/{}"|format(metadata.name, metadata.req_version, target, inner_path) -%}
     {%- else -%}
-        {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.req_version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+        {%- set target_url = "/crate/{}/{}/target-redirect/{}/{}"|format(metadata.name, metadata.req_version, target, inner_path) -%}
         {%- set target_no_follow = "nofollow" -%}
     {%- endif -%}
-    {%- if current_target is defined and current_target == target -%}
+    {%- set current = "" -%}
+    {%- if current_target == target -%}
         {%- set current = " current" -%}
-    {%- else -%}
-        {%- set current = "" -%}
     {%- endif -%}
 
     <li class="pure-menu-item">
-        <a href="{{ target_url | safe }}" class="pure-menu-link{{ current | safe }}" data-fragment="retain" rel="{{ target_no_follow }}">
+        <a href="{{ target_url|safe }}" class="pure-menu-link{{ current|safe }}" data-fragment="retain" rel="{{ target_no_follow }}">
             {{- target -}}
         </a>
     </li>

@@ -10,12 +10,15 @@ use crate::{
     },
 };
 use anyhow::anyhow;
+use askama::Template;
 use axum::response::IntoResponse;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 
 const DEFAULT_NAME: &str = "default";
 
+#[derive(Template)]
+#[template(path = "crate/features.html")]
 #[derive(Debug, Clone, Serialize)]
 struct FeaturesPage {
     metadata: MetaData,
@@ -24,10 +27,11 @@ struct FeaturesPage {
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
     use_direct_platform_links: bool,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    FeaturesPage = "crate/features.html",
+    FeaturesPage,
     cache_policy = |page| if page.is_latest_url {
         CachePolicy::ForeverInCdn
     } else {
@@ -82,6 +86,7 @@ pub(crate) async fn build_features_handler(
         is_latest_url: req_version.is_latest(),
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
         use_direct_platform_links: true,
+        csp_nonce: String::new(),
     }
     .into_response())
 }

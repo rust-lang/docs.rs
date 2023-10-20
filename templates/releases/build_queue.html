@@ -1,10 +1,10 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "releases/header.html" as release_macros -%}
 
 {%- block title -%}Queue - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Queue", description=description, tab="queue") }}
+    {% call release_macros::header(title="Queue", description=description, tab="queue", owner=false) %}
 {%- endblock header -%}
 
 {%- block body -%}
@@ -45,14 +45,14 @@
 
             <ol class="queue-list">
                 {%- if queue -%}
-                    {% for crate in queue -%}
+                    {% for crate_item in queue -%}
                         <li>
-                            <a href="https://crates.io/crates/{{ crate.name }}">
-                                {{ crate.name }} {{ crate.version }}
+                            <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                {{- crate_item.name }} {{ crate_item.version -}}
                             </a>
 
-                            {% if crate.priority != 0 -%}
-                                (priority: {{ crate.priority }})
+                            {% if crate_item.priority != 0 -%}
+                                (priority: {{ crate_item.priority }})
                             {%- endif %}
                         </li>
                     {%- endfor %}

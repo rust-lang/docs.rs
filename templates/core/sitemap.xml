@@ -3,12 +3,12 @@
     {% for release in releases -%}
         <url>
             <loc>https://docs.rs/{{ release.crate_name }}/latest/{{ release.target_name }}/</loc>
-            <lastmod>{{ release.last_modified | escape_xml }}</lastmod>
+            <lastmod>{{ release.last_modified|escape_xml }}</lastmod>
             <priority>1.0</priority>
         </url>
         <url>
             <loc>https://docs.rs/{{ release.crate_name }}/latest/{{ release.target_name }}/all.html</loc>
-            <lastmod>{{ release.last_modified | escape_xml }}</lastmod>
+            <lastmod>{{ release.last_modified|escape_xml }}</lastmod>
             <priority>0.8</priority>
         </url>
     {%- endfor %}

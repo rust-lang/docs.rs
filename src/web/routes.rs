@@ -1,6 +1,7 @@
 use super::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
+use askama::Template;
 use axum::{
     extract::Request as AxumHttpRequest,
     handler::Handler as AxumHandler,
@@ -299,13 +300,19 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         .route(
             "/-/storage-change-detection.html",
             get_internal(|| async {
+                #[derive(Template)]
+                #[template(path = "storage-change-detection.html")]
                 #[derive(Debug, Clone, serde::Serialize)]
-                struct StorageChangeDetection {}
+                struct StorageChangeDetection {
+                    csp_nonce: String,
+                }
                 crate::impl_axum_webpage!(
-                    StorageChangeDetection = "storage-change-detection.html",
+                    StorageChangeDetection,
                     cache_policy = |_| CachePolicy::ForeverInCdnAndBrowser,
                 );
-                StorageChangeDetection {}
+                StorageChangeDetection {
+                    csp_nonce: String::new(),
+                }
             }),
         )
         .route_with_tsr(
