@@ -1,4 +1,4 @@
-{% extends "about-base.html" -%}
+{% extends "about-base.html" %}
 
 {%- block title -%} Metadata {%- endblock title -%}
 
@@ -14,7 +14,7 @@
 
 	<p>The available configuration flags you can customize are:</p>
 
-	{% filter highlight(lang="toml") %}
+	{% filter highlight("toml")|safe %}
 		{%- include "core/Cargo.toml.example" -%}
 	{% endfilter %}
 	</div>

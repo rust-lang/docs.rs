@@ -11,74 +11,82 @@
         * `queue`
         * `owner` A string, used for the owners page
 #}
-{% macro header(title, description, tab, owner=false) %}
+{% macro header(title, description, tab, owner) %}
     <div class="docsrs-package-container">
         <div class="container">
             <div class="description-container">
                 <h1 id="crate-title">{{ title }}</h1>
-                <div class="description">{{ description | default(value="") }}</div>
+                <div class="description">{{ description }}</div>
 
                 {# This does double-duty as the search, so hide all tabs when we're searching something #}
-                {%- if tab != "search" -%}
-                    <div class="pure-menu pure-menu-horizontal">
-                        <ul class="pure-menu-list">
+                <div class="pure-menu pure-menu-horizontal">
+                    <ul class="pure-menu-list">
+                        <li class="pure-menu-item">
+                            <a href="/releases" class="pure-menu-link{% if *tab == "recent" %} pure-menu-active{% endif %}">
+                                {{ "leaf"|fas(false, false, "")|safe }}
+                                <span class="title">Recent</span>
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-item">
+                            <a href="/releases/stars" class="pure-menu-link{% if *tab == "stars" %} pure-menu-active{% endif %}">
+                                {{ "star"|fas(false, false, "")|safe }}
+                                <span class="title">Stars</span>
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-item">
+                            <a href="/releases/recent-failures"
+                                class="pure-menu-link{% if *tab == "recent-failures" %} pure-menu-active{% endif %}">
+                                {{ "triangle-exclamation"|fas(false, false, "")|safe }}
+                                <span class="title">Recent Failures</span>
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-item">
+                            <a href="/releases/failures"
+                                class="pure-menu-link{% if *tab == "failures" %} pure-menu-active{% endif %}">
+                                {{ "star"|far(false, false, "")|safe }}
+                                <span class="title">Failures By Stars</span>
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-item">
+                            <a href="/releases/activity"
+                                class="pure-menu-link{% if *tab == "activity" %} pure-menu-active{% endif %}">
+                                {{ "chart-line"|fas(false, false, "")|safe }}
+                                <span class="title">Activity</span>
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-item">
+                            <a href="/releases/queue" class="pure-menu-link{% if *tab == "queue" %} pure-menu-active{% endif %}">
+                                {{ "list"|fas(false, false, "")|safe }}
+                                <span class="title">Queue</span>
+                            </a>
+                        </li>
+
+                        {%- if !owner.is_empty() -%}
                             <li class="pure-menu-item">
-                                <a href="/releases" class="pure-menu-link{% if tab == 'recent' %} pure-menu-active{% endif %}">
-                                    {{ "leaf" | fas }}
-                                    <span class="title">Recent</span>
+                                <a href="#" class="pure-menu-link{% if *tab == "owner" %} pure-menu-active{% endif %}">
+                                    {{ "user"|fas(false, false, "")|safe }}
+                                    <span class="title">{{ owner }}</span>
                                 </a>
                             </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/stars" class="pure-menu-link{% if tab == 'stars' %} pure-menu-active{% endif %}">
-                                    {{ "star" | fas }}
-                                    <span class="title">Stars</span>
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/recent-failures"
-                                    class="pure-menu-link{% if tab == 'recent-failures' %} pure-menu-active{% endif %}">
-                                    {{ "triangle-exclamation" | fas }}
-                                    <span class="title">Recent Failures</span>
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/failures"
-                                    class="pure-menu-link{% if tab == 'failures' %} pure-menu-active{% endif %}">
-                                    {{ "star" | far }}
-                                    <span class="title">Failures By Stars</span>
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/activity"
-                                    class="pure-menu-link{% if tab == 'activity' %} pure-menu-active{% endif %}">
-                                    {{ "chart-line" | fas }}
-                                    <span class="title">Activity</span>
-                                </a>
-                            </li>
-
-                            <li class="pure-menu-item">
-                                <a href="/releases/queue" class="pure-menu-link{% if tab == 'queue' %} pure-menu-active{% endif %}">
-                                    {{ "list" | fas }}
-                                    <span class="title">Queue</span>
-                                </a>
-                            </li>
-
-                            {%- if owner -%}
-                                <li class="pure-menu-item">
-                                    <a href="#" class="pure-menu-link{% if tab == 'owner' %} pure-menu-active{% endif %}">
-                                        {{ "user" | fas }}
-                                        <span class="title">{{ owner }}</span>
-                                    </a>
-                                </li>
-                            {%- endif -%}
-                        </ul>
-                    </div>
-                {%- endif -%}
+                        {%- endif -%}
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
 {% endmacro header %}
+
+{% macro search_header(title) %}
+    <div class="docsrs-package-container">
+        <div class="container">
+            <div class="description-container">
+                <h1 id="crate-title">{{ title }}</h1>
+            </div>
+        </div>
+    </div>
+{% endmacro search_header %}

@@ -3,6 +3,7 @@ use anyhow::Result;
 use axum::http::uri::{PathAndQuery, Uri};
 use axum_extra::headers::{Header, HeaderName, HeaderValue};
 use serde::Serialize;
+use std::fmt;
 
 /// simplified typed header for a `Link rel=canonical` header in the response.
 /// Only takes the path to be used, url-encodes it and attaches domain & schema to it.
@@ -49,6 +50,12 @@ impl Header for CanonicalUrl {
             .unwrap();
 
         values.extend(std::iter::once(value));
+    }
+}
+
+impl fmt::Display for CanonicalUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.build_full_uri())
     }
 }
 

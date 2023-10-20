@@ -11,6 +11,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
+        page::templates::filters,
         MatchedRelease, ReqVersion,
     },
     AsyncStorage,
@@ -23,6 +24,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use log::warn;
+use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use serde::{ser::Serializer, Serialize};
@@ -33,11 +35,11 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct CrateDetails {
-    name: String,
-    pub version: Version,
-    description: Option<String>,
-    owners: Vec<(String, String, OwnerKind)>,
-    dependencies: Option<Value>,
+    pub(crate) name: String,
+    pub(crate) version: Version,
+    pub(crate) description: Option<String>,
+    pub(crate) owners: Vec<(String, String, OwnerKind)>,
+    pub(crate) dependencies: Option<Value>,
     #[serde(serialize_with = "optional_markdown")]
     readme: Option<String>,
     #[serde(serialize_with = "optional_markdown")]
@@ -48,8 +50,8 @@ pub(crate) struct CrateDetails {
     last_successful_build: Option<String>,
     pub rustdoc_status: Option<bool>,
     pub archive_storage: bool,
-    repository_url: Option<String>,
-    homepage_url: Option<String>,
+    pub repository_url: Option<String>,
+    pub homepage_url: Option<String>,
     keywords: Option<Value>,
     have_examples: Option<bool>, // need to check this manually
     pub target_name: Option<String>,
@@ -57,12 +59,12 @@ pub(crate) struct CrateDetails {
     repository_metadata: Option<RepositoryMetadata>,
     pub(crate) metadata: MetaData,
     is_library: Option<bool>,
-    license: Option<String>,
+    pub(crate) license: Option<String>,
     pub(crate) documentation_url: Option<String>,
-    total_items: Option<i32>,
-    documented_items: Option<i32>,
-    total_items_needing_examples: Option<i32>,
-    items_with_examples: Option<i32>,
+    pub(crate) total_items: Option<i32>,
+    pub(crate) documented_items: Option<i32>,
+    pub(crate) total_items_needing_examples: Option<i32>,
+    pub(crate) items_with_examples: Option<i32>,
     /// Database id for this crate
     pub(crate) crate_id: i32,
     /// Database id for this release
@@ -421,14 +423,36 @@ pub(crate) async fn releases_for_crate(
     Ok(releases)
 }
 
+#[derive(Template)]
+#[template(path = "crate/details.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct CrateDetailsPage {
     details: CrateDetails,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    CrateDetailsPage = "crate/details.html",
+    CrateDetailsPage,
     cpu_intensive_rendering = true,
+}
+
+// Used by templates.
+impl CrateDetailsPage {
+    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
+        None
+    }
+
+    pub(crate) fn permalink_path(&self) -> &str {
+        ""
+    }
+
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        Some(&self.details.metadata)
+    }
+
+    pub(crate) fn use_direct_platform_links(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -467,7 +491,11 @@ pub(crate) async fn crate_details_handler(
         Err(e) => warn!("error fetching readme: {:?}", &e),
     }
 
-    let mut res = CrateDetailsPage { details }.into_response();
+    let mut res = CrateDetailsPage {
+        details,
+        csp_nonce: String::new(),
+    }
+    .into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if req_version.is_latest() {
             CachePolicy::ForeverInCdn
@@ -477,16 +505,19 @@ pub(crate) async fn crate_details_handler(
     Ok(res.into_response())
 }
 
+#[derive(Template)]
+#[template(path = "rustdoc/releases.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ReleaseList {
     releases: Vec<Release>,
     crate_name: String,
     inner_path: String,
     target: String,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    ReleaseList = "rustdoc/releases.html",
+    ReleaseList,
     cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
@@ -564,6 +595,7 @@ pub(crate) async fn get_all_releases(
         target,
         inner_path,
         crate_name: params.name,
+        csp_nonce: String::new(),
     };
     Ok(res.into_response())
 }
@@ -576,16 +608,26 @@ struct ShortMetadata {
     doc_targets: Vec<String>,
 }
 
+impl ShortMetadata {
+    // Used in templates.
+    pub(crate) fn doc_targets(&self) -> Option<&[String]> {
+        Some(&self.doc_targets)
+    }
+}
+
+#[derive(Template)]
+#[template(path = "rustdoc/platforms.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct PlatformList {
     metadata: ShortMetadata,
     inner_path: String,
     use_direct_platform_links: bool,
     current_target: String,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    PlatformList = "rustdoc/platforms.html",
+    PlatformList,
     cache_policy = |_| CachePolicy::ForeverInCdn,
     cpu_intensive_rendering = true,
 }
@@ -652,6 +694,7 @@ pub(crate) async fn get_all_platforms_inner(
             inner_path: "".into(),
             use_direct_platform_links: is_crate_root,
             current_target: "".into(),
+            csp_nonce: String::new(),
         }
         .into_response());
     }
@@ -706,6 +749,7 @@ pub(crate) async fn get_all_platforms_inner(
         inner_path,
         use_direct_platform_links: is_crate_root,
         current_target,
+        csp_nonce: String::new(),
     }
     .into_response())
 }
@@ -1602,7 +1646,7 @@ mod tests {
                 assert_eq!(
                     url.contains("/target-redirect/"),
                     should_contain_redirect,
-                    "ajax: {ajax:?}, should_contain_redirect: {should_contain_redirect:?}",
+                    "url: {url:?}, ajax: {ajax:?}, should_contain_redirect: {should_contain_redirect:?}",
                 );
                 if !should_contain_redirect {
                     assert_eq!(rel, "");

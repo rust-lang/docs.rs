@@ -8,25 +8,32 @@
     <link href="https://pubsubhubbub.appspot.com" rel="hub" />
     <link href="https://pubsubhubbub.superfeedr.com" rel="hub" />
 
-    <id>urn:docs-rs:{{ docsrs_version() }}</id>
-    <updated>{{ recent_releases[0].build_time | default(value=now()) | date(format="%+") }}</updated>
+    <id>urn:docs-rs:{{ crate::BUILD_VERSION }}</id>
+    <updated>
+    {%- if let Some(first_release) = recent_releases.get(0) -%}
+        {{ first_release.build_time|opt_date("%+") }}
+    {%- endif -%}
+    </updated>
 
     {%- for release in recent_releases -%}
-        {%- if release.rustdoc_status -%}
-            {%- set link = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
+        {% set link = String::new() %}
+        {%- if release.rustdoc_status && release.target_name.is_some() -%}
+            {%- set link = "/{}/{}/{}/"|format(release.name, release.version, release.target_name.as_ref().unwrap()) -%}
         {%- else -%}
-            {%- set link = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+            {%- set link = "/crate/{}/{}"|format(release.name, release.version) -%}
         {%- endif %}
 
         <entry>
             <title>{{ release.name }}-{{ release.version }}</title>
 
-            <link href="{{ link | safe }}" />
+            <link href="{{ link|safe }}" />
             <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id>
-            <updated>{{ release.build_time | date(format="%+") }}</updated>
+            <updated>{{ release.build_time|opt_date("%+") }}</updated>
 
             <summary>
-                {{ release.description | default(value="") | escape_xml }}
+                {%- if let Some(description) = release.description -%}
+                    {{- description|escape_xml -}}
+                {%- endif -%}
             </summary>
 
             <author>

@@ -1,8 +1,8 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}
 {%- endblock title -%}
 
 {%- block body_classes -%}
@@ -10,30 +10,26 @@
 {%- endblock body_classes -%}
 
 {%- block topbar -%}
-    {%- set latest_version = "" -%}
-    {%- set latest_path = "" -%}
-    {%- set target = "" -%}
-    {%- if metadata.target_name -%}
-        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-    {%- else -%}
-        {%- set inner_path = "" -%}
-    {%- endif -%}
-    {%- set is_latest_version = true -%}
-    {%- set is_prerelease = false -%}
-    {%- include "rustdoc/topbar.html" -%}
+  {%- set current_target = String::new() -%}
+  {%- set latest_version = "" -%}
+  {%- set latest_path = "" -%}
+  {%- set target = "" -%}
+  {%- set inner_path = metadata.target_name_url() -%}
+  {%- set is_latest_version = true -%}
+  {%- set is_prerelease = false -%}
+  {%- set has_crate = false %}
+  {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
-    {{ navigation::package_navigation(metadata=metadata, active_tab="builds") }}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="builds") %}
 {%- endblock header -%}
 
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
             <div class="release">
-                <strong>
-                    Build #{{ build_details.id }} {%- if build_details.build_time -%} {{ build_details.build_time | date(format="%+") }} {%- endif -%}
-                </strong>
+                <strong>Build #{{ build_details.id }} {%- if let Some(build_time) = build_details.build_time %} {{ build_time|date("%+") }}{% endif %}</strong>
             </div>
 
             <ul>
@@ -41,9 +37,9 @@
                     <li>
                         <a href="/crate/{{ metadata.name }}/{{ metadata.version }}/builds/{{ build_details.id }}/{{ filename }}" class="release">
                             <div class="pure-g">
-                                <div class="pure-u-1 pure-u-sm-1-24 build">{{ "file-lines" | fas }}</div>
+                                <div class="pure-u-1 pure-u-sm-1-24 build">{{ "file-lines"|fas(false, false, "")|safe }}</div>
                                 <div class="pure-u-1 pure-u-sm-10-24">
-                                    {% if current_filename and current_filename == filename %}
+                                    {% if current_filename.as_deref().unwrap_or_default() == filename.as_str() %}
                                         <b>{{ filename }}</b>
                                     {% else %}
                                         {{ filename }}
@@ -55,25 +51,24 @@
                 {%- endfor -%}
             </ul>
 
-            {%- filter dedent -%}
+            {%- filter dedent(None)|safe -%}
                 <pre>
-
-                    {%- if build_details.errors -%}
+                    {%- if let Some(errors) = build_details.errors -%}
                         # pre-build errors
-                        {{ build_details.errors }}
+                        {{ errors }}
                     {%- endif -%}
 
-                    {%- if build_details.rustc_version -%}
+                    {%- if let Some(rustc_version) = build_details.rustc_version -%}
                         # rustc version
-                        {{ build_details.rustc_version }}
+                        {{ rustc_version }}
                     {%- endif -%}
 
-                    {%- if build_details.docsrs_version -%}
+                    {%- if let Some(docsrs_version) = build_details.docsrs_version -%}
                         # docs.rs version
-                        {{ build_details.docsrs_version }}
+                        {{ docsrs_version }}
                     {%- endif -%}
 
-                    {%- if build_details.output -%}
+                    {%- if !build_details.output.is_empty() -%}
                         # build log
                         {{ build_details.output }}
                     {%- endif -%}

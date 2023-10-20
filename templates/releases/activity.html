@@ -1,11 +1,17 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "releases/header.html" as release_macros -%}
 
 {%- block title -%}Releases - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Releases", description=description, tab="activity") }}
+    {% call release_macros::header(title="Releases", description=description, tab="activity", owner="") %}
 {%- endblock header -%}
+
+{%- block topbar -%}
+    {% set is_latest_version = true %}
+    {% let search_query = Some(String::new()) %}
+    {%- include "header/topbar.html" -%}
+{%- endblock topbar -%}
 
 {%- block body -%}
     <div class="container">
@@ -28,21 +34,21 @@
         new Chart(ctx, {
             type: "line",
             data: {
-                labels: {{ dates | json_encode() | safe }},
+                labels: {{ dates|fmt("{:?}")|safe }},
                 datasets: [
                     {
                         label: "Releases",
                         borderColor: "#4d76ae",
                         backgroundColor: "#4d76ae",
                         fill: false,
-                        data: {{ counts | json_encode() | safe }},
+                        data: {{ counts|fmt("{:?}")|safe }},
                     },
                     {
                         label: "Build Failures",
                         borderColor: "#434348",
                         backgroundColor: "#434348",
                         fill: false,
-                        data: {{ failures | json_encode() | safe }},
+                        data: {{ failures|fmt("{:?}")|safe }},
                     },
                 ]
             },

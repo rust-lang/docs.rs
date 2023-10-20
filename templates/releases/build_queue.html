@@ -1,16 +1,22 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "releases/header.html" as release_macros -%}
 
 {%- block title -%}Queue - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
-    {{ release_macros::header(title="Queue", description=description, tab="queue") }}
+    {% call release_macros::header(title="Queue", description=description, tab="queue", owner="") %}
 {%- endblock header -%}
+
+{%- block topbar -%}
+    {% set is_latest_version = true %}
+    {% let search_query = Some(String::new()) %}
+    {%- include "header/topbar.html" -%}
+{%- endblock topbar -%}
 
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
-            {%- if active_deployments %}
+            {%- if !active_deployments.is_empty() %}
                 <div class="release">
                     <strong>active CDN deployments</strong>
                 </div>
@@ -44,15 +50,15 @@
             </div>
 
             <ol class="queue-list">
-                {%- if queue -%}
-                    {% for crate in queue -%}
+                {%- if !queue.is_empty() -%}
+                    {% for crate_item in queue -%}
                         <li>
-                            <a href="https://crates.io/crates/{{ crate.name }}">
-                                {{ crate.name }} {{ crate.version }}
+                            <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                {{- crate_item.name }} {{ crate_item.version -}}
                             </a>
 
-                            {% if crate.priority != 0 -%}
-                                (priority: {{ crate.priority }})
+                            {% if crate_item.priority != 0 -%}
+                                (priority: {{ crate_item.priority }})
                             {%- endif %}
                         </li>
                     {%- endfor %}

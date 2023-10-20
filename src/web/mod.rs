@@ -1,12 +1,15 @@
 //! Web interface of docs.rs
 
 pub mod page;
+// mod tmp;
 
 use crate::db::types::BuildStatus;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
+use crate::web::page::templates::filters;
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum_extra::middleware::option_layer;
+use rinja::Template;
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -25,7 +28,7 @@ mod markdown;
 pub(crate) mod metrics;
 mod releases;
 mod routes;
-mod rustdoc;
+pub(crate) mod rustdoc;
 mod sitemap;
 mod source;
 mod statics;
@@ -702,8 +705,22 @@ impl MetaData {
         targets.sort_unstable();
         targets
     }
+
+    fn target_name_url(&self) -> String {
+        if let Some(ref target_name) = self.target_name {
+            format!("{target_name}/index.html")
+        } else {
+            String::new()
+        }
+    }
+
+    pub(crate) fn doc_targets(&self) -> Option<&[String]> {
+        self.doc_targets.as_deref()
+    }
 }
 
+#[derive(Template)]
+#[template(path = "error.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct AxumErrorPage {
     /// The title of the page
@@ -712,10 +729,17 @@ pub(crate) struct AxumErrorPage {
     pub message: Cow<'static, str>,
     #[serde(skip)]
     pub status: StatusCode,
+    pub csp_nonce: String,
+}
+
+impl AxumErrorPage {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
 }
 
 impl_axum_webpage! {
-    AxumErrorPage = "error.html",
+    AxumErrorPage,
     status = |err| err.status,
 }
 
@@ -795,11 +819,14 @@ mod test {
 
             let foo_crate =
                 kuchikiki::parse_html().one(web.get("/crate/foo/0.0.1").send()?.text()?);
-            for value in &["60%", "6", "10", "2", "1"] {
-                assert!(foo_crate
-                    .select(".pure-menu-item b")
-                    .unwrap()
-                    .any(|e| dbg!(e.text_contents()).contains(value)));
+            for (idx, value) in ["60%", "6", "10", "2", "1"].iter().enumerate() {
+                assert!(
+                    foo_crate
+                        .select(".pure-menu-item b")
+                        .unwrap()
+                        .any(|e| dbg!(e.text_contents()).contains(value)),
+                    "({idx}, {value:?})"
+                );
             }
 
             let foo_doc = kuchikiki::parse_html().one(web.get("/foo/0.0.1/foo").send()?.text()?);

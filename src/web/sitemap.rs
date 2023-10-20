@@ -6,31 +6,39 @@ use crate::{
     web::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        AxumErrorPage,
+        page::templates::filters,
+        AxumErrorPage, MetaData,
     },
     Config,
 };
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use chrono::{TimeZone, Utc};
 use futures_util::stream::TryStreamExt;
+use rinja::Template;
 use serde::Serialize;
 use std::sync::Arc;
 
 /// sitemap index
+#[derive(Template)]
+#[template(path = "core/sitemapindex.xml")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SitemapIndexXml {
     sitemaps: Vec<char>,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    SitemapIndexXml   = "core/sitemapindex.xml",
+    SitemapIndexXml,
     content_type = "application/xml",
 }
 
 pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     let sitemaps: Vec<char> = ('a'..='z').collect();
 
-    SitemapIndexXml { sitemaps }
+    SitemapIndexXml {
+        sitemaps,
+        csp_nonce: String::new(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -41,13 +49,16 @@ struct SitemapRow {
 }
 
 /// The sitemap
+#[derive(Template)]
+#[template(path = "core/sitemap.xml")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct SitemapXml {
     releases: Vec<SitemapRow>,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    SitemapXml   = "core/sitemap.xml",
+    SitemapXml,
     content_type = "application/xml",
 }
 
@@ -93,9 +104,14 @@ pub(crate) async fn sitemap_handler(
     .try_collect()
     .await?;
 
-    Ok(SitemapXml { releases })
+    Ok(SitemapXml {
+        releases,
+        csp_nonce: String::new(),
+    })
 }
 
+#[derive(Template)]
+#[template(path = "core/about/builds.html")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct AboutBuilds {
     /// The current version of rustc that docs.rs is using to build crates
@@ -104,9 +120,16 @@ struct AboutBuilds {
     limits: Limits,
     /// Just for the template, since this isn't shared with AboutPage
     active_tab: &'static str,
+    csp_nonce: String,
 }
 
-impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
+impl AboutBuilds {
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        None
+    }
+}
+
+impl_axum_webpage!(AboutBuilds);
 
 pub(crate) async fn about_builds_handler(
     Extension(pool): Extension<Pool>,
@@ -122,17 +145,34 @@ pub(crate) async fn about_builds_handler(
         rustc_version,
         limits: Limits::new(&config),
         active_tab: "builds",
+        csp_nonce: String::new(),
     })
 }
 
-#[derive(Serialize)]
-struct AboutPage<'a> {
-    #[serde(skip)]
-    template: String,
-    active_tab: &'a str,
+macro_rules! about_page {
+    ($ty:ident, $template:literal) => {
+        #[derive(Template)]
+        #[template(path = $template)]
+        struct $ty {
+            active_tab: &'static str,
+            csp_nonce: String,
+        }
+
+        impl_axum_webpage! { $ty }
+
+        impl $ty {
+            pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+                None
+            }
+        }
+    };
 }
 
-impl_axum_webpage!(AboutPage<'_> = |this: &AboutPage| this.template.clone().into());
+about_page!(AboutPage, "core/about/index.html");
+about_page!(AboutPageBadges, "core/about/badges.html");
+about_page!(AboutPageMetadata, "core/about/metadata.html");
+about_page!(AboutPageRedirection, "core/about/redirections.html");
+about_page!(AboutPageDownload, "core/about/download.html");
 
 pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<impl IntoResponse> {
     let subpage = match subpage {
@@ -140,9 +180,32 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
         None => "index".to_string(),
     };
 
-    let name = match &subpage[..] {
-        "about" | "index" => "index",
-        x @ "badges" | x @ "metadata" | x @ "redirections" | x @ "download" => x,
+    let response = match &subpage[..] {
+        "about" | "index" => AboutPage {
+            active_tab: "index",
+            csp_nonce: String::new(),
+        }
+        .into_response(),
+        "badges" => AboutPageBadges {
+            active_tab: "badges",
+            csp_nonce: String::new(),
+        }
+        .into_response(),
+        "metadata" => AboutPageMetadata {
+            active_tab: "metadata",
+            csp_nonce: String::new(),
+        }
+        .into_response(),
+        "redirections" => AboutPageRedirection {
+            active_tab: "redirections",
+            csp_nonce: String::new(),
+        }
+        .into_response(),
+        "download" => AboutPageDownload {
+            active_tab: "download",
+            csp_nonce: String::new(),
+        }
+        .into_response(),
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";
@@ -150,16 +213,12 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
                 title: "The requested page does not exist",
                 message: msg.into(),
                 status: StatusCode::NOT_FOUND,
+                csp_nonce: String::new(),
             };
-            return Ok(page.into_response());
+            page.into_response()
         }
     };
-    let template = format!("core/about/{name}.html");
-    Ok(AboutPage {
-        template,
-        active_tab: name,
-    }
-    .into_response())
+    Ok(response)
 }
 
 #[cfg(test)]
