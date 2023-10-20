@@ -20,9 +20,9 @@
     * `target` An optional target
     * `extra_classes` Optional extra css classes
 #}
-{% macro menu_link(href, text, target="", extra_classes="") %}
+{% macro menu_link(href, text, target="") %}
     <li class="pure-menu-item">
-        <a class="pure-menu-link {{ extra_classes }}" href="{{ href }}" {% if target != "" -%} target="{{ target }}" {%- endif %}>
+        <a class="pure-menu-link" href="{{ href }}" {% if target != "" -%} target="{{ target }}" {%- endif %}>
             {{ text }}
         </a>
     </li>
