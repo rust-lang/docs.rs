@@ -1,2 +1,2 @@
 *.sh eol=lf
-/.sqlx/* binary
+/.sqlx/* binary linguist-generated=true
