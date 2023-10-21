@@ -42,7 +42,7 @@ services:
             POSTGRES_PASSWORD: password
         ports:
             # Use a non-standard port on the host to avoid conflicting with existing postgres servers
-            - "15432:5432"
+            - "127.0.0.1:15432:5432"
         healthcheck:
             test: ["CMD", "pg_isready", "--username", "cratesfyi"]
             interval: 10s
@@ -57,8 +57,8 @@ services:
                 minio server /data --console-address ":9001";
             "
         ports:
-            - "9000:9000"
-            - "9001:9001"
+            - "127.0.0.1:9000:9000"
+            - "127.0.0.1:9001:9001"
         volumes:
             - minio-data:/data
         environment:
@@ -82,7 +82,7 @@ services:
             context: ./dockerfiles
             dockerfile: ./Dockerfile-prometheus
         ports:
-            - "9090:9090"
+            - "127.0.0.1:9090:9090"
         healthcheck:
             test:
                 ["CMD", "curl", "--silent", "--fail", "localhost:9090/-/ready"]
