@@ -149,9 +149,9 @@ Three services are defined:
 
 | name | access                                          | credentials                | description                            |
 |------|-------------------------------------------------|----------------------------|----------------------------------------|
-| web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
-| db   | postgresql://cratesfyi:password@localhost:15432 | -                          | Postgres database used by web          |
-| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | MinIO (simulates AWS S3) used by web   |
+| web  | http://0.0.0.0:3000                             | N/A                        | A container running the docs.rs binary |
+| db   | postgresql://cratesfyi:password@127.0.0.1:15432 | -                          | Postgres database used by web          |
+| s3   | http://127.0.0.1:9000                           | `cratesfyi` - `secret_key` | MinIO (simulates AWS S3) used by web   |
 
 [docker-compose.yml]: ./docker-compose.yml
 
