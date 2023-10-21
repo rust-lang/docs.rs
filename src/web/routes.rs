@@ -306,7 +306,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         )
         .route(
             "/:name/badge.svg",
-            get_rustdoc(super::rustdoc::badge_handler),
+            get_internal(super::rustdoc::badge_handler),
         )
         .route(
             "/:name",
