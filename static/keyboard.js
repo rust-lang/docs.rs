@@ -110,6 +110,18 @@
         }
     }
 
+    function handleSortByChange() {
+        const inputSearch = document.getElementById("nav-search");
+        const searchForm = document.getElementById("nav-search-form");
+        if (inputSearch.value && searchForm) {
+            searchForm.submit()
+        }
+    }
+    const searchSortBySel = document.getElementById("nav-sort");
+    if (searchSortBySel) {
+        searchSortBySel.addEventListener("change", handleSortByChange)
+    }
+
     document.onkeypress = handleKey;
     document.onkeydown = handleKey;
 })();

@@ -99,7 +99,7 @@ div.nav-container {
         display: flex;
         flex-direction: row;
 
-        #search-input-nav {
+        #search-input-nav, #search-select-nav {
             max-width: 150px;
             display: none;
             border-left: 1px solid var(--color-border);
@@ -120,7 +120,7 @@ div.nav-container {
                 font-size: 12.8px;
             }
 
-            input {
+            input, select {
                 border: none;
                 margin: 0 1em 0 0;
                 font-size: 12.8px;
@@ -130,7 +130,7 @@ div.nav-container {
             }
         }
 
-        input.search-input-nav:focus {
+        input.search-input-nav:focus,  select.search-select-nav:focus {
             outline: unset;
         }
 
@@ -363,7 +363,7 @@ div.nav-container {
     }
 }
 
-#nav-search {
+#nav-search, #nav-sort {
     color: var(--color-navbar-standard);
 }
 

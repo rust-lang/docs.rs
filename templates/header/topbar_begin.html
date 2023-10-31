@@ -8,6 +8,7 @@
         <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
             <form action="/releases/search"
                   method="GET"
+                  id="nav-search-form"
                   class="landing-search-form-nav {%
                   if is_latest_version is defined and not is_latest_version %}not-latest{% endif
                   %} {% if metadata.yanked %}yanked{% endif %}">
