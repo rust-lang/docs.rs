@@ -435,6 +435,7 @@ pub(super) struct Search {
     #[serde(rename = "releases")]
     pub(super) results: Vec<Release>,
     pub(super) search_query: Option<String>,
+    pub(super) search_sort_by: Option<String>,
     pub(super) previous_page_link: Option<String>,
     pub(super) next_page_link: Option<String>,
     /// This should always be `ReleaseType::Search`
@@ -451,6 +452,7 @@ impl Default for Search {
             search_query: None,
             previous_page_link: None,
             next_page_link: None,
+            search_sort_by: None,
             release_type: ReleaseType::Search,
             status: http::StatusCode::OK,
         }
@@ -528,7 +530,10 @@ pub(crate) async fn search_handler(
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-
+    let sort_by = params
+        .get("sort")
+        .map(|q| q.to_string())
+        .unwrap_or_else(|| "relevance".to_string());
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
     if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
@@ -599,6 +604,7 @@ pub(crate) async fn search_handler(
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
+            .append_pair("sort", &sort_by)
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
@@ -619,6 +625,7 @@ pub(crate) async fn search_handler(
         title,
         results: search_result.results,
         search_query: Some(executed_query),
+        search_sort_by: Some(sort_by),
         next_page_link: search_result
             .next_page
             .map(|params| format!("/releases/search?paginate={}", b64.encode(params))),
