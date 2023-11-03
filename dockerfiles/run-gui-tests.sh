@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 # Just in case it's running, we stop the web server.
 docker-compose stop web
 
