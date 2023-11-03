@@ -130,7 +130,7 @@ jobs:
       - name: Clean up the database
         run: docker-compose down --volumes
 
-  GUIs_test:
+  GUI_test:
     runs-on: ubuntu-latest
     needs: build
     steps:
