@@ -135,12 +135,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+      - id: install
+        run: |
+          rustup override set stable
+          rustup update stable
 
-      - name: get test binaries from cache
-        uses: actions/download-artifact@v3
-        with:
-          name: test-binaries-${{ github.sha }}
-          path: ./test-binaries/
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Launch postgres and min.io
         run: |
