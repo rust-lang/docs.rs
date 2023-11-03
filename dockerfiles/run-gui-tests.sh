@@ -12,12 +12,11 @@ cargo run -- build crate sysinfo 0.23.5
 cargo run -- build add-essential-files
 
 # In case we don't have a `.env`, we create one.
-if [ ! -f .env ]
-then
+if [ ! -f .env ]; then
 cp .env.sample .env
-. .env
 fi
 
+. .env
 cargo run -- start-web-server &
 SERVER_PID=$!
 
