@@ -6,7 +6,10 @@ use crate::{cdn, db::Pool, target::TargetAtom, BuildQueue, Config};
 use anyhow::Error;
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashSet,
+    time::{Duration, Instant},
+};
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -307,7 +310,26 @@ impl ServiceMetrics {
 
         let queue_pending_count = queue.pending_count_by_priority()?;
 
-        for (priority, count) in queue_pending_count.iter() {
+        // gauges keep their old value per label when it's not removed, reset to zero or updated.
+        // When a priority is used at least once, it would be kept in the metric and the last
+        // value would be remembered. `pending_count_by_priority` returns only the priorities
+        // that are currently in the queue, which means when the tasks for a priority are
+        // finished, we wouldn't update the metric any more, which means a wrong value is
+        // in the metric.
+        //
+        // The solution is to reset the metric, and then set all priorities again.
+        self.queued_crates_count_by_priority.reset();
+
+        // for commonly used priorities we want the value to be zero, and not missing,
+        // when there are no items in the queue with that priority.
+        // So we create a set of all priorities we want to be explicitly zeroed, combined
+        // with the actual priorities in the queue.
+        let all_priorities: HashSet<i32> =
+            queue_pending_count.keys().copied().chain(0..=20).collect();
+
+        for priority in all_priorities {
+            let count = queue_pending_count.get(&priority).unwrap_or(&0);
+
             self.queued_crates_count_by_priority
                 .with_label_values(&[&priority.to_string()])
                 .set(*count as i64);
