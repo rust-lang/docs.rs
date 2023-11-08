@@ -30,6 +30,8 @@ jobs:
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "rust-cache-20231109"
 
       - name: Build
         run: cargo build --workspace --locked
@@ -72,6 +74,8 @@ jobs:
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "rust-cache-20231109"
 
       - name: Build
         run: cargo build --workspace --locked
