@@ -1329,4 +1329,25 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    #[ignore]
+    fn test_new_builder_detects_existing_rustc() {
+        wrapper(|env: &TestEnvironment| {
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
+            drop(builder);
+
+            // new builder should detect the existing rustc version from the previous builder
+            // (simulating running `update-toolchain` and `build crate` in separate invocations)
+            let mut builder = RustwideBuilder::init(env)?;
+            assert!(builder.build_package(
+                DUMMY_CRATE_NAME,
+                DUMMY_CRATE_VERSION,
+                PackageKind::CratesIo
+            )?);
+
+            Ok(())
+        })
+    }
 }
