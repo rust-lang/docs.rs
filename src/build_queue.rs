@@ -285,13 +285,10 @@ impl BuildQueue {
             .context("no last_seen_reference set in database")?;
         diff.set_last_seen_reference(last_seen_reference)?;
 
-        let (mut changes, new_reference) = diff.peek_changes_ordered()?;
+        let (changes, new_reference) = diff.peek_changes_ordered()?;
         let mut crates_added = 0;
 
         debug!("queueing changes from {last_seen_reference} to {new_reference}");
-
-        // I believe this will fix ordering of queue if we get more than one crate from changes
-        changes.reverse();
 
         for change in &changes {
             if let Some((ref krate, ..)) = change.crate_deleted() {
