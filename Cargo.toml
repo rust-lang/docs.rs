@@ -129,6 +129,9 @@ aws-smithy-client = { version = "0.56.0", features = ["test-util"]}
 aws-smithy-http = "0.56.0"
 indoc = "2.0.0"
 
+[profile.dev.package.sqlx-macros]
+opt-level = 2
+
 [build-dependencies]
 time = "0.3"
 gix = { version = "0.55.2", default-features = false }
