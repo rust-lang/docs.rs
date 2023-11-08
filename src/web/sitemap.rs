@@ -5,6 +5,7 @@ use crate::{
     utils::{get_config, spawn_blocking, ConfigName},
     web::{
         error::{AxumNope, AxumResult},
+        extractors::DbConnection,
         AxumErrorPage,
     },
     Config,
@@ -14,7 +15,8 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
+use futures_util::stream::TryStreamExt;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -55,7 +57,7 @@ impl_axum_webpage! {
 
 pub(crate) async fn sitemap_handler(
     Path(letter): Path<String>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
     if letter.len() != 1 {
         return Err(AxumNope::ResourceNotFound);
@@ -64,37 +66,33 @@ pub(crate) async fn sitemap_handler(
             return Err(AxumNope::ResourceNotFound);
         }
     }
-    let releases = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        let query = conn.query(
-            "SELECT crates.name,
-                    releases.target_name,
-                    MAX(releases.release_time) as release_time
-             FROM crates
-             INNER JOIN releases ON releases.crate_id = crates.id
-             WHERE
-                rustdoc_status = true AND
-                crates.name ILIKE $1
-             GROUP BY crates.name, releases.target_name
-             ",
-            &[&format!("{letter}%")],
-        )?;
 
-        Ok(query
-            .into_iter()
-            .map(|row| SitemapRow {
-                crate_name: row.get("name"),
-                target_name: row.get("target_name"),
-                last_modified: row
-                    .get::<_, DateTime<Utc>>("release_time")
-                    // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
-                    // so they should all get recrawled if they haven't been since then.
-                    .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
-                    .format("%+")
-                    .to_string(),
-            })
-            .collect())
+    let releases: Vec<_> = sqlx::query!(
+        r#"SELECT crates.name,
+                releases.target_name,
+                MAX(releases.release_time) as "release_time!"
+         FROM crates
+         INNER JOIN releases ON releases.crate_id = crates.id
+         WHERE
+            rustdoc_status = true AND
+            crates.name ILIKE $1
+         GROUP BY crates.name, releases.target_name
+         "#,
+        format!("{letter}%"),
+    )
+    .fetch(&mut *conn)
+    .map_ok(|row| SitemapRow {
+        crate_name: row.name,
+        target_name: row.target_name,
+        last_modified: row
+            .release_time
+            // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+            // so they should all get recrawled if they haven't been since then.
+            .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
+            .format("%+")
+            .to_string(),
     })
+    .try_collect()
     .await?;
 
     Ok(SitemapXml { releases })

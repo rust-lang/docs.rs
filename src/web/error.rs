@@ -132,6 +132,12 @@ impl From<anyhow::Error> for AxumNope {
     }
 }
 
+impl From<sqlx::Error> for AxumNope {
+    fn from(err: sqlx::Error) -> Self {
+        AxumNope::InternalError(anyhow!(err))
+    }
+}
+
 impl From<PoolError> for AxumNope {
     fn from(err: PoolError) -> Self {
         AxumNope::InternalError(anyhow!(err))

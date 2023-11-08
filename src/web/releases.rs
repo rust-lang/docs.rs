@@ -618,14 +618,7 @@ impl_axum_webpage! {
     ReleaseActivity = "releases/activity.html",
 }
 
-pub(crate) async fn activity_handler(
-    Extension(pool): Extension<Pool>,
-) -> AxumResult<impl IntoResponse> {
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
-
+pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let rows: Vec<_> = sqlx::query!(
         r#"WITH dates AS (
                -- we need this series so that days in the statistic that don't have any releases are included

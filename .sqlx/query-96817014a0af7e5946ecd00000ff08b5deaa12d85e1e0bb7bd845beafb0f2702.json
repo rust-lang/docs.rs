@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            builds.id,\n            builds.rustc_version,\n            builds.docsrs_version,\n            builds.build_status,\n            builds.build_time\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE crates.name = $1 AND releases.version = $2\n         ORDER BY id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "rustc_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "docsrs_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "build_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "build_time",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "96817014a0af7e5946ecd00000ff08b5deaa12d85e1e0bb7bd845beafb0f2702"
+}

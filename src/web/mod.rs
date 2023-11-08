@@ -513,38 +513,43 @@ pub(crate) struct MetaData {
 }
 
 impl MetaData {
-    fn from_crate(
-        conn: &mut Client,
+    async fn from_crate(
+        conn: &mut sqlx::PgConnection,
         name: &str,
         version: &str,
         version_or_latest: &str,
     ) -> Result<MetaData> {
-        conn.query_opt(
-            "SELECT crates.name,
-                       releases.version,
-                       releases.description,
-                       releases.target_name,
-                       releases.rustdoc_status,
-                       releases.default_target,
-                       releases.doc_targets,
-                       releases.yanked,
-                       releases.doc_rustc_version
-                FROM releases
-                INNER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
-            &[&name, &version],
-        )?
+        sqlx::query!(
+            "SELECT
+                crates.name,
+                releases.version,
+                releases.description,
+                releases.target_name,
+                releases.rustdoc_status,
+                releases.default_target,
+                releases.doc_targets,
+                releases.yanked,
+                releases.doc_rustc_version
+            FROM releases
+            INNER JOIN crates ON crates.id = releases.crate_id
+            WHERE crates.name = $1 AND releases.version = $2",
+            name,
+            version
+        )
+        .fetch_optional(&mut *conn)
+        .await
+        .context("error fetching crate metadata")?
         .map(|row| MetaData {
-            name: row.get(0),
-            version: row.get(1),
+            name: row.name,
+            version: row.version,
             version_or_latest: version_or_latest.to_string(),
-            description: row.get(2),
-            target_name: row.get(3),
-            rustdoc_status: row.get(4),
-            default_target: row.get(5),
-            doc_targets: MetaData::parse_doc_targets(row.get(6)),
-            yanked: row.get(7),
-            rustdoc_css_file: get_correct_docsrs_style_file(row.get(8)).unwrap(),
+            description: row.description,
+            target_name: Some(row.target_name),
+            rustdoc_status: row.rustdoc_status,
+            default_target: row.default_target,
+            doc_targets: MetaData::parse_doc_targets(row.doc_targets),
+            yanked: row.yanked,
+            rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version).unwrap(),
         })
         .ok_or_else(|| anyhow!("missing metadata for {} {}", name, version))
     }
@@ -1002,8 +1007,10 @@ mod test {
     fn metadata_from_crate() {
         wrapper(|env| {
             release("0.1.0", env);
-            let mut conn = env.db().conn();
-            let metadata = MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest");
+            let metadata = env.runtime().block_on(async move {
+                let mut conn = env.db().async_conn().await;
+                MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest").await
+            });
             assert_eq!(
                 metadata.unwrap(),
                 MetaData {
