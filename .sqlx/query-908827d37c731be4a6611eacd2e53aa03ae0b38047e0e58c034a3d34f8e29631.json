@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT releases.rustdoc_status\n                 FROM releases\n                 WHERE releases.id = $1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "908827d37c731be4a6611eacd2e53aa03ae0b38047e0e58c034a3d34f8e29631"
+}

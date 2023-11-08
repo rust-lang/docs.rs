@@ -1,9 +1,8 @@
 use crate::{
-    db::Pool,
     impl_axum_webpage,
-    utils::spawn_blocking,
     web::{
         error::{AxumNope, AxumResult},
+        extractors::DbConnection,
         file::File,
         MetaData,
     },
@@ -41,58 +40,48 @@ impl_axum_webpage! {
 
 pub(crate) async fn build_details_handler(
     Path((name, version, id)): Path<(String, String, String)>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let id: i32 = id.parse().map_err(|_| AxumNope::BuildNotFound)?;
 
-    let (row, output, metadata) = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        let row = conn
-            .query_opt(
-                "SELECT
-                     builds.rustc_version,
-                     builds.docsrs_version,
-                     builds.build_status,
-                     builds.build_time,
-                     builds.output,
-                     releases.default_target
-                 FROM builds
-                 INNER JOIN releases ON releases.id = builds.rid
-                 INNER JOIN crates ON releases.crate_id = crates.id
-                 WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
-                &[&id, &name, &version],
-            )?
-            .ok_or(AxumNope::BuildNotFound)?;
+    let row = sqlx::query!(
+        "SELECT
+             builds.rustc_version,
+             builds.docsrs_version,
+             builds.build_status,
+             builds.build_time,
+             builds.output,
+             releases.default_target
+         FROM builds
+         INNER JOIN releases ON releases.id = builds.rid
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+        id,
+        name,
+        version,
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or(AxumNope::BuildNotFound)?;
 
-        let output: Option<String> = row.get("output");
-
-        Ok((
-            row,
-            output,
-            MetaData::from_crate(&mut conn, &name, &version, &version)?,
-        ))
-    })
-    .await?;
-
-    let output = if let Some(output) = output {
+    let output = if let Some(output) = row.output {
         output
     } else {
-        let target: String = row.get("default_target");
-        let path = format!("build-logs/{id}/{target}.txt");
+        let path = format!("build-logs/{id}/{}.txt", row.default_target);
         let file = File::from_path(&storage, &path, &config).await?;
         String::from_utf8(file.0.content).context("non utf8")?
     };
 
     Ok(BuildDetailsPage {
-        metadata,
+        metadata: MetaData::from_crate(&mut conn, &name, &version, &version).await?,
         build_details: BuildDetails {
             id,
-            rustc_version: row.get("rustc_version"),
-            docsrs_version: row.get("docsrs_version"),
-            build_status: row.get("build_status"),
-            build_time: row.get("build_time"),
+            rustc_version: row.rustc_version,
+            docsrs_version: row.docsrs_version,
+            build_status: row.build_status,
+            build_time: row.build_time,
             output,
         },
         use_direct_platform_links: true,

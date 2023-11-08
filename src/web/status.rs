@@ -1,7 +1,6 @@
 use super::cache::CachePolicy;
 use crate::{
     db::Pool,
-    utils::spawn_blocking,
     web::{axum_redirect, error::AxumResult, match_version_axum, MatchSemver},
 };
 use axum::{
@@ -34,20 +33,16 @@ pub(crate) async fn status_handler(
                 }
             };
 
-            let rustdoc_status: bool = spawn_blocking({
-                move || {
-                    Ok(pool
-                        .get()?
-                        .query_one(
-                            "SELECT releases.rustdoc_status
-                             FROM releases
-                             WHERE releases.id = $1
-                            ",
-                            &[&id],
-                        )?
-                        .get("rustdoc_status"))
-                }
-            })
+            let mut conn = pool.get_async().await?;
+
+            let rustdoc_status: bool = sqlx::query_scalar!(
+                "SELECT releases.rustdoc_status
+                 FROM releases
+                 WHERE releases.id = $1
+                ",
+                id
+            )
+            .fetch_one(&mut *conn)
             .await?;
 
             let json = Json(serde_json::json!({

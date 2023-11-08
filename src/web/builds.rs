@@ -61,22 +61,21 @@ pub(crate) async fn build_list_handler(
         }
     };
 
-    let (limits, builds, metadata) = spawn_blocking({
+    let limits = spawn_blocking({
         let name = name.clone();
+        let pool = pool.clone();
         move || {
             let mut conn = pool.get()?;
-            Ok((
-                Limits::for_crate(&config, &mut conn, &name)?,
-                get_builds(&mut conn, &name, &version)?,
-                MetaData::from_crate(&mut conn, &name, &version, &version_or_latest)?,
-            ))
+            Limits::for_crate(&config, &mut conn, &name)
         }
     })
     .await?;
 
+    let mut conn = pool.get_async().await?;
+
     Ok(BuildsPage {
-        metadata,
-        builds,
+        metadata: MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?,
+        builds: get_builds(&mut conn, &name, &version).await?,
         limits,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
         use_direct_platform_links: true,
@@ -102,51 +101,39 @@ pub(crate) async fn build_list_json_handler(
         }
     };
 
-    let builds = spawn_blocking({
-        move || {
-            let mut conn = pool.get()?;
-            get_builds(&mut conn, &name, &version)
-        }
-    })
-    .await?;
+    let mut conn = pool.get_async().await?;
 
     Ok((
         Extension(CachePolicy::NoStoreMustRevalidate),
         [(ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
-        Json(builds),
+        Json(get_builds(&mut conn, &name, &version).await?),
     )
         .into_response())
 }
 
-fn get_builds(conn: &mut postgres::Client, name: &str, version: &str) -> Result<Vec<Build>> {
-    Ok(conn
-        .query(
-            "SELECT crates.name,
-                releases.version,
-                releases.description,
-                releases.rustdoc_status,
-                releases.target_name,
-                builds.id,
-                builds.rustc_version,
-                builds.docsrs_version,
-                builds.build_status,
-                builds.build_time
-             FROM builds
-             INNER JOIN releases ON releases.id = builds.rid
-             INNER JOIN crates ON releases.crate_id = crates.id
-             WHERE crates.name = $1 AND releases.version = $2
-             ORDER BY id DESC",
-            &[&name, &version],
-        )?
-        .iter()
-        .map(|row| Build {
-            id: row.get("id"),
-            rustc_version: row.get("rustc_version"),
-            docsrs_version: row.get("docsrs_version"),
-            build_status: row.get("build_status"),
-            build_time: row.get("build_time"),
-        })
-        .collect())
+async fn get_builds(
+    conn: &mut sqlx::PgConnection,
+    name: &str,
+    version: &str,
+) -> Result<Vec<Build>> {
+    Ok(sqlx::query_as!(
+        Build,
+        "SELECT
+            builds.id,
+            builds.rustc_version,
+            builds.docsrs_version,
+            builds.build_status,
+            builds.build_time
+         FROM builds
+         INNER JOIN releases ON releases.id = builds.rid
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE crates.name = $1 AND releases.version = $2
+         ORDER BY id DESC",
+        name,
+        version,
+    )
+    .fetch_all(&mut *conn)
+    .await?)
 }
 
 #[cfg(test)]

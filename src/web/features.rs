@@ -1,10 +1,9 @@
 use super::headers::CanonicalUrl;
 use super::MatchSemver;
-use crate::db::types::Feature;
 use crate::{
+    db::types::Feature,
     db::Pool,
     impl_axum_webpage,
-    utils::spawn_blocking,
     web::{cache::CachePolicy, error::AxumResult, match_version_axum, MetaData},
 };
 use anyhow::anyhow;
@@ -13,6 +12,7 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Serialize;
+use sqlx::Row as _;
 use std::collections::{HashMap, VecDeque};
 
 const DEFAULT_NAME: &str = "default";
@@ -57,23 +57,20 @@ pub(crate) async fn build_features_handler(
             }
         };
 
-    let (row, metadata) = spawn_blocking({
-        let name = name.clone();
-        move || {
-            let mut conn = pool.get()?;
-            Ok((
-                conn.query_opt(
-                    "SELECT releases.features FROM releases
-                     INNER JOIN crates ON crates.id = releases.crate_id
-                     WHERE crates.name = $1 AND releases.version = $2",
-                    &[&name, &version],
-                )?
-                .ok_or_else(|| anyhow!("missing release"))?,
-                MetaData::from_crate(&mut conn, &name, &version, &version_or_latest)?,
-            ))
-        }
-    })
-    .await?;
+    let mut conn = pool.get_async().await?;
+
+    let metadata = MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?;
+
+    let row = sqlx::query(
+        "SELECT releases.features FROM releases
+         INNER JOIN crates ON crates.id = releases.crate_id
+         WHERE crates.name = $1 AND releases.version = $2",
+    )
+    .bind(&name)
+    .bind(&version)
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| anyhow!("missing release"))?;
 
     let mut features = None;
     let mut default_len = 0;
