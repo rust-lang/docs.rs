@@ -88,7 +88,6 @@ pub struct RustwideBuilder {
     storage: Arc<Storage>,
     metrics: Arc<InstanceMetrics>,
     registry_api: Arc<RegistryApi>,
-    rustc_version: String,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     workspace_initialize_time: Instant,
 }
@@ -106,7 +105,6 @@ impl RustwideBuilder {
             storage: context.storage()?,
             metrics: context.instance_metrics()?,
             registry_api: context.registry_api()?,
-            rustc_version: String::new(),
             repository_stats_updater: context.repository_stats_updater()?,
             workspace_initialize_time: Instant::now(),
         })
@@ -151,11 +149,10 @@ impl RustwideBuilder {
         // +channel argument, but the +channel argument doesn't work for CI builds. So
         // we fake the rustc version and install from scratch every time since we can't detect
         // the already-installed rustc version.
-        if let Some(ci) = self.toolchain.as_ci() {
+        if self.toolchain.as_ci().is_some() {
             self.toolchain
                 .install(&self.workspace)
                 .map_err(FailureError::compat)?;
-            self.rustc_version = format!("rustc 1.9999.0-nightly ({} 2999-12-29)", ci.sha());
             self.add_essential_files()?;
             return Ok(true);
         }
@@ -219,10 +216,22 @@ impl RustwideBuilder {
             }
         }
 
-        self.rustc_version = self.detect_rustc_version()?;
-
-        let has_changed = old_version.as_deref() != Some(&self.rustc_version);
+        let has_changed = old_version != Some(self.rustc_version()?);
         Ok(has_changed)
+    }
+
+    fn rustc_version(&self) -> Result<String> {
+        let version = self
+            .toolchain
+            .as_ci()
+            .map(|ci| {
+                // Detecting the rustc version relies on calling rustc through rustup with the
+                // +channel argument, but the +channel argument doesn't work for CI builds. So
+                // we fake the rustc version.
+                Ok(format!("rustc 1.9999.0-nightly ({} 2999-12-29)", ci.sha()))
+            })
+            .unwrap_or_else(|| self.detect_rustc_version())?;
+        Ok(version)
     }
 
     /// Return a string containing the output of `rustc --version`. Only valid
@@ -243,8 +252,8 @@ impl RustwideBuilder {
     }
 
     pub fn add_essential_files(&mut self) -> Result<()> {
-        self.rustc_version = self.detect_rustc_version()?;
-        let rustc_version = parse_rustc_version(&self.rustc_version)?;
+        let rustc_version = self.rustc_version()?;
+        let parsed_rustc_version = parse_rustc_version(&rustc_version)?;
 
         info!("building a dummy crate to get essential files");
 
@@ -266,7 +275,7 @@ impl RustwideBuilder {
 
         let mut build_dir = self
             .workspace
-            .build_dir(&format!("essential-files-{rustc_version}"));
+            .build_dir(&format!("essential-files-{parsed_rustc_version}"));
 
         // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
@@ -281,10 +290,10 @@ impl RustwideBuilder {
                     let res =
                         self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
                     if !res.result.successful {
-                        bail!("failed to build dummy crate for {}", self.rustc_version);
+                        bail!("failed to build dummy crate for {}", rustc_version);
                     }
 
-                    info!("copying essential files for {}", self.rustc_version);
+                    info!("copying essential files for {}", rustc_version);
                     assert!(!metadata.proc_macro);
                     let source = build.host_target_dir().join(HOST_TARGET).join("doc");
                     let dest = tempfile::Builder::new()
@@ -310,11 +319,7 @@ impl RustwideBuilder {
                         )?;
                     }
 
-                    set_config(
-                        &mut conn,
-                        ConfigName::RustcVersion,
-                        self.rustc_version.clone(),
-                    )?;
+                    set_config(&mut conn, ConfigName::RustcVersion, rustc_version)?;
                     Ok(())
                 })()
                 .map_err(|e| failure::Error::from_boxed_compat(e.into()))
@@ -691,7 +696,7 @@ impl RustwideBuilder {
         .to_string()];
         rustdoc_flags.extend(vec![
             "--resource-suffix".to_string(),
-            format!("-{}", parse_rustc_version(&self.rustc_version)?),
+            format!("-{}", parse_rustc_version(self.rustc_version()?)?),
         ]);
 
         let mut storage = LogStorage::new(log::LevelFilter::Info);
@@ -734,7 +739,7 @@ impl RustwideBuilder {
 
         Ok(FullBuildResult {
             result: BuildResult {
-                rustc_version: self.rustc_version.clone(),
+                rustc_version: self.rustc_version()?,
                 docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
                 successful,
             },
@@ -1336,6 +1341,7 @@ mod tests {
         wrapper(|env: &TestEnvironment| {
             let mut builder = RustwideBuilder::init(env)?;
             builder.update_toolchain()?;
+            let old_version = builder.rustc_version()?;
             drop(builder);
 
             // new builder should detect the existing rustc version from the previous builder
@@ -1346,6 +1352,7 @@ mod tests {
                 DUMMY_CRATE_VERSION,
                 PackageKind::CratesIo
             )?);
+            assert_eq!(old_version, builder.rustc_version()?);
 
             Ok(())
         })
