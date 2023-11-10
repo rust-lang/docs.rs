@@ -15,6 +15,7 @@ pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
+mod extractors;
 mod features;
 mod file;
 mod headers;
