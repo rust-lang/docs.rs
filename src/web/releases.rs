@@ -9,6 +9,7 @@ use crate::{
     web::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
+        extractors::DbConnection,
         match_version_axum,
     },
     BuildQueue, Config, InstanceMetrics,
@@ -133,7 +134,7 @@ struct SearchResult {
 ///
 /// This delegates to the crates.io search API.
 async fn get_search_results(
-    pool: Pool,
+    conn: &mut sqlx::PgConnection,
     config: &Config,
     query_params: &str,
 ) -> Result<SearchResult, anyhow::Error> {
@@ -212,10 +213,6 @@ async fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
     let crates: HashMap<String, Release> = sqlx::query!(
         r#"SELECT
                crates.name,
@@ -276,12 +273,7 @@ impl_axum_webpage! {
     HomePage = "core/home.html",
 }
 
-pub(crate) async fn home_page(Extension(pool): Extension<Pool>) -> AxumResult<impl IntoResponse> {
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
-
+pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
 
@@ -298,14 +290,7 @@ impl_axum_webpage! {
     content_type = "application/xml",
 }
 
-pub(crate) async fn releases_feed_handler(
-    Extension(pool): Extension<Pool>,
-) -> AxumResult<impl IntoResponse> {
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
-
+pub(crate) async fn releases_feed_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true).await?;
     Ok(ReleaseFeed { recent_releases })
@@ -337,15 +322,10 @@ pub(crate) enum ReleaseType {
 }
 
 pub(crate) async fn releases_handler(
-    pool: Pool,
+    conn: &mut sqlx::PgConnection,
     page: Option<i64>,
     release_type: ReleaseType,
 ) -> AxumResult<impl IntoResponse> {
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
-
     let page_number = page.unwrap_or(1);
 
     let (description, release_order, latest_only) = match release_type {
@@ -368,7 +348,7 @@ pub(crate) async fn releases_handler(
     };
 
     let releases = get_releases(
-        &mut conn,
+        &mut *conn,
         page_number,
         RELEASES_IN_RELEASES,
         release_order,
@@ -395,30 +375,30 @@ pub(crate) async fn releases_handler(
 
 pub(crate) async fn recent_releases_handler(
     page: Option<Path<i64>>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(pool, page.map(|p| p.0), ReleaseType::Recent).await
+    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Recent).await
 }
 
 pub(crate) async fn releases_by_stars_handler(
     page: Option<Path<i64>>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(pool, page.map(|p| p.0), ReleaseType::Stars).await
+    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Stars).await
 }
 
 pub(crate) async fn releases_recent_failures_handler(
     page: Option<Path<i64>>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(pool, page.map(|p| p.0), ReleaseType::RecentFailures).await
+    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::RecentFailures).await
 }
 
 pub(crate) async fn releases_failures_by_stars_handler(
     page: Option<Path<i64>>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(pool, page.map(|p| p.0), ReleaseType::Failures).await
+    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Failures).await
 }
 
 pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl IntoResponse> {
@@ -460,7 +440,7 @@ impl Default for Search {
 async fn redirect_to_random_crate(
     config: Arc<Config>,
     metrics: Arc<InstanceMetrics>,
-    pool: Pool,
+    conn: &mut sqlx::PgConnection,
 ) -> AxumResult<impl IntoResponse> {
     // We try to find a random crate and redirect to it.
     //
@@ -468,11 +448,6 @@ async fn redirect_to_random_crate(
     // on the amount of crates with > 100 GH stars over the amount of all crates.
     //
     // If random-crate-searches end up being empty, increase that value.
-    let mut conn = pool
-        .get_async()
-        .await
-        .context("can't get pool connection")?;
-
     let row = sqlx::query!(
         "WITH params AS (
             -- get maximum possible id-value in crates-table
@@ -519,6 +494,7 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn search_handler(
+    mut conn: DbConnection,
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
@@ -534,7 +510,7 @@ pub(crate) async fn search_handler(
     if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
-            return Ok(redirect_to_random_crate(config, metrics, pool)
+            return Ok(redirect_to_random_crate(config, metrics, &mut conn)
                 .await?
                 .into_response());
         }
@@ -595,14 +571,14 @@ pub(crate) async fn search_handler(
             return Err(AxumNope::NoResults);
         }
 
-        get_search_results(pool, &config, &query_params).await?
+        get_search_results(&mut conn, &config, &query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(pool, &config, &format!("?{}", &query_params)).await?
+        get_search_results(&mut conn, &config, &format!("?{}", &query_params)).await?
     } else {
         return Err(AxumNope::NoResults);
     };

@@ -1,13 +1,14 @@
-use std::borrow::Cow;
-
 use crate::{
+    db::PoolError,
     storage::PathNotFoundError,
     web::{releases::Search, AxumErrorPage},
 };
+use anyhow::anyhow;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
+use std::borrow::Cow;
 
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)] // FIXME: remove after iron is gone
@@ -128,6 +129,12 @@ impl From<anyhow::Error> for AxumNope {
                 Err(err) => AxumNope::InternalError(err),
             },
         }
+    }
+}
+
+impl From<PoolError> for AxumNope {
+    fn from(err: PoolError) -> Self {
+        AxumNope::InternalError(anyhow!(err))
     }
 }
 
