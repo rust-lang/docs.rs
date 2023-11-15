@@ -34,8 +34,6 @@ fi
 cargo run -- start-web-server &
 SERVER_PID=$!
 
-docker build . -f dockerfiles/Dockerfile-gui-tests -t gui_tests
-
 # status="docker run . -v `pwd`:/build/out:ro gui_tests"
 docker-compose run gui_tests
 status=$?
