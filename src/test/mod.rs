@@ -10,6 +10,7 @@ use crate::web::{build_axum_app, cache, page::TemplateData};
 use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi, ServiceMetrics};
 use anyhow::Context as _;
 use fn_error_context::context;
+use futures_util::FutureExt;
 use once_cell::unsync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
@@ -20,8 +21,10 @@ use std::thread::{self, JoinHandle};
 use std::{
     fmt::Write as _,
     fs,
+    future::Future,
     net::{SocketAddr, TcpListener},
     panic,
+    rc::Rc,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -36,6 +39,40 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     // if we didn't catch the panic, the server would hang forever
     let maybe_panic = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&env)));
     env.cleanup();
+    let result = match maybe_panic {
+        Ok(r) => r,
+        Err(payload) => panic::resume_unwind(payload),
+    };
+
+    if let Err(err) = result {
+        eprintln!("the test failed: {err}");
+        for cause in err.chain() {
+            eprintln!("  caused by: {cause}");
+        }
+
+        eprintln!("{}", err.backtrace());
+
+        panic!("the test failed");
+    }
+}
+
+pub(crate) async fn async_wrapper<F, Fut>(f: F)
+where
+    F: FnOnce(Rc<TestEnvironment>) -> Fut,
+    Fut: Future<Output = Result<()>>,
+{
+    let env = Rc::new(TestEnvironment::new());
+
+    let fut = f(env.clone());
+
+    // if we didn't catch the panic, the server would hang forever
+    let maybe_panic = panic::AssertUnwindSafe(fut).catch_unwind().await;
+
+    let env = Rc::into_inner(env).unwrap();
+    tokio::task::spawn_blocking(move || env.cleanup())
+        .await
+        .unwrap();
+
     let result = match maybe_panic {
         Ok(r) => r,
         Err(payload) => panic::resume_unwind(payload),
@@ -448,6 +485,27 @@ impl TestEnvironment {
         })
     }
 
+    pub(crate) async fn async_db(&self) -> &TestDatabase {
+        let config = self.config().clone();
+        let runtime = self.runtime().clone();
+        let instance_metrics = self.instance_metrics().clone();
+        if self.db.get().is_none() {
+            self.db
+                .try_insert(
+                    self.runtime()
+                        .spawn_blocking(move || {
+                            TestDatabase::new(&config, &runtime, instance_metrics)
+                                .expect("failed to initialize the db")
+                        })
+                        .await
+                        .unwrap(),
+                )
+                .unwrap()
+        } else {
+            self.db.get().unwrap()
+        }
+    }
+
     pub(crate) fn override_frontend(&self, init: impl FnOnce(&mut TestFrontend)) -> &TestFrontend {
         let mut frontend = TestFrontend::new(self);
         init(&mut frontend);
@@ -516,6 +574,7 @@ impl Context for TestEnvironment {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TestDatabase {
     pool: Pool,
     schema: String,

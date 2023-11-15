@@ -1,5 +1,4 @@
 use crate::{db::Overrides, error::Result, Config};
-use postgres::Client;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -26,9 +25,13 @@ impl Limits {
         }
     }
 
-    pub(crate) fn for_crate(config: &Config, conn: &mut Client, name: &str) -> Result<Self> {
+    pub(crate) async fn for_crate(
+        config: &Config,
+        conn: &mut sqlx::PgConnection,
+        name: &str,
+    ) -> Result<Self> {
         let default = Self::new(config);
-        let overrides = Overrides::for_crate(conn, name)?.unwrap_or_default();
+        let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
         Ok(Self {
             memory: overrides
                 .memory
@@ -70,28 +73,30 @@ mod test {
     use super::*;
     use crate::test::*;
 
-    #[test]
-    fn retrieve_limits() {
-        wrapper(|env| {
-            let db = env.db();
+    #[tokio::test]
+    async fn retrieve_limits() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
 
             let defaults = Limits::new(&env.config());
 
             let krate = "hexponent";
             // limits work if no crate has limits set
-            let hexponent = Limits::for_crate(&env.config(), &mut db.conn(), krate)?;
+            let hexponent = Limits::for_crate(&env.config(), &mut conn, krate).await?;
             assert_eq!(hexponent, defaults);
 
             Overrides::save(
-                &mut db.conn(),
+                &mut conn,
                 krate,
                 Overrides {
                     targets: Some(15),
                     ..Overrides::default()
                 },
-            )?;
+            )
+            .await?;
             // limits work if crate has limits set
-            let hexponent = Limits::for_crate(&env.config(), &mut db.conn(), krate)?;
+            let hexponent = Limits::for_crate(&env.config(), &mut conn, krate).await?;
             assert_eq!(
                 hexponent,
                 Limits {
@@ -109,78 +114,88 @@ mod test {
                 ..defaults
             };
             Overrides::save(
-                &mut db.conn(),
+                &mut conn,
                 krate,
                 Overrides {
                     memory: Some(limits.memory),
                     targets: Some(limits.targets),
                     timeout: Some(limits.timeout),
                 },
-            )?;
+            )
+            .await?;
             assert_eq!(
                 limits,
-                Limits::for_crate(&env.config(), &mut db.conn(), krate)?
+                Limits::for_crate(&env.config(), &mut conn, krate).await?
             );
             Ok(())
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn targets_default_to_one_with_timeout() {
-        wrapper(|env| {
-            let db = env.db();
+    #[tokio::test]
+    async fn targets_default_to_one_with_timeout() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
             let krate = "hexponent";
             Overrides::save(
-                &mut db.conn(),
+                &mut conn,
                 krate,
                 Overrides {
                     timeout: Some(Duration::from_secs(20 * 60)),
                     ..Overrides::default()
                 },
-            )?;
-            let limits = Limits::for_crate(&env.config(), &mut db.conn(), krate)?;
+            )
+            .await?;
+            let limits = Limits::for_crate(&env.config(), &mut conn, krate).await?;
             assert_eq!(limits.targets, 1);
 
             Ok(())
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn config_default_memory_limit() {
-        wrapper(|env| {
+    #[tokio::test]
+    async fn config_default_memory_limit() {
+        async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.build_default_memory_limit = Some(6 * GB);
             });
 
-            let db = env.db();
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
 
-            let limits = Limits::for_crate(&env.config(), &mut db.conn(), "krate")?;
+            let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
             assert_eq!(limits.memory, 6 * GB);
 
             Ok(())
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn overrides_dont_lower_memory_limit() {
-        wrapper(|env| {
-            let db = env.db();
+    #[tokio::test]
+    async fn overrides_dont_lower_memory_limit() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
 
             let defaults = Limits::new(&env.config());
 
             Overrides::save(
-                &mut db.conn(),
+                &mut conn,
                 "krate",
                 Overrides {
                     memory: Some(defaults.memory / 2),
                     ..Overrides::default()
                 },
-            )?;
+            )
+            .await?;
 
-            let limits = Limits::for_crate(&env.config(), &mut db.conn(), "krate")?;
+            let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
             assert_eq!(limits, defaults);
 
             Ok(())
-        });
+        })
+        .await;
     }
 }

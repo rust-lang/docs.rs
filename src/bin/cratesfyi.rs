@@ -615,44 +615,47 @@ enum LimitsSubcommand {
 
 impl LimitsSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
-        let conn = &mut *ctx.conn()?;
-        match self {
-            Self::Get { crate_name } => {
-                let overrides = Overrides::for_crate(conn, &crate_name)?;
-                println!("sandbox limit overrides for {crate_name} = {overrides:?}");
-            }
+        ctx.runtime()?.block_on(async move {
+            let mut conn = ctx.pool()?.get_async().await?;
 
-            Self::List => {
-                for (crate_name, overrides) in Overrides::all(conn)? {
+            match self {
+                Self::Get { crate_name } => {
+                    let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
                     println!("sandbox limit overrides for {crate_name} = {overrides:?}");
                 }
-            }
 
-            Self::Set {
-                crate_name,
-                memory,
-                targets,
-                timeout,
-            } => {
-                let overrides = Overrides::for_crate(conn, &crate_name)?;
-                println!("previous sandbox limit overrides for {crate_name} = {overrides:?}");
-                let overrides = Overrides {
+                Self::List => {
+                    for (crate_name, overrides) in Overrides::all(&mut conn).await? {
+                        println!("sandbox limit overrides for {crate_name} = {overrides:?}");
+                    }
+                }
+
+                Self::Set {
+                    crate_name,
                     memory,
                     targets,
-                    timeout: timeout.map(Into::into),
-                };
-                Overrides::save(conn, &crate_name, overrides)?;
-                let overrides = Overrides::for_crate(conn, &crate_name)?;
-                println!("new sandbox limit overrides for {crate_name} = {overrides:?}");
-            }
+                    timeout,
+                } => {
+                    let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
+                    println!("previous sandbox limit overrides for {crate_name} = {overrides:?}");
+                    let overrides = Overrides {
+                        memory,
+                        targets,
+                        timeout: timeout.map(Into::into),
+                    };
+                    Overrides::save(&mut conn, &crate_name, overrides).await?;
+                    let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
+                    println!("new sandbox limit overrides for {crate_name} = {overrides:?}");
+                }
 
-            Self::Remove { crate_name } => {
-                let overrides = Overrides::for_crate(conn, &crate_name)?;
-                println!("previous overrides for {crate_name} = {overrides:?}");
-                Overrides::remove(conn, &crate_name)?;
+                Self::Remove { crate_name } => {
+                    let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
+                    println!("previous overrides for {crate_name} = {overrides:?}");
+                    Overrides::remove(&mut conn, &crate_name).await?;
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 

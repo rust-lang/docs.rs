@@ -3,7 +3,6 @@ use crate::{
     db::Pool,
     docbuilder::Limits,
     impl_axum_webpage,
-    utils::spawn_blocking,
     web::{error::AxumResult, match_version_axum, MetaData},
     Config,
 };
@@ -61,22 +60,12 @@ pub(crate) async fn build_list_handler(
         }
     };
 
-    let limits = spawn_blocking({
-        let name = name.clone();
-        let pool = pool.clone();
-        move || {
-            let mut conn = pool.get()?;
-            Limits::for_crate(&config, &mut conn, &name)
-        }
-    })
-    .await?;
-
     let mut conn = pool.get_async().await?;
 
     Ok(BuildsPage {
         metadata: MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?,
         builds: get_builds(&mut conn, &name, &version).await?,
-        limits,
+        limits: Limits::for_crate(&config, &mut conn, &name).await?,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
         use_direct_platform_links: true,
     }
