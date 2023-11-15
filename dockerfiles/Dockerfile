@@ -73,8 +73,15 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         ca-certificates \
+        curl \
         tini \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv/docsrs
+
+# Tini is a small init binary to properly handle signals
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
+CMD ["start-web-server", "0.0.0.0:80"]
 
 ARG PROFILE_DIR=release
 COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
@@ -82,35 +89,68 @@ COPY static /srv/docsrs/static
 COPY templates /srv/docsrs/templates
 COPY vendor /srv/docsrs/vendor
 
-WORKDIR /srv/docsrs
+########################
+#  Build server stage  #
+########################
+
+FROM ubuntu:22.04 AS build-server
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        tini \
+        curl \
+        docker.io \
+        build-essential \
+        gcc \
+        pkg-config \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Tini is a small init binary to properly handle signals
-CMD ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "start-web-server", "0.0.0.0:80"]
-
-##################
-#  Output stage  #
-##################
-
-FROM ubuntu:22.04 AS output
-
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    git \
-    libmagic1 \
-    docker.io \
-    ca-certificates \
-    build-essential \
-    gcc \
-    pkg-config \
-    libssl-dev
-
-RUN mkdir -p /opt/docsrs/prefix
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
+CMD ["start-build-server"]
 
 ARG PROFILE_DIR=release
 COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
-COPY static /opt/docsrs/static
-COPY templates /opt/docsrs/templates
-COPY dockerfiles/entrypoint.sh /opt/docsrs/
-COPY vendor /opt/docsrs/vendor
 
-WORKDIR /opt/docsrs
-ENTRYPOINT ["/opt/docsrs/entrypoint.sh"]
-CMD ["daemon", "--registry-watcher=disabled"]
+############################
+#  Registry watcher stage  #
+############################
+
+FROM ubuntu:22.04 AS registry-watcher
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        tini \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tini is a small init binary to properly handle signals
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
+CMD ["start-registry-watcher", "--repository-stats-updater=enabled", "--cdn-invalidator=enabled"]
+
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
+
+###############
+#  CLI stage  #
+###############
+
+FROM ubuntu:22.04 AS cli
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
+
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin

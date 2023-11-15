@@ -42,13 +42,8 @@ jobs:
 
       - name: Launch postgres
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker compose up -d db
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db
 
       - name: install SQLX CLI
         run: cargo install sqlx-cli --no-default-features --features postgres
@@ -65,9 +60,6 @@ jobs:
           cargo sqlx migrate revert \
             --database-url $DOCSRS_DATABASE_URL \
             --target-version 0
-
-      - name: Clean up the database
-        run: docker compose down --volumes
 
   test:
     env:
@@ -91,13 +83,8 @@ jobs:
 
       - name: Launch postgres and min.io
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db s3
 
       - name: run workspace tests
         run: |
@@ -108,9 +95,6 @@ jobs:
           DOCSRS_INCLUDE_DEFAULT_TARGETS: true
         run: |
           cargo test --locked -- --ignored --test-threads=1
-
-      - name: Clean up the database
-        run: docker compose down --volumes
 
   GUI_test:
     runs-on: ubuntu-latest
@@ -129,19 +113,12 @@ jobs:
 
       - name: Launch postgres and min.io
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db s3
 
       - name: Run GUI tests
         run: ./dockerfiles/run-gui-tests.sh
 
-      - name: Clean up the database
-        run: docker compose down --volumes
 
   fmt:
     name: Rustfmt
