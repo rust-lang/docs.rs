@@ -70,7 +70,7 @@ mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 SQLX_OFFLINE=1 cargo build
 # Start the external services.
-docker compose up -d db s3
+docker compose up --wait db s3
 # anything that doesn't run via docker-compose needs the settings defined in
 # .env. Either via `. ./.env` as below, or via any dotenv shell integration.
 . ./.env
@@ -133,21 +133,32 @@ which uses docker-compose for the web server as well.
 This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
 but makes sure that you're in a known environment so you should have fewer problems getting started.
 
-You can also use the `web` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+You'll need to `touch .docker.env` first, this file can have any environment
+variable overrides you want to use in docker containers.
+
+You can also use the `builder-a` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+
 ```sh
+# update the toolchain
+docker compose run --rm builder-a build update-toolchain
 # run a build for a single crate
-docker compose run web build crate regex 1.3.1
-# or build essential files
-docker compose run web build add-essential-files
-# rebuild the web container when you changed code.
-docker compose up -d web --build
+docker compose run --rm builder-a build crate regex 1.3.1
+# rebuild containers when you changed code.
+docker compose up --wait --build
 ```
 
-You can also run other commands like the setup above from within the container:
+You can also run other non-build commands like the setup steps above, or queueing crates for the background builders from within the `cli` container:
 
 ```sh
 docker compose run --rm cli database migrate
-docker compose run --rm cli build update-toolchain
+docker compose run --rm cli queue add regex 1.3.1
+```
+
+If the command needs the crates.io-index clone then it must be run from within
+a `registry-watcher` container:
+
+```sh
+docker compose run --rm registry-watcher queue set-last-seen-reference --head
 ```
 
 Note that running tests is not supported when using pure docker-compose.
@@ -169,7 +180,7 @@ Three services are defined:
 
 #### Rebuilding Containers
 
-To rebuild the site, run `docker compose build`.
+To rebuild the site, run `docker compose --profile all build`.
 Note that docker-compose caches the build even if you change the source code,
 so this will be necessary anytime you make changes.
 
@@ -190,7 +201,7 @@ This is probably because you have `git.autocrlf` set to true,
 
 ##### I see the error `/opt/rustwide/cargo-home/bin/cargo: cannot execute binary file: Exec format error` when running builds.
 
-You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker compose run web build [...]` workaround described above.
+You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker compose run --rm builder-a build [...]` workaround described above.
 
 See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details about supporting more platforms directly.
 
@@ -218,11 +229,11 @@ cargo run -- start-web-server
 ```sh
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
-# For example, `docker compose run web build crate regex 1.1.6`
+# For example, `docker compose run --rm builder-a build crate regex 1.1.6`
 cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
 
-# alternatively, via the web container
-docker compose run web build crate <CRATE_NAME> <CRATE_VERSION>
+# alternatively, within docker-compose containers
+docker compose run --rm builder-a build crate <CRATE_NAME> <CRATE_VERSION>
 
 # Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)
