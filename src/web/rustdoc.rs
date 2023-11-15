@@ -968,6 +968,28 @@ mod test {
 
     #[test_case(true)]
     #[test_case(false)]
+    // https://github.com/rust-lang/docs.rs/issues/2313
+    fn help_html(archive_storage: bool) {
+        wrapper(|env| {
+            env.fake_release()
+                .name("krate")
+                .version("0.1.0")
+                .archive_storage(archive_storage)
+                .rustdoc_file("help.html")
+                .create()?;
+            let web = env.frontend();
+            assert_success_cached(
+                "/krate/0.1.0/help.html",
+                web,
+                CachePolicy::ForeverInCdnAndStaleInBrowser,
+                &env.config(),
+            )?;
+            Ok(())
+        });
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
     fn settings_html(archive_storage: bool) {
         wrapper(|env| {

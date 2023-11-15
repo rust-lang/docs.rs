@@ -329,6 +329,10 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
+            "/:name/:version/help.html",
+            get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
+        )
+        .route(
             "/:name/:version/settings.html",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
