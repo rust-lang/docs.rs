@@ -28,6 +28,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::runtime::Runtime;
 use tracing::{debug, info, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -83,6 +84,7 @@ pub enum PackageKind<'a> {
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
+    runtime: Arc<Runtime>,
     config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
@@ -102,6 +104,7 @@ impl RustwideBuilder {
             toolchain: get_configured_toolchain(&mut *pool.get()?)?,
             config,
             db: pool,
+            runtime: context.runtime()?,
             storage: context.storage()?,
             metrics: context.instance_metrics()?,
             registry_api: context.registry_api()?,
@@ -251,6 +254,17 @@ impl RustwideBuilder {
         }
     }
 
+    fn get_limits(&self, krate: &str) -> Result<Limits> {
+        self.runtime.block_on({
+            let db = self.db.clone();
+            let config = self.config.clone();
+            async move {
+                let mut conn = db.get_async().await?;
+                Limits::for_crate(&config, &mut conn, krate).await
+            }
+        })
+    }
+
     pub fn add_essential_files(&mut self) -> Result<()> {
         let rustc_version = self.rustc_version()?;
         let parsed_rustc_version = parse_rustc_version(&rustc_version)?;
@@ -258,7 +272,7 @@ impl RustwideBuilder {
         info!("building a dummy crate to get essential files");
 
         let mut conn = self.db.get()?;
-        let limits = Limits::for_crate(&self.config, &mut conn, DUMMY_CRATE_NAME)?;
+        let limits = self.get_limits(DUMMY_CRATE_NAME)?;
 
         // FIXME: for now, purge all build dirs before each build.
         // Currently we have some error situations where the build directory wouldn't be deleted
@@ -356,7 +370,7 @@ impl RustwideBuilder {
             return Ok(false);
         }
 
-        let limits = Limits::for_crate(&self.config, &mut conn, name)?;
+        let limits = self.get_limits(name)?;
         #[cfg(target_os = "linux")]
         if !self.config.disable_memory_limit {
             use anyhow::Context;
