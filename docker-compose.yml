@@ -1,35 +1,116 @@
-version: "3"
+version: "3.4"
+
+x-healthcheck: &healthcheck-interval
+  interval: 1s
+  timeout: 1s
+  start_period: 10s
+  # TODO: https://github.com/docker/compose/issues/10461
+  # interval: 10s
+  # start_interval: 1s
+
+x-environment: &environment
+    RUST_BACKTRACE: true
+
+    DOCSRS_PREFIX: /opt/docsrs/prefix
+
+    DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
+    DOCSRS_MIN_POOL_SIZE: 2
+    DOCSRS_MAX_POOL_SIZE: 10
+
+    DOCSRS_STORAGE_BACKEND: s3
+
+    S3_ENDPOINT: http://s3:9000
+    AWS_ACCESS_KEY_ID: cratesfyi
+    AWS_SECRET_ACCESS_KEY: secret_key
+
+    DOCSRS_RENDER_THREADS: 2
+
+    DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+    DOCSRS_DOCKER: true
+    DOCSRS_DOCKER_IMAGE: ghcr.io/rust-lang/crates-build-env/linux-micro
+    DOCSRS_BUILD_CPU_LIMIT: 2
+    DOCSRS_INCLUDE_DEFAULT_TARGETS: false
+
+x-builder: &builder
+    build:
+        context: .
+        dockerfile: ./dockerfiles/Dockerfile
+        target: build-server
+    depends_on:
+        - db
+        - s3
+    environment: *environment
+    env_file:
+        - .docker.env
+    healthcheck:
+        << : *healthcheck-interval
+        test: curl --silent --fail localhost:3000/about/metrics
+
 services:
     web:
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile
+            target: web-server
         platform: "linux/amd64"
         depends_on:
             - db
             - s3
         ports:
-            - "3000:3000"
-        # for metrics
-        expose: ["3000"]
-        volumes:
-            - "/var/run/docker.sock:/var/run/docker.sock"
-            - ".rustwide-docker:/opt/docsrs/rustwide"
-            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
-        environment:
-            DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
-            DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
-            DOCSRS_STORAGE_BACKEND: s3
-            S3_ENDPOINT: http://s3:9000
-            AWS_ACCESS_KEY_ID: cratesfyi
-            AWS_SECRET_ACCESS_KEY: secret_key
+            - "3000:80"
+        environment: *environment
         env_file:
-            - .env
+            - .docker.env
         healthcheck:
-            test: ["CMD", "curl", "--silent", "--fail", "localhost:3000"]
-            interval: 10s
-            timeout: 5s
-            retries: 10
+            << : *healthcheck-interval
+            test: curl --silent --fail localhost:80/about/metrics
+
+    # Include the registry watcher with `docker compose --profile watch up --build --wait`
+    registry-watcher:
+        build:
+            context: .
+            dockerfile: ./dockerfiles/Dockerfile
+            target: registry-watcher
+        platform: "linux/amd64"
+        depends_on:
+            - db
+        volumes:
+            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+        environment: *environment
+        env_file:
+            - .docker.env
+        profiles:
+            - watch
+            - all
+        healthcheck:
+            << : *healthcheck-interval
+            test: curl --silent --fail localhost:3000/about/metrics
+
+    builder-a:
+        << : *builder
+        volumes:
+            - ".rustwide-docker/builder-a:/opt/docsrs/rustwide"
+            - "/var/run/docker.sock:/var/run/docker.sock"
+
+    builder-b:
+        << : *builder
+        volumes:
+            - ".rustwide-docker/builder-b:/opt/docsrs/rustwide"
+            - "/var/run/docker.sock:/var/run/docker.sock"
+
+    cli:
+        build:
+            context: .
+            dockerfile: ./dockerfiles/Dockerfile
+            target: cli
+        depends_on:
+            - db
+            - s3
+        environment: *environment
+        env_file:
+            - .docker.env
+        profiles:
+            - all
 
     db:
         build:
@@ -44,10 +125,8 @@ services:
             # Use a non-standard port on the host to avoid conflicting with existing postgres servers
             - "127.0.0.1:15432:5432"
         healthcheck:
-            test: ["CMD", "pg_isready", "--username", "cratesfyi"]
-            interval: 10s
-            timeout: 5s
-            retries: 10
+            << : *healthcheck-interval
+            test: pg_isready --username cratesfyi
 
     s3:
         image: minio/minio
@@ -65,17 +144,8 @@ services:
             MINIO_ROOT_USER: cratesfyi
             MINIO_ROOT_PASSWORD: secret_key
         healthcheck:
-            test:
-                [
-                    "CMD",
-                    "curl",
-                    "--silent",
-                    "--fail",
-                    "localhost:9000/minio/health/ready",
-                ]
-            interval: 10s
-            timeout: 5s
-            retries: 10
+            << : *healthcheck-interval
+            test: mc ready local
 
     prometheus:
         build:
@@ -84,11 +154,8 @@ services:
         ports:
             - "127.0.0.1:9090:9090"
         healthcheck:
-            test:
-                ["CMD", "curl", "--silent", "--fail", "localhost:9090/-/ready"]
-            interval: 10s
-            timeout: 5s
-            retries: 10
+            << : *healthcheck-interval
+            test: promtool check healthy
 
     gui_tests:
         build:
@@ -99,6 +166,8 @@ services:
             - "host.docker.internal:host-gateway"
         volumes:
             - "${PWD}:/build/out"
+        profiles:
+            - all
 
 volumes:
     postgres-data: {}
