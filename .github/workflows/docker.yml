@@ -9,5 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build the Docker image
-        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
+      - run: docker build --target web-server -f dockerfiles/Dockerfile .
+      - run: docker build --target build-server -f dockerfiles/Dockerfile .
+      - run: docker build --target registry-watcher -f dockerfiles/Dockerfile .
+      - run: docker build --target cli -f dockerfiles/Dockerfile .
