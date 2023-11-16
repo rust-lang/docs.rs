@@ -73,8 +73,8 @@ mod test {
     use super::*;
     use crate::test::*;
 
-    #[tokio::test]
-    async fn retrieve_limits() {
+    #[test]
+    fn retrieve_limits() {
         async_wrapper(|env| async move {
             let db = env.async_db().await;
             let mut conn = db.async_conn().await;
@@ -129,11 +129,10 @@ mod test {
             );
             Ok(())
         })
-        .await;
     }
 
-    #[tokio::test]
-    async fn targets_default_to_one_with_timeout() {
+    #[test]
+    fn targets_default_to_one_with_timeout() {
         async_wrapper(|env| async move {
             let db = env.async_db().await;
             let mut conn = db.async_conn().await;
@@ -152,11 +151,10 @@ mod test {
 
             Ok(())
         })
-        .await;
     }
 
-    #[tokio::test]
-    async fn config_default_memory_limit() {
+    #[test]
+    fn config_default_memory_limit() {
         async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.build_default_memory_limit = Some(6 * GB);
@@ -170,11 +168,10 @@ mod test {
 
             Ok(())
         })
-        .await;
     }
 
-    #[tokio::test]
-    async fn overrides_dont_lower_memory_limit() {
+    #[test]
+    fn overrides_dont_lower_memory_limit() {
         async_wrapper(|env| async move {
             let db = env.async_db().await;
             let mut conn = db.async_conn().await;
@@ -196,6 +193,5 @@ mod test {
 
             Ok(())
         })
-        .await;
     }
 }

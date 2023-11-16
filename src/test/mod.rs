@@ -56,7 +56,7 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
     }
 }
 
-pub(crate) async fn async_wrapper<F, Fut>(f: F)
+pub(crate) fn async_wrapper<F, Fut>(f: F)
 where
     F: FnOnce(Rc<TestEnvironment>) -> Fut,
     Fut: Future<Output = Result<()>>,
@@ -65,13 +65,13 @@ where
 
     let fut = f(env.clone());
 
+    let runtime = env.runtime();
+
     // if we didn't catch the panic, the server would hang forever
-    let maybe_panic = panic::AssertUnwindSafe(fut).catch_unwind().await;
+    let maybe_panic = runtime.block_on(panic::AssertUnwindSafe(fut).catch_unwind());
 
     let env = Rc::into_inner(env).unwrap();
-    tokio::task::spawn_blocking(move || env.cleanup())
-        .await
-        .unwrap();
+    env.cleanup();
 
     let result = match maybe_panic {
         Ok(r) => r,
