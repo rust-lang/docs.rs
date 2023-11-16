@@ -96,8 +96,8 @@ mod test {
     use crate::{db::Overrides, test::*};
     use std::time::Duration;
 
-    #[tokio::test]
-    async fn retrieve_overrides() {
+    #[test]
+    fn retrieve_overrides() {
         async_wrapper(|env| async move {
             let db = env.async_db().await;
             let mut conn = db.async_conn().await;
@@ -143,6 +143,5 @@ mod test {
 
             Ok(())
         })
-        .await;
     }
 }
