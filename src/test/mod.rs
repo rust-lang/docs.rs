@@ -261,7 +261,7 @@ pub(crate) fn assert_redirect_cached(
 pub(crate) struct TestEnvironment {
     build_queue: OnceCell<Arc<BuildQueue>>,
     config: OnceCell<Arc<Config>>,
-    db: OnceCell<TestDatabase>,
+    db: tokio::sync::OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     async_storage: OnceCell<Arc<AsyncStorage>>,
     cdn: OnceCell<Arc<CdnBackend>>,
@@ -296,7 +296,7 @@ impl TestEnvironment {
         Self {
             build_queue: OnceCell::new(),
             config: OnceCell::new(),
-            db: OnceCell::new(),
+            db: tokio::sync::OnceCell::new(),
             storage: OnceCell::new(),
             async_storage: OnceCell::new(),
             cdn: OnceCell::new(),
@@ -479,31 +479,22 @@ impl TestEnvironment {
     }
 
     pub(crate) fn db(&self) -> &TestDatabase {
-        self.db.get_or_init(|| {
-            TestDatabase::new(&self.config(), &self.runtime(), self.instance_metrics())
-                .expect("failed to initialize the db")
-        })
+        self.runtime().block_on(self.async_db())
     }
 
     pub(crate) async fn async_db(&self) -> &TestDatabase {
-        let config = self.config().clone();
-        let runtime = self.runtime().clone();
-        let instance_metrics = self.instance_metrics().clone();
-        if self.db.get().is_none() {
-            self.db
-                .try_insert(
-                    self.runtime()
-                        .spawn_blocking(move || {
-                            TestDatabase::new(&config, &runtime, instance_metrics)
-                                .expect("failed to initialize the db")
-                        })
-                        .await
-                        .unwrap(),
-                )
-                .unwrap()
-        } else {
-            self.db.get().unwrap()
-        }
+        self.db
+            .get_or_init(|| async {
+                let config = self.config();
+                let runtime = self.runtime();
+                let instance_metrics = self.instance_metrics();
+                self.runtime()
+                    .spawn_blocking(move || TestDatabase::new(&config, &runtime, instance_metrics))
+                    .await
+                    .unwrap()
+                    .expect("failed to initialize the db")
+            })
+            .await
     }
 
     pub(crate) fn override_frontend(&self, init: impl FnOnce(&mut TestFrontend)) -> &TestFrontend {

@@ -1008,7 +1008,7 @@ mod test {
         wrapper(|env| {
             release("0.1.0", env);
             let metadata = env.runtime().block_on(async move {
-                let mut conn = env.db().async_conn().await;
+                let mut conn = env.async_db().await.async_conn().await;
                 MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest").await
             });
             assert_eq!(
