@@ -101,10 +101,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: install
-        run: |
-          rustup override set stable
-          rustup update stable
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -117,7 +113,9 @@ jobs:
           docker compose up --wait --wait-timeout 30 db s3
 
       - name: Run GUI tests
-        run: ./dockerfiles/run-gui-tests.sh
+        run: |
+          touch .docker.env
+          gui-tests/in-docker
 
 
   fmt:

@@ -65,9 +65,7 @@ RUN curl -sL https://nodejs.org/dist/v14.4.0/node-v14.4.0-linux-x64.tar.xz | tar
 ENV PATH="/node-v14.4.0-linux-x64/bin:${PATH}"
 ENV NODE_PATH="/node-v14.4.0-linux-x64/lib/node_modules/"
 
-WORKDIR /build
-
-RUN mkdir out
+WORKDIR /gui-tests
 
 # For now, we need to use `--unsafe-perm=true` to go around an issue when npm tries
 # to create a new folder. For reference:
@@ -76,6 +74,6 @@ RUN mkdir out
 # We also specify the version in case we need to update it to go around cache limitations.
 RUN npm install -g browser-ui-test@0.16.10 --unsafe-perm=true
 
-EXPOSE 3000
+COPY . /gui-tests
 
-CMD ["node", "/build/out/gui-tests/tester.js"]
+CMD ["node", "tester.js"]

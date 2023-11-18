@@ -31,6 +31,11 @@ x-environment: &environment
     DOCSRS_BUILD_CPU_LIMIT: 2
     DOCSRS_INCLUDE_DEFAULT_TARGETS: false
 
+x-gui-tests-environment: &gui-tests-environment
+    << : *environment
+    DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db/gui-tests
+    DOCSRS_S3_BUCKET: gui-tests
+
 x-builder: &builder
     build:
         context: .
@@ -47,7 +52,7 @@ x-builder: &builder
         test: curl --silent --fail localhost:3000/about/metrics
 
 services:
-    web:
+    web: &web
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile
@@ -98,7 +103,7 @@ services:
             - ".rustwide-docker/builder-b:/opt/docsrs/rustwide"
             - "/var/run/docker.sock:/var/run/docker.sock"
 
-    cli:
+    cli: &cli
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile
@@ -132,8 +137,16 @@ services:
         image: minio/minio
         entrypoint: >
             /bin/sh -c "
-                mkdir -p /data/rust-docs-rs;
-                minio server /data --console-address ":9001";
+                set -meu
+                mc alias rm s3 || true
+                mc alias rm gcs || true
+                mc alias rm local || true
+                mc alias rm play || true
+                minio server /data --console-address ":9001" &
+                sleep 1
+                mc alias set local http://s3:9000 cratesfyi secret_key
+                mc mb --ignore-existing s3/rust-docs-rs
+                fg
             "
         ports:
             - "127.0.0.1:9000:9000"
@@ -157,15 +170,36 @@ services:
             << : *healthcheck-interval
             test: promtool check healthy
 
-    gui_tests:
-        build:
-            context: .
-            dockerfile: ./dockerfiles/Dockerfile-gui-tests
-        network_mode: "host"
-        extra_hosts:
-            - "host.docker.internal:host-gateway"
+    gui-tests-cli:
+        << : *cli
+        environment: *gui-tests-environment
+        profiles:
+            - all
+
+    gui-tests-builder:
+        << : *builder
+        environment: *gui-tests-environment
         volumes:
-            - "${PWD}:/build/out"
+            - ".rustwide-docker/builder-gui-tests:/opt/docsrs/rustwide"
+            - "/var/run/docker.sock:/var/run/docker.sock"
+        profiles:
+            - all
+
+    gui-tests-web:
+        << : *web
+        ports:
+            - "3001:80"
+        environment: *gui-tests-environment
+        profiles:
+            - all
+
+    gui-tests:
+        build:
+            context: gui-tests
+        depends_on:
+            - gui-tests-web
+        environment:
+            SERVER_URL: http://gui-tests-web
         profiles:
             - all
 
