@@ -2,7 +2,7 @@ use super::{error::AxumResult, match_version_axum};
 use crate::{
     db::Pool,
     impl_axum_webpage,
-    utils::{get_correct_docsrs_style_file, spawn_blocking},
+    utils::get_correct_docsrs_style_file,
     web::{
         cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
         MatchSemver, MetaData,
@@ -11,10 +11,7 @@ use crate::{
 };
 use anyhow::Result;
 use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
-
-use postgres::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
 
@@ -68,34 +65,38 @@ impl FileList {
     /// it will return list of files (and dirs) for root directory. req_path must be a
     /// directory or empty for root directory.
     #[instrument(skip(conn))]
-    fn from_path(
-        conn: &mut Client,
+    async fn from_path(
+        conn: &mut sqlx::PgConnection,
         name: &str,
         version: &str,
         version_or_latest: &str,
         folder: &str,
     ) -> Result<Option<FileList>> {
-        let row = match conn.query_opt(
+        let row = match sqlx::query!(
             "SELECT crates.name,
-                        releases.version,
-                        releases.description,
-                        releases.target_name,
-                        releases.rustdoc_status,
-                        releases.files,
-                        releases.default_target,
-                        releases.doc_targets,
-                        releases.yanked,
-                        releases.doc_rustc_version
-                FROM releases
-                LEFT OUTER JOIN crates ON crates.id = releases.crate_id
-                WHERE crates.name = $1 AND releases.version = $2",
-            &[&name, &version],
-        )? {
+                    releases.version,
+                    releases.description,
+                    releases.target_name,
+                    releases.rustdoc_status,
+                    releases.files,
+                    releases.default_target,
+                    releases.doc_targets,
+                    releases.yanked,
+                    releases.doc_rustc_version
+            FROM releases
+            INNER JOIN crates ON crates.id = releases.crate_id
+            WHERE crates.name = $1 AND releases.version = $2",
+            name,
+            version,
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let files = if let Some(files) = row.try_get::<_, Option<Value>>(5)? {
+        let files = if let Some(files) = row.files {
             files
         } else {
             return Ok(None);
@@ -144,16 +145,16 @@ impl FileList {
 
             Ok(Some(FileList {
                 metadata: MetaData {
-                    name: row.get(0),
-                    version: row.get(1),
+                    name: row.name,
+                    version: row.version,
                     version_or_latest: version_or_latest.to_string(),
-                    description: row.get(2),
-                    target_name: row.get(3),
-                    rustdoc_status: row.get(4),
-                    default_target: row.get(6),
-                    doc_targets: MetaData::parse_doc_targets(row.get(7)),
-                    yanked: row.get(8),
-                    rustdoc_css_file: get_correct_docsrs_style_file(row.get(9))?,
+                    description: row.description,
+                    target_name: Some(row.target_name),
+                    rustdoc_status: row.rustdoc_status,
+                    default_target: row.default_target,
+                    doc_targets: MetaData::parse_doc_targets(row.doc_targets),
+                    yanked: row.yanked,
+                    rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version)?,
                 },
                 files: file_list,
             }))
@@ -203,6 +204,8 @@ pub(crate) async fn source_browser_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
+    let mut conn = pool.get_async().await?;
+
     let v = match_version_axum(&pool, &name, Some(&version)).await?;
 
     if let Some(new_name) = &v.corrected_name {
@@ -222,25 +225,17 @@ pub(crate) async fn source_browser_handler(
         }
     };
 
-    let archive_storage = spawn_blocking({
-        let pool = pool.clone();
-        let name = name.clone();
-        let version = version.clone();
-        move || {
-            let mut conn = pool.get()?;
-            Ok(conn
-                .query_one(
-                    "SELECT archive_storage
-                     FROM releases
-                     INNER JOIN crates ON releases.crate_id = crates.id
-                     WHERE
-                         name = $1 AND
-                         version = $2",
-                    &[&name, &version],
-                )?
-                .get::<_, bool>(0))
-        }
-    })
+    let archive_storage = sqlx::query_scalar!(
+        "SELECT archive_storage
+         FROM releases
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE
+             name = $1 AND
+             version = $2",
+        name,
+        version
+    )
+    .fetch_one(&mut *conn)
     .await?;
 
     // try to get actual file first
@@ -289,20 +284,13 @@ pub(crate) async fn source_browser_handler(
         ""
     };
 
-    let file_list = spawn_blocking({
-        let name = name.clone();
-        let current_folder = current_folder.to_string();
-        move || {
-            let mut conn = pool.get()?;
-            FileList::from_path(
-                &mut conn,
-                &name,
-                &version,
-                &version_or_latest,
-                &current_folder,
-            )
-        }
-    })
+    let file_list = FileList::from_path(
+        &mut conn,
+        &name,
+        &version,
+        &version_or_latest,
+        current_folder,
+    )
     .await?
     .ok_or(AxumNope::ResourceNotFound)?;
 
