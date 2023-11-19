@@ -257,6 +257,7 @@ impl CrateDetails {
             .fetch_source_file(
                 &self.name,
                 &self.version,
+                self.latest_build_id.unwrap_or(0),
                 "Cargo.toml",
                 self.archive_storage,
             )
@@ -282,7 +283,13 @@ impl CrateDetails {
         };
         for path in &paths {
             match storage
-                .fetch_source_file(&self.name, &self.version, path, self.archive_storage)
+                .fetch_source_file(
+                    &self.name,
+                    &self.version,
+                    self.latest_build_id.unwrap_or(0),
+                    path,
+                    self.archive_storage,
+                )
                 .await
             {
                 Ok(readme) => {
