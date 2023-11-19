@@ -9,7 +9,7 @@ use crate::{
     },
     AsyncStorage,
 };
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::Arc};
@@ -225,8 +225,18 @@ pub(crate) async fn source_browser_handler(
         }
     };
 
-    let archive_storage = sqlx::query_scalar!(
-        "SELECT archive_storage
+    let row = sqlx::query!(
+        "SELECT
+            releases.archive_storage,
+            (
+                SELECT id
+                FROM builds
+                WHERE
+                    builds.rid = releases.id AND
+                    builds.build_status = TRUE
+                ORDER BY build_time DESC
+                LIMIT 1
+            ) AS latest_build_id
          FROM releases
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
@@ -240,11 +250,30 @@ pub(crate) async fn source_browser_handler(
 
     // try to get actual file first
     // skip if request is a directory
-    let blob = if !path.ends_with('/') {
-        storage
-            .fetch_source_file(&name, &version, &path, archive_storage)
+    let blob = if !path.ends_with('/')
+        && storage
+            .source_file_exists(
+                &name,
+                &version,
+                row.latest_build_id.unwrap_or(0),
+                &path,
+                row.archive_storage,
+            )
             .await
-            .ok()
+            .context("error checking source file existence")?
+    {
+        Some(
+            storage
+                .fetch_source_file(
+                    &name,
+                    &version,
+                    row.latest_build_id.unwrap_or(0),
+                    &path,
+                    row.archive_storage,
+                )
+                .await
+                .context("error fetching source file")?,
+        )
     } else {
         None
     };

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            releases.archive_storage,\n            (\n                SELECT id\n                FROM builds\n                WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = TRUE\n                ORDER BY build_time DESC\n                LIMIT 1\n            ) AS latest_build_id\n         FROM releases\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n             name = $1 AND\n             version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "archive_storage",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "latest_build_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "8fdb5774a13ea9d9a70552395a4b275e859e91e439ddcd3f6be9e4cfa845f94d"
+}
