@@ -2,7 +2,7 @@ mod fakes;
 
 pub(crate) use self::fakes::FakeBuild;
 use crate::cdn::CdnBackend;
-use crate::db::{AsyncPoolClient, Pool, PoolClient};
+use crate::db::{self, AsyncPoolClient, Pool, PoolClient};
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{AsyncStorage, Storage, StorageKind};
@@ -11,16 +11,15 @@ use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi, Se
 use anyhow::Context as _;
 use axum::async_trait;
 use fn_error_context::context;
-use futures_util::FutureExt;
+use futures_util::{stream::TryStreamExt, FutureExt};
 use once_cell::sync::OnceCell;
-use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, ClientBuilder, RequestBuilder, Response},
     Method,
 };
+use sqlx::Connection as _;
 use std::thread::{self, JoinHandle};
 use std::{
-    fmt::Write as _,
     fs,
     future::Future,
     net::{SocketAddr, TcpListener},
@@ -585,41 +584,50 @@ impl TestDatabase {
 
         let pool = Pool::new_with_schema(config, runtime, metrics, &schema)?;
 
-        let mut conn = Connection::connect(&config.database_url, postgres::NoTls)?;
-        conn.batch_execute(&format!(
-            "
-                CREATE SCHEMA {schema};
-                SET search_path TO {schema}, public;
-            "
-        ))?;
-        crate::db::migrate(None, &mut conn)?;
+        runtime.block_on({
+            let schema = schema.clone();
+            async move {
+                let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
+                sqlx::query(&format!("CREATE SCHEMA {schema}"))
+                    .execute(&mut conn)
+                    .await
+                    .context("error creating schema")?;
+                sqlx::query(&format!("SET search_path TO {schema}, public"))
+                    .execute(&mut conn)
+                    .await
+                    .context("error setting search path")?;
+                db::migrate(&mut conn, None)
+                    .await
+                    .context("error running migrations")?;
 
-        // Move all sequence start positions 10000 apart to avoid overlapping primary keys
-        let query = conn
-            .query(
-                "
-                    SELECT relname
-                    FROM pg_class
-                    INNER JOIN pg_namespace
-                        ON pg_class.relnamespace = pg_namespace.oid
-                    WHERE pg_class.relkind = 'S'
-                        AND pg_namespace.nspname = $1
-                ",
-                &[&schema],
-            )?
-            .into_iter()
-            .map(|row| row.get(0))
-            .enumerate()
-            .fold(String::new(), |mut query, (i, sequence): (_, String)| {
-                let offset = (i + 1) * 10000;
-                write!(
-                    query,
-                    r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#
+                // Move all sequence start positions 10000 apart to avoid overlapping primary keys
+                let sequence_names: Vec<_> = sqlx::query!(
+                    "SELECT relname
+                     FROM pg_class
+                     INNER JOIN pg_namespace ON
+                         pg_class.relnamespace = pg_namespace.oid
+                     WHERE pg_class.relkind = 'S'
+                         AND pg_namespace.nspname = $1
+                    ",
+                    schema,
                 )
-                .expect("could not write to string");
-                query
-            });
-        conn.batch_execute(&query)?;
+                .fetch(&mut conn)
+                .map_ok(|row| row.relname)
+                .try_collect()
+                .await?;
+
+                for (i, sequence) in sequence_names.into_iter().enumerate() {
+                    let offset = (i + 1) * 10000;
+                    sqlx::query(&format!(
+                        r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#
+                    ))
+                    .execute(&mut conn)
+                    .await?;
+                }
+
+                Ok::<(), anyhow::Error>(())
+            }
+        })?;
 
         Ok(TestDatabase { pool, schema })
     }
@@ -644,7 +652,6 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        let migration_result = crate::db::migrate(Some(0), &mut self.conn());
         if let Err(e) = self.conn().execute(
             format!("DROP SCHEMA {} CASCADE;", self.schema).as_str(),
             &[],
@@ -653,7 +660,6 @@ impl Drop for TestDatabase {
         }
         // Drop the connection pool so we don't leak database connections
         self.pool.shutdown();
-        migration_result.expect("downgrading database works");
     }
 }
 

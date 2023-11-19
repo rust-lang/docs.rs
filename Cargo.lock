@@ -1551,6 +1551,7 @@ dependencies = [
  "getrandom 0.2.11",
  "gix",
  "grass",
+ "hex",
  "hostname",
  "http",
  "humantime",
@@ -1580,8 +1581,6 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "rustwide",
- "schemamama",
- "schemamama_postgres",
  "semver",
  "sentry",
  "sentry-anyhow",
@@ -4973,25 +4972,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cbc66816425a074528352f5789333ecff06ca41b36b0b0efdfbb29edc391a19"
 dependencies = [
  "parking_lot",
-]
-
-[[package]]
-name = "schemamama"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f726d3b10198a91b545c12e55775ddf4abb681056aa62adf75ed00b68855ef9"
-dependencies = [
- "log",
-]
-
-[[package]]
-name = "schemamama_postgres"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a5da098f7ee922d0c89a4416bf042e242e79f4966d40bf497f52849f2ffedda"
-dependencies = [
- "postgres",
- "schemamama",
 ]
 
 [[package]]

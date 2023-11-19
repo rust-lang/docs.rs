@@ -52,6 +52,7 @@ COPY templates/style templates/style
 COPY vendor vendor/
 COPY assets assets/
 COPY .sqlx .sqlx/
+COPY migrations migrations/
 
 RUN cargo build --release
 
