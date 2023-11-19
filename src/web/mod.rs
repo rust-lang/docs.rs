@@ -3,7 +3,7 @@
 pub mod page;
 
 use crate::utils::get_correct_docsrs_style_file;
-use crate::utils::{report_error, spawn_blocking};
+use crate::utils::report_error;
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum_extra::middleware::option_layer;
 use serde_json::Value;
@@ -30,7 +30,7 @@ mod source;
 mod statics;
 mod status;
 
-use crate::{db::Pool, impl_axum_webpage, Context};
+use crate::{impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
     extract::Extension,
@@ -45,7 +45,6 @@ use chrono::{DateTime, Utc};
 use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
-use postgres::Client;
 use semver::{Version, VersionReq};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr};
@@ -127,29 +126,27 @@ impl MatchSemver {
 /// This function will also check for crates where dashes in the name (`-`) have been replaced with
 /// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
-fn match_version(
-    conn: &mut Client,
+async fn match_version(
+    conn: &mut sqlx::PgConnection,
     name: &str,
     input_version: Option<&str>,
 ) -> Result<MatchVersion, AxumNope> {
     let (crate_id, corrected_name) = {
-        let rows = conn
-            .query(
-                "SELECT id, name
-                 FROM crates
-                 WHERE normalize_crate_name(name) = normalize_crate_name($1)",
-                &[&name],
-            )
-            .context("error fetching crate")?;
+        let row = sqlx::query!(
+            "SELECT id, name
+             FROM crates
+             WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+            name,
+        )
+        .fetch_optional(&mut *conn)
+        .await
+        .context("error fetching crate")?
+        .ok_or(AxumNope::CrateNotFound)?;
 
-        let row = rows.get(0).ok_or(AxumNope::CrateNotFound)?;
-
-        let id: i32 = row.get(0);
-        let db_name = row.get(1);
-        if db_name != name {
-            (id, Some(db_name))
+        if row.name != name {
+            (row.id, Some(row.name))
         } else {
-            (id, None)
+            (row.id, None)
         }
     };
 
@@ -157,7 +154,8 @@ fn match_version(
     // skipping and reporting versions that are not semver valid.
     // `releases_for_crate` is already sorted, newest version first.
     let releases = crate_details::releases_for_crate(conn, crate_id)
-        .expect("error fetching releases for crate");
+        .await
+        .context("error fetching releases for crate")?;
 
     if releases.is_empty() {
         return Err(AxumNope::CrateNotFound);
@@ -234,26 +232,6 @@ fn match_version(
     // we know that versions were returned but none satisfied the version requirement.
     // This can only happen when all versions are yanked.
     Err(AxumNope::VersionNotFound)
-}
-
-// temporary wrapper around `match_version` for axum handlers.
-//
-// FIXME: this can go when we fully migrated to axum / async in web
-async fn match_version_axum(
-    pool: &Pool,
-    name: &str,
-    input_version: Option<&str>,
-) -> Result<MatchVersion, Error> {
-    spawn_blocking({
-        let name = name.to_owned();
-        let input_version = input_version.map(str::to_owned);
-        let pool = pool.clone();
-        move || {
-            let mut conn = pool.get()?;
-            Ok(match_version(&mut conn, &name, input_version.as_deref())?)
-        }
-    })
-    .await
 }
 
 async fn log_timeouts_to_sentry<B>(req: AxumRequest<B>, next: Next<B>) -> AxumResponse {
@@ -594,16 +572,20 @@ mod test {
     use serde_json::json;
     use test_case::test_case;
 
-    fn release(version: &str, env: &TestEnvironment) -> i32 {
-        env.fake_release()
+    async fn release(version: &str, env: &TestEnvironment) -> i32 {
+        env.async_fake_release()
+            .await
             .name("foo")
             .version(version)
-            .create()
+            .create_async()
+            .await
             .unwrap()
     }
 
-    fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
-        let version = match_version(&mut db.conn(), "foo", v)
+    async fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
+        let mut conn = db.async_conn().await;
+        let version = match_version(&mut conn, "foo", v)
+            .await
             .ok()?
             .exact_name_only()
             .ok()?
@@ -810,26 +792,26 @@ mod test {
     #[test]
     // https://github.com/rust-lang/docs.rs/issues/223
     fn prereleases_are_not_considered_for_semver() {
-        wrapper(|env| {
-            let db = env.db();
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
             let version = |v| version(v, db);
-            let release = |v| release(v, env);
+            let release = |v| release(v, &env);
 
-            release("0.3.1-pre");
+            release("0.3.1-pre").await;
             for search in &["*", "newest", "latest"] {
-                assert_eq!(version(Some(search)), semver("0.3.1-pre"));
+                assert_eq!(version(Some(search)).await, semver("0.3.1-pre"));
             }
 
-            release("0.3.1-alpha");
-            assert_eq!(version(Some("0.3.1-alpha")), exact("0.3.1-alpha"));
+            release("0.3.1-alpha").await;
+            assert_eq!(version(Some("0.3.1-alpha")).await, exact("0.3.1-alpha"));
 
-            release("0.3.0");
+            release("0.3.0").await;
             let three = semver("0.3.0");
-            assert_eq!(version(None), three);
+            assert_eq!(version(None).await, three);
             // same thing but with "*"
-            assert_eq!(version(Some("*")), three);
+            assert_eq!(version(Some("*")).await, three);
             // make sure exact matches still work
-            assert_eq!(version(Some("0.3.0")), exact("0.3.0"));
+            assert_eq!(version(Some("0.3.0")).await, exact("0.3.0"));
 
             Ok(())
         });
@@ -838,7 +820,7 @@ mod test {
     #[test]
     fn platform_dropdown_not_shown_with_no_targets() {
         wrapper(|env| {
-            release("0.1.0", env);
+            env.runtime().block_on(release("0.1.0", env));
             let web = env.frontend();
             let text = web.get("/foo/0.1.0/foo").send()?.text()?;
             let platform = kuchikiki::parse_html()
@@ -868,19 +850,24 @@ mod test {
     #[test]
     // https://github.com/rust-lang/docs.rs/issues/221
     fn yanked_crates_are_not_considered() {
-        wrapper(|env| {
-            let db = env.db();
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
 
-            let release_id = release("0.3.0", env);
-            let query = "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'";
+            let release_id = release("0.3.0", &env).await;
 
-            db.conn().query(query, &[&release_id]).unwrap();
-            assert_eq!(version(None, db), None);
-            assert_eq!(version(Some("0.3"), db), None);
+            sqlx::query!(
+                "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
+                release_id
+            )
+            .execute(&mut *db.async_conn().await)
+            .await?;
 
-            release("0.1.0+4.1", env);
-            assert_eq!(version(Some("0.1.0+4.1"), db), exact("0.1.0+4.1"));
-            assert_eq!(version(None, db), semver("0.1.0+4.1"));
+            assert_eq!(version(None, db).await, None);
+            assert_eq!(version(Some("0.3"), db).await, None);
+
+            release("0.1.0+4.1", &env).await;
+            assert_eq!(version(Some("0.1.0+4.1"), db).await, exact("0.1.0+4.1"));
+            assert_eq!(version(None, db).await, semver("0.1.0+4.1"));
 
             Ok(())
         });
@@ -889,20 +876,23 @@ mod test {
     #[test]
     // https://github.com/rust-lang/docs.rs/issues/1682
     fn prereleases_are_considered_when_others_dont_match() {
-        wrapper(|env| {
-            let db = env.db();
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
 
             // normal release
-            release("1.0.0", env);
+            release("1.0.0", &env).await;
             // prereleases
-            release("2.0.0-alpha.1", env);
-            release("2.0.0-alpha.2", env);
+            release("2.0.0-alpha.1", &env).await;
+            release("2.0.0-alpha.2", &env).await;
 
             // STAR gives me the prod release
-            assert_eq!(version(Some("*"), db), exact("1.0.0"));
+            assert_eq!(version(Some("*"), db).await, exact("1.0.0"));
 
             // prerelease query gives me the latest prerelease
-            assert_eq!(version(Some(">=2.0.0-alpha"), db), exact("2.0.0-alpha.2"));
+            assert_eq!(
+                version(Some(">=2.0.0-alpha"), db).await,
+                exact("2.0.0-alpha.2")
+            );
 
             Ok(())
         })
@@ -911,17 +901,17 @@ mod test {
     #[test]
     // vaguely related to https://github.com/rust-lang/docs.rs/issues/395
     fn metadata_has_no_effect() {
-        wrapper(|env| {
-            let db = env.db();
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
 
-            release("0.1.0+4.1", env);
-            release("0.1.1", env);
-            assert_eq!(version(None, db), semver("0.1.1"));
-            release("0.5.1+zstd.1.4.4", env);
-            assert_eq!(version(None, db), semver("0.5.1+zstd.1.4.4"));
-            assert_eq!(version(Some("0.5"), db), semver("0.5.1+zstd.1.4.4"));
+            release("0.1.0+4.1", &env).await;
+            release("0.1.1", &env).await;
+            assert_eq!(version(None, db).await, semver("0.1.1"));
+            release("0.5.1+zstd.1.4.4", &env).await;
+            assert_eq!(version(None, db).await, semver("0.5.1+zstd.1.4.4"));
+            assert_eq!(version(Some("0.5"), db).await, semver("0.5.1+zstd.1.4.4"));
             assert_eq!(
-                version(Some("0.5.1+zstd.1.4.4"), db),
+                version(Some("0.5.1+zstd.1.4.4"), db).await,
                 exact("0.5.1+zstd.1.4.4")
             );
 
@@ -1006,12 +996,10 @@ mod test {
 
     #[test]
     fn metadata_from_crate() {
-        wrapper(|env| {
-            release("0.1.0", env);
-            let metadata = env.runtime().block_on(async move {
-                let mut conn = env.async_db().await.async_conn().await;
-                MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest").await
-            });
+        async_wrapper(|env| async move {
+            release("0.1.0", &env).await;
+            let mut conn = env.async_db().await.async_conn().await;
+            let metadata = MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest").await;
             assert_eq!(
                 metadata.unwrap(),
                 MetaData {
@@ -1034,7 +1022,7 @@ mod test {
     #[test]
     fn test_tabindex_is_present_on_topbar_crate_search_input() {
         wrapper(|env| {
-            release("0.1.0", env);
+            env.runtime().block_on(release("0.1.0", env));
             let web = env.frontend();
             let text = web.get("/foo/0.1.0/foo").send()?.text()?;
             let tabindex = kuchikiki::parse_html()

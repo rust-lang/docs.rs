@@ -515,7 +515,15 @@ impl TestEnvironment {
     }
 
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
-        fakes::FakeRelease::new(self.db(), self.storage())
+        self.runtime().block_on(self.async_fake_release())
+    }
+
+    pub(crate) async fn async_fake_release(&self) -> fakes::FakeRelease {
+        fakes::FakeRelease::new(
+            self.async_db().await,
+            self.async_storage().await,
+            self.runtime(),
+        )
     }
 }
 

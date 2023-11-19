@@ -1,7 +1,6 @@
 use super::cache::CachePolicy;
-use crate::{
-    db::Pool,
-    web::{axum_redirect, error::AxumResult, match_version_axum, MatchSemver},
+use crate::web::{
+    axum_redirect, error::AxumResult, extractors::DbConnection, match_version, MatchSemver,
 };
 use axum::{
     extract::{Extension, Path},
@@ -12,7 +11,7 @@ use axum::{
 
 pub(crate) async fn status_handler(
     Path((name, req_version)): Path<(String, String)>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> impl IntoResponse {
     (
         Extension(CachePolicy::NoStoreMustRevalidate),
@@ -20,7 +19,7 @@ pub(crate) async fn status_handler(
         // We use an async block to emulate a try block so that we can apply the above CORS header
         // and cache policy to both successful and failed responses
         async move {
-            let (version, id) = match match_version_axum(&pool, &name, Some(&req_version))
+            let (version, id) = match match_version(&mut conn, &name, Some(&req_version))
                 .await?
                 .exact_name_only()?
             {
@@ -32,8 +31,6 @@ pub(crate) async fn status_handler(
                     return Ok(redirect.into_response());
                 }
             };
-
-            let mut conn = pool.get_async().await?;
 
             let rustdoc_status: bool = sqlx::query_scalar!(
                 "SELECT releases.rustdoc_status

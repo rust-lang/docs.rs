@@ -1,4 +1,4 @@
-use super::{error::AxumResult, match_version_axum};
+use super::{error::AxumResult, match_version};
 use crate::{
     db::Pool,
     impl_axum_webpage,
@@ -207,7 +207,7 @@ pub(crate) async fn source_browser_handler(
 ) -> AxumResult<impl IntoResponse> {
     let mut conn = pool.get_async().await?;
 
-    let v = match_version_axum(&pool, &name, Some(&version)).await?;
+    let v = match_version(&mut conn, &name, Some(&version)).await?;
 
     if let Some(new_name) = &v.corrected_name {
         // `match_version` checked against -/_ typos, so if we have a name here we should

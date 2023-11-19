@@ -1,9 +1,8 @@
 use super::{cache::CachePolicy, headers::CanonicalUrl, MatchSemver};
 use crate::{
-    db::Pool,
     docbuilder::Limits,
     impl_axum_webpage,
-    web::{error::AxumResult, match_version_axum, MetaData},
+    web::{error::AxumResult, extractors::DbConnection, match_version, MetaData},
     Config,
 };
 use anyhow::Result;
@@ -41,10 +40,10 @@ impl_axum_webpage! {
 
 pub(crate) async fn build_list_handler(
     Path((name, req_version)): Path<(String, String)>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let (version, version_or_latest) = match match_version_axum(&pool, &name, Some(&req_version))
+    let (version, version_or_latest) = match match_version(&mut conn, &name, Some(&req_version))
         .await?
         .exact_name_only()?
     {
@@ -60,8 +59,6 @@ pub(crate) async fn build_list_handler(
         }
     };
 
-    let mut conn = pool.get_async().await?;
-
     Ok(BuildsPage {
         metadata: MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?,
         builds: get_builds(&mut conn, &name, &version).await?,
@@ -74,9 +71,9 @@ pub(crate) async fn build_list_handler(
 
 pub(crate) async fn build_list_json_handler(
     Path((name, req_version)): Path<(String, String)>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match match_version_axum(&pool, &name, Some(&req_version))
+    let version = match match_version(&mut conn, &name, Some(&req_version))
         .await?
         .exact_name_only()?
     {
@@ -89,8 +86,6 @@ pub(crate) async fn build_list_json_handler(
             .into_response());
         }
     };
-
-    let mut conn = pool.get_async().await?;
 
     Ok((
         Extension(CachePolicy::NoStoreMustRevalidate),

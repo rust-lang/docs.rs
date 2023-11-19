@@ -13,7 +13,7 @@ use crate::utils::{
 };
 use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
-use crate::{Config, Context, InstanceMetrics, RegistryApi, Storage};
+use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
 use failure::Error as FailureError;
@@ -88,6 +88,7 @@ pub struct RustwideBuilder {
     config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
+    async_storage: Arc<AsyncStorage>,
     metrics: Arc<InstanceMetrics>,
     registry_api: Arc<RegistryApi>,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
@@ -98,14 +99,16 @@ impl RustwideBuilder {
     pub fn init(context: &dyn Context) -> Result<Self> {
         let config = context.config()?;
         let pool = context.pool()?;
+        let runtime = context.runtime()?;
 
         Ok(RustwideBuilder {
             workspace: build_workspace(context)?,
             toolchain: get_configured_toolchain(&mut *pool.get()?)?,
             config,
             db: pool,
-            runtime: context.runtime()?,
+            runtime: runtime.clone(),
             storage: context.storage()?,
+            async_storage: runtime.block_on(context.async_storage())?,
             metrics: context.instance_metrics()?,
             registry_api: context.registry_api()?,
             repository_stats_updater: context.repository_stats_updater()?,
@@ -320,17 +323,17 @@ impl RustwideBuilder {
                     // available at --static-root-path, we add files from that subdirectory, if present.
                     let static_files = dest.as_ref().join("static.files");
                     if static_files.try_exists()? {
-                        add_path_into_database(
-                            &self.storage,
+                        self.runtime.block_on(add_path_into_database(
+                            &self.async_storage,
                             RUSTDOC_STATIC_STORAGE_PREFIX,
                             &static_files,
-                        )?;
+                        ))?;
                     } else {
-                        add_path_into_database(
-                            &self.storage,
+                        self.runtime.block_on(add_path_into_database(
+                            &self.async_storage,
                             RUSTDOC_STATIC_STORAGE_PREFIX,
                             &dest,
-                        )?;
+                        ))?;
                     }
 
                     set_config(&mut conn, ConfigName::RustcVersion, rustc_version)?;
@@ -499,24 +502,25 @@ impl RustwideBuilder {
                                 &metadata,
                             )?;
                         }
-                        let (_, new_alg) = add_path_into_remote_archive(
-                            &self.storage,
+                        let (_, new_alg) = self.runtime.block_on(add_path_into_remote_archive(
+                            &self.async_storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                             true,
-                        )?;
+                        ))?;
                         algs.insert(new_alg);
                     };
 
                     // Store the sources even if the build fails
                     debug!("adding sources into database");
                     let files_list = {
-                        let (files_list, new_alg) = add_path_into_remote_archive(
-                            &self.storage,
-                            &source_archive_path(name, version),
-                            build.host_source_dir(),
-                            false,
-                        )?;
+                        let (files_list, new_alg) =
+                            self.runtime.block_on(add_path_into_remote_archive(
+                                &self.async_storage,
+                                &source_archive_path(name, version),
+                                build.host_source_dir(),
+                                false,
+                            ))?;
                         algs.insert(new_alg);
                         files_list
                     };
@@ -551,8 +555,10 @@ impl RustwideBuilder {
                     let cargo_metadata = res.cargo_metadata.root();
                     let repository = self.get_repo(cargo_metadata)?;
 
-                    let release_id = add_package_into_database(
-                        &mut conn,
+                    let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+
+                    let release_id = self.runtime.block_on(add_package_into_database(
+                        &mut async_conn,
                         cargo_metadata,
                         &build.host_source_dir(),
                         &res.result,
@@ -565,22 +571,30 @@ impl RustwideBuilder {
                         algs,
                         repository,
                         true,
-                    )?;
+                    ))?;
 
                     if let Some(doc_coverage) = res.doc_coverage {
-                        add_doc_coverage(&mut conn, release_id, doc_coverage)?;
+                        self.runtime.block_on(add_doc_coverage(
+                            &mut async_conn,
+                            release_id,
+                            doc_coverage,
+                        ))?;
                     }
 
-                    let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
+                    let build_id = self.runtime.block_on(add_build_into_database(
+                        &mut async_conn,
+                        release_id,
+                        &res.result,
+                    ))?;
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
                     self.storage.store_one(build_log_path, res.build_log)?;
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
                     if !is_local {
                         match self.registry_api.get_crate_data(name) {
-                            Ok(crate_data) => {
-                                update_crate_data_in_database(&mut conn, name, &crate_data)?
-                            }
+                            Ok(crate_data) => self.runtime.block_on(
+                                update_crate_data_in_database(&mut async_conn, name, &crate_data),
+                            )?,
                             Err(err) => warn!("{:#?}", err),
                         }
                     }
@@ -595,6 +609,12 @@ impl RustwideBuilder {
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
+
+                    self.runtime.block_on(async move {
+                        // we need to drop the async connection inside an async runtime context
+                        // so sqlx can use a runtime to handle the pool.
+                        drop(async_conn);
+                    });
 
                     Ok(res.result.successful)
                 })()

@@ -2,15 +2,13 @@ use super::headers::CanonicalUrl;
 use super::MatchSemver;
 use crate::{
     db::types::Feature,
-    db::Pool,
     impl_axum_webpage,
-    web::{cache::CachePolicy, error::AxumResult, match_version_axum, MetaData},
+    web::{
+        cache::CachePolicy, error::AxumResult, extractors::DbConnection, match_version, MetaData,
+    },
 };
 use anyhow::anyhow;
-use axum::{
-    extract::{Extension, Path},
-    response::IntoResponse,
-};
+use axum::{extract::Path, response::IntoResponse};
 use serde::Serialize;
 use sqlx::Row as _;
 use std::collections::{HashMap, VecDeque};
@@ -38,10 +36,10 @@ impl_axum_webpage! {
 
 pub(crate) async fn build_features_handler(
     Path((name, req_version)): Path<(String, String)>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
     let (version, version_or_latest, is_latest_url) =
-        match match_version_axum(&pool, &name, Some(&req_version))
+        match match_version(&mut conn, &name, Some(&req_version))
             .await?
             .exact_name_only()?
         {
@@ -56,8 +54,6 @@ pub(crate) async fn build_features_handler(
                 .into_response());
             }
         };
-
-    let mut conn = pool.get_async().await?;
 
     let metadata = MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?;
 
