@@ -536,8 +536,8 @@ impl RustwideBuilder {
 
                     let release_data = if !is_local {
                         match self
-                            .registry_api
-                            .get_release_data(name, version)
+                            .runtime
+                            .block_on(self.registry_api.get_release_data(name, version))
                             .with_context(|| {
                                 format!("could not fetch releases-data for {name}-{version}")
                             }) {
@@ -591,7 +591,10 @@ impl RustwideBuilder {
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
                     if !is_local {
-                        match self.registry_api.get_crate_data(name) {
+                        match self
+                            .runtime
+                            .block_on(self.registry_api.get_crate_data(name))
+                        {
                             Ok(crate_data) => self.runtime.block_on(
                                 update_crate_data_in_database(&mut async_conn, name, &crate_data),
                             )?,
@@ -887,8 +890,8 @@ impl RustwideBuilder {
     }
 
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
-        self.repository_stats_updater
-            .load_repository(metadata)
+        self.runtime
+            .block_on(self.repository_stats_updater.load_repository(metadata))
             .map_err(Into::into)
     }
 }

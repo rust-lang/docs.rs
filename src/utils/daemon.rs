@@ -9,9 +9,11 @@ use crate::{
     BuildQueue, Config, Context, Index, RustwideBuilder,
 };
 use anyhow::{anyhow, Context as _, Error};
+use std::future::Future;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use tokio::runtime::Runtime;
 use tracing::{debug, info};
 
 /// Run the registry watcher
@@ -69,14 +71,19 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
     // creating a pool or if config fails, which shouldn't happen here because this is run right at
     // startup.
     let updater = context.repository_stats_updater()?;
-    cron(
-        "repositories stats updater",
+    let runtime = context.runtime()?;
+    async_cron(
+        &runtime,
+        "repository stats updater",
         Duration::from_secs(60 * 60),
         move || {
-            updater.update_all_crates()?;
-            Ok(())
+            let updater = updater.clone();
+            async move {
+                updater.update_all_crates().await?;
+                Ok(())
+            }
         },
-    )?;
+    );
     Ok(())
 }
 
@@ -152,6 +159,25 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
     webserver_thread
         .join()
         .map_err(|err| anyhow!("web server panicked: {:?}", err))?
+}
+
+pub(crate) fn async_cron<F, Fut>(runtime: &Runtime, name: &'static str, interval: Duration, exec: F)
+where
+    Fut: Future<Output = Result<(), Error>> + Send,
+    F: Fn() -> Fut + Send + 'static,
+{
+    runtime.spawn(async move {
+        let mut interval = tokio::time::interval(interval);
+        loop {
+            interval.tick().await;
+            if let Err(err) = exec()
+                .await
+                .with_context(|| format!("failed to run scheduled task '{name}'"))
+            {
+                report_error(&err);
+            }
+        }
+    });
 }
 
 pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>

@@ -35,7 +35,7 @@ crates-index = { version = "2.2.0", default-features = false, features = ["git",
 rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "21.0.0", features = [ "max-performance" ]}
-reqwest = { version = "0.11", features = ["blocking", "json"] } # TODO: Remove blocking when async is ready
+reqwest = { version = "0.11", features = ["json", "gzip"] } 
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
 r2d2 = "0.8"
@@ -124,6 +124,7 @@ kuchikiki = "0.8"
 rand = "0.8"
 mockito = "1.0.2"
 test-case = "3.0.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] } 
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"

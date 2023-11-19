@@ -1,9 +1,10 @@
 use crate::error::Result;
 use crate::Config;
+use axum::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::{
-    blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
+    Client as HttpClient,
 };
 use serde::Deserialize;
 use tracing::{trace, warn};
@@ -83,6 +84,7 @@ impl GitHub {
     }
 }
 
+#[async_trait]
 impl RepositoryForge for GitHub {
     fn host(&self) -> &'static str {
         "github.com"
@@ -98,15 +100,17 @@ impl RepositoryForge for GitHub {
         100
     }
 
-    fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>> {
+    async fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>> {
         // Fetch the latest information from the GitHub API.
-        let response: GraphResponse<GraphRepositoryNode> = self.graphql(
-            GRAPHQL_SINGLE,
-            serde_json::json!({
-                "owner": name.owner,
-                "repo": name.repo,
-            }),
-        )?;
+        let response: GraphResponse<GraphRepositoryNode> = self
+            .graphql(
+                GRAPHQL_SINGLE,
+                serde_json::json!({
+                    "owner": name.owner,
+                    "repo": name.repo,
+                }),
+            )
+            .await?;
 
         Ok(response
             .data
@@ -122,13 +126,15 @@ impl RepositoryForge for GitHub {
             }))
     }
 
-    fn fetch_repositories(&self, node_ids: &[String]) -> Result<FetchRepositoriesResult> {
-        let response: GraphResponse<GraphNodes<Option<GraphRepository>>> = self.graphql(
-            GRAPHQL_UPDATE,
-            serde_json::json!({
-                "ids": node_ids,
-            }),
-        )?;
+    async fn fetch_repositories(&self, node_ids: &[String]) -> Result<FetchRepositoriesResult> {
+        let response: GraphResponse<GraphNodes<Option<GraphRepository>>> = self
+            .graphql(
+                GRAPHQL_UPDATE,
+                serde_json::json!({
+                    "ids": node_ids,
+                }),
+            )
+            .await?;
 
         // The error is returned *before* we reach the rate limit, to ensure we always have an
         // amount of API calls we can make at any time.
@@ -180,7 +186,7 @@ impl RepositoryForge for GitHub {
 }
 
 impl GitHub {
-    fn graphql<T: serde::de::DeserializeOwned>(
+    async fn graphql<T: serde::de::DeserializeOwned>(
         &self,
         query: &str,
         variables: impl serde::Serialize,
@@ -192,9 +198,11 @@ impl GitHub {
                 "query": query,
                 "variables": variables,
             }))
-            .send()?
+            .send()
+            .await?
             .error_for_status()?
-            .json()?)
+            .json()
+            .await?)
     }
 }
 
@@ -262,8 +270,8 @@ mod tests {
     use crate::repositories::updater::{repository_name, RepositoryForge};
     use crate::repositories::RateLimitReached;
 
-    fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {
-        let server = mockito::Server::new();
+    async fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {
+        let server = mockito::Server::new_async().await;
         let updater = GitHub::with_custom_endpoint(config, format!("{}/graphql", server.url()))
             .expect("GitHub::new failed")
             .unwrap();
@@ -273,10 +281,10 @@ mod tests {
 
     #[test]
     fn test_rate_limit_fail() {
-        crate::test::wrapper(|env| {
+        crate::test::async_wrapper(|env| async move {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config);
+            let (mut server, updater) = mock_server_and_github(&config).await;
 
             let _m1 = server
                 .mock("POST", "/graphql")
@@ -286,7 +294,7 @@ mod tests {
                 )
                 .create();
 
-            match updater.fetch_repositories(&[String::new()]) {
+            match updater.fetch_repositories(&[String::new()]).await {
                 Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
                 x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
             }
@@ -296,10 +304,10 @@ mod tests {
 
     #[test]
     fn test_rate_limit_manual() {
-        crate::test::wrapper(|env| {
+        crate::test::async_wrapper(|env| async move {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config);
+            let (mut server, updater) = mock_server_and_github(&config).await;
 
             let _m1 = server
                 .mock("POST", "/graphql")
@@ -307,7 +315,7 @@ mod tests {
                 .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
                 .create();
 
-            match updater.fetch_repositories(&[String::new()]) {
+            match updater.fetch_repositories(&[String::new()]).await {
                 Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
                 x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
             }
@@ -317,10 +325,10 @@ mod tests {
 
     #[test]
     fn not_found() {
-        crate::test::wrapper(|env| {
+        crate::test::async_wrapper(|env| async move {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config);
+            let (mut server, updater) = mock_server_and_github(&config).await;
 
             let _m1 = server
                 .mock("POST", "/graphql")
@@ -331,7 +339,7 @@ mod tests {
                 )
                 .create();
 
-            match updater.fetch_repositories(&[String::new()]) {
+            match updater.fetch_repositories(&[String::new()]).await {
                 Ok(res) => {
                     assert_eq!(res.missing, vec![String::new()]);
                     assert_eq!(res.present.len(), 0);
@@ -344,10 +352,10 @@ mod tests {
 
     #[test]
     fn get_repository_info() {
-        crate::test::wrapper(|env| {
+        crate::test::async_wrapper(|env| async move {
             let mut config = env.base_config();
             config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config);
+            let (mut server, updater) = mock_server_and_github(&config).await;
 
             let _m1 = server
                 .mock("POST", "/graphql")
@@ -363,6 +371,7 @@ mod tests {
                 .fetch_repository(
                     &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
                 )
+                .await
                 .expect("fetch_repository failed")
                 .unwrap();
 
