@@ -275,6 +275,7 @@ fn apply_middleware(
 ) -> Result<AxumRouter> {
     let config = context.config()?;
     let has_templates = template_data.is_some();
+    let async_storage = context.runtime()?.block_on(context.async_storage())?;
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -293,7 +294,7 @@ fn apply_middleware(
             .layer(Extension(context.instance_metrics()?))
             .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
-            .layer(Extension(context.async_storage()?))
+            .layer(Extension(async_storage))
             .layer(Extension(context.repository_stats_updater()?))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))

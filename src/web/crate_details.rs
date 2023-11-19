@@ -1533,7 +1533,7 @@ mod tests {
                 .unwrap();
             assert!(matches!(
                 env.runtime()
-                    .block_on(details.fetch_readme(&env.async_storage())),
+                    .block_on(details.fetch_readme(&env.runtime().block_on(env.async_storage()))),
                 Ok(None)
             ));
             Ok(())

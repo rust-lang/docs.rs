@@ -9,9 +9,10 @@ use crate::storage::{AsyncStorage, Storage, StorageKind};
 use crate::web::{build_axum_app, cache, page::TemplateData};
 use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi, ServiceMetrics};
 use anyhow::Context as _;
+use axum::async_trait;
 use fn_error_context::context;
 use futures_util::FutureExt;
-use once_cell::unsync::OnceCell;
+use once_cell::sync::OnceCell;
 use postgres::Client as Connection;
 use reqwest::{
     blocking::{Client, ClientBuilder, RequestBuilder, Response},
@@ -263,7 +264,7 @@ pub(crate) struct TestEnvironment {
     config: OnceCell<Arc<Config>>,
     db: tokio::sync::OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
-    async_storage: OnceCell<Arc<AsyncStorage>>,
+    async_storage: tokio::sync::OnceCell<Arc<AsyncStorage>>,
     cdn: OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
     registry_api: OnceCell<Arc<RegistryApi>>,
@@ -298,7 +299,7 @@ impl TestEnvironment {
             config: OnceCell::new(),
             db: tokio::sync::OnceCell::new(),
             storage: OnceCell::new(),
-            async_storage: OnceCell::new(),
+            async_storage: tokio::sync::OnceCell::new(),
             cdn: OnceCell::new(),
             index: OnceCell::new(),
             registry_api: OnceCell::new(),
@@ -391,25 +392,29 @@ impl TestEnvironment {
             .clone()
     }
 
-    pub(crate) fn async_storage(&self) -> Arc<AsyncStorage> {
+    pub(crate) async fn async_storage(&self) -> Arc<AsyncStorage> {
         self.async_storage
-            .get_or_init(|| {
+            .get_or_init(|| async {
+                let db = self.async_db().await;
                 Arc::new(
-                    self.runtime()
-                        .block_on(AsyncStorage::new(
-                            self.db().pool(),
-                            self.instance_metrics(),
-                            self.config(),
-                        ))
+                    AsyncStorage::new(db.pool(), self.instance_metrics(), self.config())
+                        .await
                         .expect("failed to initialize the async storage"),
                 )
             })
+            .await
             .clone()
     }
 
     pub(crate) fn storage(&self) -> Arc<Storage> {
+        let runtime = self.runtime();
         self.storage
-            .get_or_init(|| Arc::new(Storage::new(self.async_storage(), self.runtime())))
+            .get_or_init(|| {
+                Arc::new(Storage::new(
+                    runtime.block_on(self.async_storage()),
+                    runtime,
+                ))
+            })
             .clone()
     }
 
@@ -515,6 +520,7 @@ impl TestEnvironment {
     }
 }
 
+#[async_trait]
 impl Context for TestEnvironment {
     fn config(&self) -> Result<Arc<Config>> {
         Ok(TestEnvironment::config(self))
@@ -528,8 +534,8 @@ impl Context for TestEnvironment {
         Ok(TestEnvironment::storage(self))
     }
 
-    fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
-        Ok(TestEnvironment::async_storage(self))
+    async fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
+        Ok(TestEnvironment::async_storage(self).await)
     }
 
     fn cdn(&self) -> Result<Arc<CdnBackend>> {
