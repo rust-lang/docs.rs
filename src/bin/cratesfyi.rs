@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
+use axum::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
@@ -767,6 +768,7 @@ macro_rules! lazy {
     }
 }
 
+#[async_trait]
 impl Context for BinContext {
     lazy! {
         fn build_queue(self) -> BuildQueue = BuildQueue::new(
@@ -775,10 +777,13 @@ impl Context for BinContext {
             self.config()?,
             self.storage()?,
         );
-        fn storage(self) -> Storage = Storage::new(
-            self.async_storage()?,
-            self.runtime()?
-       );
+        fn storage(self) -> Storage = {
+            let runtime = self.runtime()?;
+            Storage::new(
+                runtime.block_on(self.async_storage())?,
+                runtime
+           )
+        };
         fn cdn(self) -> CdnBackend = CdnBackend::new(
             &self.config()?,
             &self.runtime()?,
@@ -824,11 +829,9 @@ impl Context for BinContext {
             .clone())
     }
 
-    fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
-        Ok(Arc::new(self.runtime()?.block_on(AsyncStorage::new(
-            self.pool()?,
-            self.instance_metrics()?,
-            self.config()?,
-        ))?))
+    async fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
+        Ok(Arc::new(
+            AsyncStorage::new(self.pool()?, self.instance_metrics()?, self.config()?).await?,
+        ))
     }
 }

@@ -78,7 +78,7 @@ mod tests {
             let mut file = env
                 .runtime()
                 .block_on(File::from_path(
-                    &env.async_storage(),
+                    &env.runtime().block_on(env.async_storage()),
                     "rustdoc/fake-package/1.0.0/fake-package/index.html",
                     &env.config(),
                 ))
@@ -125,7 +125,7 @@ mod tests {
 
             let file = |path| {
                 env.runtime().block_on(File::from_path(
-                    &env.async_storage(),
+                    &env.runtime().block_on(env.async_storage()),
                     &format!("rustdoc/dummy/0.1.0/{path}"),
                     &env.config(),
                 ))
