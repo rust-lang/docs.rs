@@ -534,8 +534,13 @@ impl DatabaseSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Migrate { version } => {
-                db::migrate(version, &mut *ctx.conn()?)
-                    .context("Failed to run database migrations")?;
+                let pool = ctx.pool()?;
+                ctx.runtime()?
+                    .block_on(async {
+                        let mut conn = pool.get_async().await?;
+                        db::migrate(&mut conn, version).await
+                    })
+                    .context("Failed to run database migrations")?
             }
 
             Self::UpdateRepositoryFields => {

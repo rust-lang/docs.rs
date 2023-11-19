@@ -79,6 +79,9 @@ fn main() -> Result<()> {
     compile_sass(out_dir)?;
     write_known_targets(out_dir)?;
     compile_syntax(out_dir).context("could not compile syntax files")?;
+
+    // trigger recompilation when a new migration is added
+    println!("cargo:rerun-if-changed=migrations");
     Ok(())
 }
 
