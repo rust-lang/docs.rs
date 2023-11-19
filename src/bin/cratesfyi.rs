@@ -553,15 +553,21 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateCrateRegistryFields { name } => {
-                db::update_crate_data_in_database(
-                    &mut *ctx.conn()?,
-                    &name,
-                    &ctx.registry_api()?.get_crate_data(&name)?,
-                )?;
+                let registry_data = ctx.registry_api()?.get_crate_data(&name)?;
+
+                ctx.runtime()?.block_on(async move {
+                    let mut conn = ctx.pool()?.get_async().await?;
+                    db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
+                })?
             }
 
             Self::AddDirectory { directory } => {
-                add_path_into_database(&*ctx.storage()?, &ctx.config()?.prefix, directory)
+                ctx.runtime()?
+                    .block_on(async {
+                        let storage = ctx.async_storage().await?;
+
+                        add_path_into_database(&storage, &ctx.config()?.prefix, directory).await
+                    })
                     .context("Failed to add directory into database")?;
             }
 

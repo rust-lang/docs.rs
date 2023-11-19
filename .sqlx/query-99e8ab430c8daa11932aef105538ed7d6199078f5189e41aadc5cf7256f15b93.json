@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            id,\n            version,\n            build_status,\n            yanked,\n            is_library,\n            rustdoc_status,\n            target_name\n         FROM releases\n         WHERE\n             releases.crate_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "build_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "yanked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_library",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "target_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "99e8ab430c8daa11932aef105538ed7d6199078f5189e41aadc5cf7256f15b93"
+}

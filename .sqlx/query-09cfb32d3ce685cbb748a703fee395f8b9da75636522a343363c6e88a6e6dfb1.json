@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.login\n                 FROM owners o, owner_rels r\n                 WHERE\n                     o.id = r.oid AND\n                     r.cid = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "09cfb32d3ce685cbb748a703fee395f8b9da75636522a343363c6e88a6e6dfb1"
+}

@@ -10,7 +10,7 @@ use crate::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::DbConnection,
-        match_version_axum,
+        match_version,
     },
     BuildQueue, Config, InstanceMetrics,
 };
@@ -500,7 +500,6 @@ impl_axum_webpage! {
 
 pub(crate) async fn search_handler(
     mut conn: DbConnection,
-    Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Query(mut params): Query<HashMap<String, String>>,
@@ -536,7 +535,7 @@ pub(crate) async fn search_handler(
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
-        if let Ok(matchver) = match_version_axum(&pool, krate, None).await {
+        if let Ok(matchver) = match_version(&mut conn, krate, None).await {
             params.remove("query");
             queries.extend(params);
             let (version, _) = matchver.version.into_parts();

@@ -3,20 +3,24 @@ use super::TestDatabase;
 use crate::docbuilder::{BuildResult, DocCoverage};
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
-use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
+use crate::storage::{
+    rustdoc_archive_path, source_archive_path, AsyncStorage, CompressionAlgorithms,
+};
 use crate::utils::{Dependency, MetadataPackage, Target};
 use anyhow::Context;
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
-use postgres::Client;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 use tracing::debug;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {
     db: &'a TestDatabase,
-    storage: Arc<Storage>,
+    storage: Arc<AsyncStorage>,
+    runtime: Arc<Runtime>,
     package: MetadataPackage,
     builds: Vec<FakeBuild>,
     /// name, content
@@ -47,10 +51,15 @@ const DEFAULT_CONTENT: &[u8] =
     b"<html><head></head><body>default content for test/fakes</body></html>";
 
 impl<'a> FakeRelease<'a> {
-    pub(super) fn new(db: &'a TestDatabase, storage: Arc<Storage>) -> Self {
+    pub(super) fn new(
+        db: &'a TestDatabase,
+        storage: Arc<AsyncStorage>,
+        runtime: Arc<Runtime>,
+    ) -> Self {
         FakeRelease {
             db,
             storage,
+            runtime,
             package: MetadataPackage {
                 id: "fake-package-id".into(),
                 name: "fake-package".into(),
@@ -260,8 +269,13 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn create(self) -> Result<i32> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(self.create_async())
+    }
+
     /// Returns the release_id
-    pub(crate) fn create(mut self) -> Result<i32> {
+    pub(crate) async fn create_async(mut self) -> Result<i32> {
         use std::fs;
         use std::path::Path;
 
@@ -319,7 +333,13 @@ impl<'a> FakeRelease<'a> {
             Ok(())
         };
 
-        let upload_files = |kind: FileKind, source_directory: &Path| {
+        async fn upload_files(
+            kind: FileKind,
+            source_directory: &Path,
+            archive_storage: bool,
+            package: &MetadataPackage,
+            storage: &AsyncStorage,
+        ) -> Result<(Value, CompressionAlgorithms)> {
             debug!(
                 "adding directory {:?} from {}",
                 kind,
@@ -336,11 +356,12 @@ impl<'a> FakeRelease<'a> {
                 };
                 debug!("store in archive: {:?}", archive);
                 let (files_list, new_alg) = crate::db::add_path_into_remote_archive(
-                    &storage,
+                    storage,
                     &archive,
                     source_directory,
                     public,
-                )?;
+                )
+                .await?;
                 let mut hm = HashSet::new();
                 hm.insert(new_alg);
                 Ok((files_list, hm))
@@ -350,12 +371,13 @@ impl<'a> FakeRelease<'a> {
                     FileKind::Sources => "sources",
                 };
                 crate::db::add_path_into_database(
-                    &storage,
+                    storage,
                     format!("{}/{}/{}/", prefix, package.name, package.version),
                     source_directory,
                 )
+                .await
             }
-        };
+        }
 
         debug!("before upload source");
         let source_tmp = create_temp_dir();
@@ -378,7 +400,14 @@ impl<'a> FakeRelease<'a> {
             store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
         }
 
-        let (source_meta, algs) = upload_files(FileKind::Sources, source_tmp.path())?;
+        let (source_meta, algs) = upload_files(
+            FileKind::Sources,
+            source_tmp.path(),
+            archive_storage,
+            &package,
+            &storage,
+        )
+        .await?;
         debug!("added source files {}", source_meta);
 
         // If the test didn't add custom builds, inject a default one
@@ -409,12 +438,21 @@ impl<'a> FakeRelease<'a> {
                 debug!("added platform files for {}", platform);
             }
 
-            let (rustdoc_meta, _) = upload_files(FileKind::Rustdoc, rustdoc_path)?;
+            let (rustdoc_meta, _) = upload_files(
+                FileKind::Rustdoc,
+                rustdoc_path,
+                archive_storage,
+                &package,
+                &storage,
+            )
+            .await?;
             debug!("uploaded rustdoc files: {}", rustdoc_meta);
         }
 
+        let mut async_conn = db.async_conn().await;
+
         let repository = match self.github_stats {
-            Some(stats) => Some(stats.create(&mut self.db.conn())?),
+            Some(stats) => Some(stats.create(&mut async_conn).await?),
             None => None,
         };
 
@@ -428,8 +466,9 @@ impl<'a> FakeRelease<'a> {
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
         // non-linux platforms.
         let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
+        let mut async_conn = db.async_conn().await;
         let release_id = crate::db::add_package_into_database(
-            &mut db.conn(),
+            &mut async_conn,
             &package,
             crate_dir,
             last_build_result,
@@ -442,17 +481,21 @@ impl<'a> FakeRelease<'a> {
             algs,
             repository,
             archive_storage,
-        )?;
+        )
+        .await?;
         crate::db::update_crate_data_in_database(
-            &mut db.conn(),
+            &mut async_conn,
             &package.name,
             &self.registry_crate_data,
-        )?;
+        )
+        .await?;
         for build in &self.builds {
-            build.create(&mut db.conn(), &storage, release_id, default_target)?;
+            build
+                .create(&mut async_conn, &storage, release_id, default_target)
+                .await?;
         }
         if let Some(coverage) = self.doc_coverage {
-            crate::db::add_doc_coverage(&mut db.conn(), release_id, coverage)?;
+            crate::db::add_doc_coverage(&mut async_conn, release_id, coverage).await?;
         }
 
         Ok(release_id)
@@ -467,20 +510,21 @@ struct FakeGithubStats {
 }
 
 impl FakeGithubStats {
-    fn create(&self, conn: &mut Client) -> Result<i32> {
-        let existing_count: i64 = conn
-            .query_one("SELECT COUNT(*) FROM repositories;", &[])?
-            .get(0);
+    async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
+        let existing_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM repositories")
+            .fetch_one(&mut *conn)
+            .await?
+            .unwrap();
         let host_id = b64.encode(format!("FAKE ID {existing_count}"));
 
-        let data = conn.query_one(
+        let id = sqlx::query_scalar!(
             "INSERT INTO repositories (host, host_id, name, description, last_commit, stars, forks, issues, updated_at)
              VALUES ('github.com', $1, $2, 'Fake description!', NOW(), $3, $4, $5, NOW())
-             RETURNING id;",
-            &[&host_id, &self.repo, &self.stars, &self.forks, &self.issues],
-        )?;
+             RETURNING id",
+            host_id, self.repo, self.stars, self.forks, self.issues,
+        ).fetch_one(&mut *conn).await?;
 
-        Ok(data.get(0))
+        Ok(id)
     }
 }
 
@@ -536,25 +580,29 @@ impl FakeBuild {
         }
     }
 
-    fn create(
+    async fn create(
         &self,
-        conn: &mut Client,
-        storage: &Storage,
+        conn: &mut sqlx::PgConnection,
+        storage: &AsyncStorage,
         release_id: i32,
         default_target: &str,
     ) -> Result<()> {
-        let build_id = crate::db::add_build_into_database(conn, release_id, &self.result)?;
+        let build_id =
+            crate::db::add_build_into_database(&mut *conn, release_id, &self.result).await?;
 
         if let Some(db_build_log) = self.db_build_log.as_deref() {
-            conn.query(
+            sqlx::query!(
                 "UPDATE builds SET output = $2 WHERE id = $1",
-                &[&build_id, &db_build_log],
-            )?;
+                build_id,
+                db_build_log
+            )
+            .execute(&mut *conn)
+            .await?;
         }
 
         if let Some(s3_build_log) = self.s3_build_log.as_deref() {
             let path = format!("build-logs/{build_id}/{default_target}.txt");
-            storage.store_one(path, s3_build_log)?;
+            storage.store_one(path, s3_build_log).await?;
         }
 
         Ok(())
