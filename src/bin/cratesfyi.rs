@@ -545,21 +545,20 @@ impl DatabaseSubcommand {
             }
 
             Self::UpdateRepositoryFields => {
-                ctx.repository_stats_updater()?.update_all_crates()?;
+                ctx.runtime()?
+                    .block_on(ctx.repository_stats_updater()?.update_all_crates())?;
             }
 
             Self::BackfillRepositoryStats => {
-                ctx.repository_stats_updater()?.backfill_repositories()?;
+                ctx.runtime()?
+                    .block_on(ctx.repository_stats_updater()?.backfill_repositories())?;
             }
 
-            Self::UpdateCrateRegistryFields { name } => {
-                let registry_data = ctx.registry_api()?.get_crate_data(&name)?;
-
-                ctx.runtime()?.block_on(async move {
-                    let mut conn = ctx.pool()?.get_async().await?;
-                    db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
-                })?
-            }
+            Self::UpdateCrateRegistryFields { name } => ctx.runtime()?.block_on(async move {
+                let mut conn = ctx.pool()?.get_async().await?;
+                let registry_data = ctx.registry_api()?.get_crate_data(&name).await?;
+                db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
+            })?,
 
             Self::AddDirectory { directory } => {
                 ctx.runtime()?

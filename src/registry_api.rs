@@ -1,4 +1,4 @@
-use crate::{error::Result, utils::retry};
+use crate::{error::Result, utils::retry_async};
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
@@ -16,7 +16,7 @@ const APP_USER_AGENT: &str = concat!(
 pub struct RegistryApi {
     api_base: Url,
     max_retries: u32,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ impl RegistryApi {
         .into_iter()
         .collect();
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()?;
 
@@ -67,17 +67,19 @@ impl RegistryApi {
         })
     }
 
-    pub fn get_crate_data(&self, name: &str) -> Result<CrateData> {
+    pub async fn get_crate_data(&self, name: &str) -> Result<CrateData> {
         let owners = self
             .get_owners(name)
+            .await
             .context(format!("Failed to get owners for {name}"))?;
 
         Ok(CrateData { owners })
     }
 
-    pub(crate) fn get_release_data(&self, name: &str, version: &str) -> Result<ReleaseData> {
+    pub(crate) async fn get_release_data(&self, name: &str, version: &str) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
+            .await
             .context(format!("Failed to get crate data for {name}-{version}"))?;
 
         Ok(ReleaseData {
@@ -88,7 +90,7 @@ impl RegistryApi {
     }
 
     /// Get release_time, yanked and downloads from the registry's API
-    fn get_release_time_yanked_downloads(
+    async fn get_release_time_yanked_downloads(
         &self,
         name: &str,
         version: &str,
@@ -117,11 +119,20 @@ impl RegistryApi {
             downloads: i32,
         }
 
-        let response: Response = retry(
-            || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
+        let response: Response = retry_async(
+            || async {
+                Ok(self
+                    .client
+                    .get(url.clone())
+                    .send()
+                    .await?
+                    .error_for_status()?)
+            },
             self.max_retries,
-        )?
-        .json()?;
+        )
+        .await?
+        .json()
+        .await?;
 
         let version = Version::parse(version)?;
         let version = response
@@ -134,7 +145,7 @@ impl RegistryApi {
     }
 
     /// Fetch owners from the registry's API
-    fn get_owners(&self, name: &str) -> Result<Vec<CrateOwner>> {
+    async fn get_owners(&self, name: &str) -> Result<Vec<CrateOwner>> {
         let url = {
             let mut url = self.api_base.clone();
             url.path_segments_mut()
@@ -156,11 +167,20 @@ impl RegistryApi {
             login: Option<String>,
         }
 
-        let response: Response = retry(
-            || Ok(self.client.get(url.clone()).send()?.error_for_status()?),
+        let response: Response = retry_async(
+            || async {
+                Ok(self
+                    .client
+                    .get(url.clone())
+                    .send()
+                    .await?
+                    .error_for_status()?)
+            },
             self.max_retries,
-        )?
-        .json()?;
+        )
+        .await?
+        .json()
+        .await?;
 
         let result = response
             .users

@@ -2,14 +2,16 @@ use crate::error::Result;
 use crate::repositories::{GitHub, GitLab, RateLimitReached};
 use crate::utils::MetadataPackage;
 use crate::{db::Pool, Config};
+use axum::async_trait;
 use chrono::{DateTime, Utc};
+use futures_util::stream::TryStreamExt;
 use once_cell::sync::Lazy;
-use postgres::Client;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use tracing::{debug, info, trace, warn};
 
+#[async_trait]
 pub trait RepositoryForge {
     /// Result used both as the `host` column in the DB and to match repository URLs during
     /// backfill.
@@ -23,13 +25,13 @@ pub trait RepositoryForge {
 
     /// Used by both backfill_repositories and load_repository. When the repository is missing
     /// `None` is returned.
-    fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>>;
+    async fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>>;
 
     /// Used by update_all_crates.
     ///
     /// The returned struct will contain all the information needed for `RepositoriesUpdater` to
     /// update repositories that are still present and delete the missing ones.
-    fn fetch_repositories(&self, ids: &[String]) -> Result<FetchRepositoriesResult>;
+    async fn fetch_repositories(&self, ids: &[String]) -> Result<FetchRepositoriesResult>;
 }
 
 #[derive(Debug)]
@@ -79,7 +81,7 @@ impl RepositoryStatsUpdater {
         Self { updaters, pool }
     }
 
-    pub(crate) fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
+    pub(crate) async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         let url = match &metadata.repository {
             Some(url) => url,
             None => {
@@ -87,26 +89,35 @@ impl RepositoryStatsUpdater {
                 return Ok(None);
             }
         };
-        let mut conn = self.pool.get()?;
-        self.load_repository_inner(&mut conn, url)
+        let mut conn = self.pool.get_async().await?;
+        self.load_repository_inner(&mut conn, url).await
     }
 
-    fn load_repository_inner(&self, conn: &mut Client, url: &str) -> Result<Option<i32>> {
+    async fn load_repository_inner(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        url: &str,
+    ) -> Result<Option<i32>> {
         let name = match repository_name(url) {
             Some(name) => name,
             None => return Ok(None),
         };
 
         // Avoid querying the APIs for repositories we already loaded.
-        if let Some(row) = conn.query_opt(
+        if let Some(id) = sqlx::query_scalar!(
             "SELECT id FROM repositories WHERE name = $1 AND host = $2 LIMIT 1;",
-            &[&format!("{}/{}", name.owner, name.repo), &name.host],
-        )? {
-            return Ok(Some(row.get("id")));
+            format!("{}/{}", name.owner, name.repo),
+            name.host,
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        {
+            return Ok(Some(id));
         }
+
         if let Some(updater) = self.updaters.iter().find(|u| u.host() == name.host) {
-            let res = match updater.fetch_repository(&name) {
-                Ok(Some(repo)) => self.store_repository(conn, updater.host(), repo),
+            let res = match updater.fetch_repository(&name).await {
+                Ok(Some(repo)) => self.store_repository(conn, updater.host(), repo).await,
                 Ok(None) => {
                     warn!(
                         "failed to fetch repository `{}` on host `{}`",
@@ -126,21 +137,21 @@ impl RepositoryStatsUpdater {
         Ok(None)
     }
 
-    pub fn update_all_crates(&self) -> Result<()> {
-        let mut conn = self.pool.get()?;
+    pub async fn update_all_crates(&self) -> Result<()> {
+        let mut conn = self.pool.get_async().await?;
         'updaters: for updater in &self.updaters {
             info!("started updating `{}` repositories stats", updater.host());
 
-            let needs_update = conn
-                .query(
-                    "SELECT host_id
-                     FROM repositories
-                     WHERE host = $1 AND updated_at < NOW() - INTERVAL '1 day';",
-                    &[&updater.host()],
-                )?
-                .into_iter()
-                .map(|row| row.get(0))
-                .collect::<Vec<String>>();
+            let needs_update: Vec<String> = sqlx::query!(
+                "SELECT host_id
+                 FROM repositories
+                 WHERE host = $1 AND updated_at < NOW() - INTERVAL '1 day';",
+                updater.host()
+            )
+            .fetch(&mut *conn)
+            .map_ok(|row| row.host_id)
+            .try_collect()
+            .await?;
 
             if needs_update.is_empty() {
                 info!(
@@ -152,7 +163,7 @@ impl RepositoryStatsUpdater {
             // FIXME: The collect can be avoided if we use Itertools::chunks:
             // https://docs.rs/itertools/0.10.0/itertools/trait.Itertools.html#method.chunks.
             for chunk in needs_update.chunks(updater.chunk_size()) {
-                let res = match updater.fetch_repositories(chunk) {
+                let res = match updater.fetch_repositories(chunk).await {
                     Ok(r) => r,
                     Err(err) => {
                         if err.downcast_ref::<RateLimitReached>().is_some() {
@@ -166,10 +177,12 @@ impl RepositoryStatsUpdater {
                     }
                 };
                 for node in res.missing {
-                    self.delete_repository(&mut conn, &node, updater.host())?;
+                    self.delete_repository(&mut conn, &node, updater.host())
+                        .await?;
                 }
                 for (_, repo) in res.present {
-                    self.store_repository(&mut conn, updater.host(), repo)?;
+                    self.store_repository(&mut conn, updater.host(), repo)
+                        .await?;
                 }
             }
             info!("finished updating `{}` repositories stats", updater.host());
@@ -177,47 +190,56 @@ impl RepositoryStatsUpdater {
         Ok(())
     }
 
-    pub fn backfill_repositories(&self) -> Result<()> {
-        let mut conn = self.pool.get()?;
+    pub async fn backfill_repositories(&self) -> Result<()> {
+        let mut conn = self.pool.get_async().await?;
         for updater in &self.updaters {
             info!(
                 "started backfilling `{}` repositories stats",
                 updater.host()
             );
 
-            let needs_backfilling = conn.query(
+            let needs_backfilling = sqlx::query!(
                 "SELECT releases.id, crates.name, releases.version, releases.repository_url
                  FROM releases
                  INNER JOIN crates ON (crates.id = releases.crate_id)
                  WHERE repository_id IS NULL AND repository_url LIKE $1;",
-                &[&format!("%{}%", updater.host())],
-            )?;
+                format!("%{}%", updater.host()),
+            )
+            .fetch_all(&mut *conn)
+            .await?;
 
             let mut missing_urls = HashSet::new();
             for row in &needs_backfilling {
-                let id: i32 = row.get("id");
-                let name: String = row.get("name");
-                let version: String = row.get("version");
-                let url: String = row.get("repository_url");
+                let url = if let Some(ref url) = row.repository_url {
+                    url
+                } else {
+                    continue;
+                };
 
                 if missing_urls.contains(&url) {
-                    debug!("{} {} points to a known missing repo", name, version);
-                } else if let Some(node_id) = self.load_repository_inner(&mut conn, &url)? {
-                    conn.execute(
+                    debug!(
+                        "{} {} points to a known missing repo",
+                        row.name, row.version
+                    );
+                } else if let Some(node_id) = self.load_repository_inner(&mut conn, url).await? {
+                    sqlx::query!(
                         "UPDATE releases SET repository_id = $1 WHERE id = $2;",
-                        &[&node_id, &id],
-                    )?;
+                        node_id,
+                        row.id,
+                    )
+                    .execute(&mut *conn)
+                    .await?;
                     info!(
                         "backfilled `{}` repositories for {} {}",
                         updater.host(),
-                        name,
-                        version,
+                        row.name,
+                        row.version,
                     );
                 } else {
                     debug!(
                         "{} {} does not point to a {} repository",
-                        name,
-                        version,
+                        row.name,
+                        row.version,
                         updater.host(),
                     );
                     missing_urls.insert(url);
@@ -238,13 +260,18 @@ impl RepositoryStatsUpdater {
         "code-branch"
     }
 
-    fn store_repository(&self, conn: &mut Client, host: &str, repo: Repository) -> Result<i32> {
+    async fn store_repository(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        host: &str,
+        repo: Repository,
+    ) -> Result<i32> {
         trace!(
             "storing {} repository stats for {}",
             host,
             repo.name_with_owner,
         );
-        let data = conn.query_one(
+        Ok(sqlx::query_scalar!(
             "INSERT INTO repositories (
                  host, host_id, name, description, last_commit, stars, forks, issues, updated_at
              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
@@ -258,30 +285,37 @@ impl RepositoryStatsUpdater {
                  issues = $8,
                  updated_at = NOW()
              RETURNING id;",
-            &[
-                &host,
-                &repo.id,
-                &repo.name_with_owner,
-                &repo.description,
-                &repo.last_activity_at,
-                &(repo.stars as i32),
-                &(repo.forks as i32),
-                &(repo.issues as i32),
-            ],
-        )?;
-        Ok(data.get(0))
+            host,
+            repo.id,
+            repo.name_with_owner,
+            repo.description,
+            repo.last_activity_at,
+            (repo.stars as i32),
+            (repo.forks as i32),
+            (repo.issues as i32),
+        )
+        .fetch_one(conn)
+        .await?)
     }
 
-    fn delete_repository(&self, conn: &mut Client, host_id: &str, host: &str) -> Result<()> {
+    async fn delete_repository(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        host_id: &str,
+        host: &str,
+    ) -> Result<()> {
         trace!(
             "removing repository stats for host ID `{}` and host `{}`",
             host_id,
             host
         );
-        conn.execute(
+        sqlx::query!(
             "DELETE FROM repositories WHERE host_id = $1 AND host = $2;",
-            &[&host_id, &host],
-        )?;
+            host_id,
+            host,
+        )
+        .execute(conn)
+        .await?;
         Ok(())
     }
 }

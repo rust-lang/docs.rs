@@ -1,8 +1,9 @@
 use crate::error::Result;
+use axum::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::{
-    blocking::Client as HttpClient,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
+    Client as HttpClient,
 };
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -81,6 +82,7 @@ impl GitLab {
     }
 }
 
+#[async_trait]
 impl RepositoryForge for GitLab {
     fn host(&self) -> &'static str {
         self.host
@@ -94,15 +96,17 @@ impl RepositoryForge for GitLab {
         100
     }
 
-    fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>> {
+    async fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>> {
         let project_path = format!("{}/{}", name.owner, name.repo);
         // Fetch the latest information from the Gitlab API.
-        let response: (GraphResponse<GraphProjectNode>, Option<usize>) = self.graphql(
-            GRAPHQL_SINGLE,
-            serde_json::json!({
-                "fullPath": &project_path,
-            }),
-        )?;
+        let response: (GraphResponse<GraphProjectNode>, Option<usize>) = self
+            .graphql(
+                GRAPHQL_SINGLE,
+                serde_json::json!({
+                    "fullPath": &project_path,
+                }),
+            )
+            .await?;
         let (response, rate_limit) = response;
         if let Some(repo) = response.data.and_then(|d| d.project) {
             Ok(Some(Repository {
@@ -121,16 +125,18 @@ impl RepositoryForge for GitLab {
         }
     }
 
-    fn fetch_repositories(&self, ids: &[String]) -> Result<FetchRepositoriesResult> {
+    async fn fetch_repositories(&self, ids: &[String]) -> Result<FetchRepositoriesResult> {
         let response: (
             GraphResponse<GraphProjects<Option<GraphProject>>>,
             Option<usize>,
-        ) = self.graphql(
-            GRAPHQL_UPDATE,
-            serde_json::json!({
-                "ids": ids,
-            }),
-        )?;
+        ) = self
+            .graphql(
+                GRAPHQL_UPDATE,
+                serde_json::json!({
+                    "ids": ids,
+                }),
+            )
+            .await?;
         let (response, rate_limit) = response;
         let mut ret = FetchRepositoriesResult::default();
         // When gitlab doesn't find an ID, it simply doesn't list it. So we need to actually check
@@ -173,7 +179,7 @@ impl RepositoryForge for GitLab {
 }
 
 impl GitLab {
-    fn graphql<T: serde::de::DeserializeOwned + std::fmt::Debug>(
+    async fn graphql<T: serde::de::DeserializeOwned + std::fmt::Debug>(
         &self,
         query: &str,
         variables: impl serde::Serialize,
@@ -185,7 +191,8 @@ impl GitLab {
                 "query": query,
                 "variables": variables,
             }))
-            .send()?
+            .send()
+            .await?
             .error_for_status()?;
         // There are a few other header values that might interesting so keeping them here:
         // * RateLimit-Observed: '1'
@@ -196,7 +203,7 @@ impl GitLab {
             .headers()
             .get("RateLimit-Remaining")
             .and_then(|x| usize::from_str(x.to_str().ok()?).ok());
-        Ok((res.json()?, rate_limit))
+        Ok((res.json().await?, rate_limit))
     }
 }
 
@@ -261,8 +268,8 @@ mod tests {
     use crate::repositories::updater::{repository_name, RepositoryForge};
     use crate::repositories::RateLimitReached;
 
-    fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
-        let server = mockito::Server::new();
+    async fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
+        let server = mockito::Server::new_async().await;
         let updater = GitLab::with_custom_endpoint(
             "gitlab.com",
             &None,
@@ -275,72 +282,85 @@ mod tests {
 
     #[test]
     fn test_rate_limit() {
-        let (mut server, updater) = mock_server_and_gitlab();
+        crate::test::async_wrapper(|_env| async move {
+            let (mut server, updater) = mock_server_and_gitlab().await;
 
-        let _m1 = server
-            .mock("POST", "/api/graphql")
-            .with_header("content-type", "application/json")
-            .with_header("RateLimit-Remaining", "0")
-            .with_body("{}")
-            .create();
+            let _m1 = server
+                .mock("POST", "/api/graphql")
+                .with_header("content-type", "application/json")
+                .with_header("RateLimit-Remaining", "0")
+                .with_body("{}")
+                .create();
 
-        match updater.fetch_repository(
-            &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
-        ) {
-            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-        }
-        match updater.fetch_repositories(&[String::new()]) {
-            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-        }
+            match updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+            {
+                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+            }
+            match updater.fetch_repositories(&[String::new()]).await {
+                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+            }
+            Ok(())
+        })
     }
 
     #[test]
     fn not_found() {
-        let (mut server, updater) = mock_server_and_gitlab();
+        crate::test::async_wrapper(|_env| async move {
+            let (mut server, updater) = mock_server_and_gitlab().await;
 
-        let _m1 = server
-            .mock("POST", "/api/graphql")
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"data": {"projects": {"nodes": []}}}"#)
-            .create();
+            let _m1 = server
+                .mock("POST", "/api/graphql")
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"data": {"projects": {"nodes": []}}}"#)
+                .create();
 
-        match updater.fetch_repositories(&[String::new()]) {
-            Ok(res) => {
-                assert_eq!(res.missing, vec![String::new()]);
-                assert_eq!(res.present.len(), 0);
+            match updater.fetch_repositories(&[String::new()]).await {
+                Ok(res) => {
+                    assert_eq!(res.missing, vec![String::new()]);
+                    assert_eq!(res.present.len(), 0);
+                }
+                x => panic!("Failed: {x:?}"),
             }
-            x => panic!("Failed: {x:?}"),
-        }
+            Ok(())
+        })
     }
 
     #[test]
     fn get_repository_info() {
-        let (mut server, updater) = mock_server_and_gitlab();
+        crate::test::async_wrapper(|_env| async move {
+            let (mut server, updater) = mock_server_and_gitlab().await;
 
-        let _m1 = server
-            .mock("POST", "/api/graphql")
-            .with_header("content-type", "application/json")
-            .with_body(
-                r#"{"data": {"project": {"id": "hello", "fullPath": "foo/bar",
+            let _m1 = server
+                .mock("POST", "/api/graphql")
+                .with_header("content-type", "application/json")
+                .with_body(
+                    r#"{"data": {"project": {"id": "hello", "fullPath": "foo/bar",
                 "description": "this is", "starCount": 10, "forksCount": 11,
                 "openIssuesCount": 12}}}"#,
-            )
-            .create();
+                )
+                .create();
 
-        let repo = updater
-            .fetch_repository(
-                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
-            )
-            .expect("fetch_repository failed")
-            .unwrap();
+            let repo = updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+                .expect("fetch_repository failed")
+                .unwrap();
 
-        assert_eq!(repo.id, "hello");
-        assert_eq!(repo.name_with_owner, "foo/bar");
-        assert_eq!(repo.description, Some("this is".to_owned()));
-        assert_eq!(repo.stars, 10);
-        assert_eq!(repo.forks, 11);
-        assert_eq!(repo.issues, 12);
+            assert_eq!(repo.id, "hello");
+            assert_eq!(repo.name_with_owner, "foo/bar");
+            assert_eq!(repo.description, Some("this is".to_owned()));
+            assert_eq!(repo.stars, 10);
+            assert_eq!(repo.forks, 11);
+            assert_eq!(repo.issues, 12);
+            Ok(())
+        })
     }
 }
