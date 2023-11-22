@@ -2,6 +2,7 @@ use super::{error::AxumResult, match_version_axum};
 use crate::{
     db::Pool,
     impl_axum_webpage,
+    storage::PathNotFoundError,
     utils::get_correct_docsrs_style_file,
     web::{
         cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
@@ -250,9 +251,9 @@ pub(crate) async fn source_browser_handler(
 
     // try to get actual file first
     // skip if request is a directory
-    let blob = if !path.ends_with('/')
-        && storage
-            .source_file_exists(
+    let blob = if !path.ends_with('/') {
+        match storage
+            .fetch_source_file(
                 &name,
                 &version,
                 row.latest_build_id.unwrap_or(0),
@@ -260,20 +261,17 @@ pub(crate) async fn source_browser_handler(
                 row.archive_storage,
             )
             .await
-            .context("error checking source file existence")?
-    {
-        Some(
-            storage
-                .fetch_source_file(
-                    &name,
-                    &version,
-                    row.latest_build_id.unwrap_or(0),
-                    &path,
-                    row.archive_storage,
-                )
-                .await
-                .context("error fetching source file")?,
-        )
+            .context("error fetching source file")
+        {
+            Ok(blob) => Some(blob),
+            Err(err) => {
+                if err.downcast_ref::<PathNotFoundError>().is_some() {
+                    None
+                } else {
+                    return Err(err.into());
+                }
+            }
+        }
     } else {
         None
     };

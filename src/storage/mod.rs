@@ -201,24 +201,6 @@ impl AsyncStorage {
         })
     }
 
-    pub(crate) async fn source_file_exists(
-        &self,
-        name: &str,
-        version: &str,
-        latest_build_id: i32,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<bool> {
-        Ok(if archive_storage {
-            self.exists_in_archive(&source_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            // Add sources prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("sources/{name}/{version}/{path}");
-            self.exists(&remote_path).await?
-        })
-    }
-
     #[context("fetching {path} from {name} {version} (archive: {archive_storage})")]
     pub(crate) async fn fetch_source_file(
         &self,
@@ -657,23 +639,6 @@ impl Storage {
         archive_storage: bool,
     ) -> Result<Blob> {
         self.runtime.block_on(self.inner.fetch_source_file(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
-    }
-
-    pub(crate) fn source_file_exists(
-        &self,
-        name: &str,
-        version: &str,
-        latest_build_id: i32,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<bool> {
-        self.runtime.block_on(self.inner.source_file_exists(
             name,
             version,
             latest_build_id,
