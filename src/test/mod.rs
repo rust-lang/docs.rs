@@ -493,7 +493,7 @@ impl TestEnvironment {
                 let runtime = self.runtime();
                 let instance_metrics = self.instance_metrics();
                 self.runtime()
-                    .spawn_blocking(move || TestDatabase::new(&config, &runtime, instance_metrics))
+                    .spawn_blocking(move || TestDatabase::new(&config, runtime, instance_metrics))
                     .await
                     .unwrap()
                     .expect("failed to initialize the db")
@@ -574,15 +574,16 @@ impl Context for TestEnvironment {
 pub(crate) struct TestDatabase {
     pool: Pool,
     schema: String,
+    runtime: Arc<Runtime>,
 }
 
 impl TestDatabase {
-    fn new(config: &Config, runtime: &Runtime, metrics: Arc<InstanceMetrics>) -> Result<Self> {
+    fn new(config: &Config, runtime: Arc<Runtime>, metrics: Arc<InstanceMetrics>) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, runtime, metrics, &schema)?;
+        let pool = Pool::new_with_schema(config, &runtime, metrics, &schema)?;
 
         runtime.block_on({
             let schema = schema.clone();
@@ -629,7 +630,11 @@ impl TestDatabase {
             }
         })?;
 
-        Ok(TestDatabase { pool, schema })
+        Ok(TestDatabase {
+            pool,
+            schema,
+            runtime,
+        })
     }
 
     pub(crate) fn pool(&self) -> Pool {
@@ -652,6 +657,11 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
+        let migration_result = self.runtime.block_on(async {
+            let mut conn = self.async_conn().await;
+            db::migrate(&mut conn, Some(0)).await
+        });
+
         if let Err(e) = self.conn().execute(
             format!("DROP SCHEMA {} CASCADE;", self.schema).as_str(),
             &[],
@@ -660,6 +670,8 @@ impl Drop for TestDatabase {
         }
         // Drop the connection pool so we don't leak database connections
         self.pool.shutdown();
+
+        migration_result.expect("downgrading database works");
     }
 }
 
