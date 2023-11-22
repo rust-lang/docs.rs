@@ -241,6 +241,15 @@ div.landing {
     }
 }
 
+#search-select-nav {
+    display: flex;
+    flex-direction: column;
+
+    .item-end {
+        align-self: flex-end
+    }
+}
+
 div.recent-releases-container {
     text-align: left;
     padding-bottom: 50px;

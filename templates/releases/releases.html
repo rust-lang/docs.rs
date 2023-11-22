@@ -22,6 +22,7 @@ centered
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
+            {%- block sort_by %}{% endblock sort_by -%}
             <ul>
                 {# TODO: If there are no releases, then display a message that says so #}
                 {%- for release in releases -%}
