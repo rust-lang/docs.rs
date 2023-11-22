@@ -55,9 +55,6 @@ div.rustdoc {
         }
 
         @media (max-width: 700px) {
-            margin-left: -2 * $padding-x; // offset the additional padding added by the parent containers
-            width: calc(100% + #{4 * $padding-x});
-
             &.mobile {
                 top: $top-navbar-height;
                 margin-left: 0; // since the sidebar is now fixed position, remove the padding workaround
