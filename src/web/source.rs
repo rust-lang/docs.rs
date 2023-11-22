@@ -265,7 +265,7 @@ pub(crate) async fn source_browser_handler(
         {
             Ok(blob) => Some(blob),
             Err(err) => {
-                if err.downcast_ref::<PathNotFoundError>().is_some() {
+                if err.is::<PathNotFoundError>() {
                     None
                 } else {
                     return Err(err.into());
