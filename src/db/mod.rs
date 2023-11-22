@@ -38,26 +38,28 @@ pub async fn migrate(conn: &mut sqlx::PgConnection, target: Option<i64>) -> Resu
     .await?
     .is_some()
     {
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM database_versions")
+        let max_version: i64 = sqlx::query_scalar("SELECT max(version) FROM database_versions")
             .fetch_one(&mut *conn)
             .await?;
 
-        if count > 0 {
-            sqlx::query(
-                "INSERT INTO _sqlx_migrations ( version, description, success, checksum, execution_time )
-                 VALUES ( $1, $2, TRUE, $3, -1 )",
-            )
-            // the next two parameters relate to the filename of the initial migration file
-            .bind(20231021111635i64)
-            .bind("initial")
-            // this is the hash of the initial migration file, as sqlx requires it.
-            // if the initial migration file changes, this has to be updated with the new value,
-            // easiest to get from the `_sqlx_migrations` table when the migration was normally
-            // executed.
-            .bind(hex::decode("df802e0ec416063caadd1c06b13348cd885583c44962998886b929d5fe6ef3b70575d5101c5eb31daa989721df08d806").unwrap())
-            .execute(&mut *conn)
-            .await?;
+        if max_version != 39 {
+            anyhow::bail!("database_versions table has unexpected version");
         }
+
+        sqlx::query(
+            "INSERT INTO _sqlx_migrations ( version, description, success, checksum, execution_time )
+             VALUES ( $1, $2, TRUE, $3, -1 )",
+        )
+        // the next two parameters relate to the filename of the initial migration file
+        .bind(20231021111635i64)
+        .bind("initial")
+        // this is the hash of the initial migration file, as sqlx requires it.
+        // if the initial migration file changes, this has to be updated with the new value,
+        // easiest to get from the `_sqlx_migrations` table when the migration was normally
+        // executed.
+        .bind(hex::decode("df802e0ec416063caadd1c06b13348cd885583c44962998886b929d5fe6ef3b70575d5101c5eb31daa989721df08d806").unwrap())
+        .execute(&mut *conn)
+        .await?;
 
         sqlx::query("DROP TABLE database_versions")
             .execute(&mut *conn)
