@@ -1,0 +1,43 @@
+// Checks the sidebar display.
+go-to: |DOC_PATH| + "/sysinfo"
+
+set-window-size: (1000, 1000)
+
+// First we check that the rustdoc sidebar is not overlaying the docs.rs topbar.
+store-size: (".rustdoc-page .nav-container", {"height": topbar_height})
+assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
+
+// We check the same in "mobile mode".
+set-window-size: (600, 1000)
+assert-position: (".rustdoc .mobile-topbar", {"y": |topbar_height|, "x": 0})
+// We check when the sidebar is shown now.
+click: ".rustdoc .mobile-topbar .sidebar-menu-toggle"
+wait-for: ".rustdoc .sidebar.shown"
+// The mobile sidebar is supposed to be under the rustdoc mobile topbar + docs.rs topbar.
+store-size: (".rustdoc .mobile-topbar", {"height": rustdoc_topbar_height})
+assert-position: (".rustdoc .sidebar.shown", {
+    "y": |topbar_height| + |rustdoc_topbar_height|,
+    "x": 0,
+})
+
+// We reset the window's size.
+set-window-size: (1000, 1000)
+
+// We now go to the source code page.
+wait-for: ".main-heading a.src"
+click: ".main-heading a.src"
+
+// We wait for the page to load...
+wait-for: ".rustdoc.src"
+// We check that the sidebar has the correct position.
+assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
+// We expand the sidebar.
+click: "#src-sidebar-toggle button"
+wait-for: ".src-sidebar-expanded"
+// We check the position again.
+assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
+
+// We check in "mobile mode".
+set-window-size: (600, 1000)
+// We check the position again.
+assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
