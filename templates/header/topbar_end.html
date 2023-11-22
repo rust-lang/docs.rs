@@ -67,19 +67,6 @@
                     <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
                         placeholder="Find crate" {%- if search_query %} value="{{ search_query }}" {%- endif %}>
                 </div>
-                {# The sort by select-box #}
-                <div id="search-select-nav"> 
-                    <label for="nav-sort">
-                        {{ "list" | fas }}
-                    </label>
-                    <select name="sort" id="nav-sort" aria-label="Find crate by the sort by select-box"  tabindex="-1">
-                        <option value="relevance" {%- if search_sort_by and search_sort_by == "relevance" %} selected="selected" {%- endif %}>Relevance</option>
-                        <option value="downloads" {%- if search_sort_by and search_sort_by == "downloads" %} selected="selected" {%- endif %}>All-Time Downloads</option>
-                        <option value="recent-downloads" {%- if search_sort_by and search_sort_by == "recent-downloads" %} selected="selected" {%- endif %}>Recent Downloads</option>
-                        <option value="recent-updates" {%- if search_sort_by and search_sort_by == "recent-updates" %} selected="selected" {%- endif %}>Recent Updates</option>
-                        <option value="new" {%- if search_sort_by and search_sort_by == "new" %} selected="selected" {%- endif %}>Newly Added</option>
-                    </select>
-                </div>
             </form>
         </div>
     </div>
