@@ -1,6 +1,7 @@
 use super::{Blob, FileRange};
 use crate::{Config, InstanceMetrics};
 use anyhow::{Context as _, Error};
+use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
     error::SdkError,
@@ -30,7 +31,7 @@ pub(super) struct S3Backend {
 
 impl S3Backend {
     pub(super) async fn new(metrics: Arc<InstanceMetrics>, config: &Config) -> Result<Self, Error> {
-        let shared_config = aws_config::load_from_env().await;
+        let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
             .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
             .region(Region::new(config.s3_region.clone()));
@@ -78,7 +79,7 @@ impl S3Backend {
             Ok(_) => Ok(true),
             Err(SdkError::ServiceError(err))
                 if (matches!(err.err(), HeadObjectError::NotFound(_))
-                    || err.raw().status() == http::StatusCode::NOT_FOUND) =>
+                    || err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()) =>
             {
                 Ok(false)
             }
@@ -101,7 +102,7 @@ impl S3Backend {
                 .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
                 .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE)),
             Err(SdkError::ServiceError(err)) => {
-                if err.raw().status() == http::StatusCode::NOT_FOUND {
+                if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
                     Err(super::PathNotFoundError.into())
                 } else {
                     Err(err.into_err().into())
@@ -139,7 +140,7 @@ impl S3Backend {
         {
             Ok(_) => Ok(()),
             Err(SdkError::ServiceError(err)) => {
-                if err.raw().status() == http::StatusCode::NOT_FOUND {
+                if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
                     Err(super::PathNotFoundError.into())
                 } else {
                     Err(err.into_err().into())
@@ -165,7 +166,7 @@ impl S3Backend {
             .map_err(|err| match err {
                 SdkError::ServiceError(err)
                     if (matches!(err.err(), GetObjectError::NoSuchKey(_))
-                        || err.raw().status() == http::StatusCode::NOT_FOUND) =>
+                        || err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()) =>
                 {
                     super::PathNotFoundError.into()
                 }
@@ -174,7 +175,11 @@ impl S3Backend {
             .await?;
 
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
-        content.reserve(res.content_length.try_into().ok().unwrap_or(0));
+        content.reserve(
+            res.content_length
+                .and_then(|length| length.try_into().ok())
+                .unwrap_or(0),
+        );
 
         let mut body = res.body;
 
@@ -253,7 +258,7 @@ impl S3Backend {
                 .send()
                 .await?;
 
-            if list.key_count() > 0 {
+            if list.key_count().unwrap_or(0) > 0 {
                 let to_delete = Delete::builder()
                     .set_objects(Some(
                         list.contents

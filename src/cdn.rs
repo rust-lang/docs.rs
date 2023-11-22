@@ -1,5 +1,6 @@
 use crate::{metrics::duration_to_seconds, utils::report_error, Config, InstanceMetrics};
 use anyhow::{anyhow, bail, Context, Error, Result};
+use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
     config::{retry::RetryConfig, Region},
     error::SdkError,
@@ -54,7 +55,8 @@ impl CdnBackend {
     pub fn new(config: &Arc<Config>, runtime: &Arc<Runtime>) -> CdnBackend {
         match config.cdn_backend {
             CdnKind::CloudFront => {
-                let shared_config = runtime.block_on(aws_config::load_from_env());
+                let shared_config =
+                    runtime.block_on(aws_config::load_defaults(BehaviorVersion::latest()));
                 let config_builder = aws_sdk_cloudfront::config::Builder::from(&shared_config)
                     .retry_config(
                         RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries),
@@ -220,7 +222,7 @@ impl CdnBackend {
         {
             Ok(response) => response,
             Err(SdkError::ServiceError(err)) => {
-                if err.raw().status() == http::StatusCode::NOT_FOUND {
+                if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
                     return Ok(None);
                 } else {
                     return Err(err.into_err().into());
@@ -938,7 +940,7 @@ mod tests {
     }
 
     async fn get_mock_config(http_client: StaticReplayClient) -> aws_sdk_cloudfront::Config {
-        let cfg = aws_config::from_env()
+        let cfg = aws_config::defaults(BehaviorVersion::latest())
             .region(Region::new("eu-central-1"))
             .credentials_provider(Credentials::new(
                 "accesskey",
