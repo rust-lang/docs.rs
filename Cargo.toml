@@ -75,10 +75,10 @@ hex = "0.4.3"
 # Async
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros"] }
 futures-util = "0.3.5"
-aws-config = "0.57.1"
-aws-sdk-s3 = "0.36.0"
-aws-sdk-cloudfront = "0.36.0"
-aws-smithy-types-convert = { version = "0.57.1", features = ["convert-chrono"] }
+aws-config = "1.0.0"
+aws-sdk-s3 = "0.39.1"
+aws-sdk-cloudfront = "0.39.1"
+aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 http = "0.2.6"
 uuid = "1.1.2"
 
@@ -124,9 +124,9 @@ kuchikiki = "0.8"
 rand = "0.8"
 mockito = "1.0.2"
 test-case = "3.0.0"
-aws-smithy-types = "0.57.1"
-aws-smithy-runtime = {version = "0.57.1", features = ["client", "test-util"]}
-aws-smithy-http = "0.57.1"
+aws-smithy-types = "1.0.1"
+aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
+aws-smithy-http = "0.60.0"
 indoc = "2.0.0"
 
 [profile.dev.package.sqlx-macros]
