@@ -1013,7 +1013,7 @@ mod test {
                 .build_result_failed()
                 .create()?;
             let web = env.frontend();
-            assert_success_cached("/", web, CachePolicy::NoCaching, &env.config())?;
+            assert_success_cached("/", web, CachePolicy::ShortInCdnAndBrowser, &env.config())?;
             assert_success_cached(
                 "/crate/buggy/0.1.0/",
                 web,

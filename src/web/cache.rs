@@ -6,6 +6,7 @@ use http::{header::CACHE_CONTROL, HeaderValue};
 use std::sync::Arc;
 
 pub static NO_CACHING: HeaderValue = HeaderValue::from_static("max-age=0");
+pub static SHORT: HeaderValue = HeaderValue::from_static("max-age=60");
 
 pub static NO_STORE_MUST_REVALIDATE: HeaderValue =
     HeaderValue::from_static("no-cache, no-store, must-revalidate, max-age=0");
@@ -24,7 +25,12 @@ pub enum CachePolicy {
     /// * enforce revalidation
     /// * never store
     NoStoreMustRevalidate,
-    /// cache forever in browser & CDN.  
+    /// cache for a short time in the browser & CDN.
+    /// right now: one minute.
+    /// Can be used when the content can be a _little_ outdated,
+    /// while protecting agains spikes in traffic.
+    ShortInCdnAndBrowser,
+    /// cache forever in browser & CDN.
     /// Valid when you have hashed / versioned filenames and every rebuild would
     /// change the filename.
     ForeverInCdnAndBrowser,
@@ -46,6 +52,7 @@ impl CachePolicy {
         match *self {
             CachePolicy::NoCaching => Some(NO_CACHING.clone()),
             CachePolicy::NoStoreMustRevalidate => Some(NO_STORE_MUST_REVALIDATE.clone()),
+            CachePolicy::ShortInCdnAndBrowser => Some(SHORT.clone()),
             CachePolicy::ForeverInCdnAndBrowser => Some(FOREVER_IN_CDN_AND_BROWSER.clone()),
             CachePolicy::ForeverInCdn => {
                 if config.cache_invalidatable_responses {
