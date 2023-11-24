@@ -244,6 +244,7 @@ div.landing {
 #search-select-nav {
     display: flex;
     flex-direction: column;
+    padding: 1em $search-result-right-left-padding;
 
     .item-end {
         align-self: flex-end
@@ -282,7 +283,7 @@ div.recent-releases-container {
     .release {
         display: block;
         border-bottom: 1px solid var(--color-border);
-        padding: 0.4em 1em;
+        padding: 0.4em $search-result-right-left-padding;
         color: var(--color-standard);
 
         a {
