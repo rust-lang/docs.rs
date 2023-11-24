@@ -30,6 +30,8 @@ use std::sync::Arc;
 use tracing::{debug, warn};
 use url::form_urlencoded;
 
+use super::cache::CachePolicy;
+
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
 /// Releases in /releases page
@@ -271,6 +273,7 @@ struct HomePage {
 
 impl_axum_webpage! {
     HomePage = "core/home.html",
+    cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
 }
 
 pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
@@ -719,7 +722,8 @@ mod tests {
     use super::*;
     use crate::registry_api::CrateOwner;
     use crate::test::{
-        assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
+        assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success, wrapper,
+        TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -1484,6 +1488,8 @@ mod tests {
             seen.insert("".to_owned());
 
             let resp = web.get("").send()?;
+            assert_cache_control(&resp, CachePolicy::ShortInCdnAndBrowser, &env.config());
+
             assert!(resp.status().is_success());
 
             let html = kuchikiki::parse_html().one(resp.text()?);
