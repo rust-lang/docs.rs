@@ -5,6 +5,8 @@ ignore = [
 
     "RUSTSEC-2023-0018", # rustwide -> remove_dir_all,TOCTOU / Race Condition 
     # https://github.com/rust-lang/docs.rs/issues/2074
+
+    "RUSTSEC-2023-0071", # potential key recovery through timing sidechannels
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
