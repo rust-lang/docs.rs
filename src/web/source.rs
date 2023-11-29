@@ -232,9 +232,7 @@ pub(crate) async fn source_browser_handler(
             (
                 SELECT id
                 FROM builds
-                WHERE
-                    builds.rid = releases.id AND
-                    builds.build_status = TRUE
+                WHERE builds.rid = releases.id
                 ORDER BY build_time DESC
                 LIMIT 1
             ) AS latest_build_id
