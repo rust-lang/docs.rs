@@ -93,18 +93,28 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
         currentMenu = newMenu;
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
+
+        const parts = window.location.pathname.split("/");
+        const startFrom = parts[1] === "crate" ? 4 : 3;
+        // We get everything except the first crate name and the version.
+        const innerPath = "/" + parts.slice(startFrom).join("/")
+
         if (newMenu.querySelector("#releases-list")) {
-            loadAjaxMenu(newMenu, "releases-list", "release list", "releases", "");
+            loadAjaxMenu(
+                newMenu, 
+                "releases-list", 
+                "release list", 
+                "releases", 
+                innerPath,
+            );
+
         } else if (newMenu.querySelector("#platforms")) {
-            const parts = window.location.pathname.split("/");
-            const startFrom = parts[1] === "crate" ? 4 : 3;
             loadAjaxMenu(
                 newMenu,
                 "platforms",
                 "platforms list",
                 "platforms",
-                // We get everything except the first crate name and the version.
-                "/" + parts.slice(startFrom).join("/")
+                innerPath,
             );
         }
     }

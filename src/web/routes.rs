@@ -277,7 +277,19 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
+            "/crate/:name/:version/menus/releases/:target",
+            get_internal(super::crate_details::get_all_releases),
+        )
+        .route(
+            "/crate/:name/:version/menus/releases/:target/*path",
+            get_internal(super::crate_details::get_all_releases),
+        )
+        .route(
             "/crate/:name/:version/menus/releases",
+            get_internal(super::crate_details::get_all_releases),
+        )
+        .route(
+            "/crate/:name/:version/menus/releases/:target/",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
