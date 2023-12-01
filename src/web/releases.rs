@@ -509,7 +509,7 @@ pub(crate) async fn search_handler(
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-    let sort_by = params
+    let mut sort_by = params
         .get("sort")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "relevance".to_string());
@@ -578,6 +578,20 @@ pub(crate) async fn search_handler(
             );
             return Err(AxumNope::NoResults);
         }
+
+        let p = form_urlencoded::parse(query_params.as_bytes());
+        if let Some(v) = p
+            .filter_map(|(k, v)| {
+                if &k == "sort" {
+                    Some(v.to_string())
+                } else {
+                    None
+                }
+            })
+            .next()
+        {
+            sort_by = v;
+        };
 
         get_search_results(&mut conn, &config, &query_params).await?
     } else if !query.is_empty() {
@@ -930,7 +944,7 @@ mod tests {
                 .any(|el| {
                     let attributes = el.attributes.borrow();
                     attributes.get("selected").is_some()
-                        && attributes.get("value").unwrap().to_string() == "recent-updates"
+                        && attributes.get("value").unwrap() == "recent-updates"
                 });
             assert!(is_target_option_selected);
 
