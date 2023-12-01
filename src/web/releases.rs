@@ -499,13 +499,6 @@ impl_axum_webpage! {
     status = |search| search.status,
 }
 
-fn retrive_sort_from_paginate(query: &str) -> String {
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]sort=([^&]+)").unwrap());
-    let cap = RE.captures(query).unwrap();
-    cap.get(1)
-        .map_or("relevance".to_string(), |v| v.as_str().to_string())
-}
-
 pub(crate) async fn search_handler(
     mut conn: DbConnection,
     Extension(pool): Extension<Pool>,
@@ -586,7 +579,14 @@ pub(crate) async fn search_handler(
             );
             return Err(AxumNope::NoResults);
         }
-        sort_by = retrive_sort_from_paginate(&query_params);
+
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]sort=([^&]+)").unwrap());
+        if let Some(cap) = RE.captures(&query_params) {
+            sort_by = cap
+                .get(1)
+                .map_or("relevance".to_string(), |v| v.as_str().to_string());
+        }
+
         get_search_results(&mut conn, &config, &query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
