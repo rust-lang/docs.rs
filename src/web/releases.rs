@@ -23,7 +23,6 @@ use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -510,7 +509,7 @@ pub(crate) async fn search_handler(
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-    let mut sort_by = params
+    let sort_by = params
         .get("sort")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "relevance".to_string());
@@ -578,13 +577,6 @@ pub(crate) async fn search_handler(
                 query_params
             );
             return Err(AxumNope::NoResults);
-        }
-
-        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]sort=([^&]+)").unwrap());
-        if let Some(cap) = RE.captures(&query_params) {
-            sort_by = cap
-                .get(1)
-                .map_or("relevance".to_string(), |v| v.as_str().to_string());
         }
 
         get_search_results(&mut conn, &config, &query_params).await?
@@ -884,6 +876,64 @@ mod tests {
                 "/some_random_crate/1.0.0/some_random_crate/?go_to_first=true&search=somepath",
                 web,
             )?;
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn search_result_can_retrive_sort_by_from_pagination() {
+        wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url().parse().unwrap();
+            });
+
+            let web = env.frontend();
+            env.fake_release().name("some_random_crate").create()?;
+
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                    Matcher::UrlEncoded("page".into(), "2".into()),
+                    Matcher::UrlEncoded("sort".into(), "recent-updates".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                        ],
+                        "meta": {
+                            "next_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=2",
+                            "prev_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=1",
+                        }
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            // click the "Next Page" Button, the "Sort by" SelectBox should keep the same option.
+            let next_page_url = format!(
+                "/releases/search?paginate={}",
+                b64.encode("?q=some_random_crate&sort=recent-updates&per_page=30&page=2"),
+            );
+            let response = web.get(&next_page_url).send()?;
+            assert!(response.status().is_success());
+
+            let page = kuchikiki::parse_html().one(response.text()?);
+            let is_target_option_selected = page
+                .select("#nav-sort > option")
+                .expect("missing option")
+                .any(|el| {
+                    let attributes = el.attributes.borrow();
+                    attributes.get("selected").is_some()
+                        && attributes.get("value").unwrap().to_string() == "recent-updates"
+                });
+            assert!(is_target_option_selected);
+
             Ok(())
         })
     }
