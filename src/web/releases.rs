@@ -22,6 +22,8 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -156,7 +158,6 @@ async fn get_search_results(
     }
 
     use crate::utils::APP_USER_AGENT;
-    use once_cell::sync::Lazy;
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
     use reqwest::Client as HttpClient;
 
@@ -498,6 +499,13 @@ impl_axum_webpage! {
     status = |search| search.status,
 }
 
+fn retrive_sort_from_paginate(query: &str) -> String {
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]sort=([^&]+)").unwrap());
+    let cap = RE.captures(query).unwrap();
+    cap.get(1)
+        .map_or("relevance".to_string(), |v| v.as_str().to_string())
+}
+
 pub(crate) async fn search_handler(
     mut conn: DbConnection,
     Extension(pool): Extension<Pool>,
@@ -509,7 +517,7 @@ pub(crate) async fn search_handler(
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-    let sort_by = params
+    let mut sort_by = params
         .get("sort")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "relevance".to_string());
@@ -578,7 +586,7 @@ pub(crate) async fn search_handler(
             );
             return Err(AxumNope::NoResults);
         }
-
+        sort_by = retrive_sort_from_paginate(&query_params);
         get_search_results(&mut conn, &config, &query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
