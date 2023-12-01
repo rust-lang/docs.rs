@@ -442,6 +442,8 @@ pub(crate) async fn crate_details_handler(
 struct ReleaseList {
     releases: Vec<Release>,
     crate_name: String,
+    inner_path: String,
+    target: String,
 }
 
 impl_axum_webpage! {
@@ -452,28 +454,74 @@ impl_axum_webpage! {
 
 #[tracing::instrument]
 pub(crate) async fn get_all_releases(
-    Path(params): Path<CrateDetailHandlerParams>,
+    Path(params): Path<RustdocHtmlParams>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
-    let crate_id = sqlx::query_scalar!(
+    let req_path: String = params.path.clone().unwrap_or_default();
+    let req_path: Vec<&str> = req_path.split('/').collect();
+
+    let release_found = match_version(&mut conn, &params.name, Some(&params.version)).await?;
+    trace!(?release_found, "found release");
+
+    let (version, _) = match release_found.version {
+        MatchSemver::Exact((version, _)) => (version.clone(), version),
+        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
+        MatchSemver::Semver(_) => return Err(AxumNope::VersionNotFound),
+    };
+
+    let row = sqlx::query!(
         "SELECT
-            crates.id AS crate_id
+            crates.id AS crate_id,
+            releases.doc_targets
         FROM crates
-        WHERE crates.name = $1;",
+        INNER JOIN releases on crates.id = releases.crate_id
+        WHERE crates.name = $1 and releases.version = $2;",
         params.name,
+        &version,
     )
     .fetch_optional(&mut *conn)
-    .await?;
+    .await?
+    .ok_or(AxumNope::CrateNotFound)?;
 
-    let releases: Vec<Release> = if let Some(crate_id) = crate_id {
-        // get releases, sorted by semver
-        releases_for_crate(&mut conn, crate_id).await?
+    // get releases, sorted by semver
+    let releases: Vec<Release> = releases_for_crate(&mut conn, row.crate_id).await?;
+
+    let doc_targets = MetaData::parse_doc_targets(row.doc_targets);
+
+    let inner;
+    let (target, inner_path) = {
+        let mut inner_path = req_path.clone();
+
+        let target = if inner_path.len() > 1
+            && doc_targets
+                .iter()
+                .any(|s| Some(s) == params.target.as_ref())
+        {
+            inner_path.remove(0);
+            params.target.as_ref().unwrap()
+        } else {
+            ""
+        };
+
+        inner = inner_path.join("/");
+        (target, inner.trim_end_matches('/'))
+    };
+    let inner_path = if inner_path.is_empty() {
+        format!("{}/index.html", params.name)
     } else {
-        Vec::new()
+        format!("{}/{inner_path}", params.name)
+    };
+
+    let target = if target.is_empty() {
+        String::new()
+    } else {
+        format!("{target}/")
     };
 
     let res = ReleaseList {
         releases,
+        target: target.to_string(),
+        inner_path,
         crate_name: params.name,
     };
     Ok(res.into_response())
