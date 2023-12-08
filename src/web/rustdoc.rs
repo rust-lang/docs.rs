@@ -2229,6 +2229,15 @@ mod test {
         })
     }
 
+    fn parse_release_links_from_menu(body: &str) -> Vec<String> {
+        kuchikiki::parse_html()
+            .one(body)
+            .select(r#"ul > li > a"#)
+            .expect("invalid selector")
+            .map(|elem| elem.attributes.borrow().get("href").unwrap().to_string())
+            .collect()
+    }
+
     #[test_case(true)]
     #[test_case(false)]
     fn test_version_link_goes_to_docs(archive_storage: bool) {
@@ -2244,6 +2253,7 @@ mod test {
                 .version("0.3.1")
                 .archive_storage(archive_storage)
                 .rustdoc_file("hexponent/index.html")
+                .rustdoc_file("hexponent/something.html")
                 .create()?;
 
             // test rustdoc pages stay on the documentation
@@ -2253,14 +2263,27 @@ mod test {
                 .send()?;
             assert!(releases_response.status().is_success());
             assert_cache_control(&releases_response, CachePolicy::ForeverInCdn, &env.config());
-            let page = kuchikiki::parse_html().one(releases_response.text()?);
-            let selector =
-                r#"ul > li a[href="/crate/hexponent/0.3.1/target-redirect/hexponent/index.html"]"#
-                    .to_string();
             assert_eq!(
-                page.select(&selector).unwrap().count(),
-                1,
-                "link to /target-redirect/ not found"
+                parse_release_links_from_menu(&releases_response.text()?),
+                vec![
+                    "/crate/hexponent/0.3.1/target-redirect/hexponent/index.html".to_owned(),
+                    "/crate/hexponent/0.3.0/target-redirect/hexponent/index.html".to_owned(),
+                ]
+            );
+
+            // test if target-redirect inludes path
+            let releases_response = env
+                .frontend()
+                .get("/crate/hexponent/0.3.1/menus/releases/hexponent/something.html")
+                .send()?;
+            assert!(releases_response.status().is_success());
+            assert_cache_control(&releases_response, CachePolicy::ForeverInCdn, &env.config());
+            assert_eq!(
+                parse_release_links_from_menu(&releases_response.text()?),
+                vec![
+                    "/crate/hexponent/0.3.1/target-redirect/hexponent/something.html".to_owned(),
+                    "/crate/hexponent/0.3.0/target-redirect/hexponent/something.html".to_owned(),
+                ]
             );
 
             // test /crate pages stay on /crate
