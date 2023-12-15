@@ -1,6 +1,5 @@
-use super::{markdown, match_version, MatchSemver, MetaData};
+use super::{markdown, match_version, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error};
-use crate::web::axum_cached_redirect;
 use crate::web::rustdoc::RustdocHtmlParams;
 use crate::{
     impl_axum_webpage,
@@ -9,30 +8,31 @@ use crate::{
         cache::CachePolicy,
         encode_url_path,
         error::{AxumNope, AxumResult},
-        extractors::DbConnection,
+        extractors::{DbConnection, Path},
+        ReqVersion,
     },
     AsyncStorage,
 };
 use anyhow::{anyhow, Context, Result};
 use axum::{
-    extract::{Extension, Path},
+    extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use log::warn;
+use semver::Version;
 use serde::Deserialize;
 use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{instrument, trace};
 
 // TODO: Add target name and versions
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CrateDetails {
     name: String,
-    version: String,
+    version: Version,
     description: Option<String>,
     owners: Vec<(String, String)>,
     dependencies: Option<Value>,
@@ -100,8 +100,8 @@ impl CrateDetails {
     pub async fn new(
         conn: &mut sqlx::PgConnection,
         name: &str,
-        version: &str,
-        version_or_latest: &str,
+        version: &Version,
+        req_version: Option<ReqVersion>,
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
         let krate = match sqlx::query!(
             r#"SELECT
@@ -153,7 +153,7 @@ impl CrateDetails {
             LEFT JOIN repositories ON releases.repository_id = repositories.id
             WHERE crates.name = $1 AND releases.version = $2;"#,
             name,
-            version
+            version.to_string(),
         )
         .fetch_optional(&mut *conn)
         .await?
@@ -174,8 +174,8 @@ impl CrateDetails {
 
         let metadata = MetaData {
             name: krate.name.clone(),
-            version: krate.version.clone(),
-            version_or_latest: version_or_latest.to_string(),
+            version: version.clone(),
+            req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
             description: krate.description.clone(),
             rustdoc_status: krate.rustdoc_status,
             target_name: Some(krate.target_name.clone()),
@@ -187,7 +187,7 @@ impl CrateDetails {
 
         let mut crate_details = CrateDetails {
             name: krate.name,
-            version: krate.version,
+            version: version.clone(),
             description: krate.description,
             owners: Vec::new(),
             dependencies: krate.dependencies,
@@ -248,7 +248,7 @@ impl CrateDetails {
         let manifest = match storage
             .fetch_source_file(
                 &self.name,
-                &self.version,
+                &self.version.to_string(),
                 self.latest_build_id.unwrap_or(0),
                 "Cargo.toml",
                 self.archive_storage,
@@ -277,7 +277,7 @@ impl CrateDetails {
             match storage
                 .fetch_source_file(
                     &self.name,
-                    &self.version,
+                    &self.version.to_string(),
                     self.latest_build_id.unwrap_or(0),
                     path,
                     self.archive_storage,
@@ -382,7 +382,7 @@ impl_axum_webpage! {
 #[derive(Deserialize, Clone, Debug)]
 pub(crate) struct CrateDetailHandlerParams {
     name: String,
-    version: Option<String>,
+    version: Option<ReqVersion>,
 }
 
 #[tracing::instrument(skip(conn, storage))]
@@ -391,34 +391,28 @@ pub(crate) async fn crate_details_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
-    // this handler must always called with a crate name
-    if params.version.is_none() {
-        return Ok(super::axum_cached_redirect(
-            encode_url_path(&format!("/crate/{}/latest", params.name)),
+    let req_version = params.version.ok_or_else(|| {
+        AxumNope::Redirect(
+            format!("/crate/{}/{}", &params.name, ReqVersion::Latest),
             CachePolicy::ForeverInCdn,
-        )?
-        .into_response());
-    }
+        )
+    })?;
 
-    let found_version = match_version(&mut conn, &params.name, params.version.as_deref())
-        .await
-        .and_then(|m| m.exact_name_only())?;
-
-    let (version, version_or_latest, is_latest_url) = match found_version {
-        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
-        MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{}/{}", &params.name, version),
-                CachePolicy::ForeverInCdn,
-            )?
-            .into_response());
-        }
-    };
-
-    let mut details = CrateDetails::new(&mut conn, &params.name, &version, &version_or_latest)
+    let version = match_version(&mut conn, &params.name, &req_version)
         .await?
-        .ok_or(AxumNope::VersionNotFound)?;
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                format!("/crate/{}/{}", &params.name, version),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
+        .into_version();
+
+    let mut details =
+        CrateDetails::new(&mut conn, &params.name, &version, Some(req_version.clone()))
+            .await?
+            .ok_or(AxumNope::VersionNotFound)?;
 
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
@@ -427,7 +421,7 @@ pub(crate) async fn crate_details_handler(
 
     let mut res = CrateDetailsPage { details }.into_response();
     res.extensions_mut()
-        .insert::<CachePolicy>(if is_latest_url {
+        .insert::<CachePolicy>(if req_version.is_latest() {
             CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
@@ -457,14 +451,10 @@ pub(crate) async fn get_all_releases(
     let req_path: String = params.path.clone().unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
-    let release_found = match_version(&mut conn, &params.name, Some(&params.version)).await?;
-    trace!(?release_found, "found release");
-
-    let (version, _) = match release_found.version {
-        MatchSemver::Exact((version, _)) => (version.clone(), version),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
-        MatchSemver::Semver(_) => return Err(AxumNope::VersionNotFound),
-    };
+    let version = match_version(&mut conn, &params.name, &params.version)
+        .await?
+        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?
+        .into_version();
 
     let row = sqlx::query!(
         "SELECT
@@ -475,7 +465,7 @@ pub(crate) async fn get_all_releases(
         INNER JOIN releases on crates.id = releases.crate_id
         WHERE crates.name = $1 and releases.version = $2;",
         params.name,
-        &version,
+        &version.to_string(),
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -528,7 +518,8 @@ pub(crate) async fn get_all_releases(
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ShortMetadata {
     name: String,
-    version_or_latest: String,
+    version: Version,
+    req_version: ReqVersion,
     doc_targets: Vec<String>,
 }
 
@@ -555,53 +546,31 @@ pub(crate) async fn get_all_platforms_inner(
     let req_path: String = params.path.unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
-    let release_found = match_version(&mut conn, &params.name, Some(&params.version)).await?;
-    trace!(?release_found, "found release");
-
-    // Convenience function to allow for easy redirection
-    #[instrument]
-    fn redirect(
-        name: &str,
-        vers: &str,
-        path: &[&str],
-        cache_policy: CachePolicy,
-    ) -> AxumResult<AxumResponse> {
-        trace!("redirect");
-        // Format and parse the redirect url
-        Ok(axum_cached_redirect(
-            encode_url_path(&format!("/platforms/{}/{}/{}", name, vers, path.join("/"))),
-            cache_policy,
-        )?
-        .into_response())
-    }
-
-    let (version, version_or_latest) = match release_found.version {
-        MatchSemver::Exact((version, _)) => {
-            // Redirect when the requested crate name isn't correct
-            if let Some(name) = release_found.corrected_name {
-                return redirect(&name, &version, &req_path, CachePolicy::NoCaching);
-            }
-
-            (version.clone(), version)
-        }
-
-        MatchSemver::Latest((version, _)) => {
-            // Redirect when the requested crate name isn't correct
-            if let Some(name) = release_found.corrected_name {
-                return redirect(&name, "latest", &req_path, CachePolicy::NoCaching);
-            }
-
-            (version, "latest".to_string())
-        }
-
-        // Redirect when the requested version isn't correct
-        MatchSemver::Semver((v, _)) => {
-            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-            // versions, redirect the browser to the returned version instead of loading it
-            // immediately
-            return redirect(&params.name, &v, &req_path, CachePolicy::ForeverInCdn);
-        }
-    };
+    let version = match_version(&mut conn, &params.name, &params.version)
+        .await?
+        .into_exactly_named_or_else(|corrected_name, req_version| {
+            AxumNope::Redirect(
+                encode_url_path(&format!(
+                    "/platforms/{}/{}/{}",
+                    corrected_name,
+                    req_version,
+                    req_path.join("/")
+                )),
+                CachePolicy::NoCaching,
+            )
+        })?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                encode_url_path(&format!(
+                    "/platforms/{}/{}/{}",
+                    &params.name,
+                    version,
+                    req_path.join("/")
+                )),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
+        .into_version();
 
     let krate = sqlx::query!(
         "SELECT
@@ -613,7 +582,7 @@ pub(crate) async fn get_all_platforms_inner(
         INNER JOIN crates ON releases.crate_id = crates.id
         WHERE crates.name = $1 AND releases.version = $2;",
         params.name,
-        version
+        version.to_string(),
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -666,7 +635,8 @@ pub(crate) async fn get_all_platforms_inner(
     let res = PlatformList {
         metadata: ShortMetadata {
             name: krate.name,
-            version_or_latest: version_or_latest.to_string(),
+            version: version.clone(),
+            req_version: params.version.clone(),
             doc_targets,
         },
         inner_path,
@@ -701,6 +671,7 @@ mod tests {
     };
     use anyhow::{Context, Error};
     use kuchikiki::traits::TendrilSink;
+    use semver::Version;
     use std::collections::HashMap;
 
     async fn assert_last_successful_build_equals(
@@ -710,10 +681,11 @@ mod tests {
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
         let mut conn = db.async_conn().await;
-        let details = CrateDetails::new(&mut conn, package, version, version)
-            .await
-            .with_context(|| anyhow::anyhow!("could not fetch crate details"))?
-            .unwrap();
+        let details =
+            CrateDetails::new(&mut conn, package, &Version::parse(version).unwrap(), None)
+                .await
+                .with_context(|| anyhow::anyhow!("could not fetch crate details"))?
+                .unwrap();
 
         assert_eq!(
             details.last_successful_build,
@@ -878,7 +850,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", "0.2.0", "0.2.0")
+                CrateDetails::new(&mut conn, "foo", &"0.2.0".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()
@@ -999,7 +971,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", version, version)
+                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
                         .await
                         .unwrap()
                         .unwrap()
@@ -1029,7 +1001,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", version, version)
+                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
                         .await
                         .unwrap()
                         .unwrap()
@@ -1060,7 +1032,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", version, version)
+                    CrateDetails::new(&mut conn, "foo", &(version.parse().unwrap()), None)
                         .await
                         .unwrap()
                         .unwrap()
@@ -1099,7 +1071,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", version, version)
+                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
                         .await
                         .unwrap()
                         .unwrap()
@@ -1159,7 +1131,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", "0.0.1", "0.0.1")
+                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()
@@ -1185,7 +1157,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", "0.0.1", "0.0.1")
+                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()
@@ -1212,7 +1184,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", "0.0.1", "0.0.1")
+                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()
@@ -1234,7 +1206,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", "0.0.1", "0.0.1")
+                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()
@@ -1681,7 +1653,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = env.async_db().await.async_conn().await;
-                CrateDetails::new(&mut conn, "dummy", "0.5.0", "0.5.0")
+                CrateDetails::new(&mut conn, "dummy", &"0.5.0".parse().unwrap(), None)
                     .await
                     .unwrap()
                     .unwrap()

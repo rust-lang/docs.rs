@@ -51,4 +51,23 @@ impl DerefMut for DbConnection {
     }
 }
 
+/// custom axum `Path` extractor that uses our own AxumNope::BadRequest
+/// as error response instead of a plain text "bad request"
+#[allow(clippy::disallowed_types)]
+mod path_impl {
+    use super::*;
+
+    #[derive(FromRequestParts)]
+    #[from_request(via(axum::extract::Path), rejection(AxumNope))]
+    pub(crate) struct Path<T>(pub T);
+}
+
+pub(crate) use path_impl::Path;
+
+impl From<axum::extract::rejection::PathRejection> for AxumNope {
+    fn from(value: axum::extract::rejection::PathRejection) -> Self {
+        AxumNope::BadRequest(value.into())
+    }
+}
+
 // TODO: we will write tests for this when async db tests are working

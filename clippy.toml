@@ -1,0 +1,3 @@
+disallowed-types = [
+  { path = "axum::extract::Path", reason = "use our own custom web::extractors::Path for a nicer error response" },
+]

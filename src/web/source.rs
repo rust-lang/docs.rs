@@ -5,14 +5,15 @@ use crate::{
     storage::PathNotFoundError,
     utils::get_correct_docsrs_style_file,
     web::{
-        cache::CachePolicy, error::AxumNope, file::File as DbFile, headers::CanonicalUrl,
-        MatchSemver, MetaData,
+        cache::CachePolicy, error::AxumNope, extractors::Path, file::File as DbFile,
+        headers::CanonicalUrl, MetaData, ReqVersion,
     },
     AsyncStorage,
 };
 use anyhow::{Context as _, Result};
-use axum::{extract::Path, response::IntoResponse, Extension};
+use axum::{response::IntoResponse, Extension};
 use axum_extra::headers::HeaderMapExt;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -70,8 +71,8 @@ impl FileList {
     async fn from_path(
         conn: &mut sqlx::PgConnection,
         name: &str,
-        version: &str,
-        version_or_latest: &str,
+        version: &Version,
+        req_version: Option<ReqVersion>,
         folder: &str,
     ) -> Result<Option<FileList>> {
         let row = match sqlx::query!(
@@ -89,7 +90,7 @@ impl FileList {
             INNER JOIN crates ON crates.id = releases.crate_id
             WHERE crates.name = $1 AND releases.version = $2",
             name,
-            version,
+            version.to_string(),
         )
         .fetch_optional(&mut *conn)
         .await?
@@ -148,8 +149,8 @@ impl FileList {
             Ok(Some(FileList {
                 metadata: MetaData {
                     name: row.name,
-                    version: row.version,
-                    version_or_latest: version_or_latest.to_string(),
+                    version: version.clone(),
+                    req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
                     description: row.description,
                     target_name: Some(row.target_name),
                     rustdoc_status: row.rustdoc_status,
@@ -191,41 +192,37 @@ impl_axum_webpage! {
 #[derive(Deserialize, Clone, Debug)]
 pub(crate) struct SourceBrowserHandlerParams {
     name: String,
-    version: String,
+    version: ReqVersion,
     #[serde(default)]
     path: String,
 }
 
 #[instrument(skip(pool, storage))]
 pub(crate) async fn source_browser_handler(
-    Path(SourceBrowserHandlerParams {
-        mut name,
-        version,
-        path,
-    }): Path<SourceBrowserHandlerParams>,
+    Path(params): Path<SourceBrowserHandlerParams>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
     let mut conn = pool.get_async().await?;
 
-    let v = match_version(&mut conn, &name, Some(&version)).await?;
-
-    if let Some(new_name) = &v.corrected_name {
-        // `match_version` checked against -/_ typos, so if we have a name here we should
-        // use that instead
-        name = new_name.to_string();
-    }
-    let (version, version_or_latest, is_latest_url) = match v.version {
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
-        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
-        MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{name}/{version}/source/{path}"),
+    let version = match_version(&mut conn, &params.name, &params.version)
+        .await?
+        .into_exactly_named_or_else(|corrected_name, req_version| {
+            AxumNope::Redirect(
+                format!(
+                    "/crate/{corrected_name}/{req_version}/source/{}",
+                    params.path
+                ),
+                CachePolicy::NoCaching,
+            )
+        })?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                format!("/crate/{}/{version}/source/{}", params.name, params.path),
                 CachePolicy::ForeverInCdn,
-            )?
-            .into_response());
-        }
-    };
+            )
+        })?
+        .into_version();
 
     let row = sqlx::query!(
         "SELECT
@@ -242,21 +239,21 @@ pub(crate) async fn source_browser_handler(
          WHERE
              name = $1 AND
              version = $2",
-        name,
-        version
+        params.name,
+        version.to_string()
     )
     .fetch_one(&mut *conn)
     .await?;
 
     // try to get actual file first
     // skip if request is a directory
-    let blob = if !path.ends_with('/') {
+    let blob = if !params.path.ends_with('/') {
         match storage
             .fetch_source_file(
-                &name,
-                &version,
+                &params.name,
+                &version.to_string(),
                 row.latest_build_id.unwrap_or(0),
-                &path,
+                &params.path,
                 row.archive_storage,
             )
             .await
@@ -275,7 +272,10 @@ pub(crate) async fn source_browser_handler(
         None
     };
 
-    let canonical_url = CanonicalUrl::from_path(format!("/crate/{name}/latest/source/{path}"));
+    let canonical_url = CanonicalUrl::from_path(format!(
+        "/crate/{}/latest/source/{}",
+        params.name, params.path
+    ));
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.starts_with("text") || blob.mime == "application/json";
@@ -304,17 +304,17 @@ pub(crate) async fn source_browser_handler(
         (None, None)
     };
 
-    let current_folder = if let Some(last_slash_pos) = path.rfind('/') {
-        &path[..last_slash_pos + 1]
+    let current_folder = if let Some(last_slash_pos) = params.path.rfind('/') {
+        &params.path[..last_slash_pos + 1]
     } else {
         ""
     };
 
     let file_list = FileList::from_path(
         &mut conn,
-        &name,
+        &params.name,
         &version,
-        &version_or_latest,
+        Some(params.version.clone()),
         current_folder,
     )
     .await?
@@ -326,7 +326,7 @@ pub(crate) async fn source_browser_handler(
         file,
         file_content,
         canonical_url,
-        is_latest_url,
+        is_latest_url: params.version.is_latest(),
         use_direct_platform_links: true,
     }
     .into_response())
@@ -537,7 +537,7 @@ mod tests {
 
     #[test_case(true)]
     #[test_case(false)]
-    fn semver_handled(archive_storage: bool) {
+    fn semver_handled_latest(archive_storage: bool) {
         wrapper(|env| {
             env.fake_release()
                 .archive_storage(archive_storage)
@@ -549,6 +549,29 @@ mod tests {
             assert_success("/crate/mbedtls/0.2.0/source/", web)?;
             assert_redirect_cached(
                 "/crate/mbedtls/*/source/",
+                "/crate/mbedtls/latest/source/",
+                CachePolicy::ForeverInCdn,
+                web,
+                &env.config(),
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn semver_handled(archive_storage: bool) {
+        wrapper(|env| {
+            env.fake_release()
+                .archive_storage(archive_storage)
+                .name("mbedtls")
+                .version("0.2.0")
+                .source_file("README.md", b"hello")
+                .create()?;
+            let web = env.frontend();
+            assert_success("/crate/mbedtls/0.2.0/source/", web)?;
+            assert_redirect_cached(
+                "/crate/mbedtls/~0.2.0/source/",
                 "/crate/mbedtls/0.2.0/source/",
                 CachePolicy::ForeverInCdn,
                 web,

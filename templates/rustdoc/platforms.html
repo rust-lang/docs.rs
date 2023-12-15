@@ -5,10 +5,10 @@
         because the documentation root page is guaranteed to exist for all targets.
     #}
     {%- if use_direct_platform_links -%}
-        {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/" ~ target ~ "/" ~ inner_path -%}
+        {%- set target_url = "/" ~ metadata.name ~ "/" ~ metadata.req_version ~ "/" ~ target ~ "/" ~ inner_path -%}
         {%- set target_no_follow = "" -%}
     {%- else -%}
-        {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
+        {%- set target_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.req_version ~ "/target-redirect/" ~ target ~ "/" ~ inner_path -%}
         {%- set target_no_follow = "nofollow" -%}
     {%- endif -%}
     {%- if current_target is defined and current_target == target -%}

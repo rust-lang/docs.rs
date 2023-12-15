@@ -11,23 +11,24 @@ use crate::{
         csp::Csp,
         encode_url_path,
         error::{AxumNope, AxumResult},
-        extractors::DbConnection,
+        extractors::{DbConnection, Path},
         file::File,
         match_version,
         metrics::RenderingTimesRecorder,
         page::TemplateData,
-        MatchSemver, MetaData,
+        MetaData, ReqVersion,
     },
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
 use anyhow::{anyhow, Context as _};
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Query},
     http::{StatusCode, Uri},
     response::{Html, IntoResponse, Response as AxumResponse},
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -51,7 +52,7 @@ static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RustdocRedirectorParams {
     name: String,
-    version: Option<String>,
+    version: Option<ReqVersion>,
     target: Option<String>,
 }
 
@@ -142,7 +143,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         }
     }
 
-    let (mut crate_name, path_in_crate) = match params.name.split_once("::") {
+    let (crate_name, path_in_crate) = match params.name.split_once("::") {
         Some((krate, path)) => (krate.to_string(), Some(path.to_string())),
         None => (params.name.to_string(), None),
     };
@@ -160,21 +161,24 @@ pub(crate) async fn rustdoc_redirector_handler(
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     rendering_time.step("match version");
-    let v = match_version(&mut conn, &crate_name, params.version.as_deref()).await?;
-    trace!(?v, "matched version");
-    if let Some(new_name) = v.corrected_name {
-        // `match_version` checked against -/_ typos, so if we have a name here we should
-        // use that instead
-        crate_name = new_name;
-    }
-    let (mut version, id) = v.version.into_parts();
+    let matched_release = match_version(
+        &mut conn,
+        &crate_name,
+        &params.version.clone().unwrap_or_default(),
+    )
+    .await?
+    .into_exactly_named();
+    trace!(?matched_release, "matched version");
+    let crate_name = matched_release.name.clone();
 
     // we might get requests to crate-specific JS files here.
     if let Some(ref target) = params.target {
         if target.ends_with(".js") {
             // this URL is actually from a crate-internal path, serve it there instead
             rendering_time.step("serve JS for crate");
-            let krate = CrateDetails::new(&mut conn, &crate_name, &version, &version)
+            let version = matched_release.into_version();
+
+            let krate = CrateDetails::new(&mut conn, &crate_name, &version, params.version.clone())
                 .await?
                 .ok_or(AxumNope::ResourceNotFound)?;
 
@@ -183,7 +187,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             match storage
                 .fetch_rustdoc_file(
                     &crate_name,
-                    &version,
+                    &version.to_string(),
                     krate.latest_build_id.unwrap_or(0),
                     target,
                     krate.archive_storage,
@@ -213,9 +217,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         }
     }
 
-    if let None | Some("latest") = params.version.as_deref() {
-        version = "latest".to_string()
-    }
+    let matched_release = matched_release.into_canonical_req_version();
 
     // get target name and whether it has docs
     // FIXME: This is a bit inefficient but allowing us to use less code in general
@@ -227,7 +229,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                  rustdoc_status
              FROM releases
              WHERE releases.id = $1",
-            id,
+            matched_release.id(),
         )
         .fetch_one(&mut *conn)
         .await?;
@@ -244,12 +246,18 @@ pub(crate) async fn rustdoc_redirector_handler(
         rendering_time.step("redirect to doc");
 
         let url_str = if let Some(target) = target {
-            format!("/{crate_name}/{version}/{target}/{target_name}/")
+            format!(
+                "/{crate_name}/{}/{target}/{target_name}/",
+                matched_release.req_version
+            )
         } else {
-            format!("/{crate_name}/{version}/{target_name}/")
+            format!(
+                "/{crate_name}/{}/{target_name}/",
+                matched_release.req_version
+            )
         };
 
-        let cache = if version == "latest" {
+        let cache = if matched_release.is_latest_url() {
             CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
@@ -265,7 +273,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     } else {
         rendering_time.step("redirect to crate");
         Ok(axum_cached_redirect(
-            format!("/crate/{crate_name}/{version}"),
+            format!("/crate/{crate_name}/{}", matched_release.req_version),
             CachePolicy::ForeverInCdn,
         )?
         .into_response())
@@ -339,7 +347,7 @@ impl RustdocPage {
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct RustdocHtmlParams {
     pub(crate) name: String,
-    pub(crate) version: String,
+    pub(crate) version: ReqVersion,
     // both target and path are only used for matching the route.
     // The actual path is read from the request `Uri` because
     // we have some static filenames directly in the routes.
@@ -369,7 +377,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     // we have to percent-decode the string here.
     let original_path = percent_encoding::percent_decode(uri.path().as_bytes())
         .decode_utf8()
-        .map_err(|_| AxumNope::BadRequest)?;
+        .map_err(|err| AxumNope::BadRequest(err.into()))?;
 
     let mut req_path: Vec<&str> = original_path.split('/').collect();
     // Remove the empty start, the name and the version from the path
@@ -382,7 +390,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     #[instrument]
     fn redirect(
         name: &str,
-        vers: &str,
+        vers: &Version,
         path: &[&str],
         cache_policy: CachePolicy,
     ) -> AxumResult<AxumResponse> {
@@ -406,50 +414,50 @@ pub(crate) async fn rustdoc_html_server_handler(
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
-    let release_found = match_version(&mut conn, &params.name, Some(&params.version)).await?;
-    trace!(?release_found, "found release");
-
-    let (version, version_or_latest, is_latest_url) = match release_found.version {
-        MatchSemver::Exact((version, _)) => {
-            // Redirect when the requested crate name isn't correct
-            if let Some(name) = release_found.corrected_name {
-                return redirect(&name, &version, &req_path, CachePolicy::NoCaching);
-            }
-
-            (version.clone(), version, false)
-        }
-
-        MatchSemver::Latest((version, _)) => {
-            // Redirect when the requested crate name isn't correct
-            if let Some(name) = release_found.corrected_name {
-                return redirect(&name, "latest", &req_path, CachePolicy::NoCaching);
-            }
-
-            (version, "latest".to_string(), true)
-        }
-
-        // Redirect when the requested version isn't correct
-        MatchSemver::Semver((v, _)) => {
-            // to prevent cloudfront caching the wrong artifacts on URLs with loose semver
-            // versions, redirect the browser to the returned version instead of loading it
-            // immediately
-            return redirect(&params.name, &v, &req_path, CachePolicy::ForeverInCdn);
-        }
-    };
+    let version = match_version(&mut conn, &params.name, &params.version)
+        .await?
+        .into_exactly_named_or_else(|corrected_name, req_version| {
+            AxumNope::Redirect(
+                encode_url_path(&format!(
+                    "/{}/{}/{}",
+                    corrected_name,
+                    req_version,
+                    req_path.join("/")
+                )),
+                CachePolicy::NoCaching,
+            )
+        })?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                encode_url_path(&format!(
+                    "/{}/{}/{}",
+                    &params.name,
+                    version,
+                    req_path.join("/")
+                )),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
+        .into_version();
 
     trace!("crate details");
     rendering_time.step("crate details");
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = CrateDetails::new(&mut conn, &params.name, &version, &version_or_latest)
-        .await?
-        .ok_or(AxumNope::ResourceNotFound)?;
+    let krate = CrateDetails::new(
+        &mut conn,
+        &params.name,
+        &version,
+        Some(params.version.clone()),
+    )
+    .await?
+    .ok_or(AxumNope::ResourceNotFound)?;
 
     if !krate.rustdoc_status {
         rendering_time.step("redirect to crate");
         return Ok(axum_cached_redirect(
-            format!("/crate/{}/{}", params.name, version_or_latest),
+            format!("/crate/{}/{}", params.name, params.version),
             CachePolicy::ForeverInCdn,
         )?
         .into_response());
@@ -460,7 +468,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     if req_path.first().copied() == Some(&krate.metadata.default_target) {
         return redirect(
             &params.name,
-            &version_or_latest,
+            &version,
             &req_path[1..],
             CachePolicy::ForeverInCdn,
         );
@@ -484,7 +492,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     let blob = match storage
         .fetch_rustdoc_file(
             &params.name,
-            &version,
+            &version.to_string(),
             krate.latest_build_id.unwrap_or(0),
             &storage_path,
             krate.archive_storage,
@@ -506,19 +514,14 @@ pub(crate) async fn rustdoc_html_server_handler(
             return if storage
                 .rustdoc_file_exists(
                     &params.name,
-                    &version,
+                    &version.to_string(),
                     krate.latest_build_id.unwrap_or(0),
                     &storage_path,
                     krate.archive_storage,
                 )
                 .await?
             {
-                redirect(
-                    &params.name,
-                    &version_or_latest,
-                    &req_path,
-                    CachePolicy::ForeverInCdn,
-                )
+                redirect(&params.name, &version, &req_path, CachePolicy::ForeverInCdn)
             } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
@@ -526,7 +529,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                     encode_url_path(&format!(
                         "/crate/{}/{}/target-redirect/{}",
                         params.name,
-                        version,
+                        params.version,
                         req_path.join("/")
                     )),
                     CachePolicy::ForeverInCdn,
@@ -536,7 +539,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 if storage_path == format!("{}/index.html", krate.target_name) {
                     error!(
                         krate = params.name,
-                        version,
+                        version = version.to_string(),
                         original_path = original_path.as_ref(),
                         storage_path,
                         "Couldn't find crate documentation root on storage.
@@ -565,17 +568,9 @@ pub(crate) async fn rustdoc_html_server_handler(
     let latest_release = krate.latest_release()?;
 
     // Get the latest version of the crate
-    let latest_version = latest_release.version.to_string();
+    let latest_version = latest_release.version.clone();
     let is_latest_version = latest_version == version;
-    let is_prerelease = !(semver::Version::parse(&version)
-        .with_context(|| {
-            format!(
-                "invalid semver in database for crate {}: {}",
-                params.name, &version
-            )
-        })?
-        .pre
-        .is_empty());
+    let is_prerelease = !(version.pre.is_empty());
 
     // The path within this crate version's rustdoc output
     let (target, inner_path) = {
@@ -648,11 +643,11 @@ pub(crate) async fn rustdoc_html_server_handler(
                 Ok(RustdocPage {
                     latest_path,
                     permalink_path,
-                    latest_version,
+                    latest_version: latest_version.to_string(),
                     target,
                     inner_path,
                     is_latest_version,
-                    is_latest_url,
+                    is_latest_url: params.version.is_latest(),
                     is_prerelease,
                     metadata,
                     krate,
@@ -737,19 +732,16 @@ fn path_for_version(
 }
 
 pub(crate) async fn target_redirect_handler(
-    Path((name, version, req_path)): Path<(String, String, String)>,
+    Path((name, req_version, req_path)): Path<(String, ReqVersion, String)>,
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
-    let release_found = match_version(&mut conn, &name, Some(&version)).await?;
-    let (version, version_or_latest, is_latest_url) = match release_found.version {
-        MatchSemver::Exact((version, _)) => (version.clone(), version, false),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
-        // semver matching not supported here
-        MatchSemver::Semver(_) => return Err(AxumNope::VersionNotFound),
-    };
+    let version = match_version(&mut conn, &name, &req_version)
+        .await?
+        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?
+        .into_version();
 
-    let crate_details = CrateDetails::new(&mut conn, &name, &version, &version_or_latest)
+    let crate_details = CrateDetails::new(&mut conn, &name, &version, Some(req_version.clone()))
         .await?
         .ok_or(AxumNope::VersionNotFound)?;
 
@@ -781,7 +773,7 @@ pub(crate) async fn target_redirect_handler(
     let (redirect_path, query_args) = if storage
         .rustdoc_file_exists(
             &name,
-            &version,
+            &version.to_string(),
             crate_details.latest_build_id.unwrap_or(0),
             &storage_location_for_path,
             crate_details.archive_storage,
@@ -797,10 +789,10 @@ pub(crate) async fn target_redirect_handler(
 
     Ok(axum_cached_redirect(
         axum_parse_uri_with_params(
-            &encode_url_path(&format!("/{name}/{version_or_latest}/{redirect_path}")),
+            &encode_url_path(&format!("/{name}/{}/{redirect_path}", req_version)),
             query_args,
         )?,
-        if is_latest_url {
+        if req_version.is_latest() {
             CachePolicy::ForeverInCdn
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser
@@ -810,7 +802,7 @@ pub(crate) async fn target_redirect_handler(
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct BadgeQueryParams {
-    version: Option<String>,
+    version: Option<ReqVersion>,
 }
 
 #[instrument]
@@ -818,10 +810,11 @@ pub(crate) async fn badge_handler(
     Path(name): Path<String>,
     Query(query): Query<BadgeQueryParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = query.version.unwrap_or_else(|| "latest".to_string());
-
-    let url = url::Url::parse(&format!("https://img.shields.io/docsrs/{name}/{version}"))
-        .context("could not parse URL")?;
+    let url = url::Url::parse(&format!(
+        "https://img.shields.io/docsrs/{name}/{}",
+        query.version.unwrap_or_default(),
+    ))
+    .context("could not parse URL")?;
 
     Ok((
         StatusCode::MOVED_PERMANENTLY,
@@ -831,17 +824,17 @@ pub(crate) async fn badge_handler(
 }
 
 pub(crate) async fn download_handler(
-    Path((name, req_version)): Path<(String, String)>,
+    Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let (version, _) = match_version(&mut conn, &name, Some(&req_version))
+    let version = match_version(&mut conn, &name, &req_version)
         .await?
-        .exact_name_only()?
-        .into_parts();
+        .assume_exact_name()?
+        .into_version();
 
-    let archive_path = rustdoc_archive_path(&name, &version);
+    let archive_path = rustdoc_archive_path(&name, &version.to_string());
 
     // not all archives are set for public access yet, so we check if
     // the access is set and fix it if needed.
@@ -1109,7 +1102,11 @@ mod test {
                 .rustdoc_file("dummy/index.html")
                 .create()?;
 
-            let resp = env.frontend().get("/dummy/latest/dummy/").send()?;
+            let resp = env
+                .frontend()
+                .get("/dummy/latest/dummy/")
+                .send()?
+                .error_for_status()?;
             assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
             assert!(resp.url().as_str().ends_with("/dummy/latest/dummy/"));
             let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
@@ -1459,7 +1456,7 @@ mod test {
             let web = env.frontend();
 
             assert_redirect("/dummy_dash", "/dummy-dash/latest/dummy_dash/", web)?;
-            assert_redirect("/dummy_dash/*", "/dummy-dash/0.2.0/dummy_dash/", web)?;
+            assert_redirect("/dummy_dash/*", "/dummy-dash/latest/dummy_dash/", web)?;
             assert_redirect("/dummy_dash/0.1.0", "/dummy-dash/0.1.0/dummy_dash/", web)?;
             assert_redirect(
                 "/dummy-underscore",
@@ -1468,7 +1465,7 @@ mod test {
             )?;
             assert_redirect(
                 "/dummy-underscore/*",
-                "/dummy_underscore/0.2.0/dummy_underscore/",
+                "/dummy_underscore/latest/dummy_underscore/",
                 web,
             )?;
             assert_redirect(
@@ -1483,7 +1480,7 @@ mod test {
             )?;
             assert_redirect(
                 "/dummy_mixed_separators/*",
-                "/dummy_mixed-separators/0.2.0/dummy_mixed_separators/",
+                "/dummy_mixed-separators/latest/dummy_mixed_separators/",
                 web,
             )?;
             assert_redirect(

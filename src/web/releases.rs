@@ -9,14 +9,14 @@ use crate::{
     web::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
-        extractors::DbConnection,
-        match_version,
+        extractors::{DbConnection, Path},
+        match_version, ReqVersion,
     },
     BuildQueue, Config, InstanceMetrics,
 };
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Query},
     response::{IntoResponse, Response as AxumResponse},
 };
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
@@ -562,17 +562,25 @@ pub(crate) async fn search_handler(
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
-        if let Ok(matchver) = match_version(&mut conn, krate, None).await {
+        if let Ok(matchver) = match_version(&mut conn, krate, &ReqVersion::Latest)
+            .await
+            .map(|matched_release| matched_release.into_exactly_named())
+        {
             params.remove("query");
             queries.extend(params);
-            let (version, _) = matchver.version.into_parts();
-            let krate = matchver.corrected_name.unwrap_or_else(|| krate.to_string());
 
-            let uri = if matchver.rustdoc_status {
-                let target_name = matchver.target_name;
-                axum_parse_uri_with_params(&format!("/{krate}/{version}/{target_name}/"), queries)?
+            let uri = if matchver.rustdoc_status() {
+                axum_parse_uri_with_params(
+                    &format!(
+                        "/{}/{}/{}/",
+                        matchver.name,
+                        matchver.version(),
+                        matchver.target_name(),
+                    ),
+                    queries,
+                )?
             } else {
-                format!("/crate/{krate}/{version}")
+                format!("/crate/{}/{}", matchver.name, matchver.version())
                     .parse::<http::Uri>()
                     .context("could not parse redirect URI")?
             };
@@ -605,17 +613,14 @@ pub(crate) async fn search_handler(
             return Err(AxumNope::NoResults);
         }
 
-        let p = form_urlencoded::parse(query_params.as_bytes());
-        if let Some(v) = p
-            .filter_map(|(k, v)| {
-                if &k == "sort" {
-                    Some(v.to_string())
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
+        let mut p = form_urlencoded::parse(query_params.as_bytes());
+        if let Some(v) = p.find_map(|(k, v)| {
+            if &k == "sort" {
+                Some(v.to_string())
+            } else {
+                None
+            }
+        }) {
             sort_by = v;
         };
 

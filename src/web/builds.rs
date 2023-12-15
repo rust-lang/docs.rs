@@ -1,18 +1,20 @@
-use super::{cache::CachePolicy, headers::CanonicalUrl, MatchSemver};
+use super::{cache::CachePolicy, error::AxumNope, headers::CanonicalUrl};
 use crate::{
     docbuilder::Limits,
     impl_axum_webpage,
-    web::{error::AxumResult, extractors::DbConnection, match_version, MetaData},
+    web::{
+        error::AxumResult,
+        extractors::{DbConnection, Path},
+        match_version, MetaData, ReqVersion,
+    },
     Config,
 };
 use anyhow::Result;
 use axum::{
-    extract::{Extension, Path},
-    http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-    response::IntoResponse,
-    Json,
+    extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
 };
 use chrono::{DateTime, Utc};
+use semver::Version;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -39,28 +41,23 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn build_list_handler(
-    Path((name, req_version)): Path<(String, String)>,
+    Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let (version, version_or_latest) = match match_version(&mut conn, &name, Some(&req_version))
+    let version = match_version(&mut conn, &name, &req_version)
         .await?
-        .exact_name_only()?
-    {
-        MatchSemver::Exact((version, _)) => (version.clone(), version),
-        MatchSemver::Latest((version, _)) => (version, "latest".to_string()),
-
-        MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{name}/{version}/builds"),
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                format!("/crate/{name}/{version}/builds"),
                 CachePolicy::ForeverInCdn,
-            )?
-            .into_response());
-        }
-    };
+            )
+        })?
+        .into_version();
 
     Ok(BuildsPage {
-        metadata: MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?,
+        metadata: MetaData::from_crate(&mut conn, &name, &version, Some(req_version)).await?,
         builds: get_builds(&mut conn, &name, &version).await?,
         limits: Limits::for_crate(&config, &mut conn, &name).await?,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
@@ -70,22 +67,19 @@ pub(crate) async fn build_list_handler(
 }
 
 pub(crate) async fn build_list_json_handler(
-    Path((name, req_version)): Path<(String, String)>,
+    Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match match_version(&mut conn, &name, Some(&req_version))
+    let version = match_version(&mut conn, &name, &req_version)
         .await?
-        .exact_name_only()?
-    {
-        MatchSemver::Exact((version, _)) | MatchSemver::Latest((version, _)) => version,
-        MatchSemver::Semver((version, _)) => {
-            return Ok(super::axum_cached_redirect(
-                &format!("/crate/{name}/{version}/builds.json"),
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                format!("/crate/{name}/{version}/builds.json"),
                 CachePolicy::ForeverInCdn,
-            )?
-            .into_response());
-        }
-    };
+            )
+        })?
+        .into_version();
 
     Ok((
         Extension(CachePolicy::NoStoreMustRevalidate),
@@ -98,7 +92,7 @@ pub(crate) async fn build_list_json_handler(
 async fn get_builds(
     conn: &mut sqlx::PgConnection,
     name: &str,
-    version: &str,
+    version: &Version,
 ) -> Result<Vec<Build>> {
     Ok(sqlx::query_as!(
         Build,
@@ -114,7 +108,7 @@ async fn get_builds(
          WHERE crates.name = $1 AND releases.version = $2
          ORDER BY id DESC",
         name,
-        version,
+        version.to_string(),
     )
     .fetch_all(&mut *conn)
     .await?)

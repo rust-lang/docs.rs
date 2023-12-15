@@ -1,14 +1,16 @@
-use super::headers::CanonicalUrl;
-use super::MatchSemver;
 use crate::{
     db::types::Feature,
     impl_axum_webpage,
     web::{
-        cache::CachePolicy, error::AxumResult, extractors::DbConnection, match_version, MetaData,
+        cache::CachePolicy,
+        error::{AxumNope, AxumResult},
+        extractors::{DbConnection, Path},
+        headers::CanonicalUrl,
+        match_version, MetaData, ReqVersion,
     },
 };
 use anyhow::anyhow;
-use axum::{extract::Path, response::IntoResponse};
+use axum::response::IntoResponse;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 
@@ -34,27 +36,22 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn build_features_handler(
-    Path((name, req_version)): Path<(String, String)>,
+    Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let (version, version_or_latest, is_latest_url) =
-        match match_version(&mut conn, &name, Some(&req_version))
-            .await?
-            .exact_name_only()?
-        {
-            MatchSemver::Exact((version, _)) => (version.clone(), version, false),
-            MatchSemver::Latest((version, _)) => (version, "latest".to_string(), true),
+    let version = match_version(&mut conn, &name, &req_version)
+        .await?
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                format!("/crate/{}/{}/features", &name, version),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
+        .into_version();
 
-            MatchSemver::Semver((version, _)) => {
-                return Ok(super::axum_cached_redirect(
-                    &format!("/crate/{}/{}/features", &name, version),
-                    CachePolicy::ForeverInCdn,
-                )?
-                .into_response());
-            }
-        };
-
-    let metadata = MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?;
+    let metadata =
+        MetaData::from_crate(&mut conn, &name, &version, Some(req_version.clone())).await?;
 
     let row = sqlx::query!(
         r#"
@@ -63,7 +60,7 @@ pub(crate) async fn build_features_handler(
         INNER JOIN crates ON crates.id = releases.crate_id
         WHERE crates.name = $1 AND releases.version = $2"#,
         name,
-        version
+        version.to_string(),
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -82,7 +79,7 @@ pub(crate) async fn build_features_handler(
         metadata,
         features,
         default_len,
-        is_latest_url,
+        is_latest_url: req_version.is_latest(),
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
         use_direct_platform_links: true,
     }

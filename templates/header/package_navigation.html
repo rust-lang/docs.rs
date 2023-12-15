@@ -17,7 +17,7 @@
         <div class="container">
             <div class="description-container">
                 {# The partial path of the crate, `:name/:release` #}
-                {%- set crate_path = metadata.name ~ "/" ~ metadata.version_or_latest -%}
+                {%- set crate_path = metadata.name ~ "/" ~ metadata.req_version -%}
 
                 {# If docs are built, show a button for them #}
 
