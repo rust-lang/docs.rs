@@ -46,10 +46,12 @@ use page::TemplateData;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use semver::{Version, VersionReq};
 use serde::Serialize;
-use std::net::{IpAddr, Ipv4Addr};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     borrow::{Borrow, Cow},
-    net::SocketAddr,
+    fmt::{self, Display},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
     sync::Arc,
 };
 use tower::ServiceBuilder;
@@ -67,53 +69,166 @@ pub(crate) fn encode_url_path(path: &str) -> String {
 
 const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
 
-#[derive(Debug)]
-struct MatchVersion {
-    /// Represents the crate name that was found when attempting to load a crate release.
-    ///
-    /// `match_version` will attempt to match a provided crate name against similar crate names with
-    /// dashes (`-`) replaced with underscores (`_`) and vice versa.
-    pub corrected_name: Option<String>,
-    pub version: MatchSemver,
-    pub rustdoc_status: bool,
-    pub target_name: String,
+/// Represents a version identifier in a request in the original state.
+/// Can be an exact version, a semver requirement, or the string "latest".
+#[derive(Debug, Default, Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
+pub(crate) enum ReqVersion {
+    Exact(Version),
+    Semver(VersionReq),
+    #[default]
+    Latest,
 }
 
-impl MatchVersion {
-    /// If the matched version was an exact match to the requested crate name, returns the
-    /// `MatchSemver` for the query. If the lookup required a dash/underscore conversion, returns
-    /// `CrateNotFound`.
-    fn exact_name_only(self) -> Result<MatchSemver, AxumNope> {
-        if self.corrected_name.is_none() {
-            Ok(self.version)
+impl ReqVersion {
+    fn assume_exact(self) -> Result<Version, AxumNope> {
+        if let ReqVersion::Exact(version) = self {
+            Ok(version)
         } else {
-            Err(AxumNope::CrateNotFound)
+            Err(AxumNope::VersionNotFound)
+        }
+    }
+
+    pub(crate) fn is_latest(&self) -> bool {
+        matches!(self, ReqVersion::Latest)
+    }
+}
+
+impl Display for ReqVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReqVersion::Exact(version) => version.fmt(f),
+            ReqVersion::Semver(version_req) => version_req.fmt(f),
+            ReqVersion::Latest => write!(f, "latest"),
         }
     }
 }
 
-/// Represents the possible results of attempting to load a version requirement.
-/// The id (i32) of the release is stored to simplify successive queries.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum MatchSemver {
-    /// `match_version` was given an exact version, which matched a saved crate version.
-    Exact((String, i32)),
-    /// `match_version` was given a semver version requirement, which matched the given saved crate
-    /// version.
-    Semver((String, i32)),
-    // `match_version` was given the string "latest", which matches the given saved crate version.
-    Latest((String, i32)),
+impl FromStr for ReqVersion {
+    type Err = semver::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "latest" {
+            Ok(ReqVersion::Latest)
+        } else if let Ok(version) = Version::parse(s) {
+            Ok(ReqVersion::Exact(version))
+        } else if s.is_empty() || s == "newest" {
+            Ok(ReqVersion::Semver(VersionReq::STAR))
+        } else {
+            VersionReq::parse(s).map(ReqVersion::Semver)
+        }
+    }
 }
 
-impl MatchSemver {
-    /// Discard information about whether the loaded version was an exact match, and return the
-    /// matched version string and id.
-    pub fn into_parts(self) -> (String, i32) {
-        match self {
-            MatchSemver::Exact((v, i))
-            | MatchSemver::Semver((v, i))
-            | MatchSemver::Latest((v, i)) => (v, i),
+#[derive(Debug)]
+struct MatchedRelease {
+    /// crate name
+    pub name: String,
+
+    /// The crate name that was found when attempting to load a crate release.
+    /// `match_version` will attempt to match a provided crate name against similar crate names with
+    /// dashes (`-`) replaced with underscores (`_`) and vice versa.
+    pub corrected_name: Option<String>,
+
+    /// what kind of version did we get in the request? ("latest", semver, exact)
+    pub req_version: ReqVersion,
+
+    /// the matched release
+    pub release: crate_details::Release,
+}
+
+impl MatchedRelease {
+    fn assume_exact_name(self) -> Result<Self, AxumNope> {
+        if self.corrected_name.is_none() {
+            Ok(self)
+        } else {
+            Err(AxumNope::CrateNotFound)
         }
+    }
+
+    fn into_exactly_named(self) -> Self {
+        if let Some(corrected_name) = self.corrected_name {
+            Self {
+                name: corrected_name.to_owned(),
+                corrected_name: None,
+                ..self
+            }
+        } else {
+            self
+        }
+    }
+
+    fn into_exactly_named_or_else<F>(self, f: F) -> Result<Self, AxumNope>
+    where
+        F: FnOnce(&str, &ReqVersion) -> AxumNope,
+    {
+        if let Some(corrected_name) = self.corrected_name {
+            Err(f(&corrected_name, &self.req_version))
+        } else {
+            Ok(self)
+        }
+    }
+
+    /// Canonicalize the the version from the request
+    ///
+    /// Mainly:
+    /// * "newest"/"*" or empty -> "latest" in the URL
+    /// * any other semver requirement -> specific version in the URL
+    fn into_canonical_req_version(self) -> Self {
+        match self.req_version {
+            ReqVersion::Exact(_) | ReqVersion::Latest => self,
+            ReqVersion::Semver(version_req) => {
+                if version_req == VersionReq::STAR {
+                    Self {
+                        req_version: ReqVersion::Latest,
+                        ..self
+                    }
+                } else {
+                    Self {
+                        req_version: ReqVersion::Exact(self.release.version.clone()),
+                        ..self
+                    }
+                }
+            }
+        }
+    }
+
+    /// translate this MatchRelease into a specific semver::Version while canonicalizing the
+    /// version specification.
+    fn into_canonical_req_version_or_else<F>(self, f: F) -> Result<Self, AxumNope>
+    where
+        F: FnOnce(&ReqVersion) -> AxumNope,
+    {
+        let original_req_version = self.req_version.clone();
+        let canonicalized = self.into_canonical_req_version();
+
+        if canonicalized.req_version == original_req_version {
+            Ok(canonicalized)
+        } else {
+            Err(f(&canonicalized.req_version))
+        }
+    }
+
+    fn into_version(self) -> Version {
+        self.release.version
+    }
+
+    fn id(&self) -> i32 {
+        self.release.id
+    }
+
+    fn version(&self) -> &Version {
+        &self.release.version
+    }
+
+    fn rustdoc_status(&self) -> bool {
+        self.release.rustdoc_status
+    }
+
+    fn target_name(&self) -> &str {
+        &self.release.target_name
+    }
+
+    fn is_latest_url(&self) -> bool {
+        matches!(self.req_version, ReqVersion::Latest)
     }
 }
 
@@ -128,8 +243,8 @@ impl MatchSemver {
 async fn match_version(
     conn: &mut sqlx::PgConnection,
     name: &str,
-    input_version: Option<&str>,
-) -> Result<MatchVersion, AxumNope> {
+    input_version: &ReqVersion,
+) -> Result<MatchedRelease, AxumNope> {
     let (crate_id, corrected_name) = {
         let row = sqlx::query!(
             "SELECT id, name
@@ -150,9 +265,8 @@ async fn match_version(
     };
 
     // first load and parse all versions of this crate,
-    // skipping and reporting versions that are not semver valid.
     // `releases_for_crate` is already sorted, newest version first.
-    let releases = crate_details::releases_for_crate(conn, crate_id)
+    let mut releases = crate_details::releases_for_crate(conn, crate_id)
         .await
         .context("error fetching releases for crate")?;
 
@@ -160,55 +274,45 @@ async fn match_version(
         return Err(AxumNope::CrateNotFound);
     }
 
-    // version is an Option<&str> from router::Router::get, need to decode first.
-    // Any encoding errors we treat as _any version_.
-    let req_version = input_version.unwrap_or("*");
+    let req_semver: VersionReq = match input_version {
+        ReqVersion::Exact(parsed_req_version) => {
+            if let Some(release) = releases
+                .iter()
+                .find(|release| &release.version == parsed_req_version)
+            {
+                return Ok(MatchedRelease {
+                    name: name.to_owned(),
+                    corrected_name,
+                    req_version: input_version.clone(),
+                    release: release.clone(),
+                });
+            }
 
-    // first check for exact match, we can't expect users to use semver in query
-    if let Ok(parsed_req_version) = Version::parse(req_version) {
-        if let Some(release) = releases
-            .iter()
-            .find(|release| release.version == parsed_req_version)
-        {
-            return Ok(MatchVersion {
-                corrected_name,
-                version: MatchSemver::Exact((release.version.to_string(), release.id)),
-                rustdoc_status: release.rustdoc_status,
-                target_name: release.target_name.clone(),
-            });
+            if let Ok(version_req) = VersionReq::parse(&parsed_req_version.to_string()) {
+                // when we don't find a release with exact version,
+                // we try to interpret it as a semver requirement.
+                // A normal semver version ("1.2.3") is equivalent to a caret semver requirement.
+                version_req
+            } else {
+                return Err(AxumNope::VersionNotFound);
+            }
         }
-    }
-
-    // Now try to match with semver, treat `newest` and `latest` as `*`
-    let req_semver = if req_version == "newest" || req_version == "latest" {
-        VersionReq::STAR
-    } else {
-        VersionReq::parse(req_version).map_err(|err| {
-            info!(
-                "could not parse version requirement \"{}\": {:?}",
-                req_version, err
-            );
-            AxumNope::VersionNotFound
-        })?
+        ReqVersion::Latest => VersionReq::STAR,
+        ReqVersion::Semver(version_req) => version_req.clone(),
     };
 
-    // starting here, we only look at non-yanked releases
-    let releases: Vec<_> = releases.iter().filter(|r| !r.yanked).collect();
+    // when matching semver requirements, we only want to look at non-yanked releases.
+    releases.retain(|r| !r.yanked);
 
-    // try to match the version in all un-yanked releases.
     if let Some(release) = releases
         .iter()
         .find(|release| req_semver.matches(&release.version))
     {
-        return Ok(MatchVersion {
+        return Ok(MatchedRelease {
+            name: name.to_owned(),
             corrected_name,
-            version: if input_version == Some("latest") {
-                MatchSemver::Latest((release.version.to_string(), release.id))
-            } else {
-                MatchSemver::Semver((release.version.to_string(), release.id))
-            },
-            rustdoc_status: release.rustdoc_status,
-            target_name: release.target_name.clone(),
+            req_version: input_version.clone(),
+            release: release.clone(),
         });
     }
 
@@ -218,11 +322,11 @@ async fn match_version(
     if req_semver == VersionReq::STAR {
         return releases
             .first()
-            .map(|release| MatchVersion {
+            .map(|release| MatchedRelease {
+                name: name.to_owned(),
                 corrected_name: corrected_name.clone(),
-                version: MatchSemver::Semver((release.version.to_string(), release.id)),
-                rustdoc_status: release.rustdoc_status,
-                target_name: release.target_name.clone(),
+                req_version: input_version.clone(),
+                release: release.clone(),
             })
             .ok_or(AxumNope::VersionNotFound);
     }
@@ -505,11 +609,13 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct MetaData {
     pub(crate) name: String,
-    // If we're on a page with /latest/ in the URL, the string "latest".
-    // Otherwise, the version as a string.
-    pub(crate) version_or_latest: String,
-    // The exact version of the crate being shown. Never contains "latest".
-    pub(crate) version: String,
+    /// The exact version of the release being shown.
+    pub(crate) version: Version,
+    /// The version identifier in the request that was used to request this page.
+    /// This might be any of the variants of `ReqVersion`, but
+    /// due to a canonicalization step, it is either an Exact version, or `/latest/`
+    /// most of the time.
+    pub(crate) req_version: ReqVersion,
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
@@ -525,8 +631,8 @@ impl MetaData {
     async fn from_crate(
         conn: &mut sqlx::PgConnection,
         name: &str,
-        version: &str,
-        version_or_latest: &str,
+        version: &Version,
+        req_version: Option<ReqVersion>,
     ) -> Result<MetaData> {
         sqlx::query!(
             "SELECT
@@ -543,15 +649,15 @@ impl MetaData {
             INNER JOIN crates ON crates.id = releases.crate_id
             WHERE crates.name = $1 AND releases.version = $2",
             name,
-            version
+            version.to_string(),
         )
         .fetch_optional(&mut *conn)
         .await
         .context("error fetching crate metadata")?
         .map(|row| MetaData {
             name: row.name,
-            version: row.version,
-            version_or_latest: version_or_latest.to_string(),
+            version: version.clone(),
+            req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
             description: row.description,
             target_name: Some(row.target_name),
             rustdoc_status: row.rustdoc_status,
@@ -612,26 +718,29 @@ mod test {
             .unwrap()
     }
 
-    async fn version(v: Option<&str>, db: &TestDatabase) -> Option<String> {
+    async fn version(v: Option<&str>, db: &TestDatabase) -> Option<Version> {
         let mut conn = db.async_conn().await;
-        let version = match_version(&mut conn, "foo", v)
-            .await
-            .ok()?
-            .exact_name_only()
-            .ok()?
-            .into_parts()
-            .0;
+        let version = match_version(
+            &mut conn,
+            "foo",
+            &ReqVersion::from_str(v.unwrap_or_default()).unwrap(),
+        )
+        .await
+        .ok()?
+        .assume_exact_name()
+        .ok()?
+        .into_version();
         Some(version)
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn semver(version: &'static str) -> Option<String> {
-        Some(version.into())
+    fn semver(version: &'static str) -> Option<Version> {
+        version.parse().ok()
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn exact(version: &'static str) -> Option<String> {
-        Some(version.into())
+    fn exact(version: &'static str) -> Option<Version> {
+        version.parse().ok()
     }
 
     fn clipboard_is_present_for_path(path: &str, web: &TestFrontend) -> bool {
@@ -766,7 +875,7 @@ mod test {
     }
 
     #[test]
-    fn double_slash_does_redirect_and_remove_slash() {
+    fn double_slash_does_redirect_to_latest_version() {
         wrapper(|env| {
             env.fake_release()
                 .name("bat")
@@ -774,8 +883,7 @@ mod test {
                 .create()
                 .unwrap();
             let web = env.frontend();
-            let response = web.get("/bat//").send()?;
-            assert_eq!(response.status().as_u16(), StatusCode::NOT_FOUND.as_u16());
+            assert_redirect("/bat//", "/bat/latest/bat/", web)?;
             Ok(())
         })
     }
@@ -953,8 +1061,8 @@ mod test {
     fn serialize_metadata() {
         let mut metadata = MetaData {
             name: "serde".to_string(),
-            version: "1.0.0".to_string(),
-            version_or_latest: "1.0.0".to_string(),
+            version: "1.0.0".parse().unwrap(),
+            req_version: ReqVersion::Latest,
             description: Some("serde does stuff".to_string()),
             target_name: None,
             rustdoc_status: true,
@@ -970,7 +1078,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
-            "version_or_latest": "1.0.0",
+            "req_version": "latest",
             "description": "serde does stuff",
             "target_name": null,
             "rustdoc_status": true,
@@ -989,7 +1097,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
-            "version_or_latest": "1.0.0",
+            "req_version": "latest",
             "description": "serde does stuff",
             "target_name": "serde_lib_name",
             "rustdoc_status": true,
@@ -1008,7 +1116,7 @@ mod test {
         let correct_json = json!({
             "name": "serde",
             "version": "1.0.0",
-            "version_or_latest": "1.0.0",
+            "req_version": "latest",
             "description": null,
             "target_name": "serde_lib_name",
             "rustdoc_status": true,
@@ -1029,13 +1137,19 @@ mod test {
         async_wrapper(|env| async move {
             release("0.1.0", &env).await;
             let mut conn = env.async_db().await.async_conn().await;
-            let metadata = MetaData::from_crate(&mut conn, "foo", "0.1.0", "latest").await;
+            let metadata = MetaData::from_crate(
+                &mut conn,
+                "foo",
+                &"0.1.0".parse().unwrap(),
+                Some(ReqVersion::Latest),
+            )
+            .await;
             assert_eq!(
                 metadata.unwrap(),
                 MetaData {
                     name: "foo".to_string(),
-                    version_or_latest: "latest".to_string(),
-                    version: "0.1.0".to_string(),
+                    version: "0.1.0".parse().unwrap(),
+                    req_version: ReqVersion::Latest,
                     description: Some("Fake package".to_string()),
                     target_name: Some("foo".to_string()),
                     rustdoc_status: true,
@@ -1101,5 +1215,41 @@ mod test {
     fn test_axum_redirect_failure(path: &str) {
         assert!(axum_redirect(path).is_err());
         assert!(axum_cached_redirect(path, cache::CachePolicy::NoCaching).is_err());
+    }
+
+    #[test]
+    fn test_parse_req_version_latest() {
+        let req_version: ReqVersion = "latest".parse().unwrap();
+        assert_eq!(req_version, ReqVersion::Latest);
+        assert_eq!(req_version.to_string(), "latest");
+    }
+
+    #[test_case("1.2.3")]
+    fn test_parse_req_version_exact(input: &str) {
+        let req_version: ReqVersion = input.parse().unwrap();
+        assert_eq!(
+            req_version,
+            ReqVersion::Exact(Version::parse(input).unwrap())
+        );
+        assert_eq!(req_version.to_string(), input);
+    }
+
+    #[test_case("^1.2.3")]
+    #[test_case("*")]
+    fn test_parse_req_version_semver(input: &str) {
+        let req_version: ReqVersion = input.parse().unwrap();
+        assert_eq!(
+            req_version,
+            ReqVersion::Semver(VersionReq::parse(input).unwrap())
+        );
+        assert_eq!(req_version.to_string(), input);
+    }
+
+    #[test_case("")]
+    #[test_case("newest")]
+    fn test_parse_req_version_semver_latest(input: &str) {
+        let req_version: ReqVersion = input.parse().unwrap();
+        assert_eq!(req_version, ReqVersion::Semver(VersionReq::STAR));
+        assert_eq!(req_version.to_string(), "*")
     }
 }

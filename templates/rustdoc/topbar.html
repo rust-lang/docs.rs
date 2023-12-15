@@ -1,7 +1,7 @@
 {%- import "macros.html" as macros -%}
 
 {# The url of the current release, `/crate/:name/:version` #}
-{%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.version_or_latest -%}
+{%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.req_version -%}
 
 {%- include "header/topbar_begin.html" -%}{#
 extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
@@ -22,7 +22,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                         <span id="clipboard" class="fa-svg fa-svg-fw" title="Copy crate name and version information">{%- include "clipboard.svg" -%}</span>
                     </li>
 
-                    {%- if metadata.version_or_latest == "latest" -%}
+                    {%- if metadata.req_version == "latest" -%}
                     <li class="pure-menu-item">
                         <a href="{{permalink_path | safe}}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
                             {{ "link" | fas }} Permalink

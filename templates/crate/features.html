@@ -56,9 +56,9 @@
                 <div class="info">
                     There is very little structured metadata to build this page
                     from currently. You should check the
-                    <a href="/{{ metadata.name }}/{{ metadata.version_or_latest }}/{{ metadata.target_name }}/">main library docs</a>,
-                    <a href="/crate/{{ metadata.name }}/{{ metadata.version_or_latest }}/">readme</a>, or
-                    <a href="/crate/{{ metadata.name }}/{{ metadata.version_or_latest }}/source/Cargo.toml.orig">Cargo.toml</a>
+                    <a href="/{{ metadata.name }}/{{ metadata.req_version }}/{{ metadata.target_name }}/">main library docs</a>,
+                    <a href="/crate/{{ metadata.name }}/{{ metadata.req_version }}/">readme</a>, or
+                    <a href="/crate/{{ metadata.name }}/{{ metadata.req_version }}/source/Cargo.toml.orig">Cargo.toml</a>
                     in case the author documented the features in them.
                 </div>
                 {%- if features -%}

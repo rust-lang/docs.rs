@@ -1,16 +1,15 @@
-use super::cache::CachePolicy;
+use super::{cache::CachePolicy, error::AxumNope};
 use crate::web::{
-    axum_redirect, error::AxumResult, extractors::DbConnection, match_version, MatchSemver,
+    error::AxumResult,
+    extractors::{DbConnection, Path},
+    match_version, ReqVersion,
 };
 use axum::{
-    extract::{Extension, Path},
-    http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-    response::IntoResponse,
-    Json,
+    extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
 };
 
 pub(crate) async fn status_handler(
-    Path((name, req_version)): Path<(String, String)>,
+    Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
 ) -> impl IntoResponse {
     (
@@ -19,31 +18,23 @@ pub(crate) async fn status_handler(
         // We use an async block to emulate a try block so that we can apply the above CORS header
         // and cache policy to both successful and failed responses
         async move {
-            let (version, id) = match match_version(&mut conn, &name, Some(&req_version))
+            let matched_release = match_version(&mut conn, &name, &req_version)
                 .await?
-                .exact_name_only()?
-            {
-                MatchSemver::Exact((version, id)) | MatchSemver::Latest((version, id)) => {
-                    (version, id)
-                }
-                MatchSemver::Semver((version, _)) => {
-                    let redirect = axum_redirect(format!("/crate/{name}/{version}/status.json"))?;
-                    return Ok(redirect.into_response());
-                }
-            };
+                .assume_exact_name()?;
 
-            let rustdoc_status: bool = sqlx::query_scalar!(
-                "SELECT releases.rustdoc_status
-                 FROM releases
-                 WHERE releases.id = $1
-                ",
-                id
-            )
-            .fetch_one(&mut *conn)
-            .await?;
+            let rustdoc_status = matched_release.rustdoc_status();
+
+            let version = matched_release
+                .into_canonical_req_version_or_else(|version| {
+                    AxumNope::Redirect(
+                        format!("/crate/{name}/{version}/status.json"),
+                        CachePolicy::NoCaching,
+                    )
+                })?
+                .into_version();
 
             let json = Json(serde_json::json!({
-                "version": version,
+                "version": version.to_string(),
                 "doc_status": rustdoc_status,
             }));
 
@@ -91,8 +82,25 @@ mod tests {
         });
     }
 
+    #[test]
+    fn redirect_latest() {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.1.0").create()?;
+
+            let redirect = assert_redirect(
+                "/crate/foo/*/status.json",
+                "/crate/foo/latest/status.json",
+                env.frontend(),
+            )?;
+            assert_cache_control(&redirect, CachePolicy::NoStoreMustRevalidate, &env.config());
+            assert_eq!(redirect.headers()["access-control-allow-origin"], "*");
+
+            Ok(())
+        });
+    }
+
     #[test_case("0.1")]
-    #[test_case("*")]
+    #[test_case("~0.1"; "semver")]
     fn redirect(version: &str) {
         wrapper(|env| {
             env.fake_release().name("foo").version("0.1.0").create()?;

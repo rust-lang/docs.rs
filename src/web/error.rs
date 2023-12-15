@@ -1,7 +1,7 @@
 use crate::{
     db::PoolError,
     storage::PathNotFoundError,
-    web::{releases::Search, AxumErrorPage},
+    web::{cache::CachePolicy, releases::Search, AxumErrorPage},
 };
 use anyhow::anyhow;
 use axum::{
@@ -11,7 +11,6 @@ use axum::{
 use std::borrow::Cow;
 
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)] // FIXME: remove after iron is gone
 pub enum AxumNope {
     #[error("Requested resource not found")]
     ResourceNotFound,
@@ -25,12 +24,12 @@ pub enum AxumNope {
     VersionNotFound,
     #[error("Search yielded no results")]
     NoResults,
-    #[error("Internal server error")]
-    InternalServerError,
     #[error("internal error")]
     InternalError(anyhow::Error),
     #[error("bad request")]
-    BadRequest,
+    BadRequest(anyhow::Error),
+    #[error("redirect")]
+    Redirect(String, CachePolicy),
 }
 
 impl IntoResponse for AxumNope {
@@ -90,21 +89,12 @@ impl IntoResponse for AxumNope {
                 }
                 .into_response()
             }
-            AxumNope::BadRequest => AxumErrorPage {
+            AxumNope::BadRequest(source) => AxumErrorPage {
                 title: "Bad request",
-                message: "Bad request".into(),
+                message: Cow::Owned(source.to_string()),
                 status: StatusCode::BAD_REQUEST,
             }
             .into_response(),
-            AxumNope::InternalServerError => {
-                // something went wrong, details should have been logged
-                AxumErrorPage {
-                    title: "Internal server error",
-                    message: "internal server error".into(),
-                    status: StatusCode::INTERNAL_SERVER_ERROR,
-                }
-                .into_response()
-            }
             AxumNope::InternalError(source) => {
                 let web_error = crate::web::AxumErrorPage {
                     title: "Internal Server Error",
@@ -115,6 +105,12 @@ impl IntoResponse for AxumNope {
                 crate::utils::report_error(&source);
 
                 web_error.into_response()
+            }
+            AxumNope::Redirect(target, cache_policy) => {
+                match super::axum_cached_redirect(&target, cache_policy) {
+                    Ok(response) => response.into_response(),
+                    Err(err) => AxumNope::InternalError(err).into_response(),
+                }
             }
         }
     }
@@ -198,11 +194,14 @@ mod tests {
     }
 
     #[test]
-    fn check_404_page_content_not_semver_version() {
+    fn check_400_page_content_not_semver_version() {
         wrapper(|env| {
             env.fake_release().name("dummy").create()?;
-            let page = kuchikiki::parse_html()
-                .one(env.frontend().get("/dummy/not-semver").send()?.text()?);
+
+            let response = env.frontend().get("/dummy/not-semver").send()?;
+            assert_eq!(response.status(), 400);
+
+            let page = kuchikiki::parse_html().one(response.text()?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")
@@ -210,7 +209,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested version does not exist",
+                "Bad request"
             );
 
             Ok(())

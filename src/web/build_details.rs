@@ -2,17 +2,14 @@ use crate::{
     impl_axum_webpage,
     web::{
         error::{AxumNope, AxumResult},
-        extractors::DbConnection,
+        extractors::{DbConnection, Path},
         file::File,
-        MetaData,
+        MetaData, ReqVersion,
     },
     AsyncStorage, Config,
 };
 use anyhow::Context as _;
-use axum::{
-    extract::{Extension, Path},
-    response::IntoResponse,
-};
+use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::sync::Arc;
@@ -39,12 +36,13 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn build_details_handler(
-    Path((name, version, id)): Path<(String, String, String)>,
+    Path((name, version, id)): Path<(String, ReqVersion, String)>,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let id: i32 = id.parse().map_err(|_| AxumNope::BuildNotFound)?;
+    let version = version.assume_exact()?;
 
     let row = sqlx::query!(
         "SELECT
@@ -60,7 +58,7 @@ pub(crate) async fn build_details_handler(
          WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
         id,
         name,
-        version,
+        version.to_string(),
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -75,7 +73,7 @@ pub(crate) async fn build_details_handler(
     };
 
     Ok(BuildDetailsPage {
-        metadata: MetaData::from_crate(&mut conn, &name, &version, &version).await?,
+        metadata: MetaData::from_crate(&mut conn, &name, &version, None).await?,
         build_details: BuildDetails {
             id,
             rustc_version: row.rustc_version,
@@ -147,7 +145,8 @@ mod tests {
             let attrs = node.attributes.borrow();
             let url = attrs.get("href").unwrap();
 
-            let page = kuchikiki::parse_html().one(env.frontend().get(url).send()?.text()?);
+            let page = kuchikiki::parse_html()
+                .one(env.frontend().get(url).send()?.error_for_status()?.text()?);
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 

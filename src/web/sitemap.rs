@@ -5,16 +5,12 @@ use crate::{
     utils::{get_config, spawn_blocking, ConfigName},
     web::{
         error::{AxumNope, AxumResult},
-        extractors::DbConnection,
+        extractors::{DbConnection, Path},
         AxumErrorPage,
     },
     Config,
 };
-use axum::{
-    extract::{Extension, Path},
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use chrono::{TimeZone, Utc};
 use futures_util::stream::TryStreamExt;
 use serde::Serialize;
