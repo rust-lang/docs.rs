@@ -2,7 +2,6 @@
 
 use crate::{
     db::Pool,
-    repositories::RepositoryStatsUpdater,
     storage::rustdoc_archive_path,
     utils,
     web::{
@@ -175,7 +174,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         if target.ends_with(".js") {
             // this URL is actually from a crate-internal path, serve it there instead
             rendering_time.step("serve JS for crate");
-            let krate = CrateDetails::new(&mut conn, &crate_name, &version, &version, None)
+            let krate = CrateDetails::new(&mut conn, &crate_name, &version, &version)
                 .await?
                 .ok_or(AxumNope::ResourceNotFound)?;
 
@@ -362,7 +361,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
-    Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
     let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_rendering_times);
@@ -444,15 +442,9 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     // Get the crate's details from the database
     // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = CrateDetails::new(
-        &mut conn,
-        &params.name,
-        &version,
-        &version_or_latest,
-        Some(&updater),
-    )
-    .await?
-    .ok_or(AxumNope::ResourceNotFound)?;
+    let krate = CrateDetails::new(&mut conn, &params.name, &version, &version_or_latest)
+        .await?
+        .ok_or(AxumNope::ResourceNotFound)?;
 
     if !krate.rustdoc_status {
         rendering_time.step("redirect to crate");
@@ -748,7 +740,6 @@ pub(crate) async fn target_redirect_handler(
     Path((name, version, req_path)): Path<(String, String, String)>,
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(updater): Extension<Arc<RepositoryStatsUpdater>>,
 ) -> AxumResult<impl IntoResponse> {
     let release_found = match_version(&mut conn, &name, Some(&version)).await?;
     let (version, version_or_latest, is_latest_url) = match release_found.version {
@@ -758,15 +749,9 @@ pub(crate) async fn target_redirect_handler(
         MatchSemver::Semver(_) => return Err(AxumNope::VersionNotFound),
     };
 
-    let crate_details = CrateDetails::new(
-        &mut conn,
-        &name,
-        &version,
-        &version_or_latest,
-        Some(&updater),
-    )
-    .await?
-    .ok_or(AxumNope::VersionNotFound)?;
+    let crate_details = CrateDetails::new(&mut conn, &name, &version, &version_or_latest)
+        .await?
+        .ok_or(AxumNope::VersionNotFound)?;
 
     // We're trying to find the storage location
     // for the requested path in the target-redirect.

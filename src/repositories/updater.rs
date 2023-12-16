@@ -250,16 +250,6 @@ impl RepositoryStatsUpdater {
         Ok(())
     }
 
-    pub fn get_icon_name(&self, host: &str) -> &'static str {
-        for updater in &self.updaters {
-            if updater.host() == host {
-                return updater.icon();
-            }
-        }
-        // The default icon in case it doesn't match any of the "known" ones.
-        "code-branch"
-    }
-
     async fn store_repository(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -346,7 +336,6 @@ pub struct RepositoryName<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::context::Context;
 
     #[test]
     fn test_repository_name() {
@@ -422,27 +411,5 @@ mod test {
 
         // Unknown host
         assert_name("https://git.sr.ht/~ireas/merge-rs", None);
-    }
-
-    #[test]
-    fn test_icon_name() {
-        crate::test::wrapper(|env| {
-            let mut config = env.base_config();
-            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let updater = RepositoryStatsUpdater::new(&config, env.pool()?);
-
-            assert_eq!(updater.get_icon_name(""), "code-branch");
-            assert_eq!(updater.get_icon_name("random"), "code-branch");
-            assert_eq!(updater.get_icon_name("github"), "code-branch");
-            assert_eq!(updater.get_icon_name("github.com"), "github");
-            assert_eq!(updater.get_icon_name("gitlab"), "code-branch");
-            assert_eq!(updater.get_icon_name("gitlab.com"), "gitlab");
-            assert_eq!(updater.get_icon_name("gitlab.freedesktop.org"), "gitlab");
-            assert_eq!(
-                updater.get_icon_name("a.gitlab.freedesktop.org"),
-                "code-branch"
-            );
-            Ok(())
-        });
     }
 }
