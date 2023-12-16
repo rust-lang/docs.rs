@@ -131,7 +131,6 @@ pub(crate) async fn add_package_into_database(
         &metadata_pkg.name,
         &metadata_pkg.version,
         &metadata_pkg.version,
-        None,
     )
     .await
     .context("error when fetching crate-details")?

@@ -273,7 +273,6 @@ fn apply_middleware(
             .layer(Extension(context.config()?))
             .layer(Extension(context.storage()?))
             .layer(Extension(async_storage))
-            .layer(Extension(context.repository_stats_updater()?))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(

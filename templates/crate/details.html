@@ -69,7 +69,7 @@
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
                                     {%- if details.repository_metadata -%}
-                                        {{ details.repository_metadata.icon | fab }}
+                                        {{ "code-branch" | fab }}
                                         {% if details.repository_metadata.name %}
                                             {{details.repository_metadata.name}}
                                         {% else %}
