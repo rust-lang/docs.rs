@@ -14,7 +14,7 @@ use crate::{
     },
     BuildQueue, Config, InstanceMetrics,
 };
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, bail, Context as _, Result};
 use axum::{
     extract::{Extension, Path, Query},
     response::{IntoResponse, Response as AxumResponse},
@@ -142,9 +142,14 @@ async fn get_search_results(
     query_params: &str,
 ) -> Result<SearchResult, anyhow::Error> {
     #[derive(Deserialize)]
+    struct CratesIoError {
+        detail: String,
+    }
+    #[derive(Deserialize)]
     struct CratesIoSearchResult {
-        crates: Vec<CratesIoCrate>,
-        meta: CratesIoMeta,
+        crates: Option<Vec<CratesIoCrate>>,
+        meta: Option<CratesIoMeta>,
+        errors: Option<Vec<CratesIoError>>,
     }
     #[derive(Deserialize, Debug)]
     struct CratesIoCrate {
@@ -186,7 +191,7 @@ async fn get_search_results(
         }
     });
 
-    let releases: CratesIoSearchResult = retry_async(
+    let response: CratesIoSearchResult = retry_async(
         || async {
             Ok(HTTP_CLIENT
                 .get(url.clone())
@@ -200,9 +205,21 @@ async fn get_search_results(
     .json()
     .await?;
 
+    if let Some(errors) = response.errors {
+        let messages: Vec<_> = errors.into_iter().map(|e| e.detail).collect();
+        bail!("got error from crates.io: {}", messages.join("\n"));
+    }
+
+    let Some(crates) = response.crates else {
+        bail!("missing releases in crates.io response");
+    };
+
+    let Some(meta) = response.meta else {
+        bail!("missing metadata in crates.io response");
+    };
+
     let names = Arc::new(
-        releases
-            .crates
+        crates
             .into_iter()
             .map(|krate| krate.name)
             .collect::<Vec<_>>(),
@@ -261,8 +278,8 @@ async fn get_search_results(
             .cloned()
             .collect(),
         executed_query,
-        prev_page: releases.meta.prev_page,
-        next_page: releases.meta.next_page,
+        prev_page: meta.prev_page,
+        next_page: meta.next_page,
     })
 }
 
@@ -1030,6 +1047,45 @@ mod tests {
                 ))
                 .send()?;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn crates_io_errors_as_status_code_200() {
+        wrapper(|env| {
+            let mut crates_io = mockito::Server::new();
+            env.override_config(|config| {
+                config.crates_io_api_call_retries = 0;
+                config.registry_api_host = crates_io.url().parse().unwrap();
+            });
+
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "errors": [
+                            { "detail": "error name 1" },
+                            { "detail": "error name 2" },
+                        ]
+                    })
+                    .to_string(),
+                )
+                .create();
+
+            let response = env
+                .frontend()
+                .get("/releases/search?query=doesnt_matter_here")
+                .send()?;
+            assert_eq!(response.status(), 500);
+
+            assert!(response.text()?.contains("error name 1\nerror name 2"));
             Ok(())
         })
     }
