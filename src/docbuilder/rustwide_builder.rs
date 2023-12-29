@@ -999,7 +999,7 @@ mod tests {
                     &[&crate_, &version],
                 )
                 .unwrap();
-            let row = rows.get(0).unwrap();
+            let row = rows.first().unwrap();
 
             assert!(row.get::<_, bool>("rustdoc_status"));
             assert_eq!(row.get::<_, String>("default_target"), default_target);
@@ -1128,7 +1128,7 @@ mod tests {
                     &[&crate_, &version],
                 )
                 .unwrap();
-            let row = rows.get(0).unwrap();
+            let row = rows.first().unwrap();
 
             assert!(!row.get::<_, bool>("rustdoc_status"));
             assert!(!row.get::<_, bool>("is_library"));

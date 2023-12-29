@@ -26,7 +26,7 @@ pub fn get_crate_pattern_and_priority(
     )?;
 
     // If no match is found, return the default priority
-    if let Some(row) = query.get(0) {
+    if let Some(row) = query.first() {
         Ok(Some((row.get(0), row.get(1))))
     } else {
         Ok(None)
@@ -61,7 +61,7 @@ pub fn remove_crate_priority(conn: &mut Client, pattern: &str) -> Result<Option<
         &[&pattern],
     )?;
 
-    Ok(query.get(0).map(|row| row.get(0)))
+    Ok(query.first().map(|row| row.get(0)))
 }
 
 #[cfg(test)]
