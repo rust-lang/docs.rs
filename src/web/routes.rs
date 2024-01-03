@@ -2,12 +2,11 @@ use super::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
 use axum::{
+    extract::Request as AxumHttpRequest,
     handler::Handler as AxumHandler,
-    http::Request as AxumHttpRequest,
     middleware::{self, Next},
     response::{IntoResponse, Redirect},
-    routing::get,
-    routing::MethodRouter,
+    routing::{get, MethodRouter},
     Router as AxumRouter,
 };
 use axum_extra::routing::RouterExt;
@@ -17,10 +16,9 @@ use tracing::{debug, instrument};
 const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
 
 #[instrument(skip_all)]
-pub(crate) fn get_static<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
+pub(crate) fn get_static<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
 where
-    H: AxumHandler<T, S, B>,
-    B: Send + 'static + hyper::body::HttpBody,
+    H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
@@ -30,10 +28,9 @@ where
 }
 
 #[instrument(skip_all)]
-fn get_internal<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
+fn get_internal<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
 where
-    H: AxumHandler<T, S, B>,
-    B: Send + 'static + hyper::body::HttpBody,
+    H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
@@ -43,10 +40,9 @@ where
 }
 
 #[instrument(skip_all)]
-fn get_rustdoc<H, T, S, B>(handler: H) -> MethodRouter<S, B, Infallible>
+fn get_rustdoc<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
 where
-    H: AxumHandler<T, S, B>,
-    B: Send + 'static + hyper::body::HttpBody,
+    H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
@@ -57,9 +53,9 @@ where
         .layer(middleware::from_fn(block_blacklisted_prefixes_middleware))
 }
 
-async fn block_blacklisted_prefixes_middleware<B>(
-    request: AxumHttpRequest<B>,
-    next: Next<B>,
+async fn block_blacklisted_prefixes_middleware(
+    request: AxumHttpRequest,
+    next: Next,
 ) -> impl IntoResponse {
     if let Some(first_component) = request.uri().path().trim_matches('/').split('/').next() {
         if !first_component.is_empty()

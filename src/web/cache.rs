@@ -1,6 +1,6 @@
 use crate::config::Config;
 use axum::{
-    http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
+    extract::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
 use http::{header::CACHE_CONTROL, HeaderValue};
 use std::sync::Arc;
@@ -14,7 +14,7 @@ pub static NO_STORE_MUST_REVALIDATE: HeaderValue =
 pub static FOREVER_IN_CDN_AND_BROWSER: HeaderValue = HeaderValue::from_static("max-age=31104000");
 
 /// defines the wanted caching behaviour for a web response.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CachePolicy {
     /// no browser or CDN caching.
     /// In some cases the browser might still use cached content,
@@ -79,7 +79,7 @@ impl CachePolicy {
     }
 }
 
-pub(crate) async fn cache_middleware<B>(req: AxumHttpRequest<B>, next: Next<B>) -> AxumResponse {
+pub(crate) async fn cache_middleware(req: AxumHttpRequest, next: Next) -> AxumResponse {
     let config = req
         .extensions()
         .get::<Arc<Config>>()

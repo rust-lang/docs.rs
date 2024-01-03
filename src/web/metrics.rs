@@ -4,8 +4,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result};
 use axum::{
-    extract::{Extension, MatchedPath},
-    http::Request as AxumRequest,
+    extract::{Extension, MatchedPath, Request as AxumRequest},
     http::{header::CONTENT_TYPE, StatusCode},
     middleware::Next,
     response::IntoResponse,
@@ -78,9 +77,9 @@ pub(super) async fn instance_metrics_handler(
 ///     request_recorder(request, next, Some("static resource")).await
 /// }))
 /// ```
-pub(crate) async fn request_recorder<B>(
-    request: AxumRequest<B>,
-    next: Next<B>,
+pub(crate) async fn request_recorder(
+    request: AxumRequest,
+    next: Next,
     route_name: Option<&str>,
 ) -> impl IntoResponse {
     let route_name = if let Some(rn) = route_name {

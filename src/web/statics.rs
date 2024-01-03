@@ -1,14 +1,14 @@
 use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
 use axum::{
-    extract::Extension,
-    headers::HeaderValue,
-    http::{header::CONTENT_TYPE, Request},
+    extract::{Extension, Request},
+    http::header::CONTENT_TYPE,
     middleware,
     middleware::Next,
     response::{IntoResponse, Response},
     routing::get_service,
     Router as AxumRouter,
 };
+use axum_extra::headers::HeaderValue;
 use tower_http::services::ServeDir;
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
@@ -25,7 +25,7 @@ fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     )
 }
 
-async fn set_needed_static_headers<B>(req: Request<B>, next: Next<B>) -> Response {
+async fn set_needed_static_headers(req: Request, next: Next) -> Response {
     let is_opensearch_xml = req.uri().path().ends_with("/opensearch.xml");
 
     let mut response = next.run(req).await;

@@ -1,9 +1,7 @@
 use super::encode_url_path;
 use anyhow::Result;
-use axum::{
-    headers::{Header, HeaderName, HeaderValue},
-    http::uri::{PathAndQuery, Uri},
-};
+use axum::http::uri::{PathAndQuery, Uri};
+use axum_extra::headers::{Header, HeaderName, HeaderValue};
 use serde::Serialize;
 
 /// simplified typed header for a `Link rel=canonical` header in the response.
@@ -35,7 +33,7 @@ impl Header for CanonicalUrl {
         &http::header::LINK
     }
 
-    fn decode<'i, I>(_values: &mut I) -> Result<Self, axum::headers::Error>
+    fn decode<'i, I>(_values: &mut I) -> Result<Self, axum_extra::headers::Error>
     where
         I: Iterator<Item = &'i HeaderValue>,
     {
@@ -67,8 +65,8 @@ impl Serialize for CanonicalUrl {
 mod tests {
     use super::*;
 
-    use axum::headers::HeaderMapExt;
     use axum::http::HeaderMap;
+    use axum_extra::headers::HeaderMapExt;
 
     #[test]
     fn test_serialize_canonical() {
