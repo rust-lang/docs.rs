@@ -32,7 +32,7 @@ wait-for: ".rustdoc.src"
 // We check that the sidebar has the correct position.
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 // We expand the sidebar.
-click: "#src-sidebar-toggle button"
+click: "#sidebar-button a"
 wait-for: ".src-sidebar-expanded"
 // We check the position again.
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
