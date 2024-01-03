@@ -20,14 +20,7 @@ use reqwest::{
 use sqlx::Connection as _;
 use std::thread::{self, JoinHandle};
 use std::{
-    fs,
-    future::Future,
-    net::{SocketAddr, TcpListener},
-    panic,
-    rc::Rc,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
+    fs, future::Future, net::SocketAddr, panic, rc::Rc, str::FromStr, sync::Arc, time::Duration,
 };
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::oneshot::Sender;
@@ -95,8 +88,10 @@ pub(crate) fn assert_no_cache(res: &Response) {
     assert_eq!(
         res.headers()
             .get("Cache-Control")
-            .expect("missing cache-control header"),
-        cache::NO_CACHING,
+            .expect("missing cache-control header")
+            .to_str()
+            .unwrap(),
+        cache::NO_CACHING.to_str().unwrap(),
     );
 }
 
@@ -111,8 +106,11 @@ pub(crate) fn assert_cache_control(
 
     if let Some(expected_directives) = cache_policy.render(config) {
         assert_eq!(
-            cache_control.expect("missing cache-control header"),
-            expected_directives,
+            cache_control
+                .expect("missing cache-control header")
+                .to_str()
+                .unwrap(),
+            expected_directives.to_str().unwrap(),
         );
     } else {
         assert!(cache_control.is_none());
@@ -707,9 +705,14 @@ impl TestFrontend {
         debug!("loading template data");
         let template_data = Arc::new(TemplateData::new(1).unwrap());
 
+        let runtime = context.runtime().unwrap();
+
         debug!("binding local TCP port for axum");
-        let axum_listener =
-            TcpListener::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
+        let axum_listener = runtime
+            .block_on(tokio::net::TcpListener::bind(
+                "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
+            ))
+            .unwrap();
 
         let axum_addr = axum_listener.local_addr().unwrap();
         debug!("bound to local address: {}", axum_addr);
@@ -723,9 +726,7 @@ impl TestFrontend {
             let runtime = context.runtime().unwrap();
             move || {
                 runtime.block_on(async {
-                    axum::Server::from_tcp(axum_listener)
-                        .unwrap()
-                        .serve(axum_app.into_make_service())
+                    axum::serve(axum_listener, axum_app.into_make_service())
                         .with_graceful_shutdown(async {
                             rx.await.ok();
                         })

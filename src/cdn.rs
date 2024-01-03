@@ -959,16 +959,16 @@ mod tests {
     #[tokio::test]
     async fn invalidate_path() {
         let conn = StaticReplayClient::new(vec![ReplayEvent::new(
-            http::Request::builder()
+            http02::Request::builder()
                 .header("content-type", "application/xml")
-                .uri(http::uri::Uri::from_static(
+                .uri(http02::uri::Uri::from_static(
                     "https://cloudfront.amazonaws.com/2020-05-31/distribution/some_distribution/invalidation",
                 ))
                 .body(SdkBody::from(
                     r#"<InvalidationBatch xmlns="http://cloudfront.amazonaws.com/doc/2020-05-31/"><Paths><Quantity>2</Quantity><Items><Path>/some/path*</Path><Path>/another/path/*</Path></Items></Paths><CallerReference>some_reference</CallerReference></InvalidationBatch>"#,
                 ))
                 .unwrap(),
-            http::Response::builder()
+            http02::Response::builder()
                 .status(200)
                 .body(SdkBody::from(
                     r#"
@@ -1009,14 +1009,14 @@ mod tests {
     #[tokio::test]
     async fn get_invalidation_info_doesnt_exist() {
         let conn = StaticReplayClient::new(vec![ReplayEvent::new(
-            http::Request::builder()
+            http02::Request::builder()
                 .header("content-type", "application/xml")
-                .uri(http::uri::Uri::from_static(
+                .uri(http02::uri::Uri::from_static(
                    "https://cloudfront.amazonaws.com/2020-05-31/distribution/some_distribution/invalidation/some_reference"
                 ))
                 .body(SdkBody::empty())
                 .unwrap(),
-            http::Response::builder()
+            http02::Response::builder()
                 .status(404)
                 .body(SdkBody::empty())
                 .unwrap(),
@@ -1036,14 +1036,14 @@ mod tests {
     #[tokio::test]
     async fn get_invalidation_info_completed() {
         let conn = StaticReplayClient::new(vec![ReplayEvent::new(
-            http::Request::builder()
+            http02::Request::builder()
                 .header("content-type", "application/xml")
-                .uri(http::uri::Uri::from_static(
+                .uri(http02::uri::Uri::from_static(
                    "https://cloudfront.amazonaws.com/2020-05-31/distribution/some_distribution/invalidation/some_reference"
                 ))
                 .body(SdkBody::empty())
                 .unwrap(),
-            http::Response::builder()
+            http02::Response::builder()
                 .status(200)
                 .body(SdkBody::from(
                    r#"<Invalidation xmlns="http://cloudfront.amazonaws.com/doc/2020-05-31/">

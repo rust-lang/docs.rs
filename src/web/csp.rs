@@ -1,6 +1,6 @@
 use crate::config::Config;
 use axum::{
-    http::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
+    extract::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use std::{
@@ -98,7 +98,7 @@ enum ContentType {
     Other,
 }
 
-pub(crate) async fn csp_middleware<B>(mut req: AxumHttpRequest<B>, next: Next<B>) -> AxumResponse {
+pub(crate) async fn csp_middleware(mut req: AxumHttpRequest, next: Next) -> AxumResponse {
     let csp_report_only = req
         .extensions()
         .get::<Arc<Config>>()

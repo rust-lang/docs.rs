@@ -2,8 +2,8 @@ use super::TemplateData;
 use crate::web::{csp::Csp, error::AxumNope};
 use anyhow::Error;
 use axum::{
-    body::{boxed, Body},
-    http::Request as AxumRequest,
+    body::Body,
+    extract::Request as AxumRequest,
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
 };
@@ -68,7 +68,7 @@ macro_rules! impl_axum_webpage {
                     )?
                     // this empty body will be replaced in `render_templates_middleware` using
                     // the data from `DelayedTemplateRender` below.
-                    .body(::axum::body::boxed(::axum::body::Body::empty()))
+                    .body(::axum::body::Body::empty())
                     .unwrap();
 
                 $(
@@ -84,7 +84,7 @@ macro_rules! impl_axum_webpage {
                         (canonical_url)(&self)
                     };
                     if let Some(canonical_url) = canonical_url {
-                        use axum::headers::HeaderMapExt;
+                        use axum_extra::headers::HeaderMapExt;
 
                         response.headers_mut().typed_insert(canonical_url);
                     }
@@ -113,6 +113,7 @@ macro_rules! impl_axum_webpage {
 /// adding this to the axum response extensions will lead
 /// to the template being rendered, adding the csp_nonce to
 /// the context.
+#[derive(Clone)]
 pub(crate) struct DelayedTemplateRender {
     pub template: String,
     pub context: Context,
@@ -166,7 +167,7 @@ fn render_response(
                 }
             };
             let content_length = rendered.len();
-            *response.body_mut() = boxed(Body::from(rendered));
+            *response.body_mut() = Body::from(rendered);
             response
                 .headers_mut()
                 .insert(CONTENT_LENGTH, content_length.into());
@@ -178,10 +179,7 @@ fn render_response(
     .boxed()
 }
 
-pub(crate) async fn render_templates_middleware<B>(
-    req: AxumRequest<B>,
-    next: Next<B>,
-) -> AxumResponse {
+pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) -> AxumResponse {
     let templates: Arc<TemplateData> = req
         .extensions()
         .get::<Arc<TemplateData>>()

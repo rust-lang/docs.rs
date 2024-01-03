@@ -33,8 +33,7 @@ mod status;
 use crate::{impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    extract::Extension,
-    http::Request as AxumRequest,
+    extract::{Extension, Request as AxumRequest},
     http::StatusCode,
     middleware,
     middleware::Next,
@@ -234,7 +233,7 @@ async fn match_version(
     Err(AxumNope::VersionNotFound)
 }
 
-async fn log_timeouts_to_sentry<B>(req: AxumRequest<B>, next: Next<B>) -> AxumResponse {
+async fn log_timeouts_to_sentry(req: AxumRequest, next: Next) -> AxumResponse {
     let uri = req.uri().clone();
 
     let response = next.run(req).await;
@@ -309,13 +308,22 @@ pub fn start_background_metrics_webserver(
     let runtime = context.runtime()?;
 
     runtime.spawn(async move {
-        if let Err(err) = axum::Server::bind(&axum_addr)
-            .serve(metrics_axum_app)
+        match tokio::net::TcpListener::bind(axum_addr)
             .await
-            .context("error running metrics web server")
+            .context("error binding socket for metrics web server")
         {
-            report_error(&err);
-        }
+            Ok(listener) => {
+                if let Err(err) = axum::serve(listener, metrics_axum_app)
+                    .await
+                    .context("error running metrics web server")
+                {
+                    report_error(&err);
+                }
+            }
+            Err(err) => {
+                report_error(&err);
+            }
+        };
     });
 
     Ok(())
@@ -341,8 +349,11 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Resu
 
     let app = build_axum_app(context, template_data)?.into_make_service();
     context.runtime()?.block_on(async {
-        axum::Server::bind(&axum_addr)
-            .serve(app)
+        let listener = tokio::net::TcpListener::bind(axum_addr)
+            .await
+            .context("error binding socket for metrics web server")?;
+
+        axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
         Ok::<(), Error>(())
@@ -744,7 +755,7 @@ mod test {
                 .unwrap();
             let web = env.frontend();
             let response = web.get("/bat//").send()?;
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(response.status().as_u16(), StatusCode::NOT_FOUND.as_u16());
             Ok(())
         })
     }

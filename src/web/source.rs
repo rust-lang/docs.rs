@@ -11,7 +11,8 @@ use crate::{
     AsyncStorage,
 };
 use anyhow::{Context as _, Result};
-use axum::{extract::Path, headers::HeaderMapExt, response::IntoResponse, Extension};
+use axum::{extract::Path, response::IntoResponse, Extension};
+use axum_extra::headers::HeaderMapExt;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
