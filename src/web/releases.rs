@@ -49,6 +49,7 @@ pub struct Release {
     rustdoc_status: bool,
     pub(crate) build_time: DateTime<Utc>,
     stars: i32,
+    yanked: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -89,7 +90,8 @@ pub(crate) async fn get_releases(
             releases.target_name,
             releases.rustdoc_status,
             builds.build_time,
-            repositories.stars
+            repositories.stars,
+            releases.yanked
         FROM crates
         {1}
         INNER JOIN builds ON releases.id = builds.rid
@@ -121,6 +123,7 @@ pub(crate) async fn get_releases(
             rustdoc_status: row.get(4),
             build_time: row.get(5),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
+            yanked: row.get(7),
         })
         .try_collect()
         .await?)
@@ -240,7 +243,8 @@ async fn get_search_results(
                builds.build_time,
                releases.target_name,
                releases.rustdoc_status,
-               repositories.stars as "stars?"
+               repositories.stars as "stars?",
+               releases.yanked
 
            FROM crates
            INNER JOIN releases ON crates.latest_version_id = releases.id
@@ -262,6 +266,7 @@ async fn get_search_results(
                 target_name: Some(row.target_name),
                 rustdoc_status: row.rustdoc_status,
                 stars: row.stars.unwrap_or(0),
+                yanked: row.yanked,
             },
         )
     })
