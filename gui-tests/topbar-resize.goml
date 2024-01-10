@@ -8,6 +8,11 @@ define-function: (
     block {
         set-window-size: (|width|, |window_height|)
         wait-for-css: (".nav-container > .container a > .title", {"display": |text_display|})
+
+        // We check that there is no horizontal scrollbar (which would be because of docs.rs
+        // topbar).
+        assert-window-property: {"innerWidth": |width|}
+
         assert-css: ("#search-input-nav", {"display": |search_display|, "max-width": |search_max_width|})
         assert-size: ("body > .nav-container", {"height": |top_navbar_height|})
 
@@ -17,67 +22,77 @@ define-function: (
     }
 )
 
+define-function: (
+    "check-topbar-sizes",
+    (),
+    block {
+        set-window-size: (1100, |window_height|)
+        store-size: ("body > .nav-container", {"height": top_navbar_height})
+
+        call-function: ("check-topbar", {
+            "width": 1000,
+            "text_display": "inline",
+            "search_display": "block",
+            "search_max_width": "200px",
+        })
+        call-function: ("check-topbar", {
+            "width": 900,
+            "text_display": "inline",
+            "search_display": "block",
+            "search_max_width": "200px",
+        })
+        call-function: ("check-topbar", {
+            "width": 872,
+            "text_display": "inline",
+            "search_display": "block",
+            "search_max_width": "200px",
+        })
+        // From this point, text should not be displayed anymore.
+        call-function: ("check-topbar", {
+            "width": 871,
+            "text_display": "none",
+            "search_display": "block",
+            "search_max_width": "200px",
+        })
+        call-function: ("check-topbar", {
+            "width": 768,
+            "text_display": "none",
+            "search_display": "block",
+            "search_max_width": "200px",
+        })
+        // From this point, search input should be smaller.
+        call-function: ("check-topbar", {
+            "width": 767,
+            "text_display": "none",
+            "search_display": "block",
+            "search_max_width": "150px",
+        })
+        call-function: ("check-topbar", {
+            "width": 568,
+            "text_display": "none",
+            "search_display": "block",
+            "search_max_width": "150px",
+        })
+        // From this point, search input should not be displayed anymore.
+        call-function: ("check-topbar", {
+            "width": 567,
+            "text_display": "none",
+            "search_display": "none",
+            "search_max_width": "150px",
+        })
+        // Even at very small width, we maintain the height of the topbar, but such cases will very likely
+        // never happen "in real life".
+        call-function: ("check-topbar", {
+            "width": 272,
+            "text_display": "none",
+            "search_display": "none",
+            "search_max_width": "150px",
+        })
+    }
+)
+
 go-to: |DOC_PATH| + "/sysinfo"
+call-function: ("check-topbar-sizes", ())
 
-set-window-size: (1100, |window_height|)
-store-size: ("body > .nav-container", {"height": top_navbar_height})
-
-call-function: ("check-topbar", {
-    "width": 1000,
-    "text_display": "inline",
-    "search_display": "block",
-    "search_max_width": "200px",
-})
-call-function: ("check-topbar", {
-    "width": 900,
-    "text_display": "inline",
-    "search_display": "block",
-    "search_max_width": "200px",
-})
-call-function: ("check-topbar", {
-    "width": 872,
-    "text_display": "inline",
-    "search_display": "block",
-    "search_max_width": "200px",
-})
-// From this point, text should not be displayed anymore.
-call-function: ("check-topbar", {
-    "width": 871,
-    "text_display": "none",
-    "search_display": "block",
-    "search_max_width": "200px",
-})
-call-function: ("check-topbar", {
-    "width": 768,
-    "text_display": "none",
-    "search_display": "block",
-    "search_max_width": "200px",
-})
-// From this point, search input should be smaller.
-call-function: ("check-topbar", {
-    "width": 767,
-    "text_display": "none",
-    "search_display": "block",
-    "search_max_width": "150px",
-})
-call-function: ("check-topbar", {
-    "width": 568,
-    "text_display": "none",
-    "search_display": "block",
-    "search_max_width": "150px",
-})
-// From this point, search input should not be displayed anymore.
-call-function: ("check-topbar", {
-    "width": 567,
-    "text_display": "none",
-    "search_display": "none",
-    "search_max_width": "150px",
-})
-// Even at very small width, we maintain the height of the topbar, but such cases will very likely
-// never happen "in real life".
-call-function: ("check-topbar", {
-    "width": 272,
-    "text_display": "none",
-    "search_display": "none",
-    "search_max_width": "150px",
-})
+go-to: |DOC_PATH| + "/releases/search?query=sysinfo"
+call-function: ("check-topbar-sizes", ())
