@@ -3,7 +3,52 @@ function formatCrateName(crateTitleAndVersion) {
     return stringParts[0] + ' = "' + stringParts[1] + '"';
 }
 
+function copyCode() {
+    let preElements = document.querySelectorAll('pre');
+    preElements.forEach(function(pre, index) {
+        let resetTimeout = null;
+        let icon = "<img src='/-/rustdoc.static/clipboard-7571035ce49a181d.svg' width='15' height='15'>";
+        let copyBtn = document.createElement("button");
+        copyBtn.classList.add("copy-btn-" + index);
+        copyBtn.style.width = "32px";
+        copyBtn.style.height = "30px";
+        copyBtn.style.float = "right";
+        copyBtn.style.opacity = "0";
+        copyBtn.style.transition = "ease 0.3s";
+        copyBtn.style.filter = "invert(50%)";
+        copyBtn.style.background = "transparent";
+        copyBtn.style.border = "1px solid var(--main-color)";
+        copyBtn.style.borderRadius = "5px";
+        copyBtn.style.padding = "5px 7px 4px 8px";
+        copyBtn.ariaLabel = "Copy to clipboard";
+        copyBtn.innerHTML = icon;
+        pre.prepend(copyBtn);
+        pre.style.borderRadius = "10px";
+        pre.addEventListener("mouseenter", function() {
+            copyBtn.style.opacity = "1";
+            copyBtn.addEventListener('click', function() {
+                let code = pre.querySelector("code").textContent;
+                navigator.clipboard.writeText(code).then(function() {
+                    copyBtn.textContent = "✓";
+                if (resetTimeout !== null) {
+                    clearTimeout(resetTimeout);
+                }
+                    resetTimeout = setTimeout(function() {
+                        copyBtn.innerHTML = icon;
+                    }, 1000);
+                    console.log("copied");
+                    
+                });
+            });
+        });
+        pre.addEventListener("mouseleave", function() {
+            copyBtn.style.opacity = "0";
+        });
+    });
+}
+
 (function() {
+    copyCode();
     const clipboard = document.getElementById("clipboard");
     if (clipboard) {
         let resetClipboardTimeout = null;
