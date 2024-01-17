@@ -964,6 +964,19 @@ mod backend_tests {
         Ok(())
     }
 
+    fn test_too_long_filename(storage: &Storage) -> Result<()> {
+        // minio returns ErrKeyTooLongError when the key is over 1024 bytes long.
+        // When testing, minio just gave me `XMinioInvalidObjectName`, so I'll check that too.
+        let long_filename = "ATCG".repeat(512);
+
+        assert!(storage
+            .get(&long_filename, 42)
+            .unwrap_err()
+            .is::<PathNotFoundError>());
+
+        Ok(())
+    }
+
     fn test_get_too_big(storage: &Storage) -> Result<()> {
         const MAX_SIZE: usize = 1024;
 
@@ -1307,6 +1320,7 @@ mod backend_tests {
             test_get_object,
             test_get_range,
             test_get_too_big,
+            test_too_long_filename,
             test_delete_prefix,
             test_delete_prefix_without_matches,
             test_delete_percent,
