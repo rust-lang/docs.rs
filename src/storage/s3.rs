@@ -4,7 +4,7 @@ use anyhow::{Context as _, Error};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
-    error::SdkError,
+    error::{ProvideErrorMetadata, SdkError},
     operation::{get_object::GetObjectError, head_object::HeadObjectError},
     types::{Delete, ObjectIdentifier, Tag, Tagging},
     Client,
@@ -20,6 +20,19 @@ use tracing::{error, warn};
 
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
 const PUBLIC_ACCESS_VALUE: &str = "allow";
+
+fn err_is_not_found<E>(err: &SdkError<E>) -> bool
+where
+    E: ProvideErrorMetadata,
+{
+    match err {
+        SdkError::ServiceError(err) => {
+            err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
+        }
+        e if e.code() == Some("KeyTooLongError") => true,
+        _ => false,
+    }
+}
 
 pub(super) struct S3Backend {
     client: Client,
@@ -78,11 +91,11 @@ impl S3Backend {
         {
             Ok(_) => Ok(true),
             Err(SdkError::ServiceError(err))
-                if (matches!(err.err(), HeadObjectError::NotFound(_))
-                    || err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()) =>
+                if matches!(err.err(), HeadObjectError::NotFound(_)) =>
             {
                 Ok(false)
             }
+            Err(err) if err_is_not_found(&err) => Ok(false),
             Err(other) => Err(other.into()),
         }
     }
@@ -101,13 +114,7 @@ impl S3Backend {
                 .iter()
                 .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
                 .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE)),
-            Err(SdkError::ServiceError(err)) => {
-                if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
-                    Err(super::PathNotFoundError.into())
-                } else {
-                    Err(err.into_err().into())
-                }
-            }
+            Err(err) if err_is_not_found(&err) => Err(super::PathNotFoundError.into()),
             Err(other) => Err(other.into()),
         }
     }
@@ -139,13 +146,7 @@ impl S3Backend {
             .await
         {
             Ok(_) => Ok(()),
-            Err(SdkError::ServiceError(err)) => {
-                if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
-                    Err(super::PathNotFoundError.into())
-                } else {
-                    Err(err.into_err().into())
-                }
-            }
+            Err(err) if err_is_not_found(&err) => Err(super::PathNotFoundError.into()),
             Err(other) => Err(other.into()),
         }
     }
@@ -163,16 +164,16 @@ impl S3Backend {
             .key(path)
             .set_range(range.map(|r| format!("bytes={}-{}", r.start(), r.end())))
             .send()
+            .await
             .map_err(|err| match err {
                 SdkError::ServiceError(err)
-                    if (matches!(err.err(), GetObjectError::NoSuchKey(_))
-                        || err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()) =>
+                    if matches!(err.err(), GetObjectError::NoSuchKey(_)) =>
                 {
                     super::PathNotFoundError.into()
                 }
+                err if err_is_not_found(&err) => super::PathNotFoundError.into(),
                 err => Error::from(err),
-            })
-            .await?;
+            })?;
 
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
         content.reserve(
