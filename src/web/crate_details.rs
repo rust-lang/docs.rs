@@ -13,7 +13,7 @@ use crate::{
     },
     AsyncStorage,
 };
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::{Extension, Path},
     response::{IntoResponse, Response as AxumResponse},
@@ -302,11 +302,19 @@ impl CrateDetails {
 
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
     /// yanked/prereleased if that is all that exist).
-    pub fn latest_release(&self) -> &Release {
-        self.releases
-            .iter()
-            .find(|release| release.version.pre.is_empty() && !release.yanked)
-            .unwrap_or(&self.releases[0])
+    pub fn latest_release(&self) -> Result<&Release> {
+        latest_release(&self.releases).ok_or_else(|| anyhow!("crate without releases"))
+    }
+}
+
+pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
+    if let Some(release) = releases
+        .iter()
+        .find(|release| release.version.pre.is_empty() && !release.yanked)
+    {
+        Some(release)
+    } else {
+        releases.first()
     }
 }
 
@@ -996,7 +1004,7 @@ mod tests {
                         .unwrap()
                 });
                 assert_eq!(
-                    details.latest_release().version,
+                    details.latest_release().unwrap().version,
                     semver::Version::parse("0.0.3")?
                 );
             }
@@ -1026,7 +1034,7 @@ mod tests {
                         .unwrap()
                 });
                 assert_eq!(
-                    details.latest_release().version,
+                    details.latest_release().unwrap().version,
                     semver::Version::parse("0.0.2")?
                 );
             }
@@ -1057,7 +1065,7 @@ mod tests {
                         .unwrap()
                 });
                 assert_eq!(
-                    details.latest_release().version,
+                    details.latest_release().unwrap().version,
                     semver::Version::parse("0.0.2")?
                 );
             }
@@ -1096,7 +1104,7 @@ mod tests {
                         .unwrap()
                 });
                 assert_eq!(
-                    details.latest_release().version,
+                    details.latest_release().unwrap().version,
                     semver::Version::parse("0.0.3")?
                 );
             }

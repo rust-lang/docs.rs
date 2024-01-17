@@ -20,6 +20,7 @@ use docs_rs::{
     Context, Index, InstanceMetrics, PackageKind, RegistryApi, RustwideBuilder, ServiceMetrics,
     Storage,
 };
+use futures_util::StreamExt;
 use humantime::Duration;
 use once_cell::sync::OnceCell;
 use tokio::runtime::{Builder, Runtime};
@@ -486,6 +487,9 @@ enum DatabaseSubcommand {
         version: Option<i64>,
     },
 
+    /// temporary commant to update the `crates.latest_version_id` field
+    UpdateLatestVersionId,
+
     /// Updates Github/Gitlab stats for crates.
     UpdateRepositoryFields,
 
@@ -542,6 +546,30 @@ impl DatabaseSubcommand {
                         db::migrate(&mut conn, version).await
                     })
                     .context("Failed to run database migrations")?
+            }
+
+            Self::UpdateLatestVersionId => {
+                let pool = ctx.pool()?;
+                ctx.runtime()?
+                    .block_on(async {
+                        let mut list_conn = pool.get_async().await?;
+                        let mut update_conn = pool.get_async().await?;
+
+                        let mut result_stream =
+                            sqlx::query!("SELECT id, name FROM crates ORDER BY name")
+                                .fetch(&mut *list_conn);
+
+                        while let Some(row) = result_stream.next().await {
+                            let row = row?;
+
+                            println!("handling crate {}", row.name);
+
+                            db::update_latest_version_id(&mut update_conn, row.id).await?;
+                        }
+
+                        Ok::<(), anyhow::Error>(())
+                    })
+                    .context("Failed to update latest version id")?
             }
 
             Self::UpdateRepositoryFields => {
@@ -787,6 +815,7 @@ impl Context for BinContext {
             self.instance_metrics()?,
             self.config()?,
             self.storage()?,
+            self.runtime()?,
         );
         fn storage(self) -> Storage = {
             let runtime = self.runtime()?;

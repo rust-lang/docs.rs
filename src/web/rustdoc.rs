@@ -562,7 +562,7 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     rendering_time.step("find latest path");
 
-    let latest_release = krate.latest_release();
+    let latest_release = krate.latest_release()?;
 
     // Get the latest version of the crate
     let latest_version = latest_release.version.to_string();

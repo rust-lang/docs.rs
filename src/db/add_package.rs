@@ -5,9 +5,9 @@ use crate::{
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
     utils::MetadataPackage,
-    web::crate_details::CrateDetails,
+    web::crate_details::{latest_release, releases_for_crate},
 };
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
 use slug::slugify;
@@ -126,27 +126,27 @@ pub(crate) async fn add_package_into_database(
     add_keywords_into_database(conn, metadata_pkg, release_id).await?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id).await?;
 
-    let crate_details = CrateDetails::new(
-        &mut *conn,
-        &metadata_pkg.name,
-        &metadata_pkg.version,
-        &metadata_pkg.version,
-    )
-    .await
-    .context("error when fetching crate-details")?
-    .ok_or_else(|| anyhow!("crate details not found directly after creating them"))?;
+    update_latest_version_id(&mut *conn, crate_id)
+        .await
+        .context("couldn't update latest version id")?;
+
+    Ok(release_id)
+}
+
+pub async fn update_latest_version_id(conn: &mut sqlx::PgConnection, crate_id: i32) -> Result<()> {
+    let releases = releases_for_crate(conn, crate_id).await?;
 
     sqlx::query!(
         "UPDATE crates
          SET latest_version_id = $2
          WHERE id = $1",
         crate_id,
-        crate_details.latest_release().id,
+        latest_release(&releases).map(|release| release.id),
     )
     .execute(&mut *conn)
     .await?;
 
-    Ok(release_id)
+    Ok(())
 }
 
 pub(crate) async fn add_doc_coverage(
