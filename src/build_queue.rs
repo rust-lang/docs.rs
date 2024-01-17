@@ -1,5 +1,5 @@
 use crate::cdn;
-use crate::db::{delete_crate, delete_version, Pool};
+use crate::db::{delete_crate, delete_version, update_latest_version_id, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
@@ -8,11 +8,10 @@ use crate::Context;
 use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
 use anyhow::Context as _;
 use fn_error_context::context;
-
-use tracing::{debug, error, info};
-
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -30,6 +29,7 @@ pub struct BuildQueue {
     storage: Arc<Storage>,
     pub(crate) db: Pool,
     metrics: Arc<InstanceMetrics>,
+    runtime: Arc<Runtime>,
     max_attempts: i32,
 }
 
@@ -39,6 +39,7 @@ impl BuildQueue {
         metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<Storage>,
+        runtime: Arc<Runtime>,
     ) -> Self {
         BuildQueue {
             max_attempts: config.build_attempts.into(),
@@ -46,6 +47,7 @@ impl BuildQueue {
             db,
             metrics,
             storage,
+            runtime,
         }
     }
 
@@ -403,16 +405,18 @@ impl BuildQueue {
     ) -> Result<()> {
         let activity = if yanked { "yanked" } else { "unyanked" };
 
-        let rows = conn.execute(
+        let result = conn.query(
             "UPDATE releases
              SET yanked = $3
              FROM crates
              WHERE crates.id = releases.crate_id
                  AND name = $1
-                 AND version = $2",
+                 AND version = $2
+            RETURNING crates.id
+            ",
             &[&name, &version, &yanked],
         )?;
-        if rows != 1 {
+        if result.len() != 1 {
             match self
                 .has_build_queued(name, version)
                 .context("error trying to fetch build queue")
@@ -434,6 +438,17 @@ impl BuildQueue {
         } else {
             debug!("{}-{} {}", name, version, activity);
         }
+
+        if let Some(row) = result.first() {
+            let crate_id: i32 = row.get(0);
+
+            self.runtime.block_on(async {
+                let mut conn = self.db.get_async().await?;
+
+                update_latest_version_id(&mut conn, crate_id).await
+            })?;
+        }
+
         Ok(())
     }
 

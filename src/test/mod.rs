@@ -372,6 +372,7 @@ impl TestEnvironment {
                     self.instance_metrics(),
                     self.config(),
                     self.storage(),
+                    self.runtime(),
                 ))
             })
             .clone()

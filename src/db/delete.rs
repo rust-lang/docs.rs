@@ -1,6 +1,8 @@
-use crate::error::Result;
-use crate::storage::{rustdoc_archive_path, source_archive_path, Storage};
-use crate::Config;
+use crate::{
+    error::Result,
+    storage::{rustdoc_archive_path, source_archive_path, Storage},
+    Config,
+};
 use anyhow::Context as _;
 use fn_error_context::context;
 use postgres::Client;

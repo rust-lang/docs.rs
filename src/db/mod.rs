@@ -2,6 +2,7 @@
 use anyhow::Result;
 use sqlx::migrate::{Migrate, Migrator};
 
+pub use self::add_package::update_latest_version_id;
 pub(crate) use self::add_package::{
     add_build_into_database, add_doc_coverage, add_package_into_database,
 };
