@@ -25,12 +25,12 @@ fn err_is_not_found<E>(err: &SdkError<E>) -> bool
 where
     E: ProvideErrorMetadata,
 {
-    match err {
-        SdkError::ServiceError(err) => {
-            err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
-        }
-        e if e.code() == Some("KeyTooLongError") => true,
-        _ => false,
+    if err.code() == Some("KeyTooLongError") || err.code() == Some("XMinioInvalidObjectName") {
+        true
+    } else if let SdkError::ServiceError(err) = err {
+        err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
+    } else {
+        false
     }
 }
 
