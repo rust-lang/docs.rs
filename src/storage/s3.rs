@@ -5,7 +5,6 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
     error::{ProvideErrorMetadata, SdkError},
-    operation::{get_object::GetObjectError, head_object::HeadObjectError},
     types::{Delete, ObjectIdentifier, Tag, Tagging},
     Client,
 };
@@ -21,16 +20,50 @@ use tracing::{error, warn};
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
 const PUBLIC_ACCESS_VALUE: &str = "allow";
 
-fn err_is_not_found<E>(err: &SdkError<E>) -> bool
+// error codes to check for when trying to determaine if an error is
+// a "NOT FOUND" error.
+// Definition taken from the S3 rust SDK,
+// and validated by manually testing with actual S3.
+static NOT_FOUND_ERROR_CODES: [&str; 5] = [
+    // from sentry errors
+    "KeyTooLongError",
+    // https://github.com/awslabs/aws-sdk-rust/blob/6155192dbd003af7bc5d4c1419bf17794302f8c3/sdk/s3/src/protocol_serde/shape_get_object.rs#L201-L251
+    "NoSuchKey",
+    // https://github.com/awslabs/aws-sdk-rust/blob/6155192dbd003af7bc5d4c1419bf17794302f8c3/sdk/s3/src/protocol_serde/shape_head_object.rs#L1-L39"
+    "NotFound",
+    // https://github.com/awslabs/aws-sdk-rust/blob/6155192dbd003af7bc5d4c1419bf17794302f8c3/sdk/mediastoredata/src/protocol_serde/shape_get_object.rs#L47-L128
+    "ObjectNotFoundException",
+    // from testing long keys with minio
+    "XMinioInvalidObjectName",
+];
+
+trait S3ResultExt<T> {
+    fn convert_errors(self) -> anyhow::Result<T>;
+}
+
+impl<T, E> S3ResultExt<T> for Result<T, SdkError<E>>
 where
-    E: ProvideErrorMetadata,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
-    if err.code() == Some("KeyTooLongError") || err.code() == Some("XMinioInvalidObjectName") {
-        true
-    } else if let SdkError::ServiceError(err) = err {
-        err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
-    } else {
-        false
+    fn convert_errors(self) -> anyhow::Result<T> {
+        match self {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                if let Some(err_code) = err.code() {
+                    if NOT_FOUND_ERROR_CODES.iter().any(|&code| err_code == code) {
+                        return Err(super::PathNotFoundError.into());
+                    }
+                }
+
+                if let SdkError::ServiceError(err) = &err {
+                    if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
+                        return Err(super::PathNotFoundError.into());
+                    }
+                }
+
+                Err(err.into())
+            }
+        }
     }
 }
 
@@ -88,40 +121,31 @@ impl S3Backend {
             .key(path)
             .send()
             .await
+            .convert_errors()
         {
             Ok(_) => Ok(true),
-            Err(SdkError::ServiceError(err))
-                if matches!(err.err(), HeadObjectError::NotFound(_)) =>
-            {
-                Ok(false)
-            }
-            Err(err) if err_is_not_found(&err) => Ok(false),
-            Err(other) => Err(other.into()),
+            Err(err) if err.is::<super::PathNotFoundError>() => Ok(false),
+            Err(other) => Err(other),
         }
     }
 
     pub(super) async fn get_public_access(&self, path: &str) -> Result<bool, Error> {
-        match self
+        Ok(self
             .client
             .get_object_tagging()
             .bucket(&self.bucket)
             .key(path)
             .send()
             .await
-        {
-            Ok(tags) => Ok(tags
-                .tag_set()
-                .iter()
-                .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
-                .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE)),
-            Err(err) if err_is_not_found(&err) => Err(super::PathNotFoundError.into()),
-            Err(other) => Err(other.into()),
-        }
+            .convert_errors()?
+            .tag_set()
+            .iter()
+            .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
+            .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE))
     }
 
     pub(super) async fn set_public_access(&self, path: &str, public: bool) -> Result<(), Error> {
-        match self
-            .client
+        self.client
             .put_object_tagging()
             .bucket(&self.bucket)
             .key(path)
@@ -144,11 +168,8 @@ impl S3Backend {
             })
             .send()
             .await
-        {
-            Ok(_) => Ok(()),
-            Err(err) if err_is_not_found(&err) => Err(super::PathNotFoundError.into()),
-            Err(other) => Err(other.into()),
-        }
+            .convert_errors()
+            .map(|_| ())
     }
 
     pub(super) async fn get(
@@ -165,15 +186,7 @@ impl S3Backend {
             .set_range(range.map(|r| format!("bytes={}-{}", r.start(), r.end())))
             .send()
             .await
-            .map_err(|err| match err {
-                SdkError::ServiceError(err)
-                    if matches!(err.err(), GetObjectError::NoSuchKey(_)) =>
-                {
-                    super::PathNotFoundError.into()
-                }
-                err if err_is_not_found(&err) => super::PathNotFoundError.into(),
-                err => Error::from(err),
-            })?;
+            .convert_errors()?;
 
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
         content.reserve(
