@@ -270,11 +270,6 @@ impl Metadata {
         let mut all_rustdoc_args = self.rustdoc_args.clone();
         all_rustdoc_args.extend_from_slice(rustdoc_args);
 
-        if !self.rustc_args.is_empty() || !all_rustdoc_args.is_empty() {
-            cargo_args.push("-Z".into());
-            cargo_args.push("unstable-options".into());
-        }
-
         // Pass `RUSTFLAGS` and `RUSTDOCFLAGS` using `cargo --config`, which handles whitespace correctly.
         if !self.rustc_args.is_empty() {
             cargo_args.push("--config".into());
@@ -758,8 +753,6 @@ mod test_calculations {
             String::from("rustdoc"),
             "--lib".into(),
             "-Zrustdoc-map".into(),
-            "-Z".into(),
-            "unstable-options".into(),
             "--config".into(),
             r#"build.rustdocflags=["-Z", "unstable-options", "--static-root-path", "/", "--cap-lints", "warn"]"#.into(),
         ];
@@ -774,8 +767,6 @@ mod test_calculations {
             String::from("rustdoc"),
             "--lib".into(),
             "-Zrustdoc-map".into(),
-            "-Z".into(),
-            "unstable-options".into(),
             "--config".into(),
             "build.rustflags=[\"--cfg\", \"x\"]".into(),
             "-Zhost-config".into(),
