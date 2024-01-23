@@ -765,7 +765,7 @@ mod test_calculations {
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
-        // rustdocflags
+        // rustcflags
         let metadata = Metadata {
             rustc_args: vec!["--cfg".into(), "x".into()],
             ..Metadata::default()
@@ -778,6 +778,10 @@ mod test_calculations {
             "unstable-options".into(),
             "--config".into(),
             "build.rustflags=[\"--cfg\", \"x\"]".into(),
+            "-Zhost-config".into(),
+            "-Ztarget-applies-to-host".into(),
+            "--config".into(),
+            "host.rustflags=[\"--cfg\", \"x\"]".into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
