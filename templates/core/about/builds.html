@@ -30,6 +30,15 @@
 
     <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
     <p>
+        To recognize Docs.rs from your Rust code, you can test for the <code>docsrs</code> cfg, e.g.:
+        {% filter highlight(lang="rust") %}{% filter dedent(levels=3) -%}
+            #[cfg(docsrs)]
+            mod documentation;
+        {%- endfilter %}{% endfilter %}
+        The `docsrs` cfg only applies to the final rustdoc invocation (i.e. the crate currently
+        being documented). It does not apply to dependencies (including workspace ones).
+    </p>
+    <p>
         To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
         {% filter highlight(lang="rust") %}{% filter dedent(levels=3) -%}
             if std::env::var("DOCS_RS").is_ok() {
@@ -48,9 +57,9 @@
         You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
         {% filter highlight(lang="toml") %}{% filter dedent -%}
             [package.metadata.docs.rs]
-            rustc-args = ["--cfg", "docsrs"]
+            rustc-args = ["--cfg", "my_cfg"]
         {%- endfilter %}{% endfilter %}
-        Here, the compiler arguments are set so that <code>#[cfg(docsrs)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
+        Here, the compiler arguments are set so that <code>#[cfg(my_cfg)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
         This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
     </p>
 

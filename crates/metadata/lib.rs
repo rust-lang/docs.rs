@@ -267,7 +267,12 @@ impl Metadata {
             cargo_args.push("--no-default-features".into());
         }
 
-        let mut all_rustdoc_args = self.rustdoc_args.clone();
+        // Unconditionnaly set `--cfg docsrs` as it has become a de-facto way to
+        // distinguish docs.rs.
+        //
+        // See https://github.com/rust-lang/docs.rs/issues/2389.
+        let mut all_rustdoc_args = vec!["--cfg".into(), "docsrs".into()];
+        all_rustdoc_args.extend_from_slice(&self.rustdoc_args);
         all_rustdoc_args.extend_from_slice(rustdoc_args);
 
         // Pass `RUSTFLAGS` and `RUSTDOCFLAGS` using `cargo --config`, which handles whitespace correctly.
@@ -650,14 +655,20 @@ mod test_targets {
 mod test_calculations {
     use super::*;
 
-    fn default_cargo_args() -> Vec<String> {
-        vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()]
+    fn default_cargo_args(extra_args: &[String]) -> Vec<String> {
+        let mut args = vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
+        args.extend_from_slice(extra_args);
+        args.extend_from_slice(&[
+            "--config".into(),
+            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
+        ]);
+        args
     }
 
     #[test]
     fn test_defaults() {
         let metadata = Metadata::default();
-        assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args());
+        assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args(&[]));
         let env = metadata.environment_variables();
         assert_eq!(env.get("DOCS_RS").map(String::as_str), Some("1"));
         assert!(env.get("RUSTDOCFLAGS").is_none());
@@ -671,8 +682,7 @@ mod test_calculations {
             all_features: true,
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--all-features".into());
+        let expected_args = default_cargo_args(&["--all-features".into()]);
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // no default features
@@ -680,8 +690,7 @@ mod test_calculations {
             no_default_features: true,
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--no-default-features".into());
+        let expected_args = default_cargo_args(&["--no-default-features".into()]);
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // allow passing both even though it's nonsense; cargo will give an error anyway
@@ -690,9 +699,8 @@ mod test_calculations {
             no_default_features: true,
             ..Metadata::default()
         };
-        let mut expected_args = default_cargo_args();
-        expected_args.push("--all-features".into());
-        expected_args.push("--no-default-features".into());
+        let expected_args =
+            default_cargo_args(&["--all-features".into(), "--no-default-features".into()]);
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
         // explicit empty vec
@@ -706,6 +714,8 @@ mod test_calculations {
             "-Zrustdoc-map".into(),
             "--features".into(),
             String::new(),
+            "--config".into(),
+            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
@@ -720,6 +730,8 @@ mod test_calculations {
             "-Zrustdoc-map".into(),
             "--features".into(),
             "some_feature".into(),
+            "--config".into(),
+            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
@@ -734,6 +746,8 @@ mod test_calculations {
             "-Zrustdoc-map".into(),
             "--features".into(),
             "feature1 feature2".into(),
+            "--config".into(),
+            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
@@ -754,7 +768,7 @@ mod test_calculations {
             "--lib".into(),
             "-Zrustdoc-map".into(),
             "--config".into(),
-            r#"build.rustdocflags=["-Z", "unstable-options", "--static-root-path", "/", "--cap-lints", "warn"]"#.into(),
+            r#"build.rustdocflags=["--cfg", "docsrs", "-Z", "unstable-options", "--static-root-path", "/", "--cap-lints", "warn"]"#.into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
@@ -773,6 +787,8 @@ mod test_calculations {
             "-Ztarget-applies-to-host".into(),
             "--config".into(),
             "host.rustflags=[\"--cfg\", \"x\"]".into(),
+            "--config".into(),
+            "build.rustdocflags=[\"--cfg\", \"docsrs\"]".into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 
@@ -785,6 +801,8 @@ mod test_calculations {
             String::from("rustdoc"),
             "--lib".into(),
             "-Zrustdoc-map".into(),
+            "--config".into(),
+            "build.rustdocflags=[\"--cfg\", \"docsrs\"]".into(),
             "-Zbuild-std".into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
