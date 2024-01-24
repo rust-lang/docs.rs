@@ -130,11 +130,6 @@ ALTER SEQUENCE crates_id_seq OWNED BY crates.id;
 
 
 
-CREATE TABLE database_versions (
-    version bigint NOT NULL
-);
-
-
 
 CREATE TABLE doc_coverage (
     release_id integer NOT NULL,
@@ -385,11 +380,6 @@ ALTER TABLE ONLY crates
 
 ALTER TABLE ONLY crates
     ADD CONSTRAINT crates_pkey PRIMARY KEY (id);
-
-
-
-ALTER TABLE ONLY database_versions
-    ADD CONSTRAINT database_versions_pkey PRIMARY KEY (version);
 
 
 

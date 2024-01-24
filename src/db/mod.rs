@@ -39,12 +39,16 @@ pub async fn migrate(conn: &mut sqlx::PgConnection, target: Option<i64>) -> Resu
     .await?
     .is_some()
     {
-        let max_version: i64 = sqlx::query_scalar("SELECT max(version) FROM database_versions")
-            .fetch_one(&mut *conn)
-            .await?;
+        let max_version: Option<i64> =
+            sqlx::query_scalar("SELECT max(version) FROM database_versions")
+                .fetch_one(&mut *conn)
+                .await?;
 
-        if max_version != 39 {
-            anyhow::bail!("database_versions table has unexpected version");
+        if max_version != Some(39) {
+            anyhow::bail!(
+                "database_versions table has unexpected version: {:?}",
+                max_version
+            );
         }
 
         sqlx::query(
