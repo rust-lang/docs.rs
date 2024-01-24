@@ -5,7 +5,6 @@ DROP TABLE compression_rels CASCADE;
 DROP TABLE config CASCADE;
 DROP TABLE crate_priorities CASCADE;
 DROP TABLE crates CASCADE;
-DROP TABLE database_versions CASCADE;
 DROP TABLE doc_coverage CASCADE;
 DROP TABLE files CASCADE;
 DROP TABLE keyword_rels CASCADE;
