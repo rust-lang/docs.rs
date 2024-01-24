@@ -90,7 +90,7 @@ pub const fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
 #[cfg(test)]
 mod tests {
     const fn usable_as_const_() {
-        assert!(crate::svg(crate::Type::Solid, "cog").is_ok());
+        assert!(crate::svg(crate::Type::Solid, "gear").is_ok());
     }
     #[test]
     fn usable_as_const() {
@@ -98,7 +98,8 @@ mod tests {
     }
     #[test]
     fn it_works() {
-        assert!(crate::svg(crate::Type::Solid, "cog").is_ok());
-        assert!(crate::svg(crate::Type::Solid, "snuffleupigus").is_err());
+        assert!(crate::svg(crate::Type::Solid, "gear").is_ok());
+        assert!(crate::svg(crate::Type::Solid, "download").is_ok());
+        assert!(crate::svg(crate::Type::Solid, "giberich").is_err());
     }
 }
