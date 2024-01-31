@@ -34,7 +34,7 @@ clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "2.2.0", default-features = false, features = ["git", "git-performance", "parallel"], optional = true }
 rayon = "1.6.1"
 num_cpus = "1.15.0"
-crates-index-diff = { version = "22.0.0", features = [ "max-performance" ]}
+crates-index-diff = { version = "23.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.11", features = ["json", "gzip"] } 
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
@@ -47,7 +47,7 @@ anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
-comrak = { version = "0.20.0", default-features = false }
+comrak = { version = "0.21.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -58,7 +58,7 @@ hostname = "0.3.1"
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.21"
-strum = { version = "0.25.0", features = ["derive"] }
+strum = { version = "0.26.1", features = ["derive"] }
 lol_html = "1.0.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "5.1.0"
@@ -135,7 +135,7 @@ opt-level = 2
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.57.1", default-features = false }
+gix = { version = "0.58.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
