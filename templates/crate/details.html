@@ -106,6 +106,9 @@
                                             <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
                                                 {{ dep[0] }} {{ dep[1] }}
                                                 <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
+                                                {%- if dep[3] -%}
+                                                <i> optional </i>
+                                                {%- endif -%}
                                             </a>
                                         </li>
                                     {%- endfor -%}
