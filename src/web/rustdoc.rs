@@ -885,7 +885,7 @@ pub(crate) async fn static_asset_handler(
 
 #[cfg(test)]
 mod test {
-    use crate::{test::*, web::cache::CachePolicy, Config};
+    use crate::{test::*, utils::Dependency, web::cache::CachePolicy, Config};
     use anyhow::Context;
     use kuchikiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -2341,6 +2341,41 @@ mod test {
                 1,
             );
 
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_dependency_optional_suffix() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("testing")
+                .version("0.1.0")
+                .rustdoc_file("testing/index.html")
+                .add_dependency(
+                    Dependency::new("optional-dep".to_string(), "1.2.3".to_string())
+                        .set_optional(true),
+                )
+                .create()?;
+
+            let dom = kuchikiki::parse_html().one(
+                env.frontend()
+                    .get("/testing/0.1.0/testing/")
+                    .send()?
+                    .text()?,
+            );
+            assert!(dom
+                .select(r#"a[href="/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#)
+                .expect("shoud have optional dependency")
+                .any(|el| { el.text_contents().contains("optional") }));
+            let dom = kuchikiki::parse_html()
+                .one(env.frontend().get("/crate/testing/0.1.0").send()?.text()?);
+            assert!(dom
+                .select(
+                    r#"a[href="/crate/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#
+                )
+                .expect("shoud have optional dependency")
+                .any(|el| { el.text_contents().contains("optional") }));
             Ok(())
         })
     }
