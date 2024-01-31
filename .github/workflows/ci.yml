@@ -28,6 +28,9 @@ jobs:
           rustup override set stable
           rustup update stable
 
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -53,12 +56,7 @@ jobs:
         run: cargo install sqlx-cli --no-default-features --features postgres
 
       - name: run sqlx prepare --check
-        run: |
-          cargo sqlx prepare \
-            --database-url $DOCSRS_DATABASE_URL \
-            --workspace \
-            --check \
-            -- --all-targets --all-features
+        run: just sqlx-check
 
       - name: test reverse migrations
         run: |
@@ -229,7 +227,10 @@ jobs:
           rustup update stable
           rustup component add clippy
 
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
 
-      - run: cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
+      - run: just lint
