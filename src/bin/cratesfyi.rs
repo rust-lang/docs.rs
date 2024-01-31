@@ -655,8 +655,9 @@ enum LimitsSubcommand {
 
 impl LimitsSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
+        let pool = ctx.pool()?;
         ctx.runtime()?.block_on(async move {
-            let mut conn = ctx.pool()?.get_async().await?;
+            let mut conn = pool.get_async().await?;
 
             match self {
                 Self::Get { crate_name } => {
