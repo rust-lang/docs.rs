@@ -220,8 +220,8 @@ async fn initialize_package_in_database(
     }
 }
 
-/// Convert dependencies into Vec<(String, String, String)>
-fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> {
+/// Convert dependencies into Vec<(String, String, String, bool)>
+fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String, bool)> {
     pkg.dependencies
         .iter()
         .map(|dependency| {
@@ -231,8 +231,7 @@ fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String)> 
                 .kind
                 .clone()
                 .unwrap_or_else(|| "normal".to_string());
-
-            (name, version, kind)
+            (name, version, kind, dependency.optional)
         })
         .collect()
 }
