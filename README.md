@@ -207,6 +207,9 @@ cargo run -- build world
 # Builds a local package you have at <SOURCE> and adds it to the database.
 # The package does not have to be on crates.io.
 # The package must be on the local filesystem, git urls are not allowed.
+# Usually this command can be applied directly to a crate root
+# In certain scenarios it might be necessary to first package the respective
+# crate by using the `cargo package` command.
 cargo run -- build crate --local /path/to/source
 ```
 
