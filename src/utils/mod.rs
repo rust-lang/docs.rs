@@ -94,7 +94,7 @@ where
 /// The join-error will also be converted into an `anyhow::Error`.
 ///
 /// with standard `tokio::task::spawn_blocking`:
-/// ```ignore
+/// ```text,ignore
 /// let data = spawn_blocking(move || -> anyhow::Result<_> {
 ///     let data = get_the_data()?;
 ///     Ok(data)
@@ -104,7 +104,7 @@ where
 /// ```
 ///
 /// with this helper function:
-/// ```ignore
+/// ```text,ignore
 /// let data = spawn_blocking(move || {
 ///     let data = get_the_data()?;
 ///     Ok(data)
