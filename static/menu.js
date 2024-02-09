@@ -101,10 +101,10 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
 
         if (newMenu.querySelector("#releases-list")) {
             loadAjaxMenu(
-                newMenu, 
-                "releases-list", 
-                "release list", 
-                "releases", 
+                newMenu,
+                "releases-list",
+                "release list",
+                "releases",
                 innerPath,
             );
 
