@@ -469,7 +469,8 @@ pub(crate) async fn get_all_releases(
     let row = sqlx::query!(
         "SELECT
             crates.id AS crate_id,
-            releases.doc_targets
+            releases.doc_targets,
+            releases.target_name
         FROM crates
         INNER JOIN releases on crates.id = releases.crate_id
         WHERE crates.name = $1 and releases.version = $2;",
@@ -504,9 +505,9 @@ pub(crate) async fn get_all_releases(
         (target, inner.trim_end_matches('/'))
     };
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", params.name)
+        format!("{}/index.html", row.target_name)
     } else {
-        format!("{}/{inner_path}", params.name)
+        format!("{}/{inner_path}", row.target_name)
     };
 
     let target = if target.is_empty() {
@@ -517,7 +518,7 @@ pub(crate) async fn get_all_releases(
 
     let res = ReleaseList {
         releases,
-        target: target.to_string(),
+        target,
         inner_path,
         crate_name: params.name,
     };
@@ -1478,6 +1479,64 @@ mod tests {
                 "/x86_64-pc-windows-msvc/dummy/struct.A.html",
                 "/",
                 true,
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn check_crate_name_in_redirect() {
+        fn check_links(env: &TestEnvironment, url: &str, links: Vec<String>) {
+            let response = env.frontend().get(url).send().unwrap();
+            assert!(response.status().is_success());
+
+            let platform_links: Vec<String> = kuchikiki::parse_html()
+                .one(response.text().unwrap())
+                .select("li a")
+                .expect("invalid selector")
+                .map(|el| {
+                    let attributes = el.attributes.borrow();
+                    let url = attributes.get("href").expect("href").to_string();
+                    url
+                })
+                .collect();
+
+            assert_eq!(platform_links, links,);
+        }
+
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy-ba")
+                .version("0.4.0")
+                .rustdoc_file("dummy-ba/index.html")
+                .rustdoc_file("x86_64-unknown-linux-gnu/dummy-ba/index.html")
+                .add_target("x86_64-unknown-linux-gnu")
+                .create()?;
+            env.fake_release()
+                .name("dummy-ba")
+                .version("0.5.0")
+                .rustdoc_file("dummy-ba/index.html")
+                .rustdoc_file("x86_64-unknown-linux-gnu/dummy-ba/index.html")
+                .add_target("x86_64-unknown-linux-gnu")
+                .create()?;
+
+            check_links(
+                env,
+                "/crate/dummy-ba/latest/menus/releases/dummy_ba/index.html",
+                vec![
+                    "/crate/dummy-ba/0.5.0/target-redirect/dummy_ba/index.html".to_string(),
+                    "/crate/dummy-ba/0.4.0/target-redirect/dummy_ba/index.html".to_string(),
+                ],
+            );
+
+            check_links(
+                env,
+                "/crate/dummy-ba/latest/menus/releases/x86_64-unknown-linux-gnu/dummy_ba/index.html",
+                vec![
+                    "/crate/dummy-ba/0.5.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/index.html".to_string(),
+                    "/crate/dummy-ba/0.4.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/index.html".to_string(),
+                ],
             );
 
             Ok(())
