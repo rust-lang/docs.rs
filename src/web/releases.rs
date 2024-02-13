@@ -49,9 +49,7 @@ pub struct Release {
     rustdoc_status: bool,
     pub(crate) build_time: DateTime<Utc>,
     stars: i32,
-    yanked: bool,
-    is_latest_version: bool,
-    all_versions_yanked: Option<bool>,
+    has_unyanked_releases: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -92,9 +90,7 @@ pub(crate) async fn get_releases(
             releases.target_name,
             releases.rustdoc_status,
             builds.build_time,
-            repositories.stars,
-            releases.yanked,
-            crates.latest_version_id = releases.id AS \"is_latest_version!\"
+            repositories.stars
         FROM crates
         {1}
         INNER JOIN builds ON releases.id = builds.rid
@@ -126,9 +122,7 @@ pub(crate) async fn get_releases(
             rustdoc_status: row.get(4),
             build_time: row.get(5),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
-            yanked: row.get(7),
-            is_latest_version: row.get(8),
-            all_versions_yanked: None,
+            has_unyanked_releases: None,
         })
         .try_collect()
         .await?)
@@ -240,7 +234,7 @@ async fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let crates: HashMap<String, Vec<Release>> = sqlx::query!(
+    let crates: HashMap<String, Release> = sqlx::query!(
         r#"SELECT
                crates.name,
                releases.version,
@@ -249,11 +243,16 @@ async fn get_search_results(
                releases.target_name,
                releases.rustdoc_status,
                repositories.stars as "stars?",
-               releases.yanked,
-               crates.latest_version_id = releases.id AS "is_latest_version!"
+               EXISTS (
+                   SELECT 1
+                   FROM releases AS all_releases
+                   WHERE
+                       all_releases.crate_id = crates.id AND
+                       all_releases.yanked = false
+               ) AS has_unyanked_releases
 
            FROM crates
-           INNER JOIN releases ON crates.id = releases.crate_id
+           INNER JOIN releases ON crates.latest_version_id = releases.id
            INNER JOIN builds ON releases.id = builds.rid
            LEFT JOIN repositories ON releases.repository_id = repositories.id
 
@@ -261,40 +260,23 @@ async fn get_search_results(
         &names[..],
     )
     .fetch(&mut *conn)
-    .try_fold(HashMap::new(), |mut acc: HashMap<_, Vec<_>>, row| {
-        acc.entry(row.name.clone()).or_default().push(Release {
-            name: row.name,
-            version: row.version,
-            description: row.description,
-            build_time: row.build_time,
-            target_name: Some(row.target_name),
-            rustdoc_status: row.rustdoc_status,
-            stars: row.stars.unwrap_or(0),
-            yanked: row.yanked,
-            is_latest_version: row.is_latest_version,
-            all_versions_yanked: None,
-        });
-
-        async move { Ok(acc) }
+    .map_ok(|row| {
+        (
+            row.name.clone(),
+            Release {
+                name: row.name,
+                version: row.version,
+                description: row.description,
+                build_time: row.build_time,
+                target_name: Some(row.target_name),
+                rustdoc_status: row.rustdoc_status,
+                stars: row.stars.unwrap_or(0),
+                has_unyanked_releases: row.has_unyanked_releases,
+            },
+        )
     })
+    .try_collect()
     .await?;
-
-    let crates: HashMap<String, Release> = crates
-        .into_iter()
-        .map(|(name, releases)| {
-            let mut release = releases
-                .iter()
-                .find(|release| release.is_latest_version)
-                .cloned()
-                .unwrap_or(releases[0].clone());
-
-            if releases.iter().all(|release| release.yanked) {
-                release.all_versions_yanked = Some(true);
-            }
-
-            (name, release)
-        })
-        .collect();
 
     Ok(SearchResult {
         // start with the original names from crates.io to keep the original ranking,
