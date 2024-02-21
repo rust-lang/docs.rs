@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             releases.id,\n             releases.version,\n             COALESCE(builds.build_status, 'failure') as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.target_name\n         FROM releases\n         LEFT JOIN LATERAL (\n            SELECT build_status FROM builds\n            WHERE builds.rid = releases.id\n            ORDER BY builds.build_time\n            DESC LIMIT 1\n         ) AS builds ON true\n         WHERE\n             releases.crate_id = $1",
+  "query": "SELECT\n             releases.id,\n             releases.version,\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.target_name\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.id\n         WHERE\n             releases.crate_id = $1",
   "describe": {
     "columns": [
       {
@@ -58,12 +58,12 @@
     "nullable": [
       false,
       false,
-      null,
+      true,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "9a6a50ddbc1d07ef5648726f135eeca83ec922c4e9da07516b5f963b3551f4ee"
+  "hash": "e8f8c3649576bcba99393a2e78c9f892efba0a451bb14fff77876ca250b0fab1"
 }

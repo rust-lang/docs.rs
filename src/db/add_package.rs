@@ -144,6 +144,17 @@ pub async fn update_latest_version_id(conn: &mut sqlx::PgConnection, crate_id: i
     Ok(())
 }
 
+async fn crate_id_from_release_id(conn: &mut sqlx::PgConnection, release_id: i32) -> Result<i32> {
+    Ok(sqlx::query_scalar!(
+        "SELECT crate_id
+         FROM releases
+         WHERE id = $1",
+        release_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?)
+}
+
 pub(crate) async fn add_doc_coverage(
     conn: &mut sqlx::PgConnection,
     release_id: i32,
@@ -183,7 +194,8 @@ pub(crate) async fn add_build_into_database(
 ) -> Result<i32> {
     debug!("Adding build into database");
     let hostname = hostname::get()?;
-    Ok(sqlx::query_scalar!(
+
+    let build_id = sqlx::query_scalar!(
         "INSERT INTO builds (rid, rustc_version, docsrs_version, build_status, build_server)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id",
@@ -194,7 +206,14 @@ pub(crate) async fn add_build_into_database(
         hostname.to_str().unwrap_or(""),
     )
     .fetch_one(&mut *conn)
-    .await?)
+    .await?;
+
+    let crate_id = crate_id_from_release_id(&mut *conn, release_id).await?;
+    update_latest_version_id(&mut *conn, crate_id)
+        .await
+        .context("couldn't update latest version id")?;
+
+    Ok(build_id)
 }
 
 async fn initialize_package_in_database(
