@@ -1,7 +1,7 @@
 //! rustdoc handler
 
 use crate::{
-    db::{types::BuildStatus, Pool},
+    db::Pool,
     storage::rustdoc_archive_path,
     utils,
     web::{
@@ -550,7 +550,7 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     // Find the path of the latest version for the `Go to latest` and `Permalink` links
     let mut current_target = String::new();
-    let target_redirect = if latest_release.build_status == BuildStatus::Success {
+    let target_redirect = if latest_release.build_status.is_success() {
         let target = if target.is_empty() {
             current_target = krate.metadata.default_target.clone();
             &krate.metadata.default_target

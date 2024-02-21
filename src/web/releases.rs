@@ -77,9 +77,9 @@ pub(crate) async fn get_releases(
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
-        Order::ReleaseTime => ("builds.build_time", false),
+        Order::ReleaseTime => ("release_build_status.last_build_time", false),
         Order::GithubStars => ("repositories.stars", false),
-        Order::RecentFailures => ("builds.build_time", true),
+        Order::RecentFailures => ("release_build_status.last_build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
     };
 
@@ -89,14 +89,14 @@ pub(crate) async fn get_releases(
             releases.description,
             releases.target_name,
             releases.rustdoc_status,
-            builds.build_time,
+            release_build_status.last_build_time AS build_time,
             repositories.stars
         FROM crates
         {1}
-        INNER JOIN builds ON releases.id = builds.rid
+        INNER JOIN release_build_status ON releases.id = release_build_status.id
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
-            ((NOT $3) OR (builds.build_status != 'success' AND releases.is_library = TRUE))
+            ((NOT $3) OR (release_build_status.build_status = 'failure' AND releases.is_library = TRUE))
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC
@@ -686,18 +686,16 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
            release_stats AS (
                SELECT
                    release_time::date AS date_,
-                   COUNT(*) AS counts,
+                   SUM(CAST(
+                       release_build_status.build_status != 'in_progress' AS INT
+                   )) AS counts,
                    SUM(CAST((
-                       is_library = TRUE AND (
-                           SELECT builds.build_status
-                           FROM builds
-                           WHERE builds.rid = releases.id
-                           ORDER BY builds.build_time DESC
-                           LIMIT 1
-                       ) != 'success'
+                       is_library = TRUE AND
+                       release_build_status.build_status = 'failure'
                    ) AS INT)) AS failures
-               FROM
-                   releases
+               FROM releases
+               INNER JOIN release_build_status ON releases.id = release_build_status.id
+
                WHERE
                    release_time >= CURRENT_DATE - INTERVAL '30 days' AND
                    release_time < CURRENT_DATE

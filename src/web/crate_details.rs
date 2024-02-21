@@ -90,6 +90,17 @@ where
 pub(crate) struct Release {
     pub id: i32,
     pub version: semver::Version,
+    /// Aggregated build status of the release.
+    /// * no builds -> build In progress
+    /// * any build is successful -> Success
+    ///   -> even with failed or in-progress builds we have docs to show
+    /// * any build is failed -> Failure
+    ///   -> we can only have Failure or InProgress here, so the Failure is the
+    ///      important part on this aggregation level.
+    /// * the rest is all builds are in-progress -> InProgress
+    ///   -> if we have any builds, and the previous conditions don't match, we end
+    ///      up here, but we still check.
+    /// calculated in a database view : `release_build_status`
     pub build_status: BuildStatus,
     pub yanked: bool,
     pub is_library: bool,
@@ -132,8 +143,10 @@ impl CrateDetails {
                 releases.readme,
                 releases.description_long,
                 releases.release_time,
-                COALESCE(builds.build_status, 'failure') as "build_status!: BuildStatus",
+                release_build_status.build_status as "build_status!: BuildStatus",
                 (
+                    -- this is the latest build ID that generated content
+                    -- it's used to invalidate some blob storage related caches.
                     SELECT id
                     FROM builds
                     WHERE
@@ -160,21 +173,27 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
-                builds.rustc_version as "rustc_version?",
+                (
+                    -- we're using the rustc version here to set the correct CSS file
+                    -- in the metadata.
+                    -- So we're only interested in successful builds here.
+                    SELECT rustc_version
+                    FROM builds
+                    WHERE
+                        builds.rid = releases.id AND
+                        builds.build_status = 'success'
+                    ORDER BY builds.build_time
+                    DESC LIMIT 1
+                ) as "rustc_version?",
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
                 doc_coverage.items_with_examples
             FROM releases
+            INNER JOIN release_build_status ON releases.id = release_build_status.id
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
-            LEFT JOIN LATERAL (
-                SELECT * FROM builds
-                WHERE builds.rid = releases.id
-                ORDER BY builds.build_time
-                DESC LIMIT 1
-            ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2;"#,
             name,
             version.to_string(),
@@ -333,13 +352,16 @@ impl CrateDetails {
 }
 
 pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
-    if let Some(release) = releases
-        .iter()
-        .find(|release| release.version.pre.is_empty() && !release.yanked)
-    {
+    if let Some(release) = releases.iter().find(|release| {
+        release.version.pre.is_empty()
+            && !release.yanked
+            && release.build_status != BuildStatus::InProgress
+    }) {
         Some(release)
     } else {
-        releases.first()
+        releases
+            .iter()
+            .find(|release| release.build_status != BuildStatus::InProgress)
     }
 }
 
@@ -352,46 +374,41 @@ pub(crate) async fn releases_for_crate(
         r#"SELECT
              releases.id,
              releases.version,
-             COALESCE(builds.build_status, 'failure') as "build_status!: BuildStatus",
+             release_build_status.build_status as "build_status!: BuildStatus",
              releases.yanked,
              releases.is_library,
              releases.rustdoc_status,
              releases.target_name
          FROM releases
-         LEFT JOIN LATERAL (
-            SELECT build_status FROM builds
-            WHERE builds.rid = releases.id
-            ORDER BY builds.build_time
-            DESC LIMIT 1
-         ) AS builds ON true
+         INNER JOIN release_build_status ON releases.id = release_build_status.id
          WHERE
              releases.crate_id = $1"#,
         crate_id,
     )
     .fetch(&mut *conn)
     .try_filter_map(|row| async move {
-        Ok(
-            match semver::Version::parse(&row.version).with_context(|| {
-                format!(
-                    "invalid semver in database for crate {crate_id}: {}",
-                    row.version
-                )
-            }) {
-                Ok(semversion) => Some(Release {
-                    id: row.id,
-                    version: semversion,
-                    build_status: row.build_status,
-                    yanked: row.yanked,
-                    is_library: row.is_library,
-                    rustdoc_status: row.rustdoc_status,
-                    target_name: row.target_name,
-                }),
-                Err(err) => {
-                    report_error(&err);
-                    None
-                }
-            },
-        )
+        let semversion = match semver::Version::parse(&row.version).with_context(|| {
+            format!(
+                "invalid semver in database for crate {crate_id}: {}",
+                row.version
+            )
+        }) {
+            Ok(semver) => semver,
+            Err(err) => {
+                report_error(&err);
+                return Ok(None);
+            }
+        };
+
+        Ok(Some(Release {
+            id: row.id,
+            version: semversion,
+            build_status: row.build_status,
+            yanked: row.yanked,
+            is_library: row.is_library,
+            rustdoc_status: row.rustdoc_status,
+            target_name: row.target_name,
+        }))
     })
     .try_collect()
     .await?;
@@ -674,16 +691,45 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry_api::CrateOwner;
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
         FakeBuild, TestDatabase, TestEnvironment,
     };
+    use crate::{db::types::BuildStatus, registry_api::CrateOwner};
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use semver::Version;
     use std::collections::HashMap;
+
+    async fn release_build_status(
+        conn: &mut sqlx::PgConnection,
+        name: &str,
+        version: &str,
+    ) -> BuildStatus {
+        let status = sqlx::query_scalar!(
+            r#"
+            SELECT build_status as "build_status!: BuildStatus"
+            FROM crates
+            INNER JOIN releases ON crates.id = releases.crate_id
+            INNER JOIN release_build_status ON releases.id = release_build_status.id
+            WHERE crates.name = $1 AND releases.version = $2"#,
+            name,
+            version
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            crate_details(&mut *conn, name, version, None)
+                .await
+                .build_status,
+            status
+        );
+
+        status
+    }
 
     async fn crate_details(
         conn: &mut sqlx::PgConnection,
@@ -1745,6 +1791,105 @@ mod tests {
                     .send()?
                     .status(),
                 StatusCode::FOUND
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_build_status_no_builds() {
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .create_async()
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query!("DELETE FROM builds")
+                .execute(&mut *conn)
+                .await?;
+
+            assert_eq!(
+                release_build_status(&mut conn, "dummy", "0.1.0").await,
+                BuildStatus::InProgress
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_build_status_successful() {
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::Success),
+                    FakeBuild::default().build_status(BuildStatus::Failure),
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
+                ])
+                .create_async()
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+
+            assert_eq!(
+                release_build_status(&mut conn, "dummy", "0.1.0").await,
+                BuildStatus::Success
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_build_status_failed() {
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::Failure),
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
+                ])
+                .create_async()
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+
+            assert_eq!(
+                release_build_status(&mut conn, "dummy", "0.1.0").await,
+                BuildStatus::Failure
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_build_status_in_progress() {
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                ])
+                .create_async()
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+
+            assert_eq!(
+                release_build_status(&mut conn, "dummy", "0.1.0").await,
+                BuildStatus::InProgress
             );
 
             Ok(())
