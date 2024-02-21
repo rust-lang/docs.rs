@@ -18,12 +18,6 @@ impl Feature {
     }
 }
 
-impl sqlx::postgres::PgHasArrayType for Feature {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("_feature")
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "build_status", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
@@ -36,12 +30,6 @@ pub(crate) enum BuildStatus {
 impl BuildStatus {
     pub(crate) fn is_success(&self) -> bool {
         matches!(self, BuildStatus::Success)
-    }
-}
-
-impl sqlx::postgres::PgHasArrayType for BuildStatus {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("_build_status")
     }
 }
 

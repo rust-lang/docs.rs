@@ -8,7 +8,7 @@
         "name": "features?: Vec<DbFeature>",
         "type_info": {
           "Custom": {
-            "name": "_feature",
+            "name": "feature[]",
             "kind": {
               "Array": {
                 "Custom": {
