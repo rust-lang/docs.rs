@@ -40,7 +40,7 @@ semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
 r2d2 = "0.8"
 r2d2_postgres = "0.18"
-sqlx = { version = "0.7", features = [ "runtime-tokio", "postgres", "chrono" ] }
+sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "chrono" ] }
 url = { version = "2.1.1", features = ["serde"] }
 docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
@@ -67,7 +67,7 @@ zip = {version = "1.1.4", default-features = false, features = ["bzip2"]}
 bzip2 = "0.4.4"
 getrandom = "0.2.1"
 itertools = { version = "0.13.0", optional = true}
-rusqlite = { version = "0.30.0", features = ["bundled"] }
+rusqlite = { version = "0.31.0", features = ["bundled"] }
 hex = "0.4.3"
 
 # Async

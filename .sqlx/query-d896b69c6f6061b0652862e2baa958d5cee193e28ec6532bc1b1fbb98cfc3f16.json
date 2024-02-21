@@ -35,7 +35,7 @@
         "Varchar",
         {
           "Custom": {
-            "name": "_feature",
+            "name": "feature[]",
             "kind": {
               "Array": {
                 "Custom": {

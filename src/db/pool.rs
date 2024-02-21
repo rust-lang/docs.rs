@@ -215,10 +215,7 @@ where
         self,
         sql: &'q str,
         parameters: &'e [<Self::Database as sqlx::Database>::TypeInfo],
-    ) -> BoxFuture<
-        'e,
-        Result<<Self::Database as sqlx::database::HasStatement<'q>>::Statement, sqlx::Error>,
-    > {
+    ) -> BoxFuture<'e, Result<<Self::Database as sqlx::Database>::Statement<'q>, sqlx::Error>> {
         self.async_pool.prepare_with(sql, parameters)
     }
 
