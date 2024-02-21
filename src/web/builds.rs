@@ -85,7 +85,28 @@ pub(crate) async fn build_list_json_handler(
     Ok((
         Extension(CachePolicy::NoStoreMustRevalidate),
         [(ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
-        Json(get_builds(&mut conn, &name, &version).await?),
+        Json(
+            get_builds(&mut conn, &name, &version)
+                .await?
+                .iter()
+                .filter_map(|build| {
+                    // for backwards compatibility in this API, we
+                    // * filter out in-progress builds
+                    // * convert the build status to a boolean
+                    if build.build_status != BuildStatus::InProgress {
+                        Some(serde_json::json!({
+                            "id": build.id,
+                            "rustc_version": build.rustc_version,
+                            "docsrs_version": build.docsrs_version,
+                            "build_status": build.build_status.is_success(),
+                            "build_time": build.build_time,
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
+        ),
     )
         .into_response())
 }
@@ -117,6 +138,7 @@ async fn get_builds(
 
 #[cfg(test)]
 mod tests {
+    use super::BuildStatus;
     use crate::{
         test::{assert_cache_control, wrapper, FakeBuild},
         web::cache::CachePolicy,
@@ -183,12 +205,18 @@ mod tests {
                     FakeBuild::default()
                         .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0"),
+                    FakeBuild::default()
+                        .build_status(BuildStatus::InProgress)
+                        .rustc_version("rustc (blabla 2022-01-01)")
+                        .docsrs_version("docs.rs 4.0.0"),
                 ])
                 .create()?;
 
             let response = env.frontend().get("/crate/foo/0.1.0/builds.json").send()?;
             assert_cache_control(&response, CachePolicy::NoStoreMustRevalidate, &env.config());
             let value: serde_json::Value = serde_json::from_str(&response.text()?)?;
+
+            assert_eq!(value.as_array().unwrap().len(), 3);
 
             assert_eq!(value.pointer("/0/build_status"), Some(&true.into()));
             assert_eq!(
