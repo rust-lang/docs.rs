@@ -4,13 +4,14 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         file::File,
-        MetaData, ReqVersion,
+        MetaData,
     },
     AsyncStorage, Config,
 };
 use anyhow::Context as _;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
+use semver::Version;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -36,13 +37,12 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn build_details_handler(
-    Path((name, version, id)): Path<(String, ReqVersion, String)>,
+    Path((name, version, id)): Path<(String, Version, String)>,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let id: i32 = id.parse().map_err(|_| AxumNope::BuildNotFound)?;
-    let version = version.assume_exact()?;
 
     let row = sqlx::query!(
         "SELECT
