@@ -80,14 +80,6 @@ pub(crate) enum ReqVersion {
 }
 
 impl ReqVersion {
-    fn assume_exact(self) -> Result<Version, AxumNope> {
-        if let ReqVersion::Exact(version) = self {
-            Ok(version)
-        } else {
-            Err(AxumNope::VersionNotFound)
-        }
-    }
-
     pub(crate) fn is_latest(&self) -> bool {
         matches!(self, ReqVersion::Latest)
     }
