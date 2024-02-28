@@ -106,7 +106,7 @@ jobs:
 
       - name: run slow tests
         env:
-          DOCSRS_INCLUDE_DEFAULT_TARGETS: false
+          DOCSRS_INCLUDE_DEFAULT_TARGETS: true
         run: |
           cargo test --locked -- --ignored --test-threads=1
 

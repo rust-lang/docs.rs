@@ -478,6 +478,7 @@ impl RustwideBuilder {
                     }
 
                     let mut algs = HashSet::new();
+                    let mut target_build_logs = HashMap::new();
                     if has_docs {
                         debug!("adding documentation for the default target to the database");
                         self.copy_docs(
@@ -493,7 +494,7 @@ impl RustwideBuilder {
                         // Limit the number of targets so that no one can try to build all 200000 possible targets
                         for target in other_targets.into_iter().take(limits.targets()) {
                             debug!("building package {} {} for {}", name, version, target);
-                            self.build_target(
+                            let target_res = self.build_target(
                                 target,
                                 build,
                                 &limits,
@@ -501,6 +502,7 @@ impl RustwideBuilder {
                                 &mut successful_targets,
                                 &metadata,
                             )?;
+                            target_build_logs.insert(target, target_res.build_log);
                         }
                         let (_, new_alg) = self.runtime.block_on(add_path_into_remote_archive(
                             &self.async_storage,
@@ -588,6 +590,10 @@ impl RustwideBuilder {
                     ))?;
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
                     self.storage.store_one(build_log_path, res.build_log)?;
+                    for (target, log) in target_build_logs {
+                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
+                        self.storage.store_one(build_log_path, log)?;
+                    }
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
                     if !is_local {
@@ -640,7 +646,7 @@ impl RustwideBuilder {
         local_storage: &Path,
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
-    ) -> Result<()> {
+    ) -> Result<FullBuildResult> {
         let target_res = self.execute_build(target, false, build, limits, metadata, false)?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
@@ -652,7 +658,7 @@ impl RustwideBuilder {
                 successful_targets.push(target.to_string());
             }
         }
-        Ok(())
+        Ok(target_res)
     }
 
     fn get_coverage(
@@ -981,17 +987,19 @@ mod tests {
 
             // check release record in the db (default and other targets)
             let mut conn = env.db().conn();
-            let rows = conn
-                .query(
+            let row = conn
+                .query_one(
                     "SELECT
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
                         r.archive_storage,
-                        cov.total_items
+                        cov.total_items,
+                        b.id as build_id
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
+                        INNER JOIN builds as b ON r.id = b.rid
                         LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
                     WHERE
                         c.name = $1 AND
@@ -999,7 +1007,6 @@ mod tests {
                     &[&crate_, &version],
                 )
                 .unwrap();
-            let row = rows.first().unwrap();
 
             assert!(row.get::<_, bool>("rustdoc_status"));
             assert_eq!(row.get::<_, String>("default_target"), default_target);
@@ -1086,6 +1093,13 @@ mod tests {
 
                     assert!(target_docs_present);
                     assert_success(&target_url, web)?;
+
+                    assert!(storage
+                        .exists(&format!(
+                            "build-logs/{}/{target}.txt",
+                            row.get::<_, i32>("build_id")
+                        ))
+                        .unwrap());
                 }
             }
 

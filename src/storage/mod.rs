@@ -6,18 +6,20 @@ mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
-use crate::error::Result;
-use crate::web::metrics::RenderingTimesRecorder;
-use crate::{db::Pool, utils::spawn_blocking, Config, InstanceMetrics};
+use crate::{
+    db::Pool, error::Result, utils::spawn_blocking, web::metrics::RenderingTimesRecorder, Config,
+    InstanceMetrics,
+};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
+use futures_util::stream::BoxStream;
 use path_slash::PathExt;
-use std::io::BufReader;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
-    fmt, fs, io,
+    fmt, fs,
+    io::{self, BufReader},
     ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
@@ -558,6 +560,16 @@ impl AsyncStorage {
         }
     }
 
+    pub(super) async fn list_prefix<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> BoxStream<'a, Result<String>> {
+        match &self.backend {
+            StorageBackend::Database(db) => Box::pin(db.list_prefix(prefix).await),
+            StorageBackend::S3(s3) => Box::pin(s3.list_prefix(prefix).await),
+        }
+    }
+
     pub(crate) async fn delete_prefix(&self, prefix: &str) -> Result<()> {
         match &self.backend {
             StorageBackend::Database(db) => db.delete_prefix(prefix).await,
@@ -750,6 +762,22 @@ impl Storage {
         content: impl Into<Vec<u8>>,
     ) -> Result<CompressionAlgorithm> {
         self.runtime.block_on(self.inner.store_one(path, content))
+    }
+
+    /// sync wrapper for the list_prefix function
+    /// purely for testing purposes since it collects all files into a Vec.
+    #[cfg(test)]
+    pub(crate) fn list_prefix(&self, prefix: &str) -> impl Iterator<Item = Result<String>> {
+        use futures_util::stream::StreamExt;
+        self.runtime
+            .block_on(async {
+                self.inner
+                    .list_prefix(prefix)
+                    .await
+                    .collect::<Vec<_>>()
+                    .await
+            })
+            .into_iter()
     }
 
     pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
@@ -960,6 +988,37 @@ mod backend_tests {
                 .downcast_ref::<PathNotFoundError>()
                 .is_some());
         }
+
+        Ok(())
+    }
+
+    fn test_list_prefix(storage: &Storage) -> Result<()> {
+        static FILENAMES: &[&str] = &["baz.txt", "some/bar.txt"];
+
+        storage.store_blobs(
+            FILENAMES
+                .iter()
+                .map(|&filename| Blob {
+                    path: filename.into(),
+                    mime: "text/plain".into(),
+                    date_updated: Utc::now(),
+                    compression: None,
+                    content: b"test content\n".to_vec(),
+                })
+                .collect(),
+        )?;
+
+        assert_eq!(
+            storage.list_prefix("").collect::<Result<Vec<String>>>()?,
+            FILENAMES
+        );
+
+        assert_eq!(
+            storage
+                .list_prefix("some/")
+                .collect::<Result<Vec<String>>>()?,
+            &["some/bar.txt"]
+        );
 
         Ok(())
     }
@@ -1321,6 +1380,7 @@ mod backend_tests {
             test_get_range,
             test_get_too_big,
             test_too_long_filename,
+            test_list_prefix,
             test_delete_prefix,
             test_delete_prefix_without_matches,
             test_delete_percent,
