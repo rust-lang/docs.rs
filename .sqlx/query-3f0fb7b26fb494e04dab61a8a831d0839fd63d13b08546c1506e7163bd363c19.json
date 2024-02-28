@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            crates.id AS crate_id,\n            releases.doc_targets,\n            releases.target_name\n        FROM crates\n        INNER JOIN releases on crates.id = releases.crate_id\n        WHERE crates.name = $1 and releases.version = $2;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "doc_targets",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 2,
+        "name": "target_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3f0fb7b26fb494e04dab61a8a831d0839fd63d13b08546c1506e7163bd363c19"
+}

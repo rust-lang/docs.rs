@@ -72,7 +72,7 @@ pub(super) async fn instance_metrics_handler(
 /// since we need the route-name.
 ///
 /// Can be used like:
-/// ```ignore
+/// ```text,ignore
 /// get(handler).route_layer(middleware::from_fn(|request, next| async {
 ///     request_recorder(request, next, Some("static resource")).await
 /// }))

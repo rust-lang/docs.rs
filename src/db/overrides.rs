@@ -1,6 +1,5 @@
 use crate::error::Result;
 use futures_util::stream::TryStreamExt;
-use sqlx::{postgres::PgRow, FromRow, Row};
 use std::time::Duration;
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
@@ -10,42 +9,33 @@ pub struct Overrides {
     pub timeout: Option<Duration>,
 }
 
-impl FromRow<'_, PgRow> for Overrides {
-    fn from_row(row: &PgRow) -> sqlx::Result<Self> {
-        Ok(Self {
-            memory: row
-                .get::<Option<i64>, _>("max_memory_bytes")
-                .map(|i| i as usize),
-            targets: row.get::<Option<i32>, _>("max_targets").map(|i| i as usize),
-            timeout: row
-                .get::<Option<i32>, _>("timeout_seconds")
-                .map(|i| Duration::from_secs(i as u64)),
-        })
-    }
+macro_rules! row_to_overrides {
+    ($row:expr) => {{
+        Overrides {
+            memory: $row.max_memory_bytes.map(|i| i as usize),
+            targets: $row.max_targets.map(|i| i as usize),
+            timeout: $row.timeout_seconds.map(|i| Duration::from_secs(i as u64)),
+        }
+    }};
 }
 
 impl Overrides {
     pub async fn all(conn: &mut sqlx::PgConnection) -> Result<Vec<(String, Self)>> {
-        Ok(sqlx::query("SELECT * FROM sandbox_overrides")
+        Ok(sqlx::query!("SELECT * FROM sandbox_overrides")
             .fetch(conn)
-            .map_ok(|row| {
-                (
-                    row.get("crate_name"),
-                    Overrides::from_row(&row)
-                        .expect("this is fine because we never return Err(_) in from_row"),
-                )
-            })
+            .map_ok(|row| (row.crate_name, row_to_overrides!(row)))
             .try_collect()
             .await?)
     }
 
     pub async fn for_crate(conn: &mut sqlx::PgConnection, krate: &str) -> Result<Option<Self>> {
-        Ok(
-            sqlx::query_as("SELECT * FROM sandbox_overrides WHERE crate_name = $1")
-                .bind(krate)
-                .fetch_optional(conn)
-                .await?,
+        Ok(sqlx::query!(
+            "SELECT * FROM sandbox_overrides WHERE crate_name = $1",
+            krate
         )
+        .fetch_optional(conn)
+        .await?
+        .map(|row| row_to_overrides!(row)))
     }
 
     pub async fn save(conn: &mut sqlx::PgConnection, krate: &str, overrides: Self) -> Result<()> {

@@ -130,6 +130,25 @@ pub(crate) struct Dependency {
     pub(crate) optional: bool,
 }
 
+impl Dependency {
+    #[cfg(test)]
+    pub fn new(name: String, req: String) -> Dependency {
+        Dependency {
+            name,
+            req,
+            kind: None,
+            rename: None,
+            optional: false,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_optional(mut self, optional: bool) -> Self {
+        self.optional = optional;
+        self
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct DeserializedMetadata {
     packages: Vec<Package>,

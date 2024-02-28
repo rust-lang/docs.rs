@@ -115,6 +115,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn add_dependency(mut self, dependency: Dependency) -> Self {
+        self.package.dependencies.push(dependency);
+        self
+    }
+
     pub(crate) fn release_time(mut self, new: DateTime<Utc>) -> Self {
         self.registry_release_data.release_time = new;
         self

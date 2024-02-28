@@ -7,6 +7,9 @@ ignore = [
     # https://github.com/rust-lang/docs.rs/issues/2074
 
     "RUSTSEC-2023-0071", # potential key recovery through timing sidechannels
+
+    "RUSTSEC-2024-0013", # Memory corruption, denial of service, and arbitrary code execution in libgit2
+    # https://github.com/rust-lang/docs.rs/issues/2414
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")

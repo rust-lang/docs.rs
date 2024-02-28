@@ -10,7 +10,6 @@ use crate::{
 use anyhow::anyhow;
 use axum::{extract::Path, response::IntoResponse};
 use serde::Serialize;
-use sqlx::Row as _;
 use std::collections::{HashMap, VecDeque};
 
 const DEFAULT_NAME: &str = "default";
@@ -57,13 +56,15 @@ pub(crate) async fn build_features_handler(
 
     let metadata = MetaData::from_crate(&mut conn, &name, &version, &version_or_latest).await?;
 
-    let row = sqlx::query(
-        "SELECT releases.features FROM releases
-         INNER JOIN crates ON crates.id = releases.crate_id
-         WHERE crates.name = $1 AND releases.version = $2",
+    let row = sqlx::query!(
+        r#"
+        SELECT releases.features as "features?: Vec<Feature>"
+        FROM releases
+        INNER JOIN crates ON crates.id = releases.crate_id
+        WHERE crates.name = $1 AND releases.version = $2"#,
+        name,
+        version
     )
-    .bind(&name)
-    .bind(&version)
     .fetch_optional(&mut *conn)
     .await?
     .ok_or_else(|| anyhow!("missing release"))?;
@@ -71,8 +72,8 @@ pub(crate) async fn build_features_handler(
     let mut features = None;
     let mut default_len = 0;
 
-    if let Some(raw) = row.get(0) {
-        let result = order_features_and_count_default_len(raw);
+    if let Some(raw_features) = row.features {
+        let result = order_features_and_count_default_len(raw_features);
         features = Some(result.0);
         default_len = result.1;
     }

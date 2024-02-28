@@ -49,6 +49,7 @@ pub struct Release {
     rustdoc_status: bool,
     pub(crate) build_time: DateTime<Utc>,
     stars: i32,
+    has_unyanked_releases: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -121,6 +122,7 @@ pub(crate) async fn get_releases(
             rustdoc_status: row.get(4),
             build_time: row.get(5),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
+            has_unyanked_releases: None,
         })
         .try_collect()
         .await?)
@@ -240,7 +242,14 @@ async fn get_search_results(
                builds.build_time,
                releases.target_name,
                releases.rustdoc_status,
-               repositories.stars as "stars?"
+               repositories.stars as "stars?",
+               EXISTS (
+                   SELECT 1
+                   FROM releases AS all_releases
+                   WHERE
+                       all_releases.crate_id = crates.id AND
+                       all_releases.yanked = false
+               ) AS has_unyanked_releases
 
            FROM crates
            INNER JOIN releases ON crates.latest_version_id = releases.id
@@ -262,6 +271,7 @@ async fn get_search_results(
                 target_name: Some(row.target_name),
                 rustdoc_status: row.rustdoc_status,
                 stars: row.stars.unwrap_or(0),
+                has_unyanked_releases: row.has_unyanked_releases,
             },
         )
     })
@@ -1238,6 +1248,12 @@ mod tests {
                 .version("0.0.1")
                 .create()?;
 
+            env.fake_release()
+                .name("yet_another_crate")
+                .version("0.1.0")
+                .yanked(true)
+                .create()?;
+
             let _m = crates_io
                 .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
@@ -1252,6 +1268,7 @@ mod tests {
                             { "name": "some_random_crate" },
                             { "name": "some_other_crate" },
                             { "name": "and_another_one" },
+                            { "name": "yet_another_crate" }
                         ],
                         "meta": {
                             "next_page": null,
@@ -1265,13 +1282,14 @@ mod tests {
             let links = get_release_links("/releases/search?query=some_random_crate", web)?;
 
             // `some_other_crate` won't be shown since we don't have it yet
-            assert_eq!(links.len(), 2);
+            assert_eq!(links.len(), 3);
             // * `max_version` from the crates.io search result will be ignored since we
             //   might not have it yet, or the doc-build might be in progress.
             // * ranking/order from crates.io result is preserved
             // * version used is the highest semver following our own "latest version" logic
             assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
             assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
+            assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
             Ok(())
         })
     }

@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
   pull_request:
   schedule:
     - cron: "0 0 * * *"
@@ -68,7 +70,9 @@ jobs:
       - name: Clean up the database
         run: docker-compose down --volumes
 
-  build:
+  test:
+    env:
+      SQLX_OFFLINE: 1
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,38 +84,10 @@ jobs:
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "rust-cache-20231109"
+          prefix-key: "rust-cache-20240201"
 
       - name: Build
         run: cargo build --workspace --locked
-
-      - name: compile test binaries
-        run: |
-          cargo test --no-run
-          mkdir ./test-binaries/
-          find ./target \
-            -name "docs_rs*" \
-            -executable -type f \
-            -exec cp {} ./test-binaries/ \;
-
-      - uses: actions/upload-artifact@v4
-        name: set up test binaries to cache
-        with:
-          name: test-binaries-${{ github.sha }}
-          path: ./test-binaries/
-          retention-days: 1
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: get test binaries from cache
-        uses: actions/download-artifact@v4
-        with:
-          name: test-binaries-${{ github.sha }}
-          path: ./test-binaries/
 
       - name: Launch postgres and min.io
         run: |
@@ -122,22 +98,22 @@ jobs:
           sleep 5
           # Make sure the database is actually working
           psql "${DOCSRS_DATABASE_URL}"
-
-      - name: run tests
-        shell: bash
+      
+      - name: run workspace tests
         run: |
-          for f in ./test-binaries/*; do
-            echo "running $f"
-            chmod +x $f  # GH action artifacts don't handle permissions
-            $f || exit 1
-          done
+          cargo test --workspace --locked --no-fail-fast
+
+      - name: run slow tests
+        env:
+          DOCSRS_INCLUDE_DEFAULT_TARGETS: false
+        run: |
+          cargo test --locked -- --ignored --test-threads=1
 
       - name: Clean up the database
         run: docker-compose down --volumes
 
   GUI_test:
     runs-on: ubuntu-latest
-    needs: build
     steps:
       - uses: actions/checkout@v4
       - id: install
@@ -160,43 +136,6 @@ jobs:
 
       - name: Run GUI tests
         run: ./dockerfiles/run-gui-tests.sh
-
-      - name: Clean up the database
-        run: docker-compose down --volumes
-
-  build_tests:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: get test binaries from cache
-        uses: actions/download-artifact@v4
-        with:
-          name: test-binaries-${{ github.sha }}
-          path: ./test-binaries/
-
-      - name: Launch postgres and min.io
-        run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
-
-      - name: slow tests
-        env:
-          DOCSRS_INCLUDE_DEFAULT_TARGETS: true
-        run: |
-          for f in ./test-binaries/*; do
-            echo "running $f"
-            chmod +x $f  # GH action artifacts don't handle permissions
-            # run build-tests. Limited to one thread since we don't support parallel builds.
-            $f --ignored --test-threads=1 || exit 1
-          done
 
       - name: Clean up the database
         run: docker-compose down --volumes

@@ -27,7 +27,8 @@ centered
                 {# TODO: If there are no releases, then display a message that says so #}
                 {%- for release in releases -%}
                     {%- set release_version = release.version -%}
-                    {%- if release_type == "search" -%} 
+                    {%- set has_unyanked_releases = release.has_unyanked_releases | default(value=true) -%}
+                    {%- if release_type == "search" and has_unyanked_releases -%}
                         {%- set release_version = "latest" -%}
                     {%- endif -%}
                     {%- if release.rustdoc_status -%}
