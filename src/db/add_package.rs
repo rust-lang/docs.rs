@@ -49,7 +49,7 @@ pub(crate) async fn add_package_into_database(
     let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
 
-    let release_id: i32 = sqlx::query_scalar(
+    let release_id: i32 = sqlx::query_scalar!(
         "INSERT INTO releases (
             crate_id, version, release_time,
             dependencies, target_name, yanked, build_status,
@@ -92,34 +92,34 @@ pub(crate) async fn add_package_into_database(
                 repository_id = $26,
                 archive_storage = $27
          RETURNING id",
+        crate_id,
+        &metadata_pkg.version,
+        registry_data.release_time,
+        serde_json::to_value(dependencies)?,
+        metadata_pkg.package_name(),
+        registry_data.yanked,
+        res.successful,
+        has_docs,
+        false, // TODO: Add test status somehow
+        metadata_pkg.license,
+        metadata_pkg.repository,
+        metadata_pkg.homepage,
+        metadata_pkg.description,
+        rustdoc,
+        readme,
+        serde_json::to_value(&metadata_pkg.keywords)?,
+        has_examples,
+        registry_data.downloads,
+        source_files,
+        serde_json::to_value(doc_targets)?,
+        is_library,
+        &res.rustc_version,
+        metadata_pkg.documentation,
+        default_target,
+        features as Vec<Feature>,
+        repository_id,
+        archive_storage
     )
-    .bind(crate_id)
-    .bind(&metadata_pkg.version)
-    .bind(registry_data.release_time)
-    .bind(serde_json::to_value(dependencies)?)
-    .bind(metadata_pkg.package_name())
-    .bind(registry_data.yanked)
-    .bind(res.successful)
-    .bind(has_docs)
-    .bind(false) // TODO: Add test status somehow
-    .bind(&metadata_pkg.license)
-    .bind(&metadata_pkg.repository)
-    .bind(&metadata_pkg.homepage)
-    .bind(&metadata_pkg.description)
-    .bind(rustdoc)
-    .bind(readme)
-    .bind(serde_json::to_value(&metadata_pkg.keywords)?)
-    .bind(has_examples)
-    .bind(registry_data.downloads)
-    .bind(source_files)
-    .bind(serde_json::to_value(doc_targets)?)
-    .bind(is_library)
-    .bind(&res.rustc_version)
-    .bind(&metadata_pkg.documentation)
-    .bind(default_target)
-    .bind(features)
-    .bind(repository_id)
-    .bind(archive_storage)
     .fetch_one(&mut *conn)
     .await?;
 
