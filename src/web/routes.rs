@@ -221,6 +221,10 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::build_details::build_details_handler),
         )
         .route_with_tsr(
+            "/crate/:name/:version/builds/:id/:filename",
+            get_internal(super::build_details::build_details_handler),
+        )
+        .route_with_tsr(
             "/crate/:name/:version/features",
             get_internal(super::features::build_features_handler),
         )

@@ -1,6 +1,7 @@
 use super::{Blob, FileRange};
 use crate::{Config, InstanceMetrics};
 use anyhow::{Context as _, Error};
+use async_stream::try_stream;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{retry::RetryConfig, Region},
@@ -12,7 +13,8 @@ use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;
 use futures_util::{
     future::TryFutureExt,
-    stream::{FuturesUnordered, StreamExt},
+    pin_mut,
+    stream::{FuturesUnordered, Stream, StreamExt},
 };
 use std::{io::Write, sync::Arc};
 use tracing::{error, warn};
@@ -260,55 +262,73 @@ impl S3Backend {
         panic!("failed to upload 3 times, exiting");
     }
 
-    pub(super) async fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
-        let mut continuation_token = None;
-        loop {
-            let list = self
-                .client
-                .list_objects_v2()
-                .bucket(&self.bucket)
-                .prefix(prefix)
-                .set_continuation_token(continuation_token)
-                .send()
-                .await?;
-
-            if list.key_count().unwrap_or(0) > 0 {
-                let to_delete = Delete::builder()
-                    .set_objects(Some(
-                        list.contents
-                            .expect("didn't get content even though key_count was > 0")
-                            .into_iter()
-                            .filter_map(|obj| {
-                                obj.key()
-                                    .and_then(|k| ObjectIdentifier::builder().key(k).build().ok())
-                            })
-                            .collect(),
-                    ))
-                    .build()
-                    .context("could not build delete request")?;
-
-                let resp = self
+    pub(super) async fn list_prefix<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Stream<Item = Result<String, Error>> + 'a {
+        try_stream! {
+            let mut continuation_token = None;
+            loop {
+                let list = self
                     .client
-                    .delete_objects()
+                    .list_objects_v2()
                     .bucket(&self.bucket)
-                    .delete(to_delete)
+                    .prefix(prefix)
+                    .set_continuation_token(continuation_token)
                     .send()
                     .await?;
 
-                if let Some(errs) = resp.errors {
-                    for err in &errs {
-                        error!("error deleting file from s3: {:?}", err);
+                if let Some(contents) = list.contents {
+                    for obj in contents {
+                        if let Some(key) = obj.key() {
+                            yield key.to_owned();
+                        }
                     }
+                }
 
-                    anyhow::bail!("deleting from s3 failed");
+                continuation_token = list.next_continuation_token;
+                if continuation_token.is_none() {
+                    break;
                 }
             }
+        }
+    }
 
-            continuation_token = list.next_continuation_token;
-            if continuation_token.is_none() {
-                return Ok(());
+    pub(super) async fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
+        let stream = self.list_prefix(prefix).await;
+        pin_mut!(stream);
+        let mut chunks = stream.chunks(900); // 1000 is the limit for the delete_objects API
+
+        while let Some(batch) = chunks.next().await {
+            let batch: Vec<_> = batch.into_iter().collect::<anyhow::Result<_>>()?;
+
+            let to_delete = Delete::builder()
+                .set_objects(Some(
+                    batch
+                        .into_iter()
+                        .filter_map(|k| ObjectIdentifier::builder().key(k).build().ok())
+                        .collect(),
+                ))
+                .build()
+                .context("could not build delete request")?;
+
+            let resp = self
+                .client
+                .delete_objects()
+                .bucket(&self.bucket)
+                .delete(to_delete)
+                .send()
+                .await?;
+
+            if let Some(errs) = resp.errors {
+                for err in &errs {
+                    error!("error deleting file from s3: {:?}", err);
+                }
+
+                anyhow::bail!("deleting from s3 failed");
             }
         }
+        Ok(())
     }
 
     #[cfg(test)]

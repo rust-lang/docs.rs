@@ -1,10 +1,8 @@
-use chrono::{DateTime, Utc};
-use sqlx::Acquire;
-
 use super::{Blob, FileRange};
-use crate::db::Pool;
-use crate::error::Result;
-use crate::InstanceMetrics;
+use crate::{db::Pool, error::Result, InstanceMetrics};
+use chrono::{DateTime, Utc};
+use futures_util::stream::{Stream, TryStreamExt};
+use sqlx::Acquire;
 use std::{convert::TryFrom, sync::Arc};
 
 pub(crate) struct DatabaseBackend {
@@ -165,6 +163,22 @@ impl DatabaseBackend {
         }
         trans.commit().await?;
         Ok(())
+    }
+
+    pub(super) async fn list_prefix<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Stream<Item = Result<String>> + 'a {
+        sqlx::query!(
+            "SELECT path
+             FROM files
+             WHERE path LIKE $1
+             ORDER BY path;",
+            format!("{}%", prefix.replace('%', "\\%"))
+        )
+        .fetch(&self.pool)
+        .map_err(Into::into)
+        .map_ok(|row| row.path)
     }
 
     pub(crate) async fn delete_prefix(&self, prefix: &str) -> Result<()> {

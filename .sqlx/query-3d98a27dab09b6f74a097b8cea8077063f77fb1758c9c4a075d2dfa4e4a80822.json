@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT path\n             FROM files\n             WHERE path LIKE $1\n             ORDER BY path;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "path",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3d98a27dab09b6f74a097b8cea8077063f77fb1758c9c4a075d2dfa4e4a80822"
+}

@@ -7,7 +7,7 @@ use crate::storage::{
     rustdoc_archive_path, source_archive_path, AsyncStorage, CompressionAlgorithms,
 };
 use crate::utils::{Dependency, MetadataPackage, Target};
-use anyhow::Context;
+use anyhow::{bail, Context};
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -43,6 +43,7 @@ pub(crate) struct FakeRelease<'a> {
 
 pub(crate) struct FakeBuild {
     s3_build_log: Option<String>,
+    other_build_logs: HashMap<String, String>,
     db_build_log: Option<String>,
     result: BuildResult,
 }
@@ -561,6 +562,16 @@ impl FakeBuild {
         }
     }
 
+    pub(crate) fn build_log_for_other_target(
+        mut self,
+        target: impl Into<String>,
+        build_log: impl Into<String>,
+    ) -> Self {
+        self.other_build_logs
+            .insert(target.into(), build_log.into());
+        self
+    }
+
     pub(crate) fn db_build_log(self, build_log: impl Into<String>) -> Self {
         Self {
             db_build_log: Some(build_log.into()),
@@ -605,9 +616,19 @@ impl FakeBuild {
             .await?;
         }
 
+        let prefix = format!("build-logs/{build_id}/");
+
         if let Some(s3_build_log) = self.s3_build_log.as_deref() {
-            let path = format!("build-logs/{build_id}/{default_target}.txt");
+            let path = format!("{prefix}{default_target}.txt");
             storage.store_one(path, s3_build_log).await?;
+        }
+
+        for (target, log) in &self.other_build_logs {
+            if target == default_target {
+                bail!("build log for default target has to be set via `s3_build_log`");
+            }
+            let path = format!("{prefix}{target}.txt");
+            storage.store_one(path, log.as_str()).await?;
         }
 
         Ok(())
@@ -619,6 +640,7 @@ impl Default for FakeBuild {
         Self {
             s3_build_log: Some("It works!".into()),
             db_build_log: None,
+            other_build_logs: HashMap::new(),
             result: BuildResult {
                 rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
                 docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
