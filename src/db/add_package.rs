@@ -435,6 +435,16 @@ pub async fn update_crate_data_in_database(
         .fetch_one(&mut *conn)
         .await?;
 
+    update_crate_data_in_db_by_id(conn, crate_id, registry_data).await?;
+
+    Ok(())
+}
+
+pub async fn update_crate_data_in_db_by_id(
+    conn: &mut sqlx::PgConnection,
+    crate_id: i32,
+    registry_data: &CrateData,
+) -> Result<()> {
     update_owners_in_database(conn, &registry_data.owners, crate_id).await?;
 
     Ok(())
