@@ -89,7 +89,7 @@ pub(crate) async fn build_details_handler(
         (
             String::from_utf8(file.0.content).context("non utf8")?,
             storage
-                .list_prefix(&prefix)
+                .list_prefix(&prefix) // the result from S3 is ordered by key
                 .await
                 .map_ok(|path| {
                     path.strip_prefix(&prefix)
