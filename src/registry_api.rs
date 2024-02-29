@@ -45,6 +45,7 @@ impl Default for ReleaseData {
 pub struct CrateOwner {
     pub(crate) avatar: String,
     pub(crate) login: String,
+    pub(crate) kind: String,
 }
 
 impl RegistryApi {
@@ -165,6 +166,8 @@ impl RegistryApi {
             avatar: Option<String>,
             #[serde(default)]
             login: Option<String>,
+            #[serde(default)]
+            kind: Option<String>,
         }
 
         let response: Response = retry_async(
@@ -195,6 +198,7 @@ impl RegistryApi {
             .map(|data| CrateOwner {
                 avatar: data.avatar.unwrap_or_default(),
                 login: data.login.unwrap_or_default(),
+                kind: data.kind.unwrap_or("user".into()),
             })
             .collect();
 

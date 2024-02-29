@@ -1,0 +1,2 @@
+ALTER TABLE owners
+DROP COLUMN IF EXISTS kind;
