@@ -9,7 +9,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        ReqVersion,
+        MatchedRelease, ReqVersion,
     },
     AsyncStorage,
 };
@@ -98,11 +98,27 @@ pub struct Release {
 
 impl CrateDetails {
     #[tracing::instrument(skip(conn))]
-    pub async fn new(
+    pub(crate) async fn from_matched_release(
+        conn: &mut sqlx::PgConnection,
+        release: &MatchedRelease,
+    ) -> Result<Self> {
+        Ok(Self::new(
+            conn,
+            &release.name,
+            release.version(),
+            Some(release.req_version.clone()),
+            release.all_releases.clone(),
+        )
+        .await?
+        .unwrap())
+    }
+
+    async fn new(
         conn: &mut sqlx::PgConnection,
         name: &str,
         version: &Version,
         req_version: Option<ReqVersion>,
+        prefetched_releases: Vec<Release>,
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
         let krate = match sqlx::query!(
             r#"SELECT
@@ -163,9 +179,6 @@ impl CrateDetails {
             None => return Ok(None),
         };
 
-        // get releases, sorted by semver
-        let releases = releases_for_crate(conn, krate.crate_id).await?;
-
         let repository_metadata = krate.repo_host.map(|_| RepositoryMetadata {
             issues: krate.repo_issues.unwrap(),
             stars: krate.repo_stars.unwrap(),
@@ -205,7 +218,7 @@ impl CrateDetails {
             keywords: krate.keywords,
             have_examples: krate.have_examples,
             target_name: krate.target_name,
-            releases,
+            releases: prefetched_releases,
             repository_metadata,
             metadata,
             is_library: krate.is_library,
@@ -399,7 +412,7 @@ pub(crate) async fn crate_details_handler(
         )
     })?;
 
-    let version = match_version(&mut conn, &params.name, &req_version)
+    let matched_release = match_version(&mut conn, &params.name, &req_version)
         .await?
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
@@ -407,13 +420,9 @@ pub(crate) async fn crate_details_handler(
                 format!("/crate/{}/{}", &params.name, version),
                 CachePolicy::ForeverInCdn,
             )
-        })?
-        .into_version();
+        })?;
 
-    let mut details =
-        CrateDetails::new(&mut conn, &params.name, &version, Some(req_version.clone()))
-            .await?
-            .ok_or(AxumNope::VersionNotFound)?;
+    let mut details = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
 
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
@@ -670,10 +679,35 @@ mod tests {
         assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
         TestDatabase, TestEnvironment,
     };
-    use anyhow::{Context, Error};
+    use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
     use semver::Version;
     use std::collections::HashMap;
+
+    async fn crate_details(
+        conn: &mut sqlx::PgConnection,
+        name: &str,
+        version: &str,
+        req_version: Option<ReqVersion>,
+    ) -> CrateDetails {
+        let crate_id: i32 = sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", name)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+        let releases = releases_for_crate(&mut *conn, crate_id).await.unwrap();
+
+        CrateDetails::new(
+            &mut *conn,
+            name,
+            &Version::parse(version).unwrap(),
+            req_version,
+            releases,
+        )
+        .await
+        .unwrap()
+        .unwrap()
+    }
 
     async fn assert_last_successful_build_equals(
         db: &TestDatabase,
@@ -682,11 +716,7 @@ mod tests {
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
         let mut conn = db.async_conn().await;
-        let details =
-            CrateDetails::new(&mut conn, package, &Version::parse(version).unwrap(), None)
-                .await
-                .with_context(|| anyhow::anyhow!("could not fetch crate details"))?
-                .unwrap();
+        let details = crate_details(&mut conn, package, version, None).await;
 
         assert_eq!(
             details.last_successful_build,
@@ -851,10 +881,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", &"0.2.0".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "foo", "0.2.0", None).await
             });
 
             assert_eq!(
@@ -972,10 +999,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
-                        .await
-                        .unwrap()
-                        .unwrap()
+                    crate_details(&mut conn, "foo", version, None).await
                 });
                 assert_eq!(
                     details.latest_release().unwrap().version,
@@ -1002,10 +1026,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
-                        .await
-                        .unwrap()
-                        .unwrap()
+                    crate_details(&mut conn, "foo", version, None).await
                 });
                 assert_eq!(
                     details.latest_release().unwrap().version,
@@ -1033,10 +1054,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", &(version.parse().unwrap()), None)
-                        .await
-                        .unwrap()
-                        .unwrap()
+                    crate_details(&mut conn, "foo", version, None).await
                 });
                 assert_eq!(
                     details.latest_release().unwrap().version,
@@ -1072,10 +1090,7 @@ mod tests {
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = env.runtime().block_on(async move {
                     let mut conn = db.async_conn().await;
-                    CrateDetails::new(&mut conn, "foo", &version.parse().unwrap(), None)
-                        .await
-                        .unwrap()
-                        .unwrap()
+                    crate_details(&mut conn, "foo", version, None).await
                 });
                 assert_eq!(
                     details.latest_release().unwrap().version,
@@ -1132,10 +1147,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "foo", "0.0.1", None).await
             });
             assert_eq!(
                 details.owners,
@@ -1158,10 +1170,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "foo", "0.0.1", None).await
             });
             let mut owners = details.owners;
             owners.sort();
@@ -1185,10 +1194,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "foo", "0.0.1", None).await
             });
             assert_eq!(
                 details.owners,
@@ -1207,10 +1213,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = db.async_conn().await;
-                CrateDetails::new(&mut conn, "foo", &"0.0.1".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "foo", "0.0.1", None).await
             });
             assert_eq!(
                 details.owners,
@@ -1654,10 +1657,7 @@ mod tests {
 
             let details = env.runtime().block_on(async move {
                 let mut conn = env.async_db().await.async_conn().await;
-                CrateDetails::new(&mut conn, "dummy", &"0.5.0".parse().unwrap(), None)
-                    .await
-                    .unwrap()
-                    .unwrap()
+                crate_details(&mut conn, "dummy", "0.5.0", None).await
             });
             assert!(matches!(
                 env.runtime()

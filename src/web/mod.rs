@@ -111,7 +111,7 @@ impl FromStr for ReqVersion {
 }
 
 #[derive(Debug)]
-struct MatchedRelease {
+pub(crate) struct MatchedRelease {
     /// crate name
     pub name: String,
 
@@ -125,6 +125,9 @@ struct MatchedRelease {
 
     /// the matched release
     pub release: crate_details::Release,
+
+    /// all releases since we have them anyways and so we can pass them to CrateDetails
+    all_releases: Vec<crate_details::Release>,
 }
 
 impl MatchedRelease {
@@ -274,6 +277,7 @@ async fn match_version(
                     corrected_name,
                     req_version: input_version.clone(),
                     release: release.clone(),
+                    all_releases: releases,
                 });
             }
 
@@ -302,6 +306,7 @@ async fn match_version(
             corrected_name,
             req_version: input_version.clone(),
             release: release.clone(),
+            all_releases: releases,
         });
     }
 
@@ -311,11 +316,13 @@ async fn match_version(
     if req_semver == VersionReq::STAR {
         return releases
             .first()
+            .cloned()
             .map(|release| MatchedRelease {
                 name: name.to_owned(),
                 corrected_name: corrected_name.clone(),
                 req_version: input_version.clone(),
-                release: release.clone(),
+                release,
+                all_releases: releases,
             })
             .ok_or(AxumNope::VersionNotFound);
     }

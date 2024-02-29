@@ -180,12 +180,9 @@ pub(crate) async fn rustdoc_redirector_handler(
             rendering_time.step("serve JS for crate");
 
             return async {
-                let version = matched_release.into_version();
+                let krate = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
 
-                let krate =
-                    CrateDetails::new(&mut conn, &crate_name, &version, params.version.clone())
-                        .await?
-                        .ok_or(AxumNope::ResourceNotFound)?;
+                let version = matched_release.into_version();
 
                 rendering_time.step("fetch from storage");
 
@@ -409,7 +406,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     // * If both the name and the version are an exact match, return the version of the crate.
     // * If there is an exact match, but the requested crate name was corrected (dashes vs. underscores), redirect to the corrected name.
     // * If there is a semver (but not exact) match, redirect to the exact version.
-    let version = match_version(&mut conn, &params.name, &params.version)
+    let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
@@ -432,22 +429,14 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )),
                 CachePolicy::ForeverInCdn,
             )
-        })?
-        .into_version();
+        })?;
 
     trace!("crate details");
     rendering_time.step("crate details");
 
     // Get the crate's details from the database
-    // NOTE: we know this crate must exist because we just checked it above (or else `match_version` is buggy)
-    let krate = CrateDetails::new(
-        &mut conn,
-        &params.name,
-        &version,
-        Some(params.version.clone()),
-    )
-    .await?
-    .ok_or(AxumNope::ResourceNotFound)?;
+    let krate = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
+    let version = matched_release.into_version();
 
     if !krate.rustdoc_status {
         rendering_time.step("redirect to crate");
@@ -733,14 +722,12 @@ pub(crate) async fn target_redirect_handler(
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match_version(&mut conn, &name, &req_version)
+    let matched_release = match_version(&mut conn, &name, &req_version)
         .await?
-        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?
-        .into_version();
+        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
 
-    let crate_details = CrateDetails::new(&mut conn, &name, &version, Some(req_version.clone()))
-        .await?
-        .ok_or(AxumNope::VersionNotFound)?;
+    let crate_details = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
+    let version = matched_release.into_version();
 
     // We're trying to find the storage location
     // for the requested path in the target-redirect.
