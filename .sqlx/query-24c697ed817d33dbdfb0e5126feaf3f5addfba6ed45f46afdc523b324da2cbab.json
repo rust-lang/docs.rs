@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT login, avatar\n             FROM owners\n             INNER JOIN owner_rels ON owner_rels.oid = owners.id\n             WHERE cid = $1",
+  "query": "SELECT login, avatar, kind\n             FROM owners\n             INNER JOIN owner_rels ON owner_rels.oid = owners.id\n             WHERE cid = $1",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "ordinal": 1,
         "name": "avatar",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -21,8 +26,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "d9fdce61d807d32b2c700c29e0b8100b5abf2d283016f48f468d823bd85da551"
+  "hash": "24c697ed817d33dbdfb0e5126feaf3f5addfba6ed45f46afdc523b324da2cbab"
 }

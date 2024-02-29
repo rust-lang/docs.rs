@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT login, avatar FROM owners",
+  "query": "SELECT login, avatar, kind\n                FROM owners",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "ordinal": 1,
         "name": "avatar",
         "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -19,8 +24,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "8e1cb8355b3586b849494ae1cbde9b034ca01090469a84df2d9af4446f9d9451"
+  "hash": "ee9dddd0c37c0e89eab1feaddd27e5e9c7016a1b8b35b031cb05b4d0802b6be1"
 }

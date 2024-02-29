@@ -35,7 +35,7 @@ pub(crate) struct CrateDetails {
     name: String,
     pub version: Version,
     description: Option<String>,
-    owners: Vec<(String, String)>,
+    owners: Vec<(String, String, String)>,
     dependencies: Option<Value>,
     #[serde(serialize_with = "optional_markdown")]
     readme: Option<String>,
@@ -264,14 +264,14 @@ impl CrateDetails {
 
         // get owners
         crate_details.owners = sqlx::query!(
-            "SELECT login, avatar
+            "SELECT login, avatar, kind
              FROM owners
              INNER JOIN owner_rels ON owner_rels.oid = owners.id
              WHERE cid = $1",
             krate.crate_id,
         )
         .fetch(&mut *conn)
-        .map_ok(|row| (row.login, row.avatar))
+        .map_ok(|row| (row.login, row.avatar, row.kind))
         .try_collect()
         .await?;
 
@@ -1253,6 +1253,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
 
@@ -1262,7 +1263,11 @@ mod tests {
             });
             assert_eq!(
                 details.owners,
-                vec![("foobar".into(), "https://example.org/foobar".into())]
+                vec![(
+                    "foobar".into(),
+                    "https://example.org/foobar".into(),
+                    "user".into()
+                )]
             );
 
             // Adding a new owner, and changing details on an existing owner
@@ -1272,10 +1277,12 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobarv2".into(),
+                    kind: "user".into(),
                 })
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
 
@@ -1288,8 +1295,16 @@ mod tests {
             assert_eq!(
                 owners,
                 vec![
-                    ("barfoo".into(), "https://example.org/barfoo".into()),
-                    ("foobar".into(), "https://example.org/foobarv2".into())
+                    (
+                        "barfoo".into(),
+                        "https://example.org/barfoo".into(),
+                        "user".into()
+                    ),
+                    (
+                        "foobar".into(),
+                        "https://example.org/foobarv2".into(),
+                        "user".into()
+                    )
                 ]
             );
 
@@ -1300,6 +1315,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
 
@@ -1309,7 +1325,11 @@ mod tests {
             });
             assert_eq!(
                 details.owners,
-                vec![("barfoo".into(), "https://example.org/barfoo".into())]
+                vec![(
+                    "barfoo".into(),
+                    "https://example.org/barfoo".into(),
+                    "user".into()
+                )]
             );
 
             // Changing owner details on another of their crates applies the change to both
@@ -1319,6 +1339,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoov2".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
 
@@ -1328,7 +1349,11 @@ mod tests {
             });
             assert_eq!(
                 details.owners,
-                vec![("barfoo".into(), "https://example.org/barfoov2".into())]
+                vec![(
+                    "barfoo".into(),
+                    "https://example.org/barfoov2".into(),
+                    "user".into()
+                )]
             );
 
             Ok(())
