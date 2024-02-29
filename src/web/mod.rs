@@ -33,7 +33,7 @@ mod status;
 use crate::{impl_axum_webpage, Context};
 use anyhow::Error;
 use axum::{
-    extract::{Extension, Request as AxumRequest},
+    extract::{Extension, MatchedPath, Request as AxumRequest},
     http::StatusCode,
     middleware,
     middleware::Next,
@@ -245,6 +245,23 @@ async fn log_timeouts_to_sentry(req: AxumRequest, next: Next) -> AxumResponse {
     response
 }
 
+async fn set_sentry_transaction_name_from_axum_route(
+    request: AxumRequest,
+    next: Next,
+) -> AxumResponse {
+    let route_name = if let Some(path) = request.extensions().get::<MatchedPath>() {
+        path.as_str()
+    } else {
+        request.uri().path()
+    };
+
+    sentry::configure_scope(|scope| {
+        scope.set_transaction(Some(route_name));
+    });
+
+    next.run(request).await
+}
+
 fn apply_middleware(
     router: AxumRouter,
     context: &dyn Context,
@@ -258,6 +275,9 @@ fn apply_middleware(
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
             .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(middleware::from_fn(
+                set_sentry_transaction_name_from_axum_route,
+            ))
             .layer(CatchPanicLayer::new())
             .layer(option_layer(
                 config
