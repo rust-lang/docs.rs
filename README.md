@@ -210,6 +210,7 @@ cargo run -- build world
 # Usually this command can be applied directly to a crate root
 # In certain scenarios it might be necessary to first package the respective
 # crate by using the `cargo package` command.
+# See also /docs/build-workspaces.md
 cargo run -- build crate --local /path/to/source
 ```
 
