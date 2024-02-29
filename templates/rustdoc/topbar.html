@@ -112,7 +112,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 
                             {%- for owner in krate.owners -%}
                                 <li class="pure-menu-item">
-                                    <a href="https://crates.io/users/{{ owner[0] }}" class="pure-menu-link">
+                                    <a href="https://crates.io/{{ owner[2] }}s/{{ owner[0] }}" class="pure-menu-link">
                                         {{ "user" | fas }} {{ owner[0] }}
                                     </a>
                                 </li>

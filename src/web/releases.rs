@@ -1642,6 +1642,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
 
