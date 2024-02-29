@@ -10,6 +10,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
+  RUST_CACHE_KEY: rust-cache-20240229
   DOCSRS_PREFIX: ignored/cratesfyi-prefix
   DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@localhost:15432
   DOCSRS_LOG: docs_rs=debug,rustwide=info
@@ -36,7 +37,7 @@ jobs:
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "rust-cache-20231109"
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Build
         run: cargo build --workspace --locked
@@ -84,7 +85,7 @@ jobs:
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "rust-cache-20240201"
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Build
         run: cargo build --workspace --locked
@@ -123,6 +124,8 @@ jobs:
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Launch postgres and min.io
         run: |
@@ -171,5 +174,7 @@ jobs:
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - run: just lint
