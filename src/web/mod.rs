@@ -203,10 +203,6 @@ impl MatchedRelease {
         self.release.version
     }
 
-    fn id(&self) -> i32 {
-        self.release.id
-    }
-
     fn version(&self) -> &Version {
         &self.release.version
     }
@@ -232,6 +228,7 @@ impl MatchedRelease {
 /// This function will also check for crates where dashes in the name (`-`) have been replaced with
 /// underscores (`_`) and vice-versa. The return value will indicate whether the crate name has
 /// been matched exactly, or if there has been a "correction" in the name that matched instead.
+#[instrument(skip(conn))]
 async fn match_version(
     conn: &mut sqlx::PgConnection,
     name: &str,

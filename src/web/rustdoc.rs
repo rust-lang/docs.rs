@@ -34,7 +34,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, info_span, instrument, trace, Instrument};
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -126,7 +126,9 @@ pub(crate) async fn rustdoc_redirector_handler(
             .is_ok()
         {
             rendering_time.step("serve static asset");
-            return try_serve_legacy_toolchain_asset(storage, config, params.name).await;
+            return try_serve_legacy_toolchain_asset(storage, config, params.name)
+                .instrument(info_span!("serve static asset"))
+                .await;
         }
     }
 
@@ -176,84 +178,77 @@ pub(crate) async fn rustdoc_redirector_handler(
         if target.ends_with(".js") {
             // this URL is actually from a crate-internal path, serve it there instead
             rendering_time.step("serve JS for crate");
-            let version = matched_release.into_version();
 
-            let krate = CrateDetails::new(&mut conn, &crate_name, &version, params.version.clone())
-                .await?
-                .ok_or(AxumNope::ResourceNotFound)?;
+            return async {
+                let version = matched_release.into_version();
 
-            rendering_time.step("fetch from storage");
+                let krate =
+                    CrateDetails::new(&mut conn, &crate_name, &version, params.version.clone())
+                        .await?
+                        .ok_or(AxumNope::ResourceNotFound)?;
 
-            match storage
-                .fetch_rustdoc_file(
-                    &crate_name,
-                    &version.to_string(),
-                    krate.latest_build_id.unwrap_or(0),
-                    target,
-                    krate.archive_storage,
-                    Some(&mut rendering_time),
-                )
-                .await
-            {
-                Ok(blob) => return Ok(File(blob).into_response()),
-                Err(err) => {
-                    if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
-                        && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
-                    {
-                        debug!(?target, ?err, "got error serving file");
-                    }
-                    // FIXME: we sometimes still get requests for toolchain
-                    // specific static assets under the crate/version/ path.
-                    // This is fixed in rustdoc, but pending a rebuild for
-                    // docs that were affected by this bug.
-                    // https://github.com/rust-lang/docs.rs/issues/1979
-                    if target.starts_with("search-") || target.starts_with("settings-") {
-                        return try_serve_legacy_toolchain_asset(storage, config, target).await;
-                    } else {
-                        return Err(err.into());
+                rendering_time.step("fetch from storage");
+
+                match storage
+                    .fetch_rustdoc_file(
+                        &crate_name,
+                        &version.to_string(),
+                        krate.latest_build_id.unwrap_or(0),
+                        target,
+                        krate.archive_storage,
+                        Some(&mut rendering_time),
+                    )
+                    .await
+                {
+                    Ok(blob) => Ok(File(blob).into_response()),
+                    Err(err) => {
+                        if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
+                            && !matches!(
+                                err.downcast_ref(),
+                                Some(crate::storage::PathNotFoundError)
+                            )
+                        {
+                            debug!(?target, ?err, "got error serving file");
+                        }
+                        // FIXME: we sometimes still get requests for toolchain
+                        // specific static assets under the crate/version/ path.
+                        // This is fixed in rustdoc, but pending a rebuild for
+                        // docs that were affected by this bug.
+                        // https://github.com/rust-lang/docs.rs/issues/1979
+                        if target.starts_with("search-") || target.starts_with("settings-") {
+                            try_serve_legacy_toolchain_asset(storage, config, target).await
+                        } else {
+                            Err(err.into())
+                        }
                     }
                 }
             }
+            .instrument(info_span!("serve JS for crate"))
+            .await;
         }
     }
 
     let matched_release = matched_release.into_canonical_req_version();
 
-    // get target name and whether it has docs
-    // FIXME: This is a bit inefficient but allowing us to use less code in general
-    rendering_time.step("fetch release doc status");
-    let (target_name, has_docs): (String, bool) = {
-        let row = sqlx::query!(
-            "SELECT
-                 target_name,
-                 rustdoc_status
-             FROM releases
-             WHERE releases.id = $1",
-            matched_release.id(),
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        (row.target_name, row.rustdoc_status)
-    };
-
     let mut target = params.target.as_deref();
-    if target == Some("index.html") || target == Some(&target_name) {
+    if target == Some("index.html") || target == Some(matched_release.target_name()) {
         target = None;
     }
 
-    if has_docs {
+    if matched_release.rustdoc_status() {
         rendering_time.step("redirect to doc");
 
         let url_str = if let Some(target) = target {
             format!(
-                "/{crate_name}/{}/{target}/{target_name}/",
-                matched_release.req_version
+                "/{crate_name}/{}/{target}/{}/",
+                matched_release.req_version,
+                matched_release.target_name(),
             )
         } else {
             format!(
-                "/{crate_name}/{}/{target_name}/",
-                matched_release.req_version
+                "/{crate_name}/{}/{}/",
+                matched_release.req_version,
+                matched_release.target_name(),
             )
         };
 
@@ -663,6 +658,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 ))
             }
         })
+        .instrument(info_span!("rewrite html"))
         .await?
 }
 
@@ -731,6 +727,7 @@ fn path_for_version(
     (path, query_params)
 }
 
+#[instrument(skip_all)]
 pub(crate) async fn target_redirect_handler(
     Path((name, req_version, req_path)): Path<(String, ReqVersion, String)>,
     mut conn: DbConnection,
@@ -805,7 +802,7 @@ pub(crate) struct BadgeQueryParams {
     version: Option<ReqVersion>,
 }
 
-#[instrument]
+#[instrument(skip_all)]
 pub(crate) async fn badge_handler(
     Path(name): Path<String>,
     Query(query): Query<BadgeQueryParams>,
@@ -823,6 +820,7 @@ pub(crate) async fn badge_handler(
     ))
 }
 
+#[instrument(skip_all)]
 pub(crate) async fn download_handler(
     Path((name, req_version)): Path<(String, ReqVersion)>,
     mut conn: DbConnection,
@@ -866,6 +864,7 @@ pub(crate) async fn download_handler(
 /// Serves shared resources used by rustdoc-generated documentation.
 ///
 /// This serves files from S3, and is pointed to by the `--static-root-path` flag to rustdoc.
+#[instrument(skip_all)]
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
