@@ -180,16 +180,14 @@ pub(crate) async fn rustdoc_redirector_handler(
             rendering_time.step("serve JS for crate");
 
             return async {
-                let krate = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
-
-                let version = matched_release.into_version();
+                let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
                 rendering_time.step("fetch from storage");
 
                 match storage
                     .fetch_rustdoc_file(
                         &crate_name,
-                        &version.to_string(),
+                        &krate.version.to_string(),
                         krate.latest_build_id.unwrap_or(0),
                         target,
                         krate.archive_storage,
@@ -435,8 +433,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     rendering_time.step("crate details");
 
     // Get the crate's details from the database
-    let krate = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
-    let version = matched_release.into_version();
+    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
     if !krate.rustdoc_status {
         rendering_time.step("redirect to crate");
@@ -452,7 +449,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     if req_path.first().copied() == Some(&krate.metadata.default_target) {
         return redirect(
             &params.name,
-            &version,
+            &krate.version,
             &req_path[1..],
             CachePolicy::ForeverInCdn,
         );
@@ -476,7 +473,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     let blob = match storage
         .fetch_rustdoc_file(
             &params.name,
-            &version.to_string(),
+            &krate.version.to_string(),
             krate.latest_build_id.unwrap_or(0),
             &storage_path,
             krate.archive_storage,
@@ -498,14 +495,19 @@ pub(crate) async fn rustdoc_html_server_handler(
             return if storage
                 .rustdoc_file_exists(
                     &params.name,
-                    &version.to_string(),
+                    &krate.version.to_string(),
                     krate.latest_build_id.unwrap_or(0),
                     &storage_path,
                     krate.archive_storage,
                 )
                 .await?
             {
-                redirect(&params.name, &version, &req_path, CachePolicy::ForeverInCdn)
+                redirect(
+                    &params.name,
+                    &krate.version,
+                    &req_path,
+                    CachePolicy::ForeverInCdn,
+                )
             } else if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
@@ -523,7 +525,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 if storage_path == format!("{}/index.html", krate.target_name) {
                     error!(
                         krate = params.name,
-                        version = version.to_string(),
+                        version = krate.version.to_string(),
                         original_path = original_path.as_ref(),
                         storage_path,
                         "Couldn't find crate documentation root on storage.
@@ -553,8 +555,8 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     // Get the latest version of the crate
     let latest_version = latest_release.version.clone();
-    let is_latest_version = latest_version == version;
-    let is_prerelease = !(version.pre.is_empty());
+    let is_latest_version = latest_version == krate.version;
+    let is_prerelease = !(krate.version.pre.is_empty());
 
     // The path within this crate version's rustdoc output
     let (target, inner_path) = {
@@ -726,8 +728,7 @@ pub(crate) async fn target_redirect_handler(
         .await?
         .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
 
-    let crate_details = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
-    let version = matched_release.into_version();
+    let crate_details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
     // We're trying to find the storage location
     // for the requested path in the target-redirect.
@@ -757,7 +758,7 @@ pub(crate) async fn target_redirect_handler(
     let (redirect_path, query_args) = if storage
         .rustdoc_file_exists(
             &name,
-            &version.to_string(),
+            &crate_details.version.to_string(),
             crate_details.latest_build_id.unwrap_or(0),
             &storage_location_for_path,
             crate_details.archive_storage,

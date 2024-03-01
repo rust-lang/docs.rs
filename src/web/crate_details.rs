@@ -32,7 +32,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CrateDetails {
     name: String,
-    version: Version,
+    pub version: Version,
     description: Option<String>,
     owners: Vec<(String, String)>,
     dependencies: Option<Value>,
@@ -100,14 +100,14 @@ impl CrateDetails {
     #[tracing::instrument(skip(conn))]
     pub(crate) async fn from_matched_release(
         conn: &mut sqlx::PgConnection,
-        release: &MatchedRelease,
+        release: MatchedRelease,
     ) -> Result<Self> {
         Ok(Self::new(
             conn,
             &release.name,
-            release.version(),
-            Some(release.req_version.clone()),
-            release.all_releases.clone(),
+            &release.release.version,
+            Some(release.req_version),
+            release.all_releases,
         )
         .await?
         .unwrap())
@@ -422,7 +422,7 @@ pub(crate) async fn crate_details_handler(
             )
         })?;
 
-    let mut details = CrateDetails::from_matched_release(&mut conn, &matched_release).await?;
+    let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
