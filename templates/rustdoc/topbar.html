@@ -2,6 +2,13 @@
 
 {# The url of the current release, `/crate/:name/:version` #}
 {%- set crate_url = "/crate/" ~ metadata.name ~ "/" ~ metadata.req_version -%}
+{%- if current_target -%}
+  {%- set rest_menu_url = "/" ~ current_target ~ "/" ~ inner_path -%}
+{%- else -%}
+  {%- set rest_menu_url = "" -%}
+{%- endif -%}
+{%- set platform_menu_url = crate_url ~ "/menus/platforms" ~ rest_menu_url -%}
+{%- set releases_menu_url = crate_url ~ "/menus/releases" ~ rest_menu_url -%}
 
 {%- include "header/topbar_begin.html" -%}{#
 extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
@@ -137,7 +144,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
                             <li class="pure-menu-heading">Versions</li>
 
                             <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="{{ releases_menu_url }}" >
                                     <span class="rotate">{{ "spinner" | fas }}</span>
                                 </div>
                             </li>
@@ -211,7 +218,7 @@ extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
         </a>
 
         {# Build the dropdown list showing available targets #}
-        <ul class="pure-menu-children" id="platforms">
+        <ul class="pure-menu-children" id="platforms" data-url="{{ platform_menu_url }}" >
             {%- if metadata.doc_targets|length < DEFAULT_MAX_TARGETS -%}
                 {%- include "rustdoc/platforms.html" -%}
             {%- else -%}

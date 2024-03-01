@@ -1503,33 +1503,23 @@ mod tests {
             platform_links
         }
 
-        fn run_check_links_redir(
-            env: &TestEnvironment,
-            url_start: &str,
-            url_end: &str,
-            extra: &str,
-            should_contain_redirect: bool,
-        ) {
-            let response = env
-                .frontend()
-                .get(&format!("{url_start}{url_end}"))
-                .send()
-                .unwrap();
+        fn run_check_links_redir(env: &TestEnvironment, url: &str, should_contain_redirect: bool) {
+            let response = env.frontend().get(url).send().unwrap();
             assert!(response.status().is_success());
-            let list1 = check_links(response.text().unwrap(), false, should_contain_redirect);
+            let text = response.text().unwrap();
+            let list1 = check_links(text.clone(), false, should_contain_redirect);
+
             // Same test with AJAX endpoint.
-            let (start, extra_name) = if url_start.starts_with("/crate/") {
-                ("", "/crate")
-            } else {
-                ("/crate", "")
-            };
-            let response = env
-                .frontend()
-                .get(&format!(
-                    "{start}{url_start}/menus/platforms{extra_name}{url_end}{extra}"
-                ))
-                .send()
-                .unwrap();
+            let platform_menu_url = kuchikiki::parse_html()
+                .one(text)
+                .select_first("#platforms")
+                .expect("invalid selector")
+                .attributes
+                .borrow()
+                .get("data-url")
+                .expect("data-url")
+                .to_string();
+            let response = env.frontend().get(&platform_menu_url).send().unwrap();
             assert!(response.status().is_success());
             assert_cache_control(&response, CachePolicy::ForeverInCdn, &env.config());
             let list2 = check_links(response.text().unwrap(), true, should_contain_redirect);
@@ -1548,27 +1538,17 @@ mod tests {
                 .source_file("README.md", b"storage readme")
                 .create()?;
 
-            // FIXME: For some reason, there are target-redirects on non-AJAX lists on docs.rs
-            // crate pages other than the "default" one.
-            run_check_links_redir(env, "/crate/dummy/0.4.0", "/features", "", false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0", "/builds", "", false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0", "/source/", "", false);
-            run_check_links_redir(env, "/crate/dummy/0.4.0", "/source/README.md", "", false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/features", false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/builds", false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/source/", false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0/source/README.md", false);
+            run_check_links_redir(env, "/crate/dummy/0.4.0", false);
 
-            run_check_links_redir(env, "/crate/dummy/0.4.0", "", "/", false);
-            run_check_links_redir(env, "/dummy/latest", "/dummy", "/", true);
+            run_check_links_redir(env, "/dummy/latest/dummy", true);
+            run_check_links_redir(env, "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy", true);
             run_check_links_redir(
                 env,
-                "/dummy/0.4.0",
-                "/x86_64-pc-windows-msvc/dummy",
-                "/",
-                true,
-            );
-            run_check_links_redir(
-                env,
-                "/dummy/0.4.0",
-                "/x86_64-pc-windows-msvc/dummy/struct.A.html",
-                "/",
+                "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/struct.A.html",
                 true,
             );
 
