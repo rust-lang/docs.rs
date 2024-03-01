@@ -97,6 +97,7 @@ pub struct Release {
 }
 
 impl CrateDetails {
+    #[tracing::instrument(skip(conn))]
     pub async fn new(
         conn: &mut sqlx::PgConnection,
         name: &str,

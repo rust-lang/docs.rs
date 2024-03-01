@@ -134,6 +134,7 @@ impl AsyncStorage {
         })
     }
 
+    #[instrument]
     pub(crate) async fn exists(&self, path: &str) -> Result<bool> {
         match &self.backend {
             StorageBackend::Database(db) => db.exists(path).await,
@@ -141,6 +142,7 @@ impl AsyncStorage {
         }
     }
 
+    #[instrument]
     pub(crate) async fn get_public_access(&self, path: &str) -> Result<bool> {
         match &self.backend {
             StorageBackend::Database(db) => db.get_public_access(path).await,
@@ -148,6 +150,7 @@ impl AsyncStorage {
         }
     }
 
+    #[instrument]
     pub(crate) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
         match &self.backend {
             StorageBackend::Database(db) => db.set_public_access(path, public).await,
@@ -227,6 +230,7 @@ impl AsyncStorage {
         })
     }
 
+    #[instrument]
     pub(crate) async fn rustdoc_file_exists(
         &self,
         name: &str,
@@ -272,6 +276,7 @@ impl AsyncStorage {
         }
     }
 
+    #[instrument]
     pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         let mut blob = match &self.backend {
             StorageBackend::Database(db) => db.get(path, max_size, None).await,
@@ -284,6 +289,7 @@ impl AsyncStorage {
         Ok(blob)
     }
 
+    #[instrument]
     pub(super) async fn get_range(
         &self,
         path: &str,
