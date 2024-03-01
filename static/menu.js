@@ -7,7 +7,7 @@ const updateMenuPositionForSubMenu = (currentMenuSupplier) => {
 
 const loadedMenus = new Set();
 
-function loadAjaxMenu(menu, id, msg, path, extra) {
+async function loadAjaxMenu(menu, id, msg) {
     if (loadedMenus.has(id)) {
         return;
     }
@@ -15,34 +15,19 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
     if (!menu.querySelector(".rotate")) {
         return;
     }
-    const releaseListElem = document.getElementById(id);
-    if (!releaseListElem) {
+    const listElem = document.getElementById(id);
+    if (!listElem) {
         // We're not in a documentation page, so no need to do anything.
         return;
     }
-    const parts = window.location.pathname.split("/");
-    let crateName = parts[1];
-    let version = parts[2];
-    if (crateName === "crate") {
-        crateName = parts[2];
-        version = parts[3];
-        path += "/crate";
+    const url = listElem.dataset.url;
+    try {
+        const response = await fetch(url);
+        listElem.innerHTML = await response.text();
+    } catch (ex) {
+        console.error(`Failed to load ${msg}: ${ex}`)
+        listElem.innerHTML = `Failed to load ${msg}`;
     }
-    const xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-        if (xhttp.readyState !== XMLHttpRequest.DONE) {
-          return;
-        }
-        if (xhttp.status === 200) {
-            releaseListElem.innerHTML = xhttp.responseText;
-        } else {
-            console.error(`Failed to load ${msg}: [${xhttp.status}] ${xhttp.responseText}`);
-            document.getElementById(id).innerHTML = `Failed to load ${msg}`;
-        }
-    };
-    console.log(extra, path);
-    xhttp.open("GET", `/crate/${crateName}/${version}/menus/${path}${extra}`, true);
-    xhttp.send();
 };
 
 // Allow menus to be open and used by keyboard.
@@ -94,18 +79,11 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
         newMenu.className += " pure-menu-active";
         backdrop.style.display = "block";
 
-        const parts = window.location.pathname.split("/");
-        const startFrom = parts[1] === "crate" ? 4 : 3;
-        // We get everything except the first crate name and the version.
-        const innerPath = "/" + parts.slice(startFrom).join("/")
-
         if (newMenu.querySelector("#releases-list")) {
             loadAjaxMenu(
                 newMenu,
                 "releases-list",
                 "release list",
-                "releases",
-                innerPath,
             );
 
         } else if (newMenu.querySelector("#platforms")) {
@@ -113,8 +91,6 @@ function loadAjaxMenu(menu, id, msg, path, extra) {
                 newMenu,
                 "platforms",
                 "platforms list",
-                "platforms",
-                innerPath,
             );
         }
     }
