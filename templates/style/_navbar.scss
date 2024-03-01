@@ -362,6 +362,22 @@ div.nav-container {
             }
         }
     }
+
+    #warnings-menu {
+        .followed {
+            display: flex;
+            align-items: center;
+            :first-child {
+                flex: auto;
+            }
+        }
+        .remove {
+            padding: 0 .5em;
+            &:hover {
+                color: var(--color-error);
+            }
+        }
+    }
 }
 
 #nav-search, #nav-sort {
