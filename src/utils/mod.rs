@@ -28,11 +28,10 @@ use postgres::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::panic;
-use tracing::error;
+use tracing::{error, warn, Span};
 pub(crate) mod sized_buffer;
 
 use std::{future::Future, thread, time::Duration};
-use tracing::warn;
 
 pub(crate) const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -116,7 +115,15 @@ where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
 {
-    match tokio::task::spawn_blocking(f).await {
+    let span = Span::current();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = span.enter();
+        f()
+    })
+    .await;
+
+    match result {
         Ok(result) => result,
         Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
         Err(err) => Err(err.into()),
