@@ -57,7 +57,7 @@ zstd = "0.13.0"
 hostname = "0.3.1"
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
-base64 = "0.21"
+base64 = "0.22"
 strum = { version = "0.26.1", features = ["derive"] }
 lol_html = "1.0.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
