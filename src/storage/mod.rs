@@ -25,7 +25,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
-use tracing::{error, info_span, instrument, trace, Instrument};
+use tracing::{error, instrument, trace};
 
 type FileRange = RangeInclusive<u64>;
 
@@ -249,6 +249,7 @@ impl AsyncStorage {
         })
     }
 
+    #[instrument]
     pub(crate) async fn exists_in_archive(
         &self,
         archive_path: &str,
@@ -311,6 +312,7 @@ impl AsyncStorage {
         Ok(blob)
     }
 
+    #[instrument]
     pub(super) async fn download_archive_index(
         &self,
         archive_path: &str,
@@ -361,14 +363,11 @@ impl AsyncStorage {
         }
         let index_filename = self
             .download_archive_index(archive_path, latest_build_id)
-            .instrument(info_span!("download archive index"))
             .await?;
 
         let info = {
             let path = path.to_owned();
-            spawn_blocking(move || archive_index::find_in_file(index_filename, &path))
-                .instrument(info_span!("find path in index"))
-                .await
+            spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
         }?
         .ok_or(PathNotFoundError)?;
 

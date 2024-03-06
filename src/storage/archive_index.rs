@@ -3,6 +3,7 @@ use crate::storage::{compression::CompressionAlgorithm, FileRange};
 use anyhow::{bail, Context as _};
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::{fs, io, path::Path};
+use tracing::instrument;
 
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct FileInfo {
@@ -99,7 +100,8 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
     .context("error fetching SQLite data")
 }
 
-pub(crate) fn find_in_file<P: AsRef<Path>>(
+#[instrument]
+pub(crate) fn find_in_file<P: AsRef<Path> + std::fmt::Debug>(
     archive_index_path: P,
     search_for: &str,
 ) -> Result<Option<FileInfo>> {
