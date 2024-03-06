@@ -13,6 +13,14 @@
 {%- include "header/topbar_begin.html" -%}{#
 extra whitespace unremovable, need to use html tags unaffacted by whitespace T_T
 #}<ul class="pure-menu-list">
+    <script id="crate-metadata" type="application/json">
+        {# the only text that needs escaping in a <script> is `</`, none of the
+            values below can include that sequence #}
+        {
+            "name": {{ metadata.name | json_encode() | safe }},
+            "version": {{ metadata.version | json_encode() | safe }}
+        }
+    </script>
     {%- if krate -%}
         <li class="pure-menu-item pure-menu-has-children">
             <a href="#" class="pure-menu-link crate-name" title="{{ krate.description }}">
