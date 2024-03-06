@@ -87,10 +87,6 @@ metrics! {
         pub(crate) routes_visited: IntCounterVec["route"],
         /// The response times of various docs.rs routes
         pub(crate) response_time: HistogramVec["route"],
-        /// The time it takes to render a rustdoc page
-        pub(crate) rustdoc_rendering_times: HistogramVec["step"],
-        /// The time it takes to render a rustdoc redirect page
-        pub(crate) rustdoc_redirect_rendering_times: HistogramVec["step"],
 
         /// Count of recently accessed crates
         pub(crate) recent_crates: IntGaugeVec["duration"],
