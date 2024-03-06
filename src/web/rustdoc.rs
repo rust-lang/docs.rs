@@ -14,7 +14,6 @@ use crate::{
         extractors::{DbConnection, Path},
         file::File,
         match_version,
-        metrics::RenderingTimesRecorder,
         page::TemplateData,
         MetaData, ReqVersion,
     },
@@ -90,7 +89,6 @@ async fn try_serve_legacy_toolchain_asset(
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     mut conn: DbConnection,
@@ -116,8 +114,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         )?)
     }
 
-    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_redirect_rendering_times);
-
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
     if let Some((_, extension)) = params.name.rsplit_once('.') {
@@ -125,7 +121,6 @@ pub(crate) async fn rustdoc_redirector_handler(
             .binary_search(&extension)
             .is_ok()
         {
-            rendering_time.step("serve static asset");
             return try_serve_legacy_toolchain_asset(storage, config, params.name)
                 .instrument(info_span!("serve static asset"))
                 .await;
@@ -162,7 +157,6 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
-    rendering_time.step("match version");
     let matched_release = match_version(
         &mut conn,
         &crate_name,
@@ -177,12 +171,8 @@ pub(crate) async fn rustdoc_redirector_handler(
     if let Some(ref target) = params.target {
         if target.ends_with(".js") {
             // this URL is actually from a crate-internal path, serve it there instead
-            rendering_time.step("serve JS for crate");
-
             return async {
                 let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
-
-                rendering_time.step("fetch from storage");
 
                 match storage
                     .fetch_rustdoc_file(
@@ -191,7 +181,6 @@ pub(crate) async fn rustdoc_redirector_handler(
                         krate.latest_build_id.unwrap_or(0),
                         target,
                         krate.archive_storage,
-                        Some(&mut rendering_time),
                     )
                     .await
                 {
@@ -231,8 +220,6 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 
     if matched_release.rustdoc_status() {
-        rendering_time.step("redirect to doc");
-
         let url_str = if let Some(target) = target {
             format!(
                 "/{crate_name}/{}/{target}/{}/",
@@ -261,7 +248,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         )?
         .into_response())
     } else {
-        rendering_time.step("redirect to crate");
         Ok(axum_cached_redirect(
             format!("/crate/{crate_name}/{}", matched_release.req_version),
             CachePolicy::ForeverInCdn,
@@ -361,8 +347,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(csp): Extension<Arc<Csp>>,
     uri: Uri,
 ) -> AxumResult<AxumResponse> {
-    let mut rendering_time = RenderingTimesRecorder::new(&metrics.rustdoc_rendering_times);
-
     // since we directly use the Uri-path and not the extracted params from the router,
     // we have to percent-decode the string here.
     let original_path = percent_encoding::percent_decode(uri.path().as_bytes())
@@ -394,8 +378,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     }
 
     trace!("match version");
-    rendering_time.step("match version");
-
     let mut conn = pool.get_async().await?;
 
     // Check the database for releases with the requested version while doing the following:
@@ -430,13 +412,10 @@ pub(crate) async fn rustdoc_html_server_handler(
         })?;
 
     trace!("crate details");
-    rendering_time.step("crate details");
-
     // Get the crate's details from the database
     let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
     if !krate.rustdoc_status {
-        rendering_time.step("redirect to crate");
         return Ok(axum_cached_redirect(
             format!("/crate/{}/{}", params.name, params.version),
             CachePolicy::ForeverInCdn,
@@ -465,10 +444,6 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     trace!(?storage_path, ?req_path, "try fetching from storage");
 
-    // record the data-fetch step
-    // until we re-add it below inside `fetch_rustdoc_file`
-    rendering_time.step("fetch from storage");
-
     // Attempt to load the file from the database
     let blob = match storage
         .fetch_rustdoc_file(
@@ -477,7 +452,6 @@ pub(crate) async fn rustdoc_html_server_handler(
             krate.latest_build_id.unwrap_or(0),
             &storage_path,
             krate.archive_storage,
-            Some(&mut rendering_time),
         )
         .await
     {
@@ -541,15 +515,12 @@ pub(crate) async fn rustdoc_html_server_handler(
     // Serve non-html files directly
     if !storage_path.ends_with(".html") {
         trace!(?storage_path, "serve asset");
-        rendering_time.step("serve asset");
 
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
         return Ok(File(blob).into_response());
     }
-
-    rendering_time.step("find latest path");
 
     let latest_release = krate.latest_release()?;
 
@@ -617,8 +588,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     } else {
         format!("{target}/")
     };
-
-    rendering_time.step("rewrite html");
 
     // Build the page of documentation,
     templates

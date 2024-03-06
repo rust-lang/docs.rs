@@ -6,10 +6,7 @@ mod s3;
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
-use crate::{
-    db::Pool, error::Result, utils::spawn_blocking, web::metrics::RenderingTimesRecorder, Config,
-    InstanceMetrics,
-};
+use crate::{db::Pool, error::Result, utils::spawn_blocking, Config, InstanceMetrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
@@ -175,8 +172,7 @@ impl AsyncStorage {
     /// * `path` - the wanted path inside the documentation.
     /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
     ///    where we can fetch the requested path from inside the ZIP file.
-    /// * `fetch_time` - used to collect metrics when using the storage inside web server handlers.
-    #[instrument(skip(fetch_time))]
+    #[instrument]
     pub(crate) async fn fetch_rustdoc_file(
         &self,
         name: &str,
@@ -184,7 +180,6 @@ impl AsyncStorage {
         latest_build_id: i32,
         path: &str,
         archive_storage: bool,
-        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
         trace!("fetch rustdoc file");
         Ok(if archive_storage {
@@ -193,13 +188,9 @@ impl AsyncStorage {
                 latest_build_id,
                 path,
                 self.max_file_size_for(path),
-                fetch_time,
             )
             .await?
         } else {
-            if let Some(fetch_time) = fetch_time {
-                fetch_time.step("fetch from storage");
-            }
             // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
             let remote_path = format!("rustdoc/{name}/{version}/{path}");
             self.get(&remote_path, self.max_file_size_for(path)).await?
@@ -221,7 +212,6 @@ impl AsyncStorage {
                 latest_build_id,
                 path,
                 self.max_file_size_for(path),
-                None,
             )
             .await?
         } else {
@@ -349,18 +339,14 @@ impl AsyncStorage {
         Ok(local_index_path)
     }
 
-    #[instrument(skip(fetch_time))]
+    #[instrument]
     pub(crate) async fn get_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: i32,
         path: &str,
         max_size: usize,
-        mut fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
-        if let Some(ref mut t) = fetch_time {
-            t.step("find path in index");
-        }
         let index_filename = self
             .download_archive_index(archive_path, latest_build_id)
             .await?;
@@ -371,9 +357,6 @@ impl AsyncStorage {
         }?
         .ok_or(PathNotFoundError)?;
 
-        if let Some(t) = fetch_time {
-            t.step("range request");
-        }
         let blob = self
             .get_range(
                 archive_path,
@@ -640,7 +623,6 @@ impl Storage {
         latest_build_id: i32,
         path: &str,
         archive_storage: bool,
-        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
         self.runtime.block_on(self.inner.fetch_rustdoc_file(
             name,
@@ -648,7 +630,6 @@ impl Storage {
             latest_build_id,
             path,
             archive_storage,
-            fetch_time,
         ))
     }
 
@@ -730,14 +711,12 @@ impl Storage {
         latest_build_id: i32,
         path: &str,
         max_size: usize,
-        fetch_time: Option<&mut RenderingTimesRecorder<'_>>,
     ) -> Result<Blob> {
         self.runtime.block_on(self.inner.get_from_archive(
             archive_path,
             latest_build_id,
             path,
             max_size,
-            fetch_time,
         ))
     }
 
@@ -1172,14 +1151,13 @@ mod backend_tests {
         assert!(local_index_location.exists());
         assert!(storage.exists_in_archive("folder/test.zip", 0, "src/main.rs",)?);
 
-        let file =
-            storage.get_from_archive("folder/test.zip", 0, "Cargo.toml", std::usize::MAX, None)?;
+        let file = storage.get_from_archive("folder/test.zip", 0, "Cargo.toml", std::usize::MAX)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
         let file =
-            storage.get_from_archive("folder/test.zip", 0, "src/main.rs", std::usize::MAX, None)?;
+            storage.get_from_archive("folder/test.zip", 0, "src/main.rs", std::usize::MAX)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
