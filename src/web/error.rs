@@ -1,7 +1,7 @@
 use crate::{
     db::PoolError,
     storage::PathNotFoundError,
-    web::{cache::CachePolicy, releases::Search, AxumErrorPage},
+    web::{cache::CachePolicy, encode_url_path, releases::Search, AxumErrorPage},
 };
 use anyhow::anyhow;
 use axum::{
@@ -107,7 +107,7 @@ impl IntoResponse for AxumNope {
                 web_error.into_response()
             }
             AxumNope::Redirect(target, cache_policy) => {
-                match super::axum_cached_redirect(&target, cache_policy) {
+                match super::axum_cached_redirect(&encode_url_path(&target), cache_policy) {
                     Ok(response) => response.into_response(),
                     Err(err) => AxumNope::InternalError(err).into_response(),
                 }
@@ -144,8 +144,19 @@ pub(crate) type AxumResult<T> = Result<T, AxumNope>;
 
 #[cfg(test)]
 mod tests {
-    use crate::test::wrapper;
+    use super::{AxumNope, IntoResponse};
+    use crate::{test::wrapper, web::cache::CachePolicy};
     use kuchikiki::traits::TendrilSink;
+
+    #[test]
+    fn test_redirect_error_encodes_url_path() {
+        let response =
+            AxumNope::Redirect("/something>".into(), CachePolicy::ForeverInCdnAndBrowser)
+                .into_response();
+
+        assert_eq!(response.status(), 302);
+        assert_eq!(response.headers().get("Location").unwrap(), "/something%3E");
+    }
 
     #[test]
     fn check_404_page_content_crate() {

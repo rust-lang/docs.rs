@@ -86,7 +86,7 @@ async fn try_serve_legacy_toolchain_asset(
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
-#[instrument(skip_all)]
+#[instrument(skip(storage, config, conn))]
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
