@@ -1248,4 +1248,11 @@ mod test {
         assert_eq!(req_version, ReqVersion::Semver(VersionReq::STAR));
         assert_eq!(req_version.to_string(), "*")
     }
+
+    #[test_case("/something/", "/something/")] // already valid path
+    #[test_case("/something>", "/something%3E")] // something to encode
+    #[test_case("/something%3E", "/something%3E")] // re-running doesn't change anything
+    fn test_encode_url_path(input: &str, expected: &str) {
+        assert_eq!(encode_url_path(input), expected);
+    }
 }

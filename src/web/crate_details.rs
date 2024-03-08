@@ -681,6 +681,7 @@ mod tests {
     };
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
+    use reqwest::StatusCode;
     use semver::Version;
     use std::collections::HashMap;
 
@@ -1666,5 +1667,22 @@ mod tests {
             ));
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_crate_name_with_other_uri_chars() {
+        wrapper(|env| {
+            env.fake_release().name("dummy").version("1.0.0").create()?;
+
+            assert_eq!(
+                env.frontend()
+                    .get_no_redirect("/crate/dummy%3E")
+                    .send()?
+                    .status(),
+                StatusCode::FOUND
+            );
+
+            Ok(())
+        })
     }
 }
