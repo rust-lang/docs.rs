@@ -407,12 +407,11 @@ impl RustwideBuilder {
         // fill up disk space.
         // This also prevents having multiple builders using the same rustwide workspace,
         // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        {
-            let _span = info_span!("purge_all_build_dirs").entered();
+        info_span!("purge_all_build_dirs").in_scope(|| {
             self.workspace
                 .purge_all_build_dirs()
-                .map_err(FailureError::compat)?;
-        }
+                .map_err(FailureError::compat)
+        })?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
 
