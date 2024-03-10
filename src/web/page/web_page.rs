@@ -1,11 +1,16 @@
 use super::TemplateData;
-use crate::web::{csp::Csp, error::AxumNope};
+use crate::{
+    config::PublicConfig,
+    web::{csp::Csp, error::AxumNope},
+    Config,
+};
 use anyhow::Error;
 use axum::{
     body::Body,
     extract::Request as AxumRequest,
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
+    Extension,
 };
 use futures_util::future::{BoxFuture, FutureExt};
 use http::header::CONTENT_LENGTH;
@@ -123,6 +128,7 @@ pub(crate) struct DelayedTemplateRender {
 fn render_response(
     mut response: AxumResponse,
     templates: Arc<TemplateData>,
+    config: Arc<Config>,
     csp_nonce: String,
 ) -> BoxFuture<'static, AxumResponse> {
     async move {
@@ -133,6 +139,7 @@ fn render_response(
                 cpu_intensive_rendering,
             } = render;
             context.insert("csp_nonce", &csp_nonce);
+            context.insert("config", &PublicConfig(config.clone()));
 
             let rendered = if cpu_intensive_rendering {
                 templates
@@ -160,6 +167,7 @@ fn render_response(
                         return render_response(
                             AxumNope::InternalError(err).into_response(),
                             templates,
+                            config,
                             csp_nonce,
                         )
                         .await;
@@ -179,21 +187,16 @@ fn render_response(
     .boxed()
 }
 
-pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) -> AxumResponse {
-    let templates: Arc<TemplateData> = req
-        .extensions()
-        .get::<Arc<TemplateData>>()
-        .expect("template data request extension not found")
-        .clone();
-
-    let csp_nonce = req
-        .extensions()
-        .get::<Arc<Csp>>()
-        .expect("csp request extension not found")
-        .nonce()
-        .to_owned();
+pub(crate) async fn render_templates_middleware(
+    Extension(config): Extension<Arc<Config>>,
+    Extension(templates): Extension<Arc<TemplateData>>,
+    Extension(csp): Extension<Arc<Csp>>,
+    req: AxumRequest,
+    next: Next,
+) -> AxumResponse {
+    let csp_nonce = csp.nonce().to_owned();
 
     let response = next.run(req).await;
 
-    render_response(response, templates, csp_nonce).await
+    render_response(response, templates, config, csp_nonce).await
 }

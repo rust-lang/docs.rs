@@ -73,7 +73,7 @@ impl Csp {
         result.push_str("; font-src 'self'");
 
         // Allow XHR.
-        result.push_str("; connect-src 'self'");
+        result.push_str("; connect-src 'self' *.sentry.io");
 
         // Only allow scripts with the random nonce attached to them.
         //
@@ -83,6 +83,7 @@ impl Csp {
         //
         // This `.unwrap` is safe since the `Write` impl on str can never fail.
         write!(result, "; script-src 'nonce-{}'", self.nonce).unwrap();
+        result.push_str(" https://browser.sentry-cdn.com https://js.sentry-cdn.com");
     }
 
     fn render_svg(&self, result: &mut String) {
@@ -192,8 +193,13 @@ mod tests {
         let csp = Csp::new();
         assert_eq!(
             Some(format!(
-                "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
-                 style-src 'self'; font-src 'self'; connect-src 'self'; script-src 'nonce-{}'",
+                "default-src 'none'; \
+                 base-uri 'none'; \
+                 img-src 'self' https:; \
+                 style-src 'self'; \
+                 font-src 'self'; \
+                 connect-src 'self' *.sentry.io; \
+                 script-src 'nonce-{}' https://browser.sentry-cdn.com https://js.sentry-cdn.com",
                 csp.nonce()
             )),
             csp.render(ContentType::Html)
