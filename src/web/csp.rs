@@ -83,7 +83,6 @@ impl Csp {
         //
         // This `.unwrap` is safe since the `Write` impl on str can never fail.
         write!(result, "; script-src 'nonce-{}'", self.nonce).unwrap();
-        result.push_str(" https://browser.sentry-cdn.com https://js.sentry-cdn.com");
     }
 
     fn render_svg(&self, result: &mut String) {
@@ -199,7 +198,7 @@ mod tests {
                  style-src 'self'; \
                  font-src 'self'; \
                  connect-src 'self' *.sentry.io; \
-                 script-src 'nonce-{}' https://browser.sentry-cdn.com https://js.sentry-cdn.com",
+                 script-src 'nonce-{}'",
                 csp.nonce()
             )),
             csp.render(ContentType::Html)
