@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            releases.default_target,\n            releases.doc_targets\n        FROM releases\n        WHERE releases.id = $1;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "default_target",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "doc_targets",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0011936b31678ee644dff3f5f8d8e1276f7f814f22b830c46d6b77edb209a033"
+}
