@@ -405,7 +405,7 @@ impl AsyncStorage {
 
                     let mut zip_content = {
                         let _span =
-                            info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display());
+                            info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
                         let options = zip::write::FileOptions::default()
                             .compression_method(zip::CompressionMethod::Bzip2);
@@ -427,7 +427,7 @@ impl AsyncStorage {
                     let remote_index_path = format!("{}.index", &archive_path);
                     let alg = CompressionAlgorithm::default();
                     let compressed_index_content = {
-                        let _span = info_span!("create_archive_index", %remote_index_path);
+                        let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
                         fs::create_dir_all(&temp_dir)?;
                         let local_index_path =
