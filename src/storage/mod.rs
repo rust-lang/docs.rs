@@ -22,7 +22,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
-use tracing::{error, instrument, trace};
+use tracing::{error, info_span, instrument, trace};
 
 type FileRange = RangeInclusive<u64>;
 
@@ -61,7 +61,8 @@ fn get_file_list_from_dir<P: AsRef<Path>>(path: P, files: &mut Vec<PathBuf>) -> 
     Ok(())
 }
 
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
+#[instrument]
+pub fn get_file_list<P: AsRef<Path> + std::fmt::Debug>(path: P) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     let mut files = Vec::new();
 
@@ -376,6 +377,7 @@ impl AsyncStorage {
         })
     }
 
+    #[instrument(skip(self))]
     pub(crate) async fn store_all_in_archive(
         &self,
         archive_path: &str,
@@ -401,35 +403,42 @@ impl AsyncStorage {
                     // also has to be added as supported algorithm for storage compression, together
                     // with a mapping in `storage::archive_index::Index::new_from_zip`.
 
-                    let options = zip::write::FileOptions::default()
-                        .compression_method(zip::CompressionMethod::Bzip2);
+                    let mut zip_content = {
+                        let _span =
+                            info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display());
 
-                    let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
-                    for file_path in get_file_list(&root_dir)? {
-                        let mut file = fs::File::open(&root_dir.join(&file_path))?;
+                        let options = zip::write::FileOptions::default()
+                            .compression_method(zip::CompressionMethod::Bzip2);
 
-                        zip.start_file(file_path.to_str().unwrap(), options)?;
-                        io::copy(&mut file, &mut zip)?;
+                        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+                        for file_path in get_file_list(&root_dir)? {
+                            let mut file = fs::File::open(&root_dir.join(&file_path))?;
 
-                        let mime = detect_mime(&file_path);
-                        file_paths.insert(file_path, mime.to_string());
-                    }
+                            zip.start_file(file_path.to_str().unwrap(), options)?;
+                            io::copy(&mut file, &mut zip)?;
 
-                    let mut zip_content = zip.finish()?.into_inner();
+                            let mime = detect_mime(&file_path);
+                            file_paths.insert(file_path, mime.to_string());
+                        }
+
+                        zip.finish()?.into_inner()
+                    };
 
                     let remote_index_path = format!("{}.index", &archive_path);
-
-                    fs::create_dir_all(&temp_dir)?;
-                    let local_index_path =
-                        tempfile::NamedTempFile::new_in(&temp_dir)?.into_temp_path();
-                    archive_index::create(
-                        &mut io::Cursor::new(&mut zip_content),
-                        &local_index_path,
-                    )?;
-
                     let alg = CompressionAlgorithm::default();
-                    let compressed_index_content =
-                        compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?;
+                    let compressed_index_content = {
+                        let _span = info_span!("create_archive_index", %remote_index_path);
+
+                        fs::create_dir_all(&temp_dir)?;
+                        let local_index_path =
+                            tempfile::NamedTempFile::new_in(&temp_dir)?.into_temp_path();
+                        archive_index::create(
+                            &mut io::Cursor::new(&mut zip_content),
+                            &local_index_path,
+                        )?;
+
+                        compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?
+                    };
                     Ok((
                         zip_content,
                         compressed_index_content,
@@ -466,6 +475,7 @@ impl AsyncStorage {
     // Store all files in `root_dir` into the backend under `prefix`.
     //
     // This returns (map<filename, mime type>, set<compression algorithms>).
+    #[instrument(skip(self))]
     pub(crate) async fn store_all(
         &self,
         prefix: &Path,
@@ -522,9 +532,10 @@ impl AsyncStorage {
 
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
+    #[instrument(skip(self, content))]
     pub(crate) async fn store_one(
         &self,
-        path: impl Into<String>,
+        path: impl Into<String> + std::fmt::Debug,
         content: impl Into<Vec<u8>>,
     ) -> Result<CompressionAlgorithm> {
         let path = path.into();
@@ -745,9 +756,10 @@ impl Storage {
 
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
+    #[instrument(skip(self, content))]
     pub(crate) fn store_one(
         &self,
-        path: impl Into<String>,
+        path: impl Into<String> + std::fmt::Debug,
         content: impl Into<Vec<u8>>,
     ) -> Result<CompressionAlgorithm> {
         self.runtime.block_on(self.inner.store_one(path, content))
@@ -769,6 +781,7 @@ impl Storage {
             .into_iter()
     }
 
+    #[instrument(skip(self))]
     pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
         self.runtime.block_on(self.inner.delete_prefix(prefix))
     }

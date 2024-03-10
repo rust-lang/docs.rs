@@ -23,7 +23,8 @@ impl FileInfo {
 /// create an archive index based on a zipfile.
 ///
 /// Will delete the destination file if it already exists.
-pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path>>(
+#[instrument(skip(zipfile))]
+pub(crate) fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::Debug>(
     zipfile: &mut R,
     destination: P,
 ) -> Result<()> {

@@ -29,7 +29,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::runtime::Runtime;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, info_span, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
@@ -75,6 +75,7 @@ fn build_workspace(context: &dyn Context) -> Result<Workspace> {
     Ok(workspace)
 }
 
+#[derive(Debug)]
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
@@ -130,6 +131,7 @@ impl RustwideBuilder {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
         SandboxBuilder::new()
             .cpu_limit(self.config.build_cpu_limit.map(|limit| limit as f32))
@@ -257,6 +259,7 @@ impl RustwideBuilder {
         }
     }
 
+    #[instrument(skip(self))]
     fn get_limits(&self, krate: &str) -> Result<Limits> {
         self.runtime.block_on({
             let db = self.db.clone();
@@ -358,6 +361,7 @@ impl RustwideBuilder {
         self.build_package(&package.name, &package.version, PackageKind::Local(path))
     }
 
+    #[instrument(name = "docbuilder.build_package", parent = None, skip(self))]
     pub fn build_package(
         &mut self,
         name: &str,
@@ -403,21 +407,29 @@ impl RustwideBuilder {
         // fill up disk space.
         // This also prevents having multiple builders using the same rustwide workspace,
         // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        self.workspace
-            .purge_all_build_dirs()
-            .map_err(FailureError::compat)?;
+        {
+            let _span = info_span!("purge_all_build_dirs").entered();
+            self.workspace
+                .purge_all_build_dirs()
+                .map_err(FailureError::compat)?;
+        }
 
         let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
 
         let is_local = matches!(kind, PackageKind::Local(_));
-        let krate = match kind {
-            PackageKind::Local(path) => Crate::local(path),
-            PackageKind::CratesIo => Crate::crates_io(name, version),
-            PackageKind::Registry(registry) => {
-                Crate::registry(AlternativeRegistry::new(registry), name, version)
-            }
+        let krate = {
+            let _span = info_span!("krate.fetch").entered();
+
+            let krate = match kind {
+                PackageKind::Local(path) => Crate::local(path),
+                PackageKind::CratesIo => Crate::crates_io(name, version),
+                PackageKind::Registry(registry) => {
+                    Crate::registry(AlternativeRegistry::new(registry), name, version)
+                }
+            };
+            krate.fetch(&self.workspace).map_err(FailureError::compat)?;
+            krate
         };
-        krate.fetch(&self.workspace).map_err(FailureError::compat)?;
 
         fs::create_dir_all(&self.config.temp_dir)?;
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
@@ -432,8 +444,12 @@ impl RustwideBuilder {
                 } = metadata.targets(self.config.include_default_targets);
                 let mut targets = vec![default_target];
                 targets.extend(&other_targets);
-                // Fetch this before we enter the sandbox, so networking isn't blocked.
-                build.fetch_build_std_dependencies(&targets)?;
+
+                {
+                    let _span = info_span!("fetch_build_std_dependencies").entered();
+                    // Fetch this before we enter the sandbox, so networking isn't blocked.
+                    build.fetch_build_std_dependencies(&targets)?;
+                }
 
                 (|| -> Result<bool> {
                     let mut has_docs = false;
@@ -448,14 +464,20 @@ impl RustwideBuilder {
                     if !res.result.successful && cargo_lock.exists() {
                         info!("removing lockfile and reattempting build");
                         std::fs::remove_file(cargo_lock)?;
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["generate-lockfile"])
-                            .run()?;
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["fetch", "--locked"])
-                            .run()?;
+                        {
+                            let _span = info_span!("cargo_generate_lockfile").entered();
+                            Command::new(&self.workspace, self.toolchain.cargo())
+                                .cd(build.host_source_dir())
+                                .args(&["generate-lockfile"])
+                                .run()?;
+                        }
+                        {
+                            let _span = info_span!("cargo fetch --locked").entered();
+                            Command::new(&self.workspace, self.toolchain.cargo())
+                                .cd(build.host_source_dir())
+                                .args(&["fetch", "--locked"])
+                                .run()?;
+                        }
                         res = self.execute_build(
                             default_target,
                             true,
@@ -595,11 +617,14 @@ impl RustwideBuilder {
                         build_status,
                     ))?;
 
-                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
-                    self.storage.store_one(build_log_path, res.build_log)?;
-                    for (target, log) in target_build_logs {
-                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
-                        self.storage.store_one(build_log_path, log)?;
+                    {
+                        let _span = info_span!("store_build_logs").entered();
+                        let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                        self.storage.store_one(build_log_path, res.build_log)?;
+                        for (target, log) in target_build_logs {
+                            let build_log_path = format!("build-logs/{build_id}/{target}.txt");
+                            self.storage.store_one(build_log_path, log)?;
+                        }
                     }
 
                     // Some crates.io crate data is mutable, so we proactively update it during a release
@@ -638,13 +663,17 @@ impl RustwideBuilder {
             })
             .map_err(|e| e.compat())?;
 
-        krate
-            .purge_from_cache(&self.workspace)
-            .map_err(FailureError::compat)?;
-        local_storage.close()?;
+        {
+            let _span = info_span!("purge_from_cache").entered();
+            krate
+                .purge_from_cache(&self.workspace)
+                .map_err(FailureError::compat)?;
+            local_storage.close()?;
+        }
         Ok(successful)
     }
 
+    #[instrument(skip(self, build))]
     fn build_target(
         &self,
         target: &str,
@@ -668,6 +697,7 @@ impl RustwideBuilder {
         Ok(target_res)
     }
 
+    #[instrument(skip(self, build))]
     fn get_coverage(
         &self,
         target: &str,
@@ -723,6 +753,7 @@ impl RustwideBuilder {
         )
     }
 
+    #[instrument(skip(self, build))]
     fn execute_build(
         &self,
         target: &str,
@@ -764,11 +795,14 @@ impl RustwideBuilder {
             }
         };
 
-        let successful = logging::capture(&storage, || {
-            self.prepare_command(build, target, metadata, limits, rustdoc_flags)
-                .and_then(|command| command.run().map_err(Error::from))
-                .is_ok()
-        });
+        let successful = {
+            let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
+            logging::capture(&storage, || {
+                self.prepare_command(build, target, metadata, limits, rustdoc_flags)
+                    .and_then(|command| command.run().map_err(Error::from))
+                    .is_ok()
+            })
+        };
 
         // For proc-macros, cargo will put the output in `target/doc`.
         // Move it to the target-specific directory for consistency with other builds.
@@ -879,6 +913,7 @@ impl RustwideBuilder {
         Ok(command.args(&cargo_args))
     }
 
+    #[instrument(skip(self))]
     fn copy_docs(
         &self,
         target_dir: &Path,
@@ -917,7 +952,7 @@ struct FullBuildResult {
     build_log: String,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct DocCoverage {
     /// The total items that could be documented in the current crate, used to calculate
     /// documentation coverage.
@@ -931,6 +966,7 @@ pub(crate) struct DocCoverage {
     pub(crate) items_with_examples: i32,
 }
 
+#[derive(Debug)]
 pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,

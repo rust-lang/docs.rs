@@ -23,6 +23,7 @@ use docs_rs::{
 use futures_util::StreamExt;
 use humantime::Duration;
 use once_cell::sync::OnceCell;
+use sentry::TransactionContext;
 use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
 use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
@@ -53,15 +54,33 @@ fn main() {
         ))
         .unwrap();
 
+        let traces_sample_rate = env::var("SENTRY_TRACES_SAMPLE_RATE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.0);
+
+        let traces_sampler = move |ctx: &TransactionContext| -> f32 {
+            if let Some(sampled) = ctx.sampled() {
+                // if the transaction was already marked as "to be sampled" by
+                // the JS/frontend SDK, we want to sample it in the backend too.
+                return if sampled { 1.0 } else { 0.0 };
+            }
+
+            let op = ctx.operation();
+            if op == "docbuilder.build_package" {
+                // record all transactions for builds
+                1.
+            } else {
+                traces_sample_rate
+            }
+        };
+
         Some(sentry::init((
             sentry_dsn,
             sentry::ClientOptions {
                 release: Some(docs_rs::BUILD_VERSION.into()),
                 attach_stacktrace: true,
-                traces_sample_rate: env::var("SENTRY_TRACES_SAMPLE_RATE")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0.0),
+                traces_sampler: Some(Arc::new(traces_sampler)),
                 ..Default::default()
             }
             .add_integration(sentry_panic::PanicIntegration::default()),
