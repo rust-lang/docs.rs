@@ -127,7 +127,7 @@ pub(crate) struct MatchedRelease {
     pub release: crate_details::Release,
 
     /// all releases since we have them anyways and so we can pass them to CrateDetails
-    all_releases: Vec<crate_details::Release>,
+    pub(crate) all_releases: Vec<crate_details::Release>,
 }
 
 impl MatchedRelease {
@@ -208,6 +208,10 @@ impl MatchedRelease {
 
     fn version(&self) -> &Version {
         &self.release.version
+    }
+
+    fn id(&self) -> i32 {
+        self.release.id
     }
 
     fn rustdoc_status(&self) -> bool {

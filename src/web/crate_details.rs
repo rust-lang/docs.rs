@@ -461,28 +461,20 @@ pub(crate) async fn get_all_releases(
     let req_path: String = params.path.clone().unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
-    let version = match_version(&mut conn, &params.name, &params.version)
+    let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
-        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?
-        .into_version();
+        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
 
     let row = sqlx::query!(
         "SELECT
-            crates.id AS crate_id,
-            releases.doc_targets,
-            releases.target_name
-        FROM crates
-        INNER JOIN releases on crates.id = releases.crate_id
-        WHERE crates.name = $1 and releases.version = $2;",
-        params.name,
-        &version.to_string(),
+            releases.doc_targets
+        FROM releases
+        WHERE releases.id = $1;",
+        matched_release.id(),
     )
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(AxumNope::CrateNotFound)?;
-
-    // get releases, sorted by semver
-    let releases: Vec<Release> = releases_for_crate(&mut conn, row.crate_id).await?;
 
     let doc_targets = MetaData::parse_doc_targets(row.doc_targets);
 
@@ -505,9 +497,9 @@ pub(crate) async fn get_all_releases(
         (target, inner.trim_end_matches('/'))
     };
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", row.target_name)
+        format!("{}/index.html", matched_release.target_name())
     } else {
-        format!("{}/{inner_path}", row.target_name)
+        format!("{}/{inner_path}", matched_release.target_name())
     };
 
     let target = if target.is_empty() {
@@ -517,7 +509,7 @@ pub(crate) async fn get_all_releases(
     };
 
     let res = ReleaseList {
-        releases,
+        releases: matched_release.all_releases,
         target,
         inner_path,
         crate_name: params.name,
@@ -556,7 +548,7 @@ pub(crate) async fn get_all_platforms_inner(
     let req_path: String = params.path.unwrap_or_default();
     let req_path: Vec<&str> = req_path.split('/').collect();
 
-    let version = match_version(&mut conn, &params.name, &params.version)
+    let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
@@ -579,33 +571,24 @@ pub(crate) async fn get_all_platforms_inner(
                 )),
                 CachePolicy::ForeverInCdn,
             )
-        })?
-        .into_version();
+        })?;
 
     let krate = sqlx::query!(
         "SELECT
-            crates.id,
-            crates.name,
             releases.default_target,
             releases.doc_targets
         FROM releases
-        INNER JOIN crates ON releases.crate_id = crates.id
-        WHERE crates.name = $1 AND releases.version = $2;",
-        params.name,
-        version.to_string(),
+        WHERE releases.id = $1;",
+        matched_release.id(),
     )
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(AxumNope::CrateNotFound)?;
 
-    let releases = releases_for_crate(&mut conn, krate.id).await?;
-
     let doc_targets = MetaData::parse_doc_targets(krate.doc_targets);
 
-    let latest_release = releases
-        .iter()
-        .find(|release| release.version.pre.is_empty() && !release.yanked)
-        .unwrap_or(&releases[0]);
+    let latest_release = latest_release(&matched_release.all_releases)
+        .expect("we couldn't end up here without releases");
 
     // The path within this crate version's rustdoc output
     let inner;
@@ -627,9 +610,9 @@ pub(crate) async fn get_all_platforms_inner(
         (target, inner.trim_end_matches('/'))
     };
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", krate.name)
+        format!("{}/index.html", matched_release.target_name())
     } else {
-        format!("{}/{inner_path}", krate.name)
+        format!("{}/{inner_path}", matched_release.target_name())
     };
 
     let current_target = if latest_release.build_status {
@@ -644,8 +627,8 @@ pub(crate) async fn get_all_platforms_inner(
 
     let res = PlatformList {
         metadata: ShortMetadata {
-            name: krate.name,
-            version: version.clone(),
+            name: params.name,
+            version: matched_release.version().clone(),
             req_version: params.version.clone(),
             doc_targets,
         },
