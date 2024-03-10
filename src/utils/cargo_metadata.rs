@@ -57,7 +57,7 @@ impl CargoMetadata {
     }
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub(crate) struct Package {
     pub(crate) id: String,
     pub(crate) name: String,
@@ -100,7 +100,7 @@ impl Package {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct Target {
     pub(crate) name: String,
     #[cfg(not(test))]
@@ -121,7 +121,7 @@ impl Target {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,

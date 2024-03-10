@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::Deserialize;
+use tracing::instrument;
 use url::Url;
 
 const APP_USER_AGENT: &str = concat!(
@@ -67,6 +68,7 @@ impl RegistryApi {
         })
     }
 
+    #[instrument(skip(self))]
     pub async fn get_crate_data(&self, name: &str) -> Result<CrateData> {
         let owners = self
             .get_owners(name)
@@ -76,6 +78,7 @@ impl RegistryApi {
         Ok(CrateData { owners })
     }
 
+    #[instrument(skip(self))]
     pub(crate) async fn get_release_data(&self, name: &str, version: &str) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)

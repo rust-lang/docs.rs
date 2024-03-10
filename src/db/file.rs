@@ -9,9 +9,9 @@
 
 use crate::error::Result;
 use crate::storage::{AsyncStorage, CompressionAlgorithm, CompressionAlgorithms};
-
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 
 /// Store all files in a directory and return [[mimetype, filename]] as Json
 ///
@@ -34,7 +34,8 @@ pub async fn add_path_into_database<P: AsRef<Path>>(
     ))
 }
 
-pub async fn add_path_into_remote_archive<P: AsRef<Path>>(
+#[instrument(skip(storage))]
+pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     storage: &AsyncStorage,
     archive_path: &str,
     path: P,
