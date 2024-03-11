@@ -190,7 +190,7 @@ impl CrateDetails {
                 doc_coverage.total_items_needing_examples,
                 doc_coverage.items_with_examples
             FROM releases
-            INNER JOIN release_build_status ON releases.id = release_build_status.id
+            INNER JOIN release_build_status ON releases.id = release_build_status.rid
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
@@ -380,7 +380,7 @@ pub(crate) async fn releases_for_crate(
              releases.rustdoc_status,
              releases.target_name
          FROM releases
-         INNER JOIN release_build_status ON releases.id = release_build_status.id
+         INNER JOIN release_build_status ON releases.id = release_build_status.rid
          WHERE
              releases.crate_id = $1"#,
         crate_id,
@@ -695,7 +695,10 @@ mod tests {
         assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
         FakeBuild, TestDatabase, TestEnvironment,
     };
-    use crate::{db::types::BuildStatus, registry_api::CrateOwner};
+    use crate::{
+        db::{types::BuildStatus, update_build_status},
+        registry_api::CrateOwner,
+    };
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
@@ -712,7 +715,7 @@ mod tests {
             SELECT build_status as "build_status!: BuildStatus"
             FROM crates
             INNER JOIN releases ON crates.id = releases.crate_id
-            INNER JOIN release_build_status ON releases.id = release_build_status.id
+            INNER JOIN release_build_status ON releases.id = release_build_status.rid
             WHERE crates.name = $1 AND releases.version = $2"#,
             name,
             version
@@ -1800,7 +1803,8 @@ mod tests {
     #[test]
     fn test_build_status_no_builds() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            let release_id = env
+                .async_fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
@@ -1811,6 +1815,8 @@ mod tests {
             sqlx::query!("DELETE FROM builds")
                 .execute(&mut *conn)
                 .await?;
+
+            update_build_status(&mut conn, release_id).await?;
 
             assert_eq!(
                 release_build_status(&mut conn, "dummy", "0.1.0").await,
