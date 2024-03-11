@@ -5,6 +5,7 @@ pub mod page;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use anyhow::{anyhow, bail, Context as _, Result};
+use askama::Template;
 use axum_extra::middleware::option_layer;
 use serde_json::Value;
 use tracing::{info, instrument};
@@ -24,7 +25,7 @@ mod markdown;
 pub(crate) mod metrics;
 mod releases;
 mod routes;
-mod rustdoc;
+pub(crate) mod rustdoc;
 mod sitemap;
 mod source;
 mod statics;
@@ -684,6 +685,8 @@ impl MetaData {
     }
 }
 
+#[derive(Template)]
+#[template(path = "error.html")]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct AxumErrorPage {
     /// The title of the page
@@ -692,10 +695,11 @@ pub(crate) struct AxumErrorPage {
     pub message: Cow<'static, str>,
     #[serde(skip)]
     pub status: StatusCode,
+    pub csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    AxumErrorPage = "error.html",
+    AxumErrorPage,
     status = |err| err.status,
 }
 

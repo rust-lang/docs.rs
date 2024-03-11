@@ -1,8 +1,8 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}
 {%- endblock title -%}
 
 {%- block body_classes -%}
@@ -13,21 +13,21 @@ centered
   {%- set latest_version = "" -%}
   {%- set latest_path = "" -%}
   {%- set target = "" -%}
-  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+  {%- set inner_path = "{}/index.html"|format(metadata.target_name) -%}
   {%- set is_latest_version = true -%}
   {%- set is_prerelease = false -%}
   {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
-    {{ navigation::package_navigation(metadata=metadata, active_tab="builds") }}
+    {% call navigation::package_navigation(title=false, metadata=metadata, active_tab="builds") %}
 {%- endblock header -%}
 
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
             <div class="release">
-                <strong>Build #{{ build_details.id }} {{ build_details.build_time | date(format="%+") }}</strong>
+                <strong>Build #{{ build_details.id }} {{ build_details.build_time|date("%+") }}</strong>
             </div>
 
             <ul>

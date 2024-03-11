@@ -9,7 +9,11 @@ use crate::{
     AsyncStorage, Config,
 };
 use anyhow::Context as _;
-use axum::{extract::Extension, response::IntoResponse};
+use askama::Template;
+use axum::{
+    extract::{Extension, Path},
+    response::IntoResponse,
+};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
 use semver::Version;
@@ -26,6 +30,8 @@ pub(crate) struct BuildDetails {
     output: String,
 }
 
+#[derive(Template)]
+#[template(path = "crate/build_details.html")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BuildDetailsPage {
     metadata: MetaData,
@@ -33,11 +39,10 @@ struct BuildDetailsPage {
     use_direct_platform_links: bool,
     all_log_filenames: Vec<String>,
     current_filename: Option<String>,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    BuildDetailsPage = "crate/build_details.html",
-}
+impl_axum_webpage! { BuildDetailsPage }
 
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct BuildDetailsParams {
@@ -115,6 +120,7 @@ pub(crate) async fn build_details_handler(
         use_direct_platform_links: true,
         all_log_filenames,
         current_filename,
+        csp_nonce: String::new(),
     }
     .into_response())
 }

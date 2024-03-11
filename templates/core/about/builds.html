@@ -1,4 +1,4 @@
-{% extends "about-base.html" -%}
+{% extends "about-base.html" %}
 
 {%- block title -%} Builds {%- endblock title -%}
 
@@ -64,9 +64,9 @@
     </p>
 
     <h4 id="testing-builds-locally"> <a href="#testing-builds-locally">Testing documentation builds locally</a> </h4>
-    {%- set build_subcommand = docsrs_repo ~ "/blob/master/README.md#build-subcommand" -%}
+    {%- set build_subcommand = "{}/blob/master/README.md#build-subcommand"|format(docsrs_repo) -%}
     <p>
-        The Docs.rs <a href="{{ build_subcommand | safe }}">README</a> describes how to build
+        The Docs.rs <a href="{{ build_subcommand|safe }}">README</a> describes how to build
         unpublished crate documentation locally using the same build environment as the Docs.rs build agent.
     </p>
 
@@ -93,11 +93,11 @@
         All the builds are executed inside a sandbox with limited resources. The current limits are:
     </p>
 
-    {{ macros::crate_limits(limits=limits) }}
+    {% call macros::crate_limits(limits=limits) %}
 
     <p>
         If your build fails because it hit one of these limits, please
-        <a href="{{ docsrs_repo | safe }}/issues/new/choose">open an issue</a>
+        <a href="{{ docsrs_repo|safe }}/issues/new/choose">open an issue</a>
         to get them increased for your crate.
         Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies:
         <ul>
@@ -108,7 +108,7 @@
 
     <h4 id="failures-and-rebuilds"> <a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a> </h4>
     <p>
-        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo | safe }}/issues">file an issue</a>.
+        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo|safe }}/issues">file an issue</a>.
         Some build failures can be fixed by Docs.rs, e.g., by issuing a rebuild after a bug in Docs.rs has been fixed.
     </p>
 

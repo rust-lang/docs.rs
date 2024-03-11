@@ -1,18 +1,18 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 {%- import "releases/header.html" as release_macros -%}
 
-{%- block title -%}{{ title | default(value="Releases - Docs.rs")}}{%- endblock title -%}
+{%- block title -%}Releases - Docs.rs{%- endblock title -%}
 
 {%- block header -%}
     {# These all have defaults so searches work #}
-    {{
-        release_macros::header(
-            title=title | default(value="Releases"),
-            description=description | default(value=""),
+    {%
+        call release_macros::header(
+            title="Releases",
+            description={% if description.is_empty() %}""{% else %}description{% endif %},
             tab=release_type,
-            owner=owner | default(value=false)
+            owner={% if let Some(owner) = owner %}owner{% else %}false{% endif %}
         )
-    }}
+    %}
 {%- endblock header -%}
 
 {%- block body_classes -%}
@@ -32,12 +32,12 @@ centered
                         {%- set release_version = "latest" -%}
                     {%- endif -%}
                     {%- if release.rustdoc_status -%}
-                        {% set link = "/" ~ release.name ~ "/" ~ release_version ~ "/" ~ release.target_name ~ "/" -%}
+                        {% set link = "/{}/{}/{}/"|format(release.name, release_version, release.target_name) -%}
                     {%- else -%}
-                        {% set link = "/crate/" ~ release.name ~ "/" ~ release_version -%}
+                        {% set link = "/crate/{}/{}"|format(release.name, release_version) -%}
                     {%- endif -%}
                     <li>
-                        <a href="{{ link | safe }}" class="release">
+                        <a href="{{ link|safe }}" class="release">
                             <div class="pure-g">
                                 <div class="pure-u-1 pure-u-sm-6-24 pure-u-md-5-24 name">
                                     {{ release.name }}-{{ release.version }}
@@ -47,16 +47,16 @@ centered
                                     {{ release.description }}
                                 </div>
 
-                                {% if release_type == 'owner' -%}
+                                {% if release_type == "owner" -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="Published {{ release.build_time | timeformat(relative=true) }}">
+                                        title="Published {{ release.build_time|timeformat(true) }}">
                                         {{ release.stars }}
-                                        {{ "star" | fas }}
+                                        {{ "star"|fas }}
                                     </div>
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="{{ release.build_time | date(format='%FT%TZ') }}">
-                                        {{ release.build_time | timeformat(relative=true) }}
+                                        title="{{ release.build_time|date("%FT%TZ") }}">
+                                        {{ release.build_time|timeformat(true) }}
                                     </div>
                                 {%- endif %}
                             </div>
@@ -68,14 +68,14 @@ centered
             <div class="pagination">
                 {% block pagination %}
                     {%- if show_previous_page -%}
-                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number - 1 }}{{ query | default(value='') }}">
-                            {{ "arrow-left" | fas }} Previous Page
+                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number - 1 }}{% if query %}{{ query }}{% endif %}">
+                            {{ "arrow-left"|fas }} Previous Page
                         </a>
                     {%- endif -%}
 
                     {%- if show_next_page -%}
-                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number + 1 }}{{ query | default(value='') }}">
-                            Next Page {{ "arrow-right" | fas }}
+                        <a class="pure-button pure-button-normal" href="/releases/{{ release_type }}/{{ page_number + 1 }}{% if query %}{{ query }}{% endif %}">
+                            Next Page {{ "arrow-right"|fas }}
                         </a>
                     {%- endif -%}
                 {% endblock pagination %}
@@ -85,5 +85,5 @@ centered
 {%- endblock body -%}
 
 {%- block javascript -%}
-    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ docsrs_version() | slugify }}"></script>
+    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ crate::BUILD_VERSION|slugify }}"></script>
 {%- endblock javascript -%}

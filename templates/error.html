@@ -1,4 +1,4 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 
 {%- block header -%}
     <div class="docsrs-package-container">
@@ -6,7 +6,5 @@
             <h1 id="crate-title">{{ title }}</h1>
         </div>
     </div>
-    <div class="description">
-        {{ message | default(value="") }}
-    </div>
+    <div class="description">{{ message }}</div>
 {%- endblock header -%}

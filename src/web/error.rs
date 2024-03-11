@@ -41,6 +41,7 @@ impl IntoResponse for AxumNope {
                     title: "The requested resource does not exist",
                     message: "no such resource".into(),
                     status: StatusCode::NOT_FOUND,
+                    csp_nonce: String::new(),
                 }
                 .into_response()
             }
@@ -49,6 +50,7 @@ impl IntoResponse for AxumNope {
                 title: "The requested build does not exist",
                 message: "no such build".into(),
                 status: StatusCode::NOT_FOUND,
+                    csp_nonce: String::new(),
             }
             .into_response(),
 
@@ -59,6 +61,7 @@ impl IntoResponse for AxumNope {
                     title: "The requested crate does not exist",
                     message: "no such crate".into(),
                     status: StatusCode::NOT_FOUND,
+                    csp_nonce: String::new(),
                 }
                 .into_response()
             }
@@ -67,6 +70,7 @@ impl IntoResponse for AxumNope {
                 title: "The requested owner does not exist",
                 message: "no such owner".into(),
                 status: StatusCode::NOT_FOUND,
+                csp_nonce: String::new(),
             }
             .into_response(),
 
@@ -77,6 +81,7 @@ impl IntoResponse for AxumNope {
                     title: "The requested version does not exist",
                     message: "no such version for this crate".into(),
                     status: StatusCode::NOT_FOUND,
+                    csp_nonce: String::new(),
                 }
                 .into_response()
             }
@@ -93,13 +98,25 @@ impl IntoResponse for AxumNope {
                 title: "Bad request",
                 message: Cow::Owned(source.to_string()),
                 status: StatusCode::BAD_REQUEST,
+                csp_nonce: String::new(),
             }
             .into_response(),
+            AxumNope::InternalServerError => {
+                // something went wrong, details should have been logged
+                AxumErrorPage {
+                    title: "Internal server error",
+                    message: "internal server error".into(),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    csp_nonce: String::new(),
+                }
+                .into_response()
+            }
             AxumNope::InternalError(source) => {
                 let web_error = crate::web::AxumErrorPage {
                     title: "Internal Server Error",
                     message: Cow::Owned(source.to_string()),
                     status: StatusCode::INTERNAL_SERVER_ERROR,
+                    csp_nonce: String::new(),
                 };
 
                 crate::utils::report_error(&source);

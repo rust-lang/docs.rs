@@ -14,6 +14,7 @@ use anyhow::{Context as _, Result};
 use axum::{response::IntoResponse, Extension};
 use axum_extra::headers::HeaderMapExt;
 use semver::Version;
+use askama::Template;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -167,6 +168,8 @@ impl FileList {
     }
 }
 
+#[derive(Template)]
+#[template(path = "crate/source.html")]
 #[derive(Debug, Clone, Serialize)]
 struct SourcePage {
     file_list: FileList,
@@ -176,10 +179,11 @@ struct SourcePage {
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
     use_direct_platform_links: bool,
+    csp_nonce: String,
 }
 
 impl_axum_webpage! {
-    SourcePage = "crate/source.html",
+    SourcePage,
     canonical_url = |page| Some(page.canonical_url.clone()),
     cache_policy = |page| if page.is_latest_url {
         CachePolicy::ForeverInCdn
@@ -328,6 +332,7 @@ pub(crate) async fn source_browser_handler(
         canonical_url,
         is_latest_url: params.version.is_latest(),
         use_direct_platform_links: true,
+        csp_nonce: String::new(),
     }
     .into_response())
 }
