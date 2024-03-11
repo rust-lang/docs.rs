@@ -394,6 +394,16 @@ pub async fn update_crate_data_in_database(
         .fetch_one(&mut *conn)
         .await?;
 
+    update_crate_data_in_db_by_id(conn, crate_id, registry_data).await?;
+
+    Ok(())
+}
+
+pub async fn update_crate_data_in_db_by_id(
+    conn: &mut sqlx::PgConnection,
+    crate_id: i32,
+    registry_data: &CrateData,
+) -> Result<()> {
     update_owners_in_database(conn, &registry_data.owners, crate_id).await?;
 
     Ok(())
@@ -413,14 +423,16 @@ async fn update_owners_in_database(
     for owner in owners {
         oids.push(
             sqlx::query_scalar!(
-                "INSERT INTO owners (login, avatar)
-                 VALUES ($1, $2)
+                "INSERT INTO owners (login, avatar, kind)
+                 VALUES ($1, $2, $3)
                  ON CONFLICT (login) DO UPDATE
                      SET
-                         avatar = EXCLUDED.avatar
+                         avatar = EXCLUDED.avatar,
+                         kind = EXCLUDED.kind
                  RETURNING id",
                 owner.login,
-                owner.avatar
+                owner.avatar,
+                owner.kind,
             )
             .fetch_one(&mut *conn)
             .await?,
@@ -612,18 +624,20 @@ mod test {
             let owner1 = CrateOwner {
                 avatar: "avatar".into(),
                 login: "login".into(),
+                kind: "user".into(),
             };
 
             update_owners_in_database(&mut conn, &[owner1.clone()], crate_id).await?;
 
             let owner_def = sqlx::query!(
-                "SELECT login, avatar
+                "SELECT login, avatar, kind
                 FROM owners"
             )
             .fetch_one(&mut *conn)
             .await?;
             assert_eq!(owner_def.login, owner1.login);
             assert_eq!(owner_def.avatar, owner1.avatar);
+            assert_eq!(owner_def.kind, owner1.kind);
 
             let owner_rel = sqlx::query!(
                 "SELECT o.login
@@ -654,6 +668,7 @@ mod test {
                 &[CrateOwner {
                     login: "login".into(),
                     avatar: "avatar".into(),
+                    kind: "user".into(),
                 }],
                 crate_id,
             )
@@ -662,14 +677,16 @@ mod test {
             let updated_owner = CrateOwner {
                 login: "login".into(),
                 avatar: "avatar2".into(),
+                kind: "team".into(),
             };
             update_owners_in_database(&mut conn, &[updated_owner.clone()], crate_id).await?;
 
-            let owner_def = sqlx::query!("SELECT login, avatar FROM owners")
+            let owner_def = sqlx::query!("SELECT login, avatar, kind FROM owners")
                 .fetch_one(&mut *conn)
                 .await?;
             assert_eq!(owner_def.login, updated_owner.login);
             assert_eq!(owner_def.avatar, updated_owner.avatar);
+            assert_eq!(owner_def.kind, updated_owner.kind);
 
             let owner_rel = sqlx::query!(
                 "SELECT o.login
@@ -705,6 +722,7 @@ mod test {
                 &[CrateOwner {
                     login: "login".into(),
                     avatar: "avatar".into(),
+                    kind: "user".into(),
                 }],
                 crate_id,
             )
@@ -714,6 +732,7 @@ mod test {
                 .map(|i| CrateOwner {
                     login: format!("login{i}"),
                     avatar: format!("avatar{i}"),
+                    kind: "user".into(),
                 })
                 .collect();
 

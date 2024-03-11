@@ -329,6 +329,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "malicious actor".into(),
                     avatar: "https://example.org/malicious".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
@@ -359,6 +360,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "Peter Rabbit".into(),
                     avatar: "https://example.org/peter".into(),
+                    kind: "user".into(),
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v2)?);
