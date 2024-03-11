@@ -93,7 +93,7 @@ pub(crate) async fn get_releases(
             repositories.stars
         FROM crates
         {1}
-        INNER JOIN release_build_status ON releases.id = release_build_status.id
+        INNER JOIN release_build_status ON releases.id = release_build_status.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
             ((NOT $3) OR (release_build_status.build_status = 'failure' AND releases.is_library = TRUE))
@@ -694,7 +694,7 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
                        release_build_status.build_status = 'failure'
                    ) AS INT)) AS failures
                FROM releases
-               INNER JOIN release_build_status ON releases.id = release_build_status.id
+               INNER JOIN release_build_status ON releases.id = release_build_status.rid
 
                WHERE
                    release_time >= CURRENT_DATE - INTERVAL '30 days' AND

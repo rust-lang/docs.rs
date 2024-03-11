@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT build_status as \"build_status!: BuildStatus\"\n            FROM crates\n            INNER JOIN releases ON crates.id = releases.crate_id\n            INNER JOIN release_build_status ON releases.id = release_build_status.id\n            WHERE crates.name = $1 AND releases.version = $2",
+  "query": "\n            SELECT build_status as \"build_status!: BuildStatus\"\n            FROM crates\n            INNER JOIN releases ON crates.id = releases.crate_id\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            WHERE crates.name = $1 AND releases.version = $2",
   "describe": {
     "columns": [
       {
@@ -27,8 +27,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "5ecd90db215d7bf3178869a320176af53e2e45f860edd6b2bb42ed5b45ae4efa"
+  "hash": "0b4084390b6c738c6f26c2dd13eff6ec8e7ea47c4d005d6cc00dbc60f69380cf"
 }

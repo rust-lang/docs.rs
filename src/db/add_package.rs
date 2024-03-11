@@ -125,6 +125,8 @@ pub(crate) async fn add_package_into_database(
         .await
         .context("couldn't update latest version id")?;
 
+    update_build_status(conn, release_id).await?;
+
     Ok(release_id)
 }
 
@@ -137,6 +139,44 @@ pub async fn update_latest_version_id(conn: &mut sqlx::PgConnection, crate_id: i
          WHERE id = $1",
         crate_id,
         latest_release(&releases).map(|release| release.id),
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn update_build_status(conn: &mut sqlx::PgConnection, release_id: i32) -> Result<()> {
+    sqlx::query!(
+        "INSERT INTO release_build_status(rid, last_build_time, build_status)
+         SELECT
+         summary.id,
+         summary.last_build_time,
+         CASE
+           WHEN summary.success_count > 0 THEN 'success'::build_status
+           WHEN summary.failure_count > 0 THEN 'failure'::build_status
+           ELSE 'in_progress'::build_status
+         END as build_status
+
+         FROM (
+             SELECT
+               r.id,
+               MAX(b.build_time) as last_build_time,
+               SUM(CASE WHEN b.build_status = 'success' THEN 1 ELSE 0 END) as success_count,
+               SUM(CASE WHEN b.build_status = 'failure' THEN 1 ELSE 0 END) as failure_count
+             FROM
+               releases as r
+               LEFT OUTER JOIN builds AS b on b.rid = r.id
+             WHERE
+               r.id = $1
+             GROUP BY r.id
+         ) as summary
+
+         ON CONFLICT (rid) DO UPDATE
+         SET
+             last_build_time = EXCLUDED.last_build_time,
+             build_status=EXCLUDED.build_status",
+        release_id,
     )
     .execute(&mut *conn)
     .await?;
@@ -207,6 +247,8 @@ pub(crate) async fn add_build_into_database(
     )
     .fetch_one(&mut *conn)
     .await?;
+
+    update_build_status(conn, release_id).await?;
 
     let crate_id = crate_id_from_release_id(&mut *conn, release_id).await?;
     update_latest_version_id(&mut *conn, crate_id)
