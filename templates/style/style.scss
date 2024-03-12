@@ -380,6 +380,13 @@ div.recent-releases-container {
     h4 {
         border-bottom-color: var(--color-border) !important;
     }
+
+    .yanked {
+      color: var(--color-warn-msg);
+      background-color: var(--color-warn-background);
+      padding: .2em .8em .2em .5em;
+      border-radius: 1em;
+    }
 }
 
 div.package-container {
