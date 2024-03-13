@@ -635,7 +635,7 @@ mod tests {
                 let mut conn = env.db().conn();
                 conn.execute(
                     "UPDATE queue SET last_attempt = $1",
-                    &[&(Utc::now() - chrono::Duration::seconds(60))],
+                    &[&(Utc::now() - chrono::Duration::try_seconds(60).unwrap())],
                 )?;
             }
 
