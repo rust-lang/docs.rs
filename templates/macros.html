@@ -96,7 +96,10 @@
     {%- for release in releases -%}
         {# The url for the release, `/crate/:name/:version` #}
         {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
-        {% if inner_path == "" %} {# /crate #}
+        {% if release.build_status == "failure" %}
+            {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
+            {%- set retain_fragment = false -%}
+        {% elif inner_path == "" %} {# /crate #}
             {%- set release_url = "/crate/" ~ name ~ "/" ~ release.version -%}
             {%- set retain_fragment = false -%}
         {% else %}
@@ -106,13 +109,13 @@
         {# The release's name and version, `:name-:version` #}
         {%- set release_name = name ~ "-" ~ release.version -%}
 
-        {%- if not release.is_library -%}
+        {%- if release.is_library == false -%}
             {# If the release isn't a library, then display that warning #}
             {%- set warning = release_name ~ " is not a library" -%}
-        {%- elif release.yanked and release.build_status == "success" -%}
+        {%- elif release.yanked == true and release.build_status == "success" -%}
             {# If the release has been yanked and successfully built, display a warning #}
             {%- set warning = release_name ~ " is yanked" -%}
-        {%- elif release.yanked and release.build_status == "failure" -%}
+        {%- elif release.yanked == true and release.build_status == "failure" -%}
             {# If the release has been yanked and failed to build, display a warning #}
             {%- set warning = release_name ~ " is yanked and docs.rs failed to build it" -%}
         {%- elif release.build_status == "failure" -%}

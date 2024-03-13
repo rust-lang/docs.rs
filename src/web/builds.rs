@@ -22,10 +22,11 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Build {
     id: i32,
-    rustc_version: String,
-    docsrs_version: String,
+    rustc_version: Option<String>,
+    docsrs_version: Option<String>,
     build_status: BuildStatus,
-    build_time: DateTime<Utc>,
+    build_time: Option<DateTime<Utc>>,
+    errors: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -123,7 +124,8 @@ async fn get_builds(
             builds.rustc_version,
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
-            builds.build_time
+            builds.build_time,
+            builds.errors
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
@@ -286,25 +288,30 @@ mod tests {
                 .create()?;
 
             let response = env.frontend().get("/crate/foo/0.1.0/builds").send()?;
-            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
-            let page = kuchikiki::parse_html().one(response.text()?);
 
-            let rows: Vec<_> = page
-                .select("ul > li a.release")
-                .unwrap()
-                .map(|row| row.text_contents())
-                .collect();
+            // FIXME: temporarily we don't show in-progress releases anywhere, which means we don't
+            // show releases without builds anywhere.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-            assert!(rows.is_empty());
+            // assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            // let page = kuchikiki::parse_html().one(response.text()?);
 
-            let warning = page
-                .select_first(".warning")
-                .expect("missing warning element")
-                .text_contents();
+            // let rows: Vec<_> = page
+            //     .select("ul > li a.release")
+            //     .unwrap()
+            //     .map(|row| row.text_contents())
+            //     .collect();
 
-            assert!(warning.contains("has not built"));
-            assert!(warning.contains("queued"));
-            assert!(warning.contains("open an issue"));
+            // assert!(rows.is_empty());
+
+            // let warning = page
+            //     .select_first(".warning")
+            //     .expect("missing warning element")
+            //     .text_contents();
+
+            // assert!(warning.contains("has not built"));
+            // assert!(warning.contains("queued"));
+            // assert!(warning.contains("open an issue"));
 
             Ok(())
         });

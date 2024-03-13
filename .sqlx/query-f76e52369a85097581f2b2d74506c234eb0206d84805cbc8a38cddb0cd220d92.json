@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO releases (crate_id, version, archive_storage)\n         VALUES ($1, $2, TRUE)\n         ON CONFLICT (crate_id, version) DO UPDATE\n         SET -- this `SET` is needed so the id is always returned.\n            version = EXCLUDED.version\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f76e52369a85097581f2b2d74506c234eb0206d84805cbc8a38cddb0cd220d92"
+}

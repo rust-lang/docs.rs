@@ -1,0 +1,17 @@
+ALTER TABLE releases 
+    ALTER COLUMN release_time DROP NOT NULL, 
+    ALTER COLUMN target_name DROP NOT NULL, 
+    ALTER COLUMN yanked DROP NOT NULL, 
+    ALTER COLUMN yanked DROP DEFAULT, 
+    ALTER COLUMN is_library DROP NOT NULL, 
+    ALTER COLUMN is_library DROP DEFAULT, 
+    ALTER COLUMN rustdoc_status DROP NOT NULL, 
+    ALTER COLUMN rustdoc_status DROP DEFAULT, 
+    ALTER COLUMN test_status DROP DEFAULT, 
+    ALTER COLUMN have_examples DROP NOT NULL, 
+    ALTER COLUMN have_examples DROP DEFAULT, 
+    ALTER COLUMN downloads DROP NOT NULL, 
+    ALTER COLUMN downloads DROP DEFAULT, 
+    ALTER COLUMN doc_targets DROP NOT NULL, 
+    ALTER COLUMN doc_targets DROP DEFAULT, 
+    ALTER COLUMN default_target DROP NOT NULL;

@@ -17,7 +17,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 /// Adds a package into database.
 ///
@@ -41,7 +41,7 @@ pub(crate) async fn add_package_into_database(
     archive_storage: bool,
 ) -> Result<i32> {
     debug!("Adding package into database");
-    let crate_id = initialize_package_in_database(conn, metadata_pkg).await?;
+    let crate_id = initialize_crate(conn, &metadata_pkg.name).await?;
     let dependencies = convert_dependencies(metadata_pkg);
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
@@ -181,6 +181,11 @@ pub async fn update_build_status(conn: &mut sqlx::PgConnection, release_id: i32)
     .execute(&mut *conn)
     .await?;
 
+    let crate_id = crate_id_from_release_id(&mut *conn, release_id).await?;
+    update_latest_version_id(&mut *conn, crate_id)
+        .await
+        .context("couldn't update latest version id")?;
+
     Ok(())
 }
 
@@ -224,25 +229,120 @@ pub(crate) async fn add_doc_coverage(
     .await?)
 }
 
-/// Adds a build into database
-pub(crate) async fn add_build_into_database(
+pub(crate) async fn finish_build(
     conn: &mut sqlx::PgConnection,
-    release_id: i32,
+    build_id: i32,
     rustc_version: &str,
     docsrs_version: &str,
     build_status: BuildStatus,
-) -> Result<i32> {
+    errors: Option<&str>,
+) -> Result<()> {
     debug!("Adding build into database");
     let hostname = hostname::get()?;
 
-    let build_id = sqlx::query_scalar!(
-        "INSERT INTO builds (rid, rustc_version, docsrs_version, build_status, build_server)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id",
-        release_id,
+    let release_id = sqlx::query_scalar!(
+        "UPDATE builds
+         SET
+             rustc_version = $1,
+             docsrs_version = $2,
+             build_status = $3,
+             build_server = $4,
+             errors = $5,
+             build_time = NOW()
+         WHERE
+            id = $6
+         RETURNING rid",
         rustc_version,
         docsrs_version,
         build_status as BuildStatus,
+        hostname.to_str().unwrap_or(""),
+        errors,
+        build_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+
+    update_build_status(conn, release_id).await?;
+
+    Ok(())
+}
+
+#[instrument(skip(conn))]
+pub(crate) async fn update_build_with_error(
+    conn: &mut sqlx::PgConnection,
+    build_id: i32,
+    errors: Option<&str>,
+) -> Result<i32> {
+    debug!("Adding build into database");
+    let release_id = sqlx::query_scalar!(
+        "UPDATE builds
+         SET
+             build_status = $1,
+             errors = $2
+         WHERE id = $3
+         RETURNING rid",
+        BuildStatus::Failure as BuildStatus,
+        errors,
+        build_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+
+    update_build_status(conn, release_id).await?;
+
+    Ok(build_id)
+}
+
+pub(crate) async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
+    sqlx::query_scalar!(
+        "INSERT INTO crates (name)
+         VALUES ($1)
+         ON CONFLICT (name) DO UPDATE
+         SET -- this `SET` is needed so the id is always returned.
+            name = EXCLUDED.name
+         RETURNING id",
+        name
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(Into::into)
+}
+
+pub(crate) async fn initialize_release(
+    conn: &mut sqlx::PgConnection,
+    crate_id: i32,
+    version: &str,
+) -> Result<i32> {
+    let release_id = sqlx::query_scalar!(
+        "INSERT INTO releases (crate_id, version, archive_storage)
+         VALUES ($1, $2, TRUE)
+         ON CONFLICT (crate_id, version) DO UPDATE
+         SET -- this `SET` is needed so the id is always returned.
+            version = EXCLUDED.version
+         RETURNING id",
+        crate_id,
+        version
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+
+    update_build_status(conn, release_id).await?;
+
+    Ok(release_id)
+}
+
+pub(crate) async fn initialize_build(
+    conn: &mut sqlx::PgConnection,
+    release_id: i32,
+) -> Result<i32> {
+    let hostname = hostname::get()?;
+
+    let build_id = sqlx::query_scalar!(
+        "INSERT INTO builds(rid, build_status, build_server)
+         VALUES ($1, $2, $3)
+         RETURNING id",
+        release_id,
+        BuildStatus::InProgress as BuildStatus,
         hostname.to_str().unwrap_or(""),
     )
     .fetch_one(&mut *conn)
@@ -250,32 +350,7 @@ pub(crate) async fn add_build_into_database(
 
     update_build_status(conn, release_id).await?;
 
-    let crate_id = crate_id_from_release_id(&mut *conn, release_id).await?;
-    update_latest_version_id(&mut *conn, crate_id)
-        .await
-        .context("couldn't update latest version id")?;
-
     Ok(build_id)
-}
-
-async fn initialize_package_in_database(
-    conn: &mut sqlx::PgConnection,
-    pkg: &MetadataPackage,
-) -> Result<i32> {
-    if let Some(id) = sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", pkg.name)
-        .fetch_optional(&mut *conn)
-        .await?
-    {
-        Ok(id)
-    } else {
-        // insert crate into database if it is not exists
-        Ok(sqlx::query_scalar!(
-            "INSERT INTO crates (name) VALUES ($1) RETURNING id",
-            pkg.name,
-        )
-        .fetch_one(&mut *conn)
-        .await?)
-    }
 }
 
 /// Convert dependencies into Vec<(String, String, String, bool)>
@@ -522,7 +597,7 @@ where
 mod test {
     use super::*;
     use crate::test::*;
-    use crate::utils::{CargoMetadata, MetadataPackage};
+    use crate::utils::CargoMetadata;
     use test_case::test_case;
 
     #[test]
@@ -643,13 +718,7 @@ mod test {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
 
-            let crate_id = initialize_package_in_database(
-                &mut conn,
-                &MetadataPackage {
-                    ..Default::default()
-                },
-            )
-            .await?;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             let owner1 = CrateOwner {
                 avatar: "avatar".into(),
@@ -687,8 +756,7 @@ mod test {
     fn update_owner_detais() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
-            let crate_id =
-                initialize_package_in_database(&mut conn, &MetadataPackage::default()).await?;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             // set initial owner details
             update_owners_in_database(
@@ -733,13 +801,7 @@ mod test {
     fn add_new_owners_and_delete_old() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
-            let crate_id = initialize_package_in_database(
-                &mut conn,
-                &MetadataPackage {
-                    ..Default::default()
-                },
-            )
-            .await?;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             // set initial owner details
             update_owners_in_database(
@@ -848,5 +910,77 @@ mod test {
         assert_eq!(features, expected.as_ref());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_initialize_crate() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+
+            let name = "krate";
+            let crate_id = initialize_crate(&mut conn, name).await?;
+
+            let id: i32 = sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", name)
+                .fetch_one(&mut *conn)
+                .await?;
+
+            assert_eq!(crate_id, id);
+
+            let same_crate_id = initialize_crate(&mut conn, name).await?;
+            assert_eq!(crate_id, same_crate_id);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_initialize_release() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let name = "krate";
+            let version = "0.1.0";
+            let crate_id = initialize_crate(&mut conn, name).await?;
+
+            let release_id = initialize_release(&mut conn, crate_id, version).await?;
+
+            let id: i32 = sqlx::query_scalar!(
+                "SELECT id FROM releases WHERE crate_id = $1 and version = $2",
+                crate_id,
+                version
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+
+            assert_eq!(release_id, id);
+
+            let same_release_id = initialize_release(&mut conn, crate_id, version).await?;
+            assert_eq!(release_id, same_release_id);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_initialize_build() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let name = "krate";
+            let version = "0.1.0";
+            let crate_id = initialize_crate(&mut conn, name).await?;
+            let release_id = initialize_release(&mut conn, crate_id, version).await?;
+
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            let id: i32 = sqlx::query_scalar!("SELECT id FROM builds WHERE rid = $1", release_id)
+                .fetch_one(&mut *conn)
+                .await?;
+
+            assert_eq!(build_id, id);
+
+            let another_build_id = initialize_build(&mut conn, release_id).await?;
+            assert_ne!(build_id, another_build_id);
+
+            Ok(())
+        })
     }
 }
