@@ -18,6 +18,7 @@ cargo run -- database migrate
 cargo run -- build update-toolchain
 cargo run -- build crate sysinfo 0.23.4
 cargo run -- build crate sysinfo 0.23.5
+cargo run -- build crate libtest 0.0.1
 cargo run -- build add-essential-files
 
 if [ -f .tmp.env ]; then

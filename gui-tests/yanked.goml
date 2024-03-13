@@ -1,0 +1,3 @@
+go-to: |DOC_PATH| + "/releases/search?query=libtest"
+
+assert-text: ("//*[contains(@class, 'release')]//*[contains(@class, 'name')][contains(text(), 'libtest-0.0.1')]", "Yanked", CONTAINS)
