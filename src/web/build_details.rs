@@ -20,11 +20,12 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct BuildDetails {
     id: i32,
-    rustc_version: String,
-    docsrs_version: String,
+    rustc_version: Option<String>,
+    docsrs_version: Option<String>,
     build_status: BuildStatus,
-    build_time: DateTime<Utc>,
+    build_time: Option<DateTime<Utc>>,
     output: String,
+    errors: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -63,6 +64,7 @@ pub(crate) async fn build_details_handler(
              builds.build_status as "build_status: BuildStatus",
              builds.build_time,
              builds.output,
+             builds.errors,
              releases.default_target
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -81,26 +83,33 @@ pub(crate) async fn build_details_handler(
     } else {
         let prefix = format!("build-logs/{}/", id);
 
-        let current_filename = params
+        if let Some(current_filename) = params
             .filename
-            .unwrap_or_else(|| format!("{}.txt", row.default_target));
-
-        let path = format!("{prefix}{current_filename}");
-        let file = File::from_path(&storage, &path, &config).await?;
-        (
-            String::from_utf8(file.0.content).context("non utf8")?,
-            storage
-                .list_prefix(&prefix) // the result from S3 is ordered by key
-                .await
-                .map_ok(|path| {
-                    path.strip_prefix(&prefix)
-                        .expect("since we query for the prefix, it has to be always there")
-                        .to_owned()
-                })
-                .try_collect()
-                .await?,
-            Some(current_filename),
-        )
+            .or(row.default_target.map(|target| format!("{}.txt", target)))
+        {
+            let path = format!("{prefix}{current_filename}");
+            let file = File::from_path(&storage, &path, &config).await?;
+            (
+                String::from_utf8(file.0.content).context("non utf8")?,
+                storage
+                    .list_prefix(&prefix) // the result from S3 is ordered by key
+                    .await
+                    .map_ok(|path| {
+                        path.strip_prefix(&prefix)
+                            .expect("since we query for the prefix, it has to be always there")
+                            .to_owned()
+                    })
+                    .try_collect()
+                    .await?,
+                Some(current_filename),
+            )
+        } else {
+            // this can only happen when `releases.default_target` is NULL,
+            // which is the case for in-progress builds or builds which errored
+            // before we could determine the target.
+            // For the "error" case we show `row.errors`, which should contain what we need to see.
+            ("".into(), Vec::new(), None)
+        }
     };
 
     Ok(BuildDetailsPage {
@@ -112,6 +121,7 @@ pub(crate) async fn build_details_handler(
             build_status: row.build_status,
             build_time: row.build_time,
             output,
+            errors: row.errors,
         },
         use_direct_platform_links: true,
         all_log_filenames,
@@ -154,6 +164,7 @@ mod tests {
                 env.frontend()
                     .get("/crate/foo/0.1.0/builds")
                     .send()?
+                    .error_for_status()?
                     .text()?,
             );
 

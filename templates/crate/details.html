@@ -10,15 +10,19 @@
 {%- endblock meta -%}
 
 {%- block topbar -%}
-  {%- set metadata = details.metadata -%}
-  {%- set latest_version = "" -%}
-  {%- set latest_path = "" -%}
-  {%- set target = "" -%}
-  {%- set inner_path = details.metadata.target_name ~ "/index.html" -%}
-  {%- set is_latest_version = true -%}
-  {%- set is_prerelease = false -%}
-  {%- set use_direct_platform_links = true -%}
-  {%- include "rustdoc/topbar.html" -%}
+    {%- set metadata = details.metadata -%}
+    {%- set latest_version = "" -%}
+    {%- set latest_path = "" -%}
+    {%- set target = "" -%}
+    {%- if metadata.target_name -%}
+        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- else -%}
+        {%- set inner_path = "" -%}
+    {%- endif -%}
+    {%- set is_latest_version = true -%}
+    {%- set is_prerelease = false -%}
+    {%- set use_direct_platform_links = true -%}
+    {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
@@ -101,17 +105,21 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# List all dependencies that the current release has #}
-                                    {%- for dep in details.dependencies -%}
-                                        <li class="pure-menu-item">
-                                            <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
-                                                {{ dep[0] }} {{ dep[1] }}
-                                                <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
-                                                {%- if dep[3] -%}
-                                                <i> optional </i>
-                                                {%- endif -%}
-                                            </a>
-                                        </li>
-                                    {%- endfor -%}
+                                    {%- if details.dependencies -%}
+                                        {%- for dep in details.dependencies -%}
+                                            <li class="pure-menu-item">
+                                                <a href="/crate/{{ dep[0] }}/{{ dep[1] }}" class="pure-menu-link">
+                                                    {{ dep[0] }} {{ dep[1] }}
+                                                    <i class="dependencies {{ dep[2] | default(value='') }}">{{ dep[2] | default(value="") }}</i>
+                                                    {%- if dep[3] -%}
+                                                        <i> optional </i>
+                                                    {%- endif -%}
+                                                </a>
+                                            </li>
+                                        {%- endfor -%}
+                                    {%- else -%}
+                                        &mdash;
+                                    {%- endif -%}
                                 </ul>
                             </div>
                         </li>
@@ -141,13 +149,13 @@
 
             <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
                 {# If the release is not a library #}
-                {%- if not details.is_library -%}
+                {%- if details.is_library == false -%}
                     <div class="warning">
                         {{ details.name }}-{{ details.version }} is not a library.
                     </div>
 
                 {# If the release has been yanked and is a library #}
-                {%- elif details.yanked -%}
+                {%- elif details.metadata.yanked == true -%}
                     <div class="warning">
                         {{ details.name }}-{{ details.version }} has been yanked.
                     </div>

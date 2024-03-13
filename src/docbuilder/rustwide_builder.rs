@@ -1,7 +1,8 @@
 use crate::db::file::add_path_into_database;
 use crate::db::{
-    add_build_into_database, add_doc_coverage, add_package_into_database,
-    add_path_into_remote_archive, types::BuildStatus, update_crate_data_in_database, Pool,
+    add_doc_coverage, add_package_into_database, add_path_into_remote_archive, finish_build,
+    initialize_build, initialize_crate, initialize_release, types::BuildStatus,
+    update_build_with_error, update_crate_data_in_database, Pool,
 };
 use crate::docbuilder::Limits;
 use crate::error::Result;
@@ -368,8 +369,37 @@ impl RustwideBuilder {
         version: &str,
         kind: PackageKind<'_>,
     ) -> Result<bool> {
-        let mut conn = self.db.get()?;
+        let build_id = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            let crate_id = initialize_crate(&mut conn, name).await?;
+            let release_id = initialize_release(&mut conn, crate_id, version).await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+            Ok::<i32, Error>(build_id)
+        })?;
 
+        match self.build_package_inner(name, version, kind, build_id) {
+            Ok(successful) => Ok(successful),
+            Err(err) => self.runtime.block_on(async {
+                // NOTE: this might hide some errors from us, while only surfacing them in the build
+                // result.
+                // At some point we might introduce a special error type which additionally reports
+                // to sentry.
+                let mut conn = self.db.get_async().await?;
+                update_build_with_error(&mut conn, build_id, Some(&format!("{:?}", err))).await?;
+
+                Ok(false)
+            }),
+        }
+    }
+
+    fn build_package_inner(
+        &mut self,
+        name: &str,
+        version: &str,
+        kind: PackageKind<'_>,
+        build_id: i32,
+    ) -> Result<bool> {
+        let mut conn = self.db.get()?;
         info!("building package {} {}", name, version);
 
         if is_blacklisted(&mut conn, name)? {
@@ -608,12 +638,13 @@ impl RustwideBuilder {
                     } else {
                         BuildStatus::Failure
                     };
-                    let build_id = self.runtime.block_on(add_build_into_database(
+                    self.runtime.block_on(finish_build(
                         &mut async_conn,
-                        release_id,
+                        build_id,
                         &res.result.rustc_version,
                         &res.result.docsrs_version,
                         build_status,
+                        None,
                     ))?;
 
                     {

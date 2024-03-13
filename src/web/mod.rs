@@ -2,6 +2,7 @@
 
 pub mod page;
 
+use crate::db::types::BuildStatus;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use anyhow::{anyhow, bail, Context as _, Result};
@@ -57,6 +58,8 @@ use std::{
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use url::form_urlencoded;
+
+use self::crate_details::Release;
 
 // from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
 // and https://github.com/tokio-rs/axum/blob/main/axum-extra/src/lib.rs
@@ -214,12 +217,16 @@ impl MatchedRelease {
         self.release.id
     }
 
-    fn rustdoc_status(&self) -> bool {
-        self.release.rustdoc_status
+    fn build_status(&self) -> BuildStatus {
+        self.release.build_status
     }
 
-    fn target_name(&self) -> &str {
-        &self.release.target_name
+    fn rustdoc_status(&self) -> bool {
+        self.release.rustdoc_status.unwrap_or(false)
+    }
+
+    fn target_name(&self) -> Option<&str> {
+        self.release.target_name.as_deref()
     }
 
     fn is_latest_url(&self) -> bool {
@@ -262,7 +269,7 @@ async fn match_version(
 
     // first load and parse all versions of this crate,
     // `releases_for_crate` is already sorted, newest version first.
-    let mut releases = crate_details::releases_for_crate(conn, crate_id)
+    let releases = crate_details::releases_for_crate(conn, crate_id)
         .await
         .context("error fetching releases for crate")?;
 
@@ -299,10 +306,11 @@ async fn match_version(
     };
 
     // when matching semver requirements, we only want to look at non-yanked releases.
-    releases.retain(|r| !r.yanked);
+    let flt = |r: &&Release| r.yanked == Some(false);
 
     if let Some(release) = releases
         .iter()
+        .filter(flt)
         .find(|release| req_semver.matches(&release.version))
     {
         return Ok(MatchedRelease {
@@ -319,7 +327,8 @@ async fn match_version(
     // just return the latest prerelease.
     if req_semver == VersionReq::STAR {
         return releases
-            .first()
+            .iter()
+            .find(flt)
             .cloned()
             .map(|release| MatchedRelease {
                 name: name.to_owned(),
@@ -618,10 +627,10 @@ pub(crate) struct MetaData {
     pub(crate) req_version: ReqVersion,
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
-    pub(crate) rustdoc_status: bool,
-    pub(crate) default_target: String,
-    pub(crate) doc_targets: Vec<String>,
-    pub(crate) yanked: bool,
+    pub(crate) rustdoc_status: Option<bool>,
+    pub(crate) default_target: Option<String>,
+    pub(crate) doc_targets: Option<Vec<String>>,
+    pub(crate) yanked: Option<bool>,
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
     pub(crate) rustdoc_css_file: Option<String>,
@@ -667,12 +676,11 @@ impl MetaData {
             version: version.clone(),
             req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
             description: row.description,
-            target_name: Some(row.target_name),
+            target_name: row.target_name,
             rustdoc_status: row.rustdoc_status,
             default_target: row.default_target,
-            doc_targets: MetaData::parse_doc_targets(row.doc_targets),
+            doc_targets: row.doc_targets.map(MetaData::parse_doc_targets),
             yanked: row.yanked,
-            // rustdoc_css_file: get_correct_docsrs_style_file(&row.doc_rustc_version).unwrap(),
             rustdoc_css_file: row
                 .rustc_version
                 .as_deref()
@@ -1076,13 +1084,13 @@ mod test {
             req_version: ReqVersion::Latest,
             description: Some("serde does stuff".to_string()),
             target_name: None,
-            rustdoc_status: true,
-            default_target: "x86_64-unknown-linux-gnu".to_string(),
-            doc_targets: vec![
+            rustdoc_status: Some(true),
+            default_target: Some("x86_64-unknown-linux-gnu".to_string()),
+            doc_targets: Some(vec![
                 "x86_64-unknown-linux-gnu".to_string(),
                 "arm64-unknown-linux-gnu".to_string(),
-            ],
-            yanked: false,
+            ]),
+            yanked: Some(false),
             rustdoc_css_file: Some("rustdoc.css".to_string()),
         };
 
@@ -1163,10 +1171,10 @@ mod test {
                     req_version: ReqVersion::Latest,
                     description: Some("Fake package".to_string()),
                     target_name: Some("foo".to_string()),
-                    rustdoc_status: true,
-                    default_target: "x86_64-unknown-linux-gnu".to_string(),
-                    doc_targets: vec![],
-                    yanked: false,
+                    rustdoc_status: Some(true),
+                    default_target: Some("x86_64-unknown-linux-gnu".to_string()),
+                    doc_targets: Some(vec![]),
+                    yanked: Some(false),
                     rustdoc_css_file: Some("rustdoc.css".to_string()),
                 },
             );

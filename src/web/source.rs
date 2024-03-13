@@ -44,7 +44,6 @@ impl File {
 /// A list of source files
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct FileList {
-    metadata: MetaData,
     files: Vec<File>,
 }
 
@@ -136,10 +135,7 @@ impl FileList {
                 }
             });
 
-            Ok(Some(FileList {
-                metadata: MetaData::from_crate(conn, name, version, req_version).await?,
-                files: file_list,
-            }))
+            Ok(Some(FileList { files: file_list }))
         } else {
             Ok(None)
         }
@@ -149,6 +145,7 @@ impl FileList {
 #[derive(Debug, Clone, Serialize)]
 struct SourcePage {
     file_list: FileList,
+    metadata: MetaData,
     show_parent_link: bool,
     file: Option<File>,
     file_content: Option<String>,
@@ -210,7 +207,9 @@ pub(crate) async fn source_browser_handler(
             (
                 SELECT id
                 FROM builds
-                WHERE builds.rid = releases.id
+                WHERE
+                    builds.rid = releases.id AND
+                    builds.build_status = 'success'
                 ORDER BY build_time DESC
                 LIMIT 1
             ) AS latest_build_id
@@ -308,6 +307,13 @@ pub(crate) async fn source_browser_handler(
 
     Ok(SourcePage {
         file_list,
+        metadata: MetaData::from_crate(
+            &mut conn,
+            &params.name,
+            &version,
+            Some(params.version.clone()),
+        )
+        .await?,
         show_parent_link: !current_folder.is_empty(),
         file,
         file_content,

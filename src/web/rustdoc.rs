@@ -214,23 +214,24 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     let matched_release = matched_release.into_canonical_req_version();
 
-    let mut target = params.target.as_deref();
-    if target == Some("index.html") || target == Some(matched_release.target_name()) {
-        target = None;
-    }
-
     if matched_release.rustdoc_status() {
+        let target_name = matched_release
+            .target_name()
+            .expect("when rustdoc_status is true, target name exists");
+        let mut target = params.target.as_deref();
+        if target == Some("index.html") || target == Some(target_name) {
+            target = None;
+        }
+
         let url_str = if let Some(target) = target {
             format!(
                 "/{crate_name}/{}/{target}/{}/",
-                matched_release.req_version,
-                matched_release.target_name(),
+                matched_release.req_version, target_name
             )
         } else {
             format!(
                 "/{crate_name}/{}/{}/",
-                matched_release.req_version,
-                matched_release.target_name(),
+                matched_release.req_version, target_name
             )
         };
 
@@ -411,11 +412,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             )
         })?;
 
-    trace!("crate details");
-    // Get the crate's details from the database
-    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
-
-    if !krate.rustdoc_status {
+    if !matched_release.rustdoc_status() {
         return Ok(axum_cached_redirect(
             format!("/crate/{}/{}", params.name, params.version),
             CachePolicy::ForeverInCdn,
@@ -423,9 +420,19 @@ pub(crate) async fn rustdoc_html_server_handler(
         .into_response());
     }
 
+    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
-    if req_path.first().copied() == Some(&krate.metadata.default_target) {
+    if req_path.first().copied()
+        == Some(
+            krate
+                .metadata
+                .default_target
+                .as_ref()
+                .expect("when we have docs, this is always filled"),
+        )
+    {
         return redirect(
             &params.name,
             &krate.version,
@@ -496,7 +503,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )?
                 .into_response())
             } else {
-                if storage_path == format!("{}/index.html", krate.target_name) {
+                if storage_path == format!("{}/index.html", krate.target_name.expect("we check rustdoc_status = true above, and with docs we have target_name")) {
                     error!(
                         krate = params.name,
                         version = krate.version.to_string(),
@@ -537,6 +544,8 @@ pub(crate) async fn rustdoc_html_server_handler(
             && krate
                 .metadata
                 .doc_targets
+                .as_ref()
+                .expect("with rustdoc_status=true we always have doc_targets")
                 .iter()
                 .any(|s| s == inner_path[0])
         {
@@ -551,14 +560,17 @@ pub(crate) async fn rustdoc_html_server_handler(
     // Find the path of the latest version for the `Go to latest` and `Permalink` links
     let mut current_target = String::new();
     let target_redirect = if latest_release.build_status.is_success() {
-        let target = if target.is_empty() {
-            current_target.clone_from(&krate.metadata.default_target);
-            &krate.metadata.default_target
+        current_target = if target.is_empty() {
+            krate
+                .metadata
+                .default_target
+                .as_ref()
+                .expect("with docs we always have a default_target")
+                .clone()
         } else {
-            target.clone_into(&mut current_target);
-            target
+            target.to_owned()
         };
-        format!("/target-redirect/{target}/{inner_path}")
+        format!("/target-redirect/{current_target}/{inner_path}")
     } else {
         "".to_string()
     };
@@ -641,6 +653,8 @@ fn path_for_version(
     let platform = if crate_details
         .metadata
         .doc_targets
+        .as_ref()
+        .expect("this method is only used when we have docs, so this field contains data")
         .iter()
         .any(|s| s == file_path[0])
         && !file_path.is_empty()
@@ -673,7 +687,10 @@ fn path_for_version(
         // else, don't try searching at all, we don't know how to find it
         last_component.strip_suffix(".rs.html")
     };
-    let target_name = &crate_details.target_name;
+    let target_name = &crate_details
+        .target_name
+        .as_ref()
+        .expect("this method is only used when we have docs, so this field contains data");
     let path = if platform.is_empty() {
         format!("{target_name}/")
     } else {
@@ -699,6 +716,18 @@ pub(crate) async fn target_redirect_handler(
 
     let crate_details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
+    // this handler should only be used when we have docs.
+    // So we can assume here that we always have a default_target.
+    // the only case where this would be empty is when the build failed before calling rustdoc.
+    let default_target = crate_details
+        .metadata
+        .default_target
+        .as_ref()
+        .ok_or_else(|| {
+            error!("target_redirect_handler was called with release with missing default_target");
+            AxumNope::VersionNotFound
+        })?;
+
     // We're trying to find the storage location
     // for the requested path in the target-redirect.
     // *path always contains the target,
@@ -709,7 +738,7 @@ pub(crate) async fn target_redirect_handler(
     let storage_location_for_path = {
         let mut pieces: Vec<_> = req_path.split('/').map(str::to_owned).collect();
 
-        if pieces.first() == Some(&crate_details.metadata.default_target) {
+        if pieces.first() == Some(default_target) {
             pieces.remove(0);
         }
 

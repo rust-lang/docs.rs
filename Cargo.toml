@@ -131,6 +131,7 @@ aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"
 indoc = "2.0.0"
+pretty_assertions = "1.4.0"
 
 [profile.dev.package."*"]
 opt-level = 2
