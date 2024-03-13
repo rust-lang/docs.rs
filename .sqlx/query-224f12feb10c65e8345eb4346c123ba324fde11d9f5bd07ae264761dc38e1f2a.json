@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             builds.rustc_version,\n             builds.docsrs_version,\n             builds.build_status as \"build_status: BuildStatus\",\n             builds.build_time,\n             builds.output,\n             releases.default_target\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+  "query": "SELECT\n             builds.rustc_version,\n             builds.docsrs_version,\n             builds.build_status as \"build_status: BuildStatus\",\n             builds.build_time,\n             builds.output,\n             builds.errors,\n             releases.default_target\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
   "describe": {
     "columns": [
       {
@@ -41,6 +41,11 @@
       },
       {
         "ordinal": 5,
+        "name": "errors",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
         "name": "default_target",
         "type_info": "Varchar"
       }
@@ -53,13 +58,14 @@
       ]
     },
     "nullable": [
-      false,
-      false,
-      false,
+      true,
+      true,
       false,
       true,
-      false
+      true,
+      true,
+      true
     ]
   },
-  "hash": "b29681d013e952b90a2fe01db50da562d6ef7ab5ab19c6c992235db5bd931e8c"
+  "hash": "224f12feb10c65e8345eb4346c123ba324fde11d9f5bd07ae264761dc38e1f2a"
 }

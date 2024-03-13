@@ -13,7 +13,11 @@
   {%- set latest_version = "" -%}
   {%- set latest_path = "" -%}
   {%- set target = "" -%}
-  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- if metadata.target_name -%}
+        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- else -%}
+        {%- set inner_path = "" -%}
+    {%- endif -%}
   {%- set is_latest_version = true -%}
   {%- set is_prerelease = false -%}
   {%- include "rustdoc/topbar.html" -%}
@@ -44,7 +48,10 @@
                             </li>
                         {%- else -%}
                             <li class="pure-menu-item">
-                                <span class="documented-info">Feature flags are not available for this release because it was built before features were collected by docs.rs.</span>
+                                <span class="documented-info">
+                                    Feature flags are not available for this release because the build failed before we could retrieve them,
+                                    or it was built before features were collected by docs.rs.
+                                </span>
                             </li>
                         {%- endif -%}
                     </ul>
@@ -80,7 +87,10 @@
                 {%- elif features is iterable  -%}
                     <p data-id="empty-features">This release does not have any feature flags.</p>
                 {%- else -%}
-                    <p data-id="null-features">Feature flags are not available for this release because it was built before features were collected by docs.rs.</p>
+                <p data-id="null-features">
+                    Feature flags are not available for this release because the build failed before we could retrieve them,
+                    or it was built before features were collected by docs.rs.
+                </p>
                 {%- endif -%}
             </div>
         </div>

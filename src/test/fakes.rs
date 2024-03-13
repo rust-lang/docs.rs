@@ -612,12 +612,14 @@ impl FakeBuild {
         release_id: i32,
         default_target: &str,
     ) -> Result<()> {
-        let build_id = crate::db::add_build_into_database(
+        let build_id = crate::db::initialize_build(&mut *conn, release_id).await?;
+        crate::db::finish_build(
             &mut *conn,
-            release_id,
+            build_id,
             &self.rustc_version,
             &self.docsrs_version,
             self.build_status,
+            None,
         )
         .await?;
 

@@ -2,23 +2,27 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {{ macros::doc_title(name=file_list.metadata.name, version=file_list.metadata.version) }}
+    {{ macros::doc_title(name=metadata.name, version=metadata.version) }}
 {%- endblock title -%}
 
 {%- block topbar -%}
-  {%- set metadata = file_list.metadata -%}
-  {%- set latest_version = "" -%}
-  {%- set latest_path = "" -%}
-  {%- set target = "" -%}
-  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-  {%- set is_latest_version = true -%}
-  {%- set is_prerelease = false -%}
-  {%- include "rustdoc/topbar.html" -%}
+    {%- set metadata = metadata -%}
+    {%- set latest_version = "" -%}
+    {%- set latest_path = "" -%}
+    {%- set target = "" -%}
+    {%- if metadata.target_name -%}
+        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- else -%}
+        {%- set inner_path = "" -%}
+    {%- endif -%}
+    {%- set is_latest_version = true -%}
+    {%- set is_prerelease = false -%}
+    {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
     {# Set the active tab to the `source` tab #}
-    {{ navigation::package_navigation(metadata=file_list.metadata, active_tab="source") }}
+    {{ navigation::package_navigation(metadata=metadata, active_tab="source") }}
 {%- endblock header -%}
 
 {%- block body_classes -%}
@@ -46,54 +50,54 @@
 
                         {%- for file in file_list.files -%}
                             <li class="pure-menu-item">
-                                {#
-                                    Show a link to the file with a fancy icon. If the file is a directory,
-                                    `/` is appended to show the contents of the folder
-                                #}
+                                    {#
+                                        Show a link to the file with a fancy icon. If the file is a directory,
+                                        `/` is appended to show the contents of the folder
+                                    #}
                                 <a href="./{{ file.name }}{% if file.mime == 'dir' %}/{% endif %}" class="pure-menu-link">
-                                    {# Directories #}
+                                        {# Directories #}
                                     {%- if file.mime == "dir" -%}
                                         {{ "folder-open" | far }}
 
-                                    {# Rust files #}
+                                        {# Rust files #}
                                     {%- elif file.mime == "text/rust" -%}
                                         {{ "rust" | fab }}
 
-                                    {# Cargo.lock #}
+                                        {# Cargo.lock #}
                                     {%- elif file.mime == "text/plain" and file.name == "Cargo.lock" -%}
                                         {{ "lock" | fas }}
 
-                                    {# Markdown files #}
+                                        {# Markdown files #}
                                     {% elif file.mime == "text/markdown" %}
                                         {{ "markdown" | fab }}
 
-                                    {# .gitignore #}
+                                        {# .gitignore #}
                                     {% elif file.mime == "text/plain" and file.name == ".gitignore" %}
                                         {{ "git-alt" | fab }}
 
-                                    {#
-                                        More ideas
-                                            FontAwesome v5:
-                                                ".application/x-bzip"
-                                                | "application/gzip"
-                                                | "application/x-bzip2"
-                                                | "application/vnd.rar"
-                                                | "application/x-tar"
-                                                | "application/zip"
-                                                | "application/x-7z-compressed" => https://fontawesome.com/icons/file-archive
-                                                "text/javascript" => https://fontawesome.com/icons/js
-                                                "application/java-archive" => https://fontawesome.com/icons/java
-                                            DevOpticons (https://github.com/file-icons/DevOpicons):
-                                                "text/rust" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#Rust
-                                                "text/css" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#CSS3,%20Full
-                                                "text/html" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#HTML5
-                                    #}
+                                        {#
+                                            More ideas
+                                                FontAwesome v5:
+                                                    ".application/x-bzip"
+                                                    | "application/gzip"
+                                                    | "application/x-bzip2"
+                                                    | "application/vnd.rar"
+                                                    | "application/x-tar"
+                                                    | "application/zip"
+                                                    | "application/x-7z-compressed" => https://fontawesome.com/icons/file-archive
+                                                    "text/javascript" => https://fontawesome.com/icons/js
+                                                    "application/java-archive" => https://fontawesome.com/icons/java
+                                                DevOpticons (https://github.com/file-icons/DevOpicons):
+                                                    "text/rust" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#Rust
+                                                    "text/css" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#CSS3,%20Full
+                                                    "text/html" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#HTML5
+                                        #}
 
-                                    {# Text files or files which mime starts with `text` #}
+                                        {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" or file.mime | split(pat="/") | first == "text" -%}
                                         {{ "file-alt" | far }}
 
-                                    {# Binary files and any unrecognized types #}
+                                        {# Binary files and any unrecognized types #}
                                     {% else -%}
                                         {{ "file-archive" | far }}
                                     {%- endif -%}

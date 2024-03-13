@@ -59,12 +59,12 @@
       false,
       false,
       true,
-      false,
-      false,
-      false,
-      false,
-      false,
-      false
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
     ]
   },
   "hash": "d471c22a41a040f720ac678b085265f616eef21a09ffaaa243fc26f107ad6c87"

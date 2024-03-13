@@ -47,7 +47,7 @@ pub struct Release {
     description: Option<String>,
     target_name: Option<String>,
     rustdoc_status: bool,
-    pub(crate) build_time: DateTime<Utc>,
+    pub(crate) build_time: Option<DateTime<Utc>>,
     stars: i32,
     has_unyanked_releases: Option<bool>,
 }
@@ -89,7 +89,7 @@ pub(crate) async fn get_releases(
             releases.description,
             releases.target_name,
             releases.rustdoc_status,
-            release_build_status.last_build_time AS build_time,
+            release_build_status.last_build_time,
             repositories.stars
         FROM crates
         {1}
@@ -97,7 +97,8 @@ pub(crate) async fn get_releases(
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
             ((NOT $3) OR (release_build_status.build_status = 'failure' AND releases.is_library = TRUE))
-            AND {0} IS NOT NULL
+            AND {0} IS NOT NULL AND
+            release_build_status.build_status != 'in_progress'
 
         ORDER BY {0} DESC
         LIMIT $1 OFFSET $2",
@@ -239,7 +240,7 @@ async fn get_search_results(
                crates.name,
                releases.version,
                releases.description,
-               builds.build_time,
+               release_build_status.last_build_time,
                releases.target_name,
                releases.rustdoc_status,
                repositories.stars as "stars?",
@@ -253,10 +254,12 @@ async fn get_search_results(
 
            FROM crates
            INNER JOIN releases ON crates.latest_version_id = releases.id
-           INNER JOIN builds ON releases.id = builds.rid
+           INNER JOIN release_build_status ON releases.id = release_build_status.rid
            LEFT JOIN repositories ON releases.repository_id = repositories.id
 
-           WHERE crates.name = ANY($1)"#,
+           WHERE
+               crates.name = ANY($1) AND
+               release_build_status.build_status <> 'in_progress'"#,
         &names[..],
     )
     .fetch(&mut *conn)
@@ -267,9 +270,9 @@ async fn get_search_results(
                 name: row.name,
                 version: row.version,
                 description: row.description,
-                build_time: row.build_time,
-                target_name: Some(row.target_name),
-                rustdoc_status: row.rustdoc_status,
+                build_time: row.last_build_time,
+                target_name: row.target_name,
+                rustdoc_status: row.rustdoc_status.unwrap_or(false),
                 stars: row.stars.unwrap_or(0),
                 has_unyanked_releases: row.has_unyanked_releases,
             },
@@ -512,7 +515,10 @@ async fn redirect_to_random_crate(
 
         Ok(axum_redirect(format!(
             "/{}/{}/{}/",
-            row.name, row.version, row.target_name
+            row.name,
+            row.version,
+            row.target_name
+                .expect("we only look at releases with docs, so target_name will exist")
         ))?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
@@ -575,7 +581,9 @@ pub(crate) async fn search_handler(
                         "/{}/{}/{}/",
                         matchver.name,
                         matchver.version(),
-                        matchver.target_name(),
+                        matchver
+                            .target_name()
+                            .expect("target name will exist when rustdoc_status is true"),
                     ),
                     queries,
                 )?

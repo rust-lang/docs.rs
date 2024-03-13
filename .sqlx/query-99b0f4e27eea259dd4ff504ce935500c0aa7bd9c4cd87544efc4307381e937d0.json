@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n            releases.doc_targets\n        FROM releases\n        WHERE releases.id = $1;",
+  "query": "SELECT\n            releases.doc_targets\n         FROM releases\n         WHERE releases.id = $1;",
   "describe": {
     "columns": [
       {
@@ -15,8 +15,8 @@
       ]
     },
     "nullable": [
-      false
+      true
     ]
   },
-  "hash": "9a3bcf29ba086cd26102227e024218a0fd4b7bbe2b229350523a1aa69a4d731f"
+  "hash": "99b0f4e27eea259dd4ff504ce935500c0aa7bd9c4cd87544efc4307381e937d0"
 }

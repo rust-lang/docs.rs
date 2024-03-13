@@ -42,21 +42,21 @@ pub(crate) struct CrateDetails {
     readme: Option<String>,
     #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
-    release_time: DateTime<Utc>,
+    release_time: Option<DateTime<Utc>>,
     build_status: BuildStatus,
     pub latest_build_id: Option<i32>,
     last_successful_build: Option<String>,
-    pub rustdoc_status: bool,
+    pub rustdoc_status: Option<bool>,
     pub archive_storage: bool,
     repository_url: Option<String>,
     homepage_url: Option<String>,
     keywords: Option<Value>,
-    have_examples: bool, // need to check this manually
-    pub target_name: String,
+    have_examples: Option<bool>, // need to check this manually
+    pub target_name: Option<String>,
     releases: Vec<Release>,
     repository_metadata: Option<RepositoryMetadata>,
     pub(crate) metadata: MetaData,
-    is_library: bool,
+    is_library: Option<bool>,
     license: Option<String>,
     pub(crate) documentation_url: Option<String>,
     total_items: Option<i32>,
@@ -103,10 +103,10 @@ pub(crate) struct Release {
     ///      up here, but we still check.
     /// calculated in a database view : `release_build_status`
     pub build_status: BuildStatus,
-    pub yanked: bool,
-    pub is_library: bool,
-    pub rustdoc_status: bool,
-    pub target_name: String,
+    pub yanked: Option<bool>,
+    pub is_library: Option<bool>,
+    pub rustdoc_status: Option<bool>,
+    pub target_name: Option<String>,
 }
 
 impl CrateDetails {
@@ -219,9 +219,9 @@ impl CrateDetails {
             req_version: req_version.unwrap_or_else(|| ReqVersion::Exact(version.clone())),
             description: krate.description.clone(),
             rustdoc_status: krate.rustdoc_status,
-            target_name: Some(krate.target_name.clone()),
+            target_name: krate.target_name.clone(),
             default_target: krate.default_target,
-            doc_targets: MetaData::parse_doc_targets(krate.doc_targets),
+            doc_targets: krate.doc_targets.map(MetaData::parse_doc_targets),
             yanked: krate.yanked,
             rustdoc_css_file: krate
                 .rustc_version
@@ -280,7 +280,9 @@ impl CrateDetails {
             crate_details.last_successful_build = crate_details
                 .releases
                 .iter()
-                .filter(|release| release.build_status == BuildStatus::Success && !release.yanked)
+                .filter(|release| {
+                    release.build_status == BuildStatus::Success && release.yanked == Some(false)
+                })
                 .map(|release| release.version.to_string())
                 .next();
         }
@@ -355,7 +357,7 @@ impl CrateDetails {
 pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
     if let Some(release) = releases.iter().find(|release| {
         release.version.pre.is_empty()
-            && !release.yanked
+            && release.yanked == Some(false)
             && release.build_status != BuildStatus::InProgress
     }) {
         Some(release)
@@ -383,7 +385,8 @@ pub(crate) async fn releases_for_crate(
          FROM releases
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
          WHERE
-             releases.crate_id = $1"#,
+             releases.crate_id = $1 AND
+             release_build_status.build_status != 'in_progress'"#,
         crate_id,
     )
     .fetch(&mut *conn)
@@ -500,18 +503,26 @@ pub(crate) async fn get_all_releases(
         .await?
         .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
 
-    let row = sqlx::query!(
+    if matched_release.build_status() != BuildStatus::Success {
+        // this handler should only be used for successful builds, so then we have all rows in the
+        // `releases` table filled with data.
+        // If we at some point need this view for in-progress releases or failed releases, we need
+        // to handle empty doc targets.
+        return Err(AxumNope::CrateNotFound);
+    }
+
+    let doc_targets = sqlx::query_scalar!(
         "SELECT
             releases.doc_targets
-        FROM releases
-        WHERE releases.id = $1;",
+         FROM releases
+         WHERE releases.id = $1;",
         matched_release.id(),
     )
     .fetch_optional(&mut *conn)
     .await?
-    .ok_or(AxumNope::CrateNotFound)?;
-
-    let doc_targets = MetaData::parse_doc_targets(row.doc_targets);
+    .ok_or(AxumNope::CrateNotFound)?
+    .map(MetaData::parse_doc_targets)
+    .ok_or_else(|| anyhow!("empty doc targets for successful release"))?;
 
     let inner;
     let (target, inner_path) = {
@@ -531,10 +542,15 @@ pub(crate) async fn get_all_releases(
         inner = inner_path.join("/");
         (target, inner.trim_end_matches('/'))
     };
+
+    let target_name = matched_release
+        .target_name()
+        .ok_or_else(|| anyhow!("empty target name for succesful release"))?;
+
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", matched_release.target_name())
+        format!("{}/index.html", target_name)
     } else {
-        format!("{}/{inner_path}", matched_release.target_name())
+        format!("{}/{inner_path}", target_name)
     };
 
     let target = if target.is_empty() {
@@ -620,10 +636,27 @@ pub(crate) async fn get_all_platforms_inner(
     .await?
     .ok_or(AxumNope::CrateNotFound)?;
 
-    let doc_targets = MetaData::parse_doc_targets(krate.doc_targets);
+    if krate.doc_targets.is_none()
+        || krate.default_target.is_none()
+        || matched_release.target_name().is_none()
+    {
+        // FIXME: is this really OK?  just return an empty platform list in case of
+        // an early failure?
+        return Ok(PlatformList {
+            metadata: ShortMetadata {
+                name: params.name,
+                version: matched_release.version().clone(),
+                req_version: params.version.clone(),
+                doc_targets: Vec::new(),
+            },
+            inner_path: "".into(),
+            use_direct_platform_links: is_crate_root,
+            current_target: "".into(),
+        }
+        .into_response());
+    }
 
-    let latest_release = latest_release(&matched_release.all_releases)
-        .expect("we couldn't end up here without releases");
+    let doc_targets = MetaData::parse_doc_targets(krate.doc_targets.unwrap());
 
     // The path within this crate version's rustdoc output
     let inner;
@@ -645,14 +678,17 @@ pub(crate) async fn get_all_platforms_inner(
         (target, inner.trim_end_matches('/'))
     };
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", matched_release.target_name())
+        format!("{}/index.html", matched_release.target_name().unwrap())
     } else {
-        format!("{}/{inner_path}", matched_release.target_name())
+        format!("{}/{inner_path}", matched_release.target_name().unwrap())
     };
+
+    let latest_release = latest_release(&matched_release.all_releases)
+        .expect("we couldn't end up here without releases");
 
     let current_target = if latest_release.build_status.is_success() {
         if target.is_empty() {
-            krate.default_target
+            krate.default_target.unwrap()
         } else {
             target.to_owned()
         }
@@ -660,7 +696,7 @@ pub(crate) async fn get_all_platforms_inner(
         String::new()
     };
 
-    let res = PlatformList {
+    Ok(PlatformList {
         metadata: ShortMetadata {
             name: params.name,
             version: matched_release.version().clone(),
@@ -670,8 +706,8 @@ pub(crate) async fn get_all_platforms_inner(
         inner_path,
         use_direct_platform_links: is_crate_root,
         current_target,
-    };
-    Ok(res.into_response())
+    }
+    .into_response())
 }
 
 pub(crate) async fn get_all_platforms_root(
@@ -699,6 +735,7 @@ mod tests {
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
+    use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
     use std::collections::HashMap;
 
@@ -940,74 +977,74 @@ mod tests {
                     Release {
                         version: semver::Version::parse("1.0.0")?,
                         build_status: BuildStatus::Success,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[0].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
                         build_status: BuildStatus::Success,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[1].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
                         build_status: BuildStatus::Failure,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: false,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(false),
                         id: details.releases[2].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
                         build_status: BuildStatus::Success,
-                        yanked: true,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(true),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[3].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
                         build_status: BuildStatus::Success,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[4].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
                         build_status: BuildStatus::Success,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[5].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
                         build_status: BuildStatus::Success,
-                        yanked: false,
-                        is_library: true,
-                        rustdoc_status: true,
+                        yanked: Some(false),
+                        is_library: Some(true),
+                        rustdoc_status: Some(true),
                         id: details.releases[6].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
                         build_status: BuildStatus::Failure,
-                        yanked: false,
-                        is_library: false,
-                        rustdoc_status: false,
+                        yanked: Some(false),
+                        is_library: Some(false),
+                        rustdoc_status: Some(false),
                         id: details.releases[7].id,
-                        target_name: "foo".to_owned(),
+                        target_name: Some("foo".to_owned()),
                     },
                 ]
             );
@@ -1222,22 +1259,26 @@ mod tests {
                 ])
                 .create()?;
 
-            let page = kuchikiki::parse_html()
-                .one(env.frontend().get("/crate/foo/latest").send()?.text()?);
-            let link = page
-                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
-                .unwrap();
+            let response = env.frontend().get("/crate/foo/latest").send()?;
+            // FIXME: temporarily we don't show in-progress releases anywhere, which means we don't
+            // show releases without builds anywhere.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-            assert_eq!(
-                link.as_node()
-                    .as_element()
-                    .unwrap()
-                    .attributes
-                    .borrow()
-                    .get("title")
-                    .unwrap(),
-                "foo-0.1.0 is currently being built"
-            );
+            // let page = kuchikiki::parse_html().one(response.text()?);
+            // let link = page
+            //     .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
+            //     .unwrap();
+
+            // assert_eq!(
+            //     link.as_node()
+            //         .as_element()
+            //         .unwrap()
+            //         .attributes
+            //         .borrow()
+            //         .get("title")
+            //         .unwrap(),
+            //     "foo-0.1.0 is currently being built"
+            // );
 
             Ok(())
         });
