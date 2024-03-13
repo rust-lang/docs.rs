@@ -322,7 +322,7 @@ mod tests {
                 &[
                     &"foo",
                     &(6 * 1024 * 1024 * 1024i64),
-                    &(Duration::hours(2).num_seconds() as i32),
+                    &(Duration::try_hours(2).unwrap().num_seconds() as i32),
                     &1,
                 ],
             )?;

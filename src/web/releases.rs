@@ -1517,12 +1517,12 @@ mod tests {
 
             env.fake_release()
                 .name("some_random_crate_yesterday")
-                .release_time(Utc::now() - Duration::days(1))
+                .release_time(Utc::now() - Duration::try_days(1).unwrap())
                 .create()?;
             env.fake_release()
                 .name("some_random_crate_that_failed_yesterday")
                 .build_result_failed()
-                .release_time(Utc::now() - Duration::days(1))
+                .release_time(Utc::now() - Duration::try_days(1).unwrap())
                 .create()?;
 
             // with releases yesterday we get the data we want
