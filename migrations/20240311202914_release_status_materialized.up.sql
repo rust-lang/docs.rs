@@ -1,6 +1,6 @@
 DROP VIEW release_build_status;
 CREATE TABLE release_build_status (
-    rid INTEGER NOT NULL PRIMARY KEY,
+    rid INTEGER NOT NULL PRIMARY KEY REFERENCES releases ON DELETE CASCADE,
     last_build_time timestamp with time zone,
     build_status build_status NOT NULL
 );
