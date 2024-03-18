@@ -17,10 +17,10 @@ html {
   --color-syntax-string: #718c00;
 }
 
-// To add a new theme, copy the above theme into a new `html[data-theme="name"]`
+// To add a new theme, copy the above theme into a new `html[data-docs-rs-theme="name"]`
 // block below and change the colors
 
-html[data-theme="dark"] {
+html[data-docs-rs-theme="dark"] {
   --color-syntax-foreground: inherit;
   --color-syntax-attribute: #ee6868;
   --color-syntax-background: #2a2a2a;
@@ -39,7 +39,7 @@ html[data-theme="dark"] {
   --color-syntax-string: #83a300;
 }
 
-html[data-theme="ayu"] {
+html[data-docs-rs-theme="ayu"] {
   --color-syntax-foreground: #e6e1cf;
   --color-syntax-attribute: #e6e1cf;
   --color-syntax-background: #191f26;
