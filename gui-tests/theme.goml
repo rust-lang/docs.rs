@@ -1,0 +1,18 @@
+// setting local-storage emulates how we detect rustdoc changing the theme, we
+// only run this detection on rustdoc pages so must change there before visiting
+// other pages
+
+// on rustdoc pages we only control the .nav-container and its descendants, on
+// the crate page we control the whole page
+
+go-to: |DOC_PATH| + "/sysinfo"
+set-local-storage: { "rustdoc-theme": null }
+wait-for-css: (".nav-container", { "background-color": "rgb(255, 255, 255)" })
+go-to: |DOC_PATH| + "/crate/sysinfo"
+wait-for-css: ("body", { "background-color": "rgb(255, 255, 255)" })
+
+go-to: |DOC_PATH| + "/sysinfo"
+set-local-storage: { "rustdoc-theme": "ayu" }
+wait-for-css: (".nav-container", { "background-color": "rgb(15, 20, 25)" })
+go-to: |DOC_PATH| + "/crate/sysinfo"
+wait-for-css: ("body", { "background-color": "rgb(15, 20, 25)" })
