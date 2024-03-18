@@ -1,6 +1,8 @@
 (function() {
     function applyTheme(theme) {
-        document.documentElement.dataset.theme = theme;
+        if (theme) {
+            document.documentElement.dataset.theme = theme;
+        }
     }
 
     window.addEventListener('storage', function (ev) {
