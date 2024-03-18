@@ -32,10 +32,10 @@ html {
   --chart-grid: #ddd;
 }
 
-// To add a new theme, copy the above theme into a new `html[data-theme="name"]`
+// To add a new theme, copy the above theme into a new `html[data-docs-rs-theme="name"]`
 // block below and change the colors
 
-html[data-theme="dark"] {
+html[data-docs-rs-theme="dark"] {
   color-scheme: dark;
   --color-background-code: #2a2a2a;
   --color-background: #353535;
@@ -68,7 +68,7 @@ html[data-theme="dark"] {
   --chart-grid: #4e4e4e;
 }
 
-html[data-theme="ayu"] {
+html[data-docs-rs-theme="ayu"] {
   color-scheme: dark;
   --color-background-code: #191f26;
   --color-background: #0f1419;

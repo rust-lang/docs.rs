@@ -1,7 +1,7 @@
 (function() {
     function applyTheme(theme) {
         if (theme) {
-            document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.docsRsTheme = theme;
         }
     }
 
