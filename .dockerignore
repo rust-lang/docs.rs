@@ -1,4 +1,12 @@
+/target/
 /.rustwide
 /.rustwide-docker
+/Justfile
+/LICENSE
+/README.md
+/docker-compose.yml
+/docs/
 /ignored
-**/target
+/mcps
+/triagebot.toml
+/clippy.toml
