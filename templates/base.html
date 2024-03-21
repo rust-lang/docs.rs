@@ -17,6 +17,27 @@
 
         <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
 
+        {% if config.sentry_dsn %}
+            <script
+                nonce="{{ csp_nonce }}"
+                src="/-/static/sentry/bundle.tracing.7.105.0.min.js"
+                type="text/javascript">
+            </script>
+
+            <script nonce="{{ csp_nonce }}">
+                Sentry.init({
+                    dsn: "{{ config.sentry_dsn | safe }}",
+                    release: "{{ docsrs_version() }}",
+                    integrations: [
+                        // potentially override transaction name later
+                        // https://docs.sentry.io/platforms/javascript/performance/troubleshooting/
+                        Sentry.browserTracingIntegration()
+                    ],
+                    tracesSampleRate: {{ config.sentry_traces_sample_rate }},
+                });
+            </script>
+        {% endif %}
+
         <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
         {%- block css -%}{%- endblock css -%}
 
@@ -26,7 +47,7 @@
 
     <body class="{% block body_classes %}{% endblock body_classes %}">
         {%- block topbar -%}
-          {%- include "header/topbar.html" -%}
+            {%- include "header/topbar.html" -%}
         {%- endblock topbar -%}
 
         {%- block header %}{% endblock header -%}

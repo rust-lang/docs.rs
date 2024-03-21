@@ -1,6 +1,7 @@
 use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
-use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tracing::trace;
 use url::Url;
 
@@ -10,6 +11,10 @@ pub struct Config {
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
     pub registry_api_host: Url,
+
+    // sentry config
+    pub sentry_dsn: Option<sentry::types::Dsn>,
+    pub sentry_traces_sample_rate: Option<f32>,
 
     // Database connection params
     pub(crate) database_url: String,
@@ -148,6 +153,9 @@ impl Config {
             )?,
             prefix: prefix.clone(),
 
+            sentry_dsn: maybe_env("SENTRY_DSN")?,
+            sentry_traces_sample_rate: maybe_env("SENTRY_TRACES_SAMPLE_RATE")?,
+
             database_url: require_env("DOCSRS_DATABASE_URL")?,
             max_legacy_pool_size: env("DOCSRS_MAX_LEGACY_POOL_SIZE", 45)?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 45)?,
@@ -221,6 +229,25 @@ impl Config {
                 86400,
             )?),
         })
+    }
+}
+
+/// A more public version of the config that will be automaticaly exposed to the
+/// Tera context.
+pub(crate) struct PublicConfig(pub Arc<Config>);
+
+impl Serialize for PublicConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("PublicConfig", 2)?;
+        state.serialize_field("sentry_dsn", &self.0.sentry_dsn)?;
+        state.serialize_field(
+            "sentry_traces_sample_rate",
+            &self.0.sentry_traces_sample_rate,
+        )?;
+        state.end()
     }
 }
 

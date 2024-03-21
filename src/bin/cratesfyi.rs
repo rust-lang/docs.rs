@@ -41,7 +41,16 @@ fn main() {
                 .from_env_lossy(),
         );
 
-    let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
+    let ctx = BinContext::new();
+    let config = match ctx.config().context("could not load config") {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("{:?}", err);
+            std::process::exit(1);
+        }
+    };
+
+    let _sentry_guard = if let Some(ref sentry_dsn) = config.sentry_dsn {
         tracing::subscriber::set_global_default(tracing_registry.with(
             sentry_tracing::layer().event_filter(|md| {
                 if md.fields().field("reported_to_sentry").is_some() {
@@ -58,10 +67,7 @@ fn main() {
             sentry::ClientOptions {
                 release: Some(docs_rs::BUILD_VERSION.into()),
                 attach_stacktrace: true,
-                traces_sample_rate: env::var("SENTRY_TRACES_SAMPLE_RATE")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0.0),
+                traces_sample_rate: config.sentry_traces_sample_rate.unwrap_or(0.0),
                 ..Default::default()
             }
             .add_integration(sentry_panic::PanicIntegration::default()),
@@ -71,7 +77,7 @@ fn main() {
         None
     };
 
-    if let Err(err) = CommandLine::parse().handle_args() {
+    if let Err(err) = CommandLine::parse().handle_args(ctx) {
         let mut msg = format!("Error: {err}");
         for cause in err.chain() {
             write!(msg, "\n\nCaused by:\n    {cause}").unwrap();
@@ -156,9 +162,7 @@ enum CommandLine {
 }
 
 impl CommandLine {
-    fn handle_args(self) -> Result<()> {
-        let ctx = BinContext::new();
-
+    fn handle_args(self, ctx: BinContext) -> Result<()> {
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx)?,
             Self::StartRegistryWatcher {
