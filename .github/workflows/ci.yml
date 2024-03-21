@@ -44,13 +44,8 @@ jobs:
 
       - name: Launch postgres
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db
 
       - name: run database migrations
         run: cargo run -- database migrate
@@ -67,9 +62,6 @@ jobs:
           cargo sqlx migrate revert \
             --database-url $DOCSRS_DATABASE_URL \
             --target-version 0
-
-      - name: Clean up the database
-        run: docker-compose down --volumes
 
   test:
     env:
@@ -92,13 +84,8 @@ jobs:
 
       - name: Launch postgres and min.io
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db s3
       
       - name: run workspace tests
         run: |
@@ -110,17 +97,10 @@ jobs:
         run: |
           cargo test --locked -- --ignored --test-threads=1
 
-      - name: Clean up the database
-        run: docker-compose down --volumes
-
   GUI_test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: install
-        run: |
-          rustup override set stable
-          rustup update stable
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -129,19 +109,14 @@ jobs:
 
       - name: Launch postgres and min.io
         run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
+          touch .docker.env
+          docker compose up --wait --wait-timeout 30 db s3
 
       - name: Run GUI tests
-        run: ./dockerfiles/run-gui-tests.sh
+        run: |
+          touch .docker.env
+          gui-tests/in-docker
 
-      - name: Clean up the database
-        run: docker-compose down --volumes
 
   fmt:
     name: Rustfmt

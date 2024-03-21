@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+run() {
+  cmd="$1"
+  shift
+  printf '     \e[36;1mRunning\e[0m `%q' "$cmd" >&2
+  printf ' %q' "$@" >&2
+  printf '`\n' >&2
+  "$cmd" "$@"
+}
+
+cleanup() {
+  run docker compose rm --stop --volumes --force gui-tests-web
+
+  run docker compose up --wait --wait-timeout 10 db s3
+
+  run docker compose exec db dropdb --user cratesfyi gui-tests || true
+  run docker compose exec s3 mc rb --force local/gui-tests || true
+}
+
+init() {
+  run docker compose up --wait --wait-timeout 10 db s3
+
+  run docker compose exec db createdb --user cratesfyi gui-tests
+  run docker compose exec s3 mc mb local/gui-tests
+
+  # Pre-build the images needed
+  run docker compose build gui-tests-cli gui-tests-builder gui-tests-web
+
+  # Add the information we need
+  run docker compose run --rm gui-tests-cli database migrate
+  run docker compose run --rm gui-tests-builder build update-toolchain
+  run docker compose run --rm gui-tests-builder build crate sysinfo 0.23.4
+  run docker compose run --rm gui-tests-builder build crate sysinfo 0.23.5
+  run docker compose run --rm gui-tests-builder build crate libtest 0.0.1
+
+  # Start the web server up
+  run docker compose up --wait --wait-timeout 10 gui-tests-web
+}
+
+execute() {
+  run docker compose build gui-tests
+  run docker compose run --rm gui-tests
+}
+
+case "${1:-all}"
+in
+  cleanup)
+    cleanup
+    ;;
+  init)
+    cleanup
+    init
+    ;;
+  run)
+    execute
+    ;;
+  all)
+    cleanup
+    init
+    execute
+    cleanup
+    ;;
+  *)
+    echo 'unknown command `'"$1"'`, expected one of [init, run, cleanup, all]' >&2
+    exit 1
+    ;;
+esac
