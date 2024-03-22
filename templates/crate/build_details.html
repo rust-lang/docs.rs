@@ -6,17 +6,21 @@
 {%- endblock title -%}
 
 {%- block body_classes -%}
-centered
+    centered
 {%- endblock body_classes -%}
 
 {%- block topbar -%}
-  {%- set latest_version = "" -%}
-  {%- set latest_path = "" -%}
-  {%- set target = "" -%}
-  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-  {%- set is_latest_version = true -%}
-  {%- set is_prerelease = false -%}
-  {%- include "rustdoc/topbar.html" -%}
+    {%- set latest_version = "" -%}
+    {%- set latest_path = "" -%}
+    {%- set target = "" -%}
+    {%- if metadata.target_name -%}
+        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- else -%}
+        {%- set inner_path = "" -%}
+    {%- endif -%}
+    {%- set is_latest_version = true -%}
+    {%- set is_prerelease = false -%}
+    {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
@@ -27,7 +31,9 @@ centered
     <div class="container">
         <div class="recent-releases-container">
             <div class="release">
-                <strong>Build #{{ build_details.id }} {{ build_details.build_time | date(format="%+") }}</strong>
+                <strong>
+                    Build #{{ build_details.id }} {%- if build_details.build_time -%} {{ build_details.build_time | date(format="%+") }} {%- endif -%}
+                </strong>
             </div>
 
             <ul>
@@ -51,13 +57,26 @@ centered
 
             {%- filter dedent -%}
                 <pre>
-                    # rustc version
-                    {{ build_details.rustc_version }}
-                    # docs.rs version
-                    {{ build_details.docsrs_version }}
 
-                    # build log
-                    {{ build_details.output }}
+                    {%- if build_details.errors -%}
+                        # pre-build errors
+                        {{ build_details.errors }}
+                    {%- endif -%}
+
+                    {%- if build_details.rustc_version -%}
+                        # rustc version
+                        {{ build_details.rustc_version }}
+                    {%- endif -%}
+
+                    {%- if build_details.docsrs_version -%}
+                        # docs.rs version
+                        {{ build_details.docsrs_version }}
+                    {%- endif -%}
+
+                    {%- if build_details.output -%}
+                        # build log
+                        {{ build_details.output }}
+                    {%- endif -%}
                 </pre>
             {%- endfilter -%}
         </div>

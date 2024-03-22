@@ -6,21 +6,25 @@
 {%- endblock title -%}
 
 {%- block meta -%}
-<link rel="canonical" href="{{ canonical_url | safe }}" />
+    <link rel="canonical" href="{{ canonical_url | safe }}" />
 {%- endblock -%}
 
 {%- block body_classes -%}
-centered
+    centered
 {%- endblock body_classes -%}
 
 {%- block topbar -%}
-  {%- set latest_version = "" -%}
-  {%- set latest_path = "" -%}
-  {%- set target = "" -%}
-  {%- set inner_path = metadata.target_name ~ "/index.html" -%}
-  {%- set is_latest_version = true -%}
-  {%- set is_prerelease = false -%}
-  {%- include "rustdoc/topbar.html" -%}
+    {%- set latest_version = "" -%}
+    {%- set latest_path = "" -%}
+    {%- set target = "" -%}
+    {%- if metadata.target_name -%}
+        {%- set inner_path = metadata.target_name ~ "/index.html" -%}
+    {%- else -%}
+        {%- set inner_path = "" -%}
+    {%- endif -%}
+    {%- set is_latest_version = true -%}
+    {%- set is_prerelease = false -%}
+    {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
 {%- block header -%}
@@ -44,22 +48,41 @@ centered
                                         {%- if build.build_status == "success" -%}
                                             {{ "check" | fas }}
                                         {%- elif build.build_status == "failure" -%}
-                                            {{ "times" | fas }}
+                                            {{ "triangle-exclamation" | fas }}
                                         {%- elif build.build_status == "in_progress" -%}
                                             {{ "gear" | fas(spin=true) }}
                                         {%- else -%}
                                             {{ "x" | fas }}
                                         {%- endif -%}
                                     </div>
-                                    <div class="pure-u-1 pure-u-sm-10-24">{{ build.rustc_version }}</div>
-                                    <div class="pure-u-1 pure-u-sm-10-24">{{ build.docsrs_version }}</div>
-                                    <div class="pure-u-1 pure-u-sm-3-24 date">{{ build.build_time | timeformat(relative=true) }}</div>
+                                    <div class="pure-u-1 pure-u-sm-10-24">
+                                        {%- if build.rustc_version -%}
+                                            {{ build.rustc_version }}
+                                        {%- else -%}
+                                            &mdash;
+                                        {%- endif -%}
+                                    </div>
+                                    <div class="pure-u-1 pure-u-sm-10-24">
+                                        {%- if build.docsrs_version -%}
+                                            {{ build.docsrs_version }}
+                                        {%- else -%}
+                                            &mdash;
+                                        {%- endif -%}
+                                    </div>
+                                    <div class="pure-u-1 pure-u-sm-3-24 date">
+                                        {%- if build.build_time -%}
+                                            {{ build.build_time | timeformat(relative=true) }}
+                                        {%- else -%}
+                                            &mdash;
+                                        {%- endif -%}
+                                    </div>
                                 </div>
                             </a>
                         </li>
                     {%- endfor -%}
                 </ul>
             {%- else -%}
+                {# FIXME: temporarily this will never be shown since we hide in-progress releases for now #}
                 <div class="warning">
                     docs.rs has not built {{ metadata.name }}-{{ metadata.version }}
                     <br>

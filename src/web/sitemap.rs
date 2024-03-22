@@ -79,7 +79,9 @@ pub(crate) async fn sitemap_handler(
     .fetch(&mut *conn)
     .map_ok(|row| SitemapRow {
         crate_name: row.name,
-        target_name: row.target_name,
+        target_name: row
+            .target_name
+            .expect("when we have rustdoc_status=true, this field is filled"),
         last_modified: row
             .release_time
             // On Aug 27 2022 we added `<link rel="canonical">` to all pages,

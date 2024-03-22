@@ -1617,6 +1617,7 @@ dependencies = [
  "percent-encoding",
  "postgres",
  "postgres-types",
+ "pretty_assertions",
  "procfs",
  "prometheus",
  "r2d2",
