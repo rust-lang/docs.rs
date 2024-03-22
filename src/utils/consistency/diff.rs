@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_crate_not_in_index() {
-        let db_releases = vec![Crate {
+        let db_releases = [Crate {
             name: "krate".into(),
             releases: vec![],
         }];
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_crate_not_in_db() {
-        let index_releases = vec![Crate {
+        let index_releases = [Crate {
             name: "krate".into(),
             releases: vec![
                 Release {
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_yank_diff() {
-        let db_releases = vec![Crate {
+        let db_releases = [Crate {
             name: "krate".into(),
             releases: vec![
                 Release {
@@ -165,7 +165,7 @@ mod tests {
                 },
             ],
         }];
-        let index_releases = vec![Crate {
+        let index_releases = [Crate {
             name: "krate".into(),
             releases: vec![
                 Release {
@@ -191,14 +191,14 @@ mod tests {
 
     #[test]
     fn test_yank_diff_without_db_data() {
-        let db_releases = vec![Crate {
+        let db_releases = [Crate {
             name: "krate".into(),
             releases: vec![Release {
                 version: "0.0.2".into(),
                 yanked: None,
             }],
         }];
-        let index_releases = vec![Crate {
+        let index_releases = [Crate {
             name: "krate".into(),
             releases: vec![Release {
                 version: "0.0.2".into(),

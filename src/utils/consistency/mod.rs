@@ -175,7 +175,7 @@ mod tests {
                 .version("0.1.2")
                 .create()?;
 
-            let diff = vec![Difference::CrateNotInIndex("krate".into())];
+            let diff = [Difference::CrateNotInIndex("krate".into())];
 
             // calling with dry-run leads to no change
             handle_diff(env, diff.iter(), true)?;
@@ -203,7 +203,7 @@ mod tests {
             env.fake_release().name("krate").version("0.1.1").create()?;
             env.fake_release().name("krate").version("0.1.2").create()?;
 
-            let diff = vec![Difference::ReleaseNotInIndex(
+            let diff = [Difference::ReleaseNotInIndex(
                 "krate".into(),
                 "0.1.1".into(),
             )];
@@ -234,7 +234,7 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
-            let diff = vec![Difference::ReleaseYank(
+            let diff = [Difference::ReleaseYank(
                 "krate".into(),
                 "0.1.1".into(),
                 false,
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn test_missing_release_in_db() {
         wrapper(|env| {
-            let diff = vec![Difference::ReleaseNotInDb("krate".into(), "0.1.1".into())];
+            let diff = [Difference::ReleaseNotInDb("krate".into(), "0.1.1".into())];
 
             handle_diff(env, diff.iter(), true)?;
 
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn test_missing_crate_in_db() {
         wrapper(|env| {
-            let diff = vec![Difference::CrateNotInDb(
+            let diff = [Difference::CrateNotInDb(
                 "krate".into(),
                 vec!["0.1.1".into(), "0.1.2".into()],
             )];
