@@ -16,6 +16,7 @@ services:
             - "/var/run/docker.sock:/var/run/docker.sock"
             - ".rustwide-docker:/opt/docsrs/rustwide"
             - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+            - "./static:/opt/docsrs/static:ro"
         environment:
             DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
             DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
