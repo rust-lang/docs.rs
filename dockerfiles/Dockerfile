@@ -14,13 +14,18 @@ FROM ubuntu:22.04 AS build
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-    libssl-dev zlib1g-dev ca-certificates
+    libssl-dev zlib1g-dev ca-certificates mold clang
 
 # Install the stable toolchain with rustup
 RUN curl https://sh.rustup.rs >/tmp/rustup-init && \
     chmod +x /tmp/rustup-init && \
     /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
 ENV PATH=/root/.cargo/bin:$PATH
+
+# Configure linking to use mold instead for speed (need to use clang because gcc
+# is too old on this image)
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-Clink-arg=-fuse-ld=mold
 
 # Build the dependencies in a separate step to avoid rebuilding all of them
 # every time the source code changes. This takes advantage of Docker's layer
@@ -36,7 +41,9 @@ RUN mkdir -p src/bin && \
     echo "fn main() {}" > build.rs
 
 RUN cargo fetch
-RUN cargo build --release
+
+ARG PROFILE=release
+RUN cargo build --profile=$PROFILE
 
 # Dependencies are now cached, copy the actual source code and do another full
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
@@ -54,7 +61,7 @@ COPY assets assets/
 COPY .sqlx .sqlx/
 COPY migrations migrations/
 
-RUN cargo build --release
+RUN cargo build --profile=$PROFILE
 
 ######################
 #  Web server stage  #
@@ -69,7 +76,8 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
 COPY static /srv/docsrs/static
 COPY templates /srv/docsrs/templates
 COPY vendor /srv/docsrs/vendor
@@ -96,7 +104,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 RUN mkdir -p /opt/docsrs/prefix
 
-COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
 COPY static /opt/docsrs/static
 COPY templates /opt/docsrs/templates
 COPY dockerfiles/entrypoint.sh /opt/docsrs/

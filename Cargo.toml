@@ -132,8 +132,9 @@ aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"
 indoc = "2.0.0"
 
-[profile.dev.package.sqlx-macros]
+[profile.dev.package."*"]
 opt-level = 2
+debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
