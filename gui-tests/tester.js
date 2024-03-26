@@ -6,8 +6,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const os = require('os');
-const {Options, runTest} = require('browser-ui-test');
+const os = require("os");
+const {Options, runTest} = require("browser-ui-test");
 
 function showHelp() {
     console.log("docs-rs-gui-js options:");
@@ -24,20 +24,20 @@ function isNumeric(s) {
 }
 
 function parseOptions(args) {
-    var opts = {
+    const opts = {
         "files": [],
         "debug": false,
         "show_text": false,
         "no_headless": false,
         "jobs": -1,
     };
-    var correspondances = {
+    const correspondances = {
         "--debug": "debug",
         "--show-text": "show_text",
         "--no-headless": "no_headless",
     };
 
-    for (var i = 0; i < args.length; ++i) {
+    for (let i = 0; i < args.length; ++i) {
         if (args[i] === "--file"
             || args[i] === "--jobs") {
             i += 1;
@@ -110,7 +110,7 @@ function by_filename(a, b) {
 }
 
 async function main(argv) {
-    let opts = parseOptions(argv.slice(2));
+    const opts = parseOptions(argv.slice(2));
     if (opts === null) {
         process.exit(1);
     }
@@ -122,10 +122,10 @@ async function main(argv) {
     const options = new Options();
     try {
         // This is more convenient that setting fields one by one.
-        let args = [
+        const args = [
             "--no-sandbox",
         ];
-        if (typeof process.env.SERVER_URL !== 'undefined') {
+        if (typeof process.env.SERVER_URL !== "undefined") {
             args.push("--variable", "DOC_PATH", process.env.SERVER_URL);
         } else {
             args.push("--variable", "DOC_PATH", "http://127.0.0.1:3000");
@@ -154,7 +154,7 @@ async function main(argv) {
     } else {
         files = opts["files"];
     }
-    files = files.filter(file => path.extname(file) == ".goml");
+    files = files.filter(file => path.extname(file) === ".goml");
     if (files.length === 0) {
         console.error("No test selected");
         process.exit(2);
@@ -176,7 +176,7 @@ async function main(argv) {
     console.log(`Running ${files.length} docs.rs GUI (${jobs} concurrently) ...`);
 
     const tests_queue = [];
-    let results = {
+    const results = {
         successful: [],
         failed: [],
         errored: [],

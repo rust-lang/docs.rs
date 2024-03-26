@@ -1,5 +1,5 @@
 (function() {
-    var oldLabel;
+    let oldLabel;
 
     function showSourceFiles(button, sideMenu, sourceCode) {
         button.title = oldLabel;
@@ -20,8 +20,8 @@
     }
 
     function toggleSource(button) {
-        var sideMenu = document.getElementById("side-menu");
-        var sourceCode = document.getElementById("source-code");
+        const sideMenu = document.getElementById("side-menu");
+        const sourceCode = document.getElementById("source-code");
 
         if (sideMenu.classList.contains("collapsed")) {
             showSourceFiles(button, sideMenu, sourceCode);
@@ -30,11 +30,11 @@
         }
     }
 
-    document.addEventListener("DOMContentLoaded", function(event) { 
-        var toggleSourceButton = document.querySelector("li.toggle-source button");
+    document.addEventListener("DOMContentLoaded", () => {
+        const toggleSourceButton = document.querySelector("li.toggle-source button");
         oldLabel = toggleSourceButton.getAttribute("aria-label");
 
-        toggleSourceButton.addEventListener("click", function() {
+        toggleSourceButton.addEventListener("click", () => {
             toggleSource(toggleSourceButton);
         });
     });

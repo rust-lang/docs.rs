@@ -2,16 +2,16 @@
     function focusSearchInput() {
         // On the index page, we have a "#search" input. If we are on this page, we want to go back
         // to this one and not the one in the header navbar.
-        var searchInput = document.getElementById("search");
+        const searchInput = document.getElementById("search");
         if (searchInput) {
             searchInput.focus();
         } else {
-            document.getElementById("nav-search").focus()
+            document.getElementById("nav-search").focus();
         }
     }
 
     function focusFirstSearchResult() {
-        var elem = document.querySelector(".recent-releases-container a.release");
+        const elem = document.querySelector(".recent-releases-container a.release");
         if (elem) {
             elem.focus();
         }
@@ -28,14 +28,14 @@
     }
 
     function focusOnLi(li) {
-        var elem = li.querySelector(".release");
+        const elem = li.querySelector(".release");
         if (elem) {
             elem.focus();
         }
     }
 
     function getKey(ev) {
-        if ("key" in ev && typeof ev.key != "undefined") {
+        if ("key" in ev && typeof ev.key !== "undefined") {
             return ev.key;
         }
         return String.fromCharCode(ev.charCode || ev.keyCode);
@@ -59,13 +59,12 @@
             document.activeElement.blur();
             return;
         }
-        var tagName = document.activeElement.tagName;
+        const tagName = document.activeElement.tagName;
         // We want to check two things here: if an input or an element of the docs.rs topbar
         // has the focus. If so, then we do nothing and simply return.
         if (tagName === "INPUT" ||
             (tagName === "A" &&
-                checkIfHasParent(document.activeElement, "nav-container")))
-        {
+                checkIfHasParent(document.activeElement, "nav-container"))) {
             return;
         }
 
@@ -74,7 +73,7 @@
             if (tagName === "BODY") {
                 focusFirstSearchResult();
             } else {
-                var wrappingLi = getWrappingLi(document.activeElement);
+                const wrappingLi = getWrappingLi(document.activeElement);
                 if (!wrappingLi) {
                     // Doesn't seem like we are in the crates list, let's focus the first element
                     // of the list then!
@@ -86,7 +85,7 @@
         } else if (ev.which === 38) { // Up arrow
             ev.preventDefault();
             if (tagName === "A") {
-                var wrappingLi = getWrappingLi(document.activeElement);
+                const wrappingLi = getWrappingLi(document.activeElement);
                 if (!wrappingLi) {
                     // Doesn't seem like we are in the crates list, let's focus the first element
                     // of the list then!
@@ -114,12 +113,12 @@
         const inputSearch = document.getElementById("nav-search");
         const searchForm = document.getElementById("nav-search-form");
         if (inputSearch.value && searchForm) {
-            searchForm.submit()
+            searchForm.submit();
         }
     }
     const searchSortBySel = document.getElementById("nav-sort");
     if (searchSortBySel) {
-        searchSortBySel.addEventListener("change", handleSortByChange)
+        searchSortBySel.addEventListener("change", handleSortByChange);
     }
 
     document.onkeypress = handleKey;
