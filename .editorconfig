@@ -1,6 +1,6 @@
 root = true
 
-[*.{rs,html,js,json}]
+[*.{rs,html,js,json,scss}]
 end_of_line = lf
 charset = utf-8
 trim_trailing_whitespace = true
