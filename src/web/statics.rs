@@ -145,7 +145,7 @@ mod tests {
         });
     }
 
-    #[test_case("/-/static/index.js", "copyTextHandler")]
+    #[test_case("/-/static/index.js", "resetClipboardTimeout")]
     #[test_case("/-/static/menu.js", "closeMenu")]
     #[test_case("/-/static/keyboard.js", "handleKey")]
     #[test_case("/-/static/source.js", "toggleSource")]
