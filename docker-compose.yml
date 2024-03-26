@@ -4,6 +4,9 @@ services:
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile
+            args:
+              PROFILE: dev
+              PROFILE_DIR: debug
         platform: "linux/amd64"
         depends_on:
             - db
