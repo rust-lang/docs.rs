@@ -14,13 +14,18 @@ FROM ubuntu:22.04 AS build
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-    libssl-dev zlib1g-dev ca-certificates
+    libssl-dev zlib1g-dev ca-certificates mold clang
 
 # Install the stable toolchain with rustup
 RUN curl https://sh.rustup.rs >/tmp/rustup-init && \
     chmod +x /tmp/rustup-init && \
     /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
 ENV PATH=/root/.cargo/bin:$PATH
+
+# Configure linking to use mold instead for speed (need to use clang because gcc
+# is too old on this image)
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-Clink-arg=-fuse-ld=mold
 
 # Build the dependencies in a separate step to avoid rebuilding all of them
 # every time the source code changes. This takes advantage of Docker's layer
