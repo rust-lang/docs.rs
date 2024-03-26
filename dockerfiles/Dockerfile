@@ -36,7 +36,9 @@ RUN mkdir -p src/bin && \
     echo "fn main() {}" > build.rs
 
 RUN cargo fetch
-RUN cargo build --release
+
+ARG PROFILE=release
+RUN cargo build --profile=$PROFILE
 
 # Dependencies are now cached, copy the actual source code and do another full
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
@@ -54,7 +56,7 @@ COPY assets assets/
 COPY .sqlx .sqlx/
 COPY migrations migrations/
 
-RUN cargo build --release
+RUN cargo build --profile=$PROFILE
 
 ######################
 #  Web server stage  #
@@ -69,7 +71,8 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
 COPY static /srv/docsrs/static
 COPY templates /srv/docsrs/templates
 COPY vendor /srv/docsrs/vendor
@@ -96,7 +99,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 RUN mkdir -p /opt/docsrs/prefix
 
-COPY --from=build /build/target/release/cratesfyi /usr/local/bin
+ARG PROFILE_DIR=release
+COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
 COPY static /opt/docsrs/static
 COPY templates /opt/docsrs/templates
 COPY dockerfiles/entrypoint.sh /opt/docsrs/
