@@ -14,3 +14,5 @@ sqlx-check:
 lint: 
   cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
 
+lint-js:
+  eslint static templates gui-tests

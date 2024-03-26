@@ -178,3 +178,13 @@ jobs:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - run: just lint
+
+  eslint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+      - run: npm install -g eslint
+      - run: just lint-js
