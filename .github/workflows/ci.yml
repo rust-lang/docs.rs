@@ -10,7 +10,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
-  RUST_CACHE_KEY: rust-cache-20240320
+  RUST_CACHE_KEY: rust-cache-20240327
   DOCSRS_PREFIX: ignored/cratesfyi-prefix
   DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@localhost:15432
   DOCSRS_LOG: docs_rs=debug,rustwide=info
