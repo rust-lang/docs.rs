@@ -1451,4 +1451,15 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    #[ignore]
+    fn test_zero_byte_file_works() {
+        wrapper(|env| {
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
+            assert!(builder.build_local_package(Path::new("tests/crates/zero-byte-file"))?);
+            Ok(())
+        })
+    }
 }
