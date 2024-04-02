@@ -1462,4 +1462,15 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    #[ignore]
+    fn test_aymr() {
+        wrapper(|env| {
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
+            assert!(builder.build_package("aymr", "0.0.1", PackageKind::CratesIo)?);
+            Ok(())
+        })
+    }
 }
