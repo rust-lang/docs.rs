@@ -578,29 +578,30 @@ impl RustwideBuilder {
                     let cargo_metadata = res.cargo_metadata.root();
                     let repository = self.get_repo(cargo_metadata)?;
 
-                    let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-
-                    let release_id = self.runtime.block_on(add_package_into_database(
-                        &mut async_conn,
-                        cargo_metadata,
-                        &build.host_source_dir(),
-                        &res.target,
-                        files_list,
-                        successful_targets,
-                        &release_data,
-                        has_docs,
-                        has_examples,
-                        algs,
-                        repository,
-                        true,
-                    ))?;
+                    let release_id = self.runtime.block_on(async {
+                        let mut async_conn = self.db.get_async().await?;
+                        add_package_into_database(
+                            &mut async_conn,
+                            cargo_metadata,
+                            &build.host_source_dir(),
+                            &res.target,
+                            files_list,
+                            successful_targets,
+                            &release_data,
+                            has_docs,
+                            has_examples,
+                            algs,
+                            repository,
+                            true,
+                        )
+                        .await
+                    })?;
 
                     if let Some(doc_coverage) = res.doc_coverage {
-                        self.runtime.block_on(add_doc_coverage(
-                            &mut async_conn,
-                            release_id,
-                            doc_coverage,
-                        ))?;
+                        self.runtime.block_on(async {
+                            let mut async_conn = self.db.get_async().await?;
+                            add_doc_coverage(&mut async_conn, release_id, doc_coverage).await
+                        })?;
                     }
 
                     let build_status = if res.result.successful {
@@ -608,13 +609,17 @@ impl RustwideBuilder {
                     } else {
                         BuildStatus::Failure
                     };
-                    let build_id = self.runtime.block_on(add_build_into_database(
-                        &mut async_conn,
-                        release_id,
-                        &res.result.rustc_version,
-                        &res.result.docsrs_version,
-                        build_status,
-                    ))?;
+                    let build_id = self.runtime.block_on(async {
+                        let mut async_conn = self.db.get_async().await?;
+                        add_build_into_database(
+                            &mut async_conn,
+                            release_id,
+                            &res.result.rustc_version,
+                            &res.result.docsrs_version,
+                            build_status,
+                        )
+                        .await
+                    })?;
 
                     {
                         let _span = info_span!("store_build_logs").entered();
@@ -632,9 +637,11 @@ impl RustwideBuilder {
                             .runtime
                             .block_on(self.registry_api.get_crate_data(name))
                         {
-                            Ok(crate_data) => self.runtime.block_on(
-                                update_crate_data_in_database(&mut async_conn, name, &crate_data),
-                            )?,
+                            Ok(crate_data) => self.runtime.block_on(async {
+                                let mut async_conn = self.db.get_async().await?;
+                                update_crate_data_in_database(&mut async_conn, name, &crate_data)
+                                    .await
+                            })?,
                             Err(err) => warn!("{:#?}", err),
                         }
                     }
@@ -649,12 +656,6 @@ impl RustwideBuilder {
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
-
-                    self.runtime.block_on(async move {
-                        // we need to drop the async connection inside an async runtime context
-                        // so sqlx can use a runtime to handle the pool.
-                        drop(async_conn);
-                    });
 
                     Ok(res.result.successful)
                 })()
