@@ -578,6 +578,9 @@ impl RustwideBuilder {
                     let cargo_metadata = res.cargo_metadata.root();
                     let repository = self.get_repo(cargo_metadata)?;
 
+                    // get an async connection and enter the async runtime so the connection can
+                    // be handed back in it's `Drop` impl.
+                    let _guard = self.runtime.enter();
                     let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
                     let release_id = self.runtime.block_on(add_package_into_database(
@@ -649,12 +652,6 @@ impl RustwideBuilder {
                             self.storage.delete_prefix(&prefix)?;
                         }
                     }
-
-                    self.runtime.block_on(async move {
-                        // we need to drop the async connection inside an async runtime context
-                        // so sqlx can use a runtime to handle the pool.
-                        drop(async_conn);
-                    });
 
                     Ok(res.result.successful)
                 })()
