@@ -4,12 +4,15 @@ use futures_util::{future::BoxFuture, stream::BoxStream};
 use postgres::{Client, NoTls};
 use r2d2_postgres::PostgresConnectionManager;
 use sqlx::{postgres::PgPoolOptions, Executor};
-use std::{sync::Arc, time::Duration};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::runtime::Runtime;
 use tracing::debug;
 
 pub type PoolClient = r2d2::PooledConnection<PostgresConnectionManager<NoTls>>;
-pub type AsyncPoolClient = sqlx::pool::PoolConnection<sqlx::postgres::Postgres>;
 
 const DEFAULT_SCHEMA: &str = "public";
 
@@ -20,6 +23,7 @@ pub struct Pool {
     #[cfg(not(test))]
     pool: r2d2::Pool<PostgresConnectionManager<NoTls>>,
     async_pool: sqlx::PgPool,
+    runtime: Arc<Runtime>,
     metrics: Arc<InstanceMetrics>,
     max_size: u32,
 }
@@ -27,7 +31,7 @@ pub struct Pool {
 impl Pool {
     pub fn new(
         config: &Config,
-        runtime: &Runtime,
+        runtime: Arc<Runtime>,
         metrics: Arc<InstanceMetrics>,
     ) -> Result<Pool, PoolError> {
         debug!(
@@ -39,7 +43,7 @@ impl Pool {
     #[cfg(test)]
     pub(crate) fn new_with_schema(
         config: &Config,
-        runtime: &Runtime,
+        runtime: Arc<Runtime>,
         metrics: Arc<InstanceMetrics>,
         schema: &str,
     ) -> Result<Pool, PoolError> {
@@ -48,7 +52,7 @@ impl Pool {
 
     fn new_inner(
         config: &Config,
-        runtime: &Runtime,
+        runtime: Arc<Runtime>,
         metrics: Arc<InstanceMetrics>,
         schema: &str,
     ) -> Result<Pool, PoolError> {
@@ -109,6 +113,7 @@ impl Pool {
             pool,
             async_pool,
             metrics,
+            runtime,
             max_size: config.max_legacy_pool_size + config.max_pool_size,
         })
     }
@@ -139,7 +144,10 @@ impl Pool {
 
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
         match self.async_pool.acquire().await {
-            Ok(conn) => Ok(conn),
+            Ok(conn) => Ok(AsyncPoolClient {
+                inner: Some(conn),
+                runtime: self.runtime.clone(),
+            }),
             Err(err) => {
                 self.metrics.failed_db_connections.inc();
                 Err(PoolError::AsyncClientError(err))
@@ -219,6 +227,36 @@ where
         sql: &'q str,
     ) -> BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>> {
         self.async_pool.describe(sql)
+    }
+}
+
+/// we wrap `sqlx::PoolConnection` so we can drop it in a sync context
+/// and enter the runtime.
+/// Otherwise dropping the PoolConnection will panic because it can't spawn a task.
+#[derive(Debug)]
+pub struct AsyncPoolClient {
+    inner: Option<sqlx::pool::PoolConnection<sqlx::postgres::Postgres>>,
+    runtime: Arc<Runtime>,
+}
+
+impl Deref for AsyncPoolClient {
+    type Target = sqlx::PgConnection;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref().unwrap()
+    }
+}
+
+impl DerefMut for AsyncPoolClient {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.as_mut().unwrap()
+    }
+}
+
+impl Drop for AsyncPoolClient {
+    fn drop(&mut self) {
+        let _guard = self.runtime.enter();
+        drop(self.inner.take())
     }
 }
 

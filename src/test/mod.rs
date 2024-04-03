@@ -590,7 +590,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, &runtime, metrics, &schema)?;
+        let pool = Pool::new_with_schema(config, runtime.clone(), metrics, &schema)?;
 
         runtime.block_on({
             let schema = schema.clone();

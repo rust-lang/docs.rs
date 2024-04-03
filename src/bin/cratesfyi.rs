@@ -882,7 +882,7 @@ impl Context for BinContext {
             .get_or_try_init::<_, Error>(|| {
                 Ok(Pool::new(
                     &*self.config()?,
-                    &*self.runtime()?,
+                    self.runtime()?,
                     self.instance_metrics()?,
                 )?)
             })?
