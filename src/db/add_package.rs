@@ -42,7 +42,7 @@ pub(crate) async fn add_package_into_database(
     archive_storage: bool,
 ) -> Result<i32> {
     debug!("Adding package into database");
-    let crate_id = initialize_package_in_database(conn, metadata_pkg).await?;
+    let crate_id = initialize_crate(conn, &metadata_pkg.name).await?;
     let dependencies = convert_dependencies(metadata_pkg);
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
@@ -261,24 +261,19 @@ pub(crate) async fn add_build_into_database(
     Ok(build_id)
 }
 
-async fn initialize_package_in_database(
-    conn: &mut sqlx::PgConnection,
-    pkg: &MetadataPackage,
-) -> Result<i32> {
-    if let Some(id) = sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", pkg.name)
-        .fetch_optional(&mut *conn)
-        .await?
-    {
-        Ok(id)
-    } else {
-        // insert crate into database if it is not exists
-        Ok(sqlx::query_scalar!(
-            "INSERT INTO crates (name) VALUES ($1) RETURNING id",
-            pkg.name,
-        )
-        .fetch_one(&mut *conn)
-        .await?)
-    }
+pub(crate) async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
+    sqlx::query_scalar!(
+        "INSERT INTO crates (name)
+         VALUES ($1)
+         ON CONFLICT (name) DO UPDATE
+         SET -- this `SET` is needed so the id is always returned.
+            name = EXCLUDED.name
+         RETURNING id",
+        name
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(Into::into)
 }
 
 /// Convert dependencies into Vec<(String, String, String, bool)>
@@ -526,7 +521,7 @@ where
 mod test {
     use super::*;
     use crate::test::*;
-    use crate::utils::{CargoMetadata, MetadataPackage};
+    use crate::utils::CargoMetadata;
     use test_case::test_case;
 
     #[test]
@@ -647,13 +642,7 @@ mod test {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
 
-            let crate_id = initialize_package_in_database(
-                &mut conn,
-                &MetadataPackage {
-                    ..Default::default()
-                },
-            )
-            .await?;
+            let crate_id = initialize_crate(&mut conn, "").await?;
 
             let owner1 = CrateOwner {
                 avatar: "avatar".into(),
@@ -691,8 +680,7 @@ mod test {
     fn update_owner_detais() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
-            let crate_id =
-                initialize_package_in_database(&mut conn, &MetadataPackage::default()).await?;
+            let crate_id = initialize_crate(&mut conn, "").await?;
 
             // set initial owner details
             update_owners_in_database(
@@ -737,13 +725,7 @@ mod test {
     fn add_new_owners_and_delete_old() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
-            let crate_id = initialize_package_in_database(
-                &mut conn,
-                &MetadataPackage {
-                    ..Default::default()
-                },
-            )
-            .await?;
+            let crate_id = initialize_crate(&mut conn, "").await?;
 
             // set initial owner details
             update_owners_in_database(
