@@ -526,7 +526,7 @@ where
 mod test {
     use super::*;
     use crate::test::*;
-    use crate::utils::{CargoMetadata, MetadataPackage};
+    use crate::utils::CargoMetadata;
     use test_case::test_case;
 
     #[test]

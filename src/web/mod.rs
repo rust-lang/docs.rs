@@ -714,8 +714,7 @@ impl_axum_webpage! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{docbuilder::DocCoverage, test::*, web::match_version};
-    use axum::http::StatusCode;
+    use crate::{docbuilder::DocCoverage, test::*};
     use kuchikiki::traits::TendrilSink;
     use serde_json::json;
     use test_case::test_case;

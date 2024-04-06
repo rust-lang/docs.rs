@@ -553,10 +553,7 @@ mod tests {
     use super::*;
     use crate::test::wrapper;
 
-    use aws_sdk_cloudfront::{
-        config::{Credentials, Region},
-        Client, Config,
-    };
+    use aws_sdk_cloudfront::{config::Credentials, Config};
     use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
     use aws_smithy_types::body::SdkBody;
 

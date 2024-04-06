@@ -21,7 +21,6 @@ pub(crate) fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::fs;
 
     #[test]
     fn test_copy_doc_dir() {
