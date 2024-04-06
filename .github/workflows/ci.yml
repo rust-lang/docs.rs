@@ -183,8 +183,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: denoland/setup-deno@v1
       - name: install `just`
         run: sudo snap install --edge --classic just
-      - run: npm install -g eslint@8
       - run: just lint-js
