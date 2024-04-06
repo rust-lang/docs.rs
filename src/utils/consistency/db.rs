@@ -62,7 +62,6 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::{Crate, Release};
     use crate::test::wrapper;
 
     #[test]

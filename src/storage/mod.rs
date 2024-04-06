@@ -878,7 +878,6 @@ mod test {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
-    use std::fs;
 
     fn test_exists(storage: &Storage) -> Result<()> {
         assert!(!storage.exists("path/to/file.txt").unwrap());

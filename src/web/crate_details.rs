@@ -695,14 +695,10 @@ mod tests {
         assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
         FakeBuild, TestDatabase, TestEnvironment,
     };
-    use crate::{
-        db::{types::BuildStatus, update_build_status},
-        registry_api::CrateOwner,
-    };
+    use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
-    use semver::Version;
     use std::collections::HashMap;
 
     async fn release_build_status(

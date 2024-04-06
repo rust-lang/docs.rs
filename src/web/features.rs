@@ -126,10 +126,8 @@ fn get_feature_map(raw: Vec<Feature>) -> HashMap<String, Feature> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::Feature;
     use crate::test::{assert_cache_control, assert_redirect_cached, wrapper};
     use reqwest::StatusCode;
-    use std::collections::HashMap;
 
     #[test]
     fn test_feature_map_filters_private() {

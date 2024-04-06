@@ -64,7 +64,7 @@ impl IntoResponse for File {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test::wrapper, web::cache::CachePolicy};
+    use crate::test::wrapper;
     use chrono::Utc;
     use http::header::CACHE_CONTROL;
 

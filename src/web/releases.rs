@@ -789,7 +789,6 @@ mod tests {
     use mockito::Matcher;
     use reqwest::StatusCode;
     use serde_json::json;
-    use std::collections::HashSet;
     use test_case::test_case;
 
     #[test]

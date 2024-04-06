@@ -3,7 +3,7 @@ use crate::{db::Pool, error::Result, InstanceMetrics};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,

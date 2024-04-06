@@ -198,7 +198,6 @@ mod tests {
     use super::*;
     use crate::registry_api::CrateOwner;
     use crate::test::{assert_success, wrapper};
-    use postgres::Client;
     use test_case::test_case;
 
     fn crate_exists(conn: &mut Client, name: &str) -> Result<bool> {
