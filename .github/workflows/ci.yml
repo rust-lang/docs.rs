@@ -186,5 +186,5 @@ jobs:
       - uses: actions/setup-node@v4
       - name: install `just`
         run: sudo snap install --edge --classic just
-      - run: npm install -g eslint
+      - run: npm install -g eslint@8
       - run: just lint-js
