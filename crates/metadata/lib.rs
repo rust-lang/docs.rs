@@ -288,13 +288,11 @@ impl Metadata {
             cargo_args.push(format!("host.rustflags={rustflags}"));
         }
 
-        if !all_rustdoc_args.is_empty() {
-            cargo_args.push("--config".into());
-            let rustdocflags = toml::Value::try_from(&all_rustdoc_args)
-                .expect("serializing a string should never fail")
-                .to_string();
-            cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
-        }
+        cargo_args.push("--config".into());
+        let rustdocflags = toml::Value::try_from(&all_rustdoc_args)
+            .expect("serializing a string should never fail")
+            .to_string();
+        cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
 
         cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
         cargo_args.extend_from_slice(&self.cargo_args);
