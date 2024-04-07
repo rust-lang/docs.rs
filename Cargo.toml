@@ -35,7 +35,7 @@ crates-index = { version = "2.2.0", default-features = false, features = ["git",
 rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "23.0.0", features = [ "max-performance" ]}
-reqwest = { version = "0.11", features = ["json", "gzip"] } 
+reqwest = { version = "0.12", features = ["json", "gzip"] } 
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
 r2d2 = "0.8"
@@ -47,14 +47,14 @@ anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 failure = "0.1.8"
 thiserror = "1.0.26"
-comrak = { version = "0.21.0", default-features = false }
+comrak = { version = "0.22.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
 rustwide = { version = "0.16.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
-hostname = "0.3.1"
+hostname = "0.4.0"
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.22"
@@ -126,7 +126,7 @@ http02 = { version = "0.2.11", package = "http"}
 rand = "0.8"
 mockito = "1.0.2"
 test-case = "3.0.0"
-reqwest = { version = "0.11", features = ["blocking", "json"] } 
+reqwest = { version = "0.12", features = ["blocking", "json"] } 
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"
@@ -138,7 +138,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.58.0", default-features = false }
+gix = { version = "0.61.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
