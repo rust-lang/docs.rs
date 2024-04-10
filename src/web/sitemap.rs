@@ -1,8 +1,7 @@
 use crate::{
-    db::Pool,
     docbuilder::Limits,
     impl_axum_webpage,
-    utils::{get_config, spawn_blocking, ConfigName},
+    utils::{get_config, ConfigName},
     web::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
@@ -109,17 +108,11 @@ struct AboutBuilds {
 impl_axum_webpage!(AboutBuilds = "core/about/builds.html");
 
 pub(crate) async fn about_builds_handler(
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let rustc_version = spawn_blocking(move || {
-        let mut conn = pool.get()?;
-        get_config::<String>(&mut conn, ConfigName::RustcVersion)
-    })
-    .await?;
-
     Ok(AboutBuilds {
-        rustc_version,
+        rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
         limits: Limits::new(&config),
         active_tab: "builds",
     })

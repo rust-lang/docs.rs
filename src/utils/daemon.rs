@@ -88,10 +88,11 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
 }
 
 pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Error> {
-    let cdn = context.cdn()?;
     let metrics = context.instance_metrics()?;
     let config = context.config()?;
     let pool = context.pool()?;
+    let runtime = context.runtime()?;
+    let cdn = runtime.block_on(context.cdn())?;
 
     if config.cloudfront_distribution_id_web.is_none()
         && config.cloudfront_distribution_id_static.is_none()
@@ -105,18 +106,41 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
         return Ok(());
     }
 
-    cron("cdn invalidator", Duration::from_secs(60), move || {
-        let mut conn = pool.get()?;
-        if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-            cdn::handle_queued_invalidation_requests(&cdn, &metrics, &mut *conn, distribution_id)
-                .context("error handling queued invalidations for web CDN invalidation")?;
-        }
-        if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-            cdn::handle_queued_invalidation_requests(&cdn, &metrics, &mut *conn, distribution_id)
-                .context("error handling queued invalidations for static CDN invalidation")?;
-        }
-        Ok(())
-    })?;
+    async_cron(
+        &runtime,
+        "cdn invalidator",
+        Duration::from_secs(60),
+        move || {
+            let pool = pool.clone();
+            let config = config.clone();
+            let cdn = cdn.clone();
+            let metrics = metrics.clone();
+            async move {
+                let mut conn = pool.get_async().await?;
+                if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
+                    cdn::handle_queued_invalidation_requests(
+                        &cdn,
+                        &metrics,
+                        &mut conn,
+                        distribution_id,
+                    )
+                    .await
+                    .context("error handling queued invalidations for web CDN invalidation")?;
+                }
+                if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
+                    cdn::handle_queued_invalidation_requests(
+                        &cdn,
+                        &metrics,
+                        &mut conn,
+                        distribution_id,
+                    )
+                    .await
+                    .context("error handling queued invalidations for static CDN invalidation")?;
+                }
+                Ok(())
+            }
+        },
+    );
     Ok(())
 }
 
@@ -178,21 +202,4 @@ where
             }
         }
     });
-}
-
-pub(crate) fn cron<F>(name: &'static str, interval: Duration, exec: F) -> Result<(), Error>
-where
-    F: Fn() -> Result<(), Error> + Send + 'static,
-{
-    thread::Builder::new()
-        .name(name.into())
-        .spawn(move || loop {
-            thread::sleep(interval);
-            if let Err(err) =
-                exec().with_context(|| format!("failed to run scheduled task '{name}'"))
-            {
-                report_error(&err);
-            }
-        })?;
-    Ok(())
 }

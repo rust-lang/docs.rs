@@ -750,31 +750,27 @@ pub(crate) async fn build_queue_handler(
     Extension(build_queue): Extension<Arc<BuildQueue>>,
     Extension(pool): Extension<Pool>,
 ) -> AxumResult<impl IntoResponse> {
-    let (queue, active_deployments) = spawn_blocking(move || {
-        let mut queue = build_queue.queued_crates()?;
-        for krate in queue.iter_mut() {
-            // The priority here is inverted: in the database if a crate has a higher priority it
-            // will be built after everything else, which is counter-intuitive for people not
-            // familiar with docs.rs's inner workings.
-            krate.priority = -krate.priority;
-        }
+    let mut conn = pool.get_async().await?;
+    let mut active_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
+        .await?
+        .into_iter()
+        .map(|i| i.krate)
+        .collect();
 
-        let mut conn = pool.get()?;
-        let mut active_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut *conn)?
-            .into_iter()
-            .map(|i| i.krate)
-            .collect();
+    // deduplicate the list of crates while keeping their order
+    let mut set = HashSet::new();
+    active_deployments.retain(|k| set.insert(k.clone()));
 
-        // deduplicate the list of crates while keeping their order
-        let mut set = HashSet::new();
-        active_deployments.retain(|k| set.insert(k.clone()));
+    // reverse the list, so the oldest comes first
+    active_deployments.reverse();
 
-        // reverse the list, so the oldest comes first
-        active_deployments.reverse();
-
-        Ok((queue, active_deployments))
-    })
-    .await?;
+    let mut queue = spawn_blocking(move || build_queue.queued_crates()).await?;
+    for krate in queue.iter_mut() {
+        // The priority here is inverted: in the database if a crate has a higher priority it
+        // will be built after everything else, which is counter-intuitive for people not
+        // familiar with docs.rs's inner workings.
+        krate.priority = -krate.priority;
+    }
 
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
@@ -1596,7 +1592,10 @@ mod tests {
 
             let web = env.frontend();
 
-            cdn::queue_crate_invalidation(&mut *env.db().conn(), &env.config(), "krate_2")?;
+            env.runtime().block_on(async move {
+                let mut conn = env.async_db().await.async_conn().await;
+                cdn::queue_crate_invalidation(&mut conn, &env.config(), "krate_2").await
+            })?;
 
             let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
@@ -1622,7 +1621,6 @@ mod tests {
     #[test]
     fn test_releases_queue() {
         wrapper(|env| {
-            let queue = env.build_queue();
             let web = env.frontend();
 
             let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
@@ -1636,6 +1634,7 @@ mod tests {
                 .expect("missing heading")
                 .any(|el| el.text_contents().contains("active CDN deployments")));
 
+            let queue = env.build_queue();
             queue.add_crate("foo", "1.0.0", 0, None)?;
             queue.add_crate("bar", "0.1.0", -10, None)?;
             queue.add_crate("baz", "0.0.1", 10, None)?;

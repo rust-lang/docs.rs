@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE crates SET latest_version_id = (\n            SELECT id FROM releases WHERE release_time = (\n                SELECT MAX(release_time) FROM releases WHERE crate_id = $1\n            )\n        ) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "337665bde311c54fc9ab22d0926dc610770d650db67a78c9d93d6ea9dc83a68c"
+}

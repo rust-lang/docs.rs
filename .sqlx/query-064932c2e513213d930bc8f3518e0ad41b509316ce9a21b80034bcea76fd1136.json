@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, path_pattern, queued\n         FROM cdn_invalidation_queue\n         WHERE cdn_distribution_id = $1 AND created_in_cdn IS NULL\n         ORDER BY queued, id\n         LIMIT $2\n         FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "path_pattern",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "queued",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "064932c2e513213d930bc8f3518e0ad41b509316ce9a21b80034bcea76fd1136"
+}

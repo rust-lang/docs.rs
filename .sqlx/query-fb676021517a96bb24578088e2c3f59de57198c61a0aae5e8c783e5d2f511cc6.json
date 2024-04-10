@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO cdn_invalidation_queue (crate, cdn_distribution_id, path_pattern)\n                 VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb676021517a96bb24578088e2c3f59de57198c61a0aae5e8c783e5d2f511cc6"
+}
