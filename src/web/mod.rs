@@ -400,7 +400,10 @@ fn apply_middleware(
 ) -> Result<AxumRouter> {
     let config = context.config()?;
     let has_templates = template_data.is_some();
-    let async_storage = context.runtime()?.block_on(context.async_storage())?;
+    let runtime = context.runtime()?;
+    let async_storage = runtime.block_on(context.async_storage())?;
+    let build_queue = context.build_queue()?;
+
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -417,7 +420,7 @@ fn apply_middleware(
             ))
             .layer(option_layer(config.request_timeout.map(TimeoutLayer::new)))
             .layer(Extension(context.pool()?))
-            .layer(Extension(context.build_queue()?))
+            .layer(Extension(build_queue))
             .layer(Extension(context.service_metrics()?))
             .layer(Extension(context.instance_metrics()?))
             .layer(Extension(context.config()?))

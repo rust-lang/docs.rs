@@ -345,41 +345,45 @@ enum PrioritySubcommand {
 
 impl PrioritySubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
-        let conn = &mut *ctx.conn()?;
-        match self {
-            Self::List => {
-                for (pattern, priority) in list_crate_priorities(conn)? {
-                    println!("{pattern:>20} : {priority:>3}");
+        ctx.runtime()?.block_on(async move {
+            let mut conn = ctx.pool()?.get_async().await?;
+            match self {
+                Self::List => {
+                    for (pattern, priority) in list_crate_priorities(&mut conn).await? {
+                        println!("{pattern:>20} : {priority:>3}");
+                    }
+                }
+
+                Self::Get { crate_name } => {
+                    if let Some((pattern, priority)) =
+                        get_crate_pattern_and_priority(&mut conn, &crate_name).await?
+                    {
+                        println!("{pattern} : {priority}");
+                    } else {
+                        println!("No priority found for {crate_name}");
+                    }
+                }
+
+                Self::Set { pattern, priority } => {
+                    set_crate_priority(&mut conn, &pattern, priority)
+                        .await
+                        .context("Could not set pattern's priority")?;
+                    println!("Set pattern '{pattern}' to priority {priority}");
+                }
+
+                Self::Remove { pattern } => {
+                    if let Some(priority) = remove_crate_priority(&mut conn, &pattern)
+                        .await
+                        .context("Could not remove pattern's priority")?
+                    {
+                        println!("Removed pattern '{pattern}' with priority {priority}");
+                    } else {
+                        println!("Pattern '{pattern}' did not exist and so was not removed");
+                    }
                 }
             }
-
-            Self::Get { crate_name } => {
-                if let Some((pattern, priority)) =
-                    get_crate_pattern_and_priority(conn, &crate_name)?
-                {
-                    println!("{pattern} : {priority}");
-                } else {
-                    println!("No priority found for {crate_name}");
-                }
-            }
-
-            Self::Set { pattern, priority } => {
-                set_crate_priority(conn, &pattern, priority)
-                    .context("Could not set pattern's priority")?;
-                println!("Set pattern '{pattern}' to priority {priority}");
-            }
-
-            Self::Remove { pattern } => {
-                if let Some(priority) = remove_crate_priority(conn, &pattern)
-                    .context("Could not remove pattern's priority")?
-                {
-                    println!("Removed pattern '{pattern}' with priority {priority}");
-                } else {
-                    println!("Pattern '{pattern}' did not exist and so was not removed");
-                }
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -457,16 +461,20 @@ impl BuildSubcommand {
             }
 
             Self::UpdateToolchain { only_first_time } => {
-                if only_first_time {
-                    let mut conn = ctx
-                        .pool()?
-                        .get()
-                        .context("failed to get a database connection")?;
+                let rustc_version = ctx.runtime()?.block_on({
+                    let pool = ctx.pool()?;
+                    async move {
+                        let mut conn = pool
+                            .get_async()
+                            .await
+                            .context("failed to get a database connection")?;
 
-                    if get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_some() {
-                        println!("update-toolchain was already called in the past, exiting");
-                        return Ok(());
+                        get_config::<String>(&mut conn, ConfigName::RustcVersion).await
                     }
+                })?;
+                if only_first_time && rustc_version.is_some() {
+                    println!("update-toolchain was already called in the past, exiting");
+                    return Ok(());
                 }
 
                 rustwide_builder()?
@@ -489,12 +497,16 @@ impl BuildSubcommand {
             }
 
             Self::SetToolchain { toolchain_name } => {
-                let mut conn = ctx
-                    .pool()?
-                    .get()
-                    .context("failed to get a database connection")?;
-                set_config(&mut conn, ConfigName::Toolchain, toolchain_name)
-                    .context("failed to set toolchain in database")?;
+                ctx.runtime()?.block_on(async move {
+                    let mut conn = ctx
+                        .pool()?
+                        .get_async()
+                        .await
+                        .context("failed to get a database connection")?;
+                    set_config(&mut conn, ConfigName::Toolchain, toolchain_name)
+                        .await
+                        .context("failed to set toolchain in database")
+                })?;
             }
 
             Self::Lock => build_queue.lock().context("Failed to lock")?,
@@ -627,23 +639,35 @@ impl DatabaseSubcommand {
 
             Self::Delete {
                 command: DeleteSubcommand::Version { name, version },
-            } => db::delete_version(
-                &mut *ctx.pool()?.get()?,
-                &*ctx.storage()?,
-                &*ctx.config()?,
-                &name,
-                &version,
-            )
-            .context("failed to delete the version")?,
+            } => ctx
+                .runtime()?
+                .block_on(async move {
+                    let mut conn = ctx.pool()?.get_async().await?;
+                    db::delete_version(
+                        &mut conn,
+                        &*ctx.async_storage().await?,
+                        &*ctx.config()?,
+                        &name,
+                        &version,
+                    )
+                    .await
+                })
+                .context("failed to delete the version")?,
             Self::Delete {
                 command: DeleteSubcommand::Crate { name },
-            } => db::delete_crate(
-                &mut *ctx.pool()?.get()?,
-                &*ctx.storage()?,
-                &*ctx.config()?,
-                &name,
-            )
-            .context("failed to delete the crate")?,
+            } => ctx
+                .runtime()?
+                .block_on(async move {
+                    let mut conn = ctx.pool()?.get_async().await?;
+                    db::delete_crate(
+                        &mut conn,
+                        &*ctx.async_storage().await?,
+                        &*ctx.config()?,
+                        &name,
+                    )
+                    .await
+                })
+                .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
             Self::Limits { command } => command.handle_args(ctx)?,
@@ -791,7 +815,7 @@ enum DeleteSubcommand {
 struct BinContext {
     build_queue: OnceCell<Arc<BuildQueue>>,
     storage: OnceCell<Arc<Storage>>,
-    cdn: OnceCell<Arc<CdnBackend>>,
+    cdn: tokio::sync::OnceCell<Arc<CdnBackend>>,
     config: OnceCell<Arc<Config>>,
     pool: OnceCell<Pool>,
     service_metrics: OnceCell<Arc<ServiceMetrics>>,
@@ -807,7 +831,7 @@ impl BinContext {
         Self {
             build_queue: OnceCell::new(),
             storage: OnceCell::new(),
-            cdn: OnceCell::new(),
+            cdn: tokio::sync::OnceCell::new(),
             config: OnceCell::new(),
             pool: OnceCell::new(),
             service_metrics: OnceCell::new(),
@@ -838,13 +862,16 @@ macro_rules! lazy {
 #[async_trait]
 impl Context for BinContext {
     lazy! {
-        fn build_queue(self) -> BuildQueue = BuildQueue::new(
-            self.pool()?,
-            self.instance_metrics()?,
-            self.config()?,
-            self.storage()?,
-            self.runtime()?,
-        );
+        fn build_queue(self) -> BuildQueue = {
+            let runtime = self.runtime()?;
+            BuildQueue::new(
+                self.pool()?,
+                self.instance_metrics()?,
+                self.config()?,
+                runtime.clone(),
+                runtime.block_on(self.async_storage())?,
+            )
+        };
         fn storage(self) -> Storage = {
             let runtime = self.runtime()?;
             Storage::new(
@@ -852,12 +879,11 @@ impl Context for BinContext {
                 runtime
            )
         };
-        fn cdn(self) -> CdnBackend = CdnBackend::new(
-            &self.config()?,
-            &self.runtime()?,
-        );
         fn config(self) -> Config = Config::from_env()?;
-        fn service_metrics(self) -> ServiceMetrics = ServiceMetrics::new()?;
+        fn service_metrics(self) -> ServiceMetrics = {
+            let runtime = self.runtime()?;
+            ServiceMetrics::new(runtime)?
+        };
         fn instance_metrics(self) -> InstanceMetrics = InstanceMetrics::new()?;
         fn runtime(self) -> Runtime = {
             Builder::new_multi_thread()
@@ -901,5 +927,14 @@ impl Context for BinContext {
         Ok(Arc::new(
             AsyncStorage::new(self.pool()?, self.instance_metrics()?, self.config()?).await?,
         ))
+    }
+
+    async fn cdn(&self) -> Result<Arc<CdnBackend>> {
+        let config = self.config()?;
+        Ok(self
+            .cdn
+            .get_or_init(|| async { Arc::new(CdnBackend::new(&config).await) })
+            .await
+            .clone())
     }
 }

@@ -8,8 +8,10 @@ use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
 use std::{
     collections::HashSet,
+    sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::runtime::Runtime;
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -248,13 +250,15 @@ pub struct ServiceMetrics {
     pub queued_cdn_invalidations_by_distribution: IntGaugeVec,
 
     registry: prometheus::Registry,
+    runtime: Arc<Runtime>,
 }
 
 impl ServiceMetrics {
-    pub fn new() -> Result<Self, prometheus::Error> {
+    pub fn new(runtime: Arc<Runtime>) -> Result<Self, prometheus::Error> {
         let registry = prometheus::Registry::new();
         Ok(Self {
             registry: registry.clone(),
+            runtime,
             queued_crates_count: metric_from_opts(
                 &registry,
                 "queued_crates_count",
@@ -332,14 +336,18 @@ impl ServiceMetrics {
                 .set(*count as i64);
         }
 
-        let mut conn = pool.get()?;
-        for (distribution_id, count) in
-            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut *conn, config)?
-        {
-            self.queued_cdn_invalidations_by_distribution
-                .with_label_values(&[&distribution_id])
-                .set(count);
-        }
+        self.runtime.block_on(async {
+            let mut conn = pool.get_async().await?;
+            for (distribution_id, count) in
+                cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut conn, config)
+                    .await?
+            {
+                self.queued_cdn_invalidations_by_distribution
+                    .with_label_values(&[&distribution_id])
+                    .set(count);
+            }
+            Ok::<_, Error>(())
+        })?;
 
         self.failed_crates_count.set(queue.failed_count()? as i64);
         Ok(self.registry.gather())

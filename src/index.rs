@@ -1,11 +1,10 @@
-use std::sync::atomic::AtomicBool;
-use std::{path::PathBuf, process::Command};
-
-use anyhow::Context;
-use crates_index_diff::gix;
-
 use crate::error::Result;
 use crate::utils::report_error;
+use anyhow::Context;
+use crates_index_diff::gix;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::atomic::AtomicBool;
 
 pub struct Index {
     path: PathBuf,

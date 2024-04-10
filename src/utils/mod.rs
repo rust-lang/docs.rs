@@ -24,7 +24,6 @@ mod queue;
 pub(crate) mod queue_builder;
 mod rustc_version;
 use anyhow::Result;
-use postgres::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::panic;
@@ -58,29 +57,35 @@ pub enum ConfigName {
     Toolchain,
 }
 
-pub fn set_config(
-    conn: &mut Client,
+pub async fn set_config(
+    conn: &mut sqlx::PgConnection,
     name: ConfigName,
     value: impl Serialize,
 ) -> anyhow::Result<()> {
     let name: &'static str = name.into();
-    conn.execute(
+    sqlx::query!(
         "INSERT INTO config (name, value)
-        VALUES ($1, $2)
-        ON CONFLICT (name) DO UPDATE SET value = $2;",
-        &[&name, &serde_json::to_value(value)?],
-    )?;
+         VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET value = $2;",
+        name,
+        &serde_json::to_value(value)?,
+    )
+    .execute(conn)
+    .await?;
     Ok(())
 }
 
-pub fn get_config<T>(conn: &mut Client, name: ConfigName) -> Result<Option<T>>
+pub async fn get_config<T>(conn: &mut sqlx::PgConnection, name: ConfigName) -> Result<Option<T>>
 where
     T: DeserializeOwned,
 {
     let name: &'static str = name.into();
     Ok(
-        match conn.query_opt("SELECT value FROM config WHERE name = $1;", &[&name])? {
-            Some(row) => serde_json::from_value(row.get("value"))?,
+        match sqlx::query!("SELECT value FROM config WHERE name = $1;", name)
+            .fetch_optional(conn)
+            .await?
+        {
+            Some(row) => serde_json::from_value(row.value)?,
             None => None,
         },
     )
@@ -178,7 +183,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::wrapper;
+    use crate::test::async_wrapper;
     use serde_json::Value;
     use test_case::test_case;
 
@@ -192,30 +197,39 @@ mod tests {
 
     #[test]
     fn test_get_config_empty() {
-        wrapper(|env| {
-            let mut conn = env.db().conn();
-            conn.execute("DELETE FROM config", &[])?;
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query!("DELETE FROM config")
+                .execute(&mut *conn)
+                .await?;
 
-            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_none());
+            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                .await?
+                .is_none());
             Ok(())
         });
     }
 
     #[test]
     fn test_set_and_get_config_() {
-        wrapper(|env| {
-            let mut conn = env.db().conn();
-            conn.execute("DELETE FROM config", &[])?;
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query!("DELETE FROM config")
+                .execute(&mut *conn)
+                .await?;
 
-            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)?.is_none());
+            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                .await?
+                .is_none());
 
             set_config(
                 &mut conn,
                 ConfigName::RustcVersion,
                 Value::String("some value".into()),
-            )?;
+            )
+            .await?;
             assert_eq!(
-                get_config(&mut conn, ConfigName::RustcVersion)?,
+                get_config(&mut conn, ConfigName::RustcVersion).await?,
                 Some("some value".to_string())
             );
             Ok(())
