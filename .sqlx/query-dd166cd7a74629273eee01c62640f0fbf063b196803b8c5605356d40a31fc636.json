@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT login FROM owners\n                    INNER JOIN owner_rels ON owners.id = owner_rels.oid\n                    WHERE owner_rels.cid = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dd166cd7a74629273eee01c62640f0fbf063b196803b8c5605356d40a31fc636"
+}

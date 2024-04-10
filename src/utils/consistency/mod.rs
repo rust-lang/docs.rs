@@ -81,10 +81,13 @@ where
 {
     let mut result = HandleResult::default();
 
-    let mut conn = ctx.pool()?.get()?;
-    let storage = ctx.storage()?;
     let config = ctx.config()?;
+    let runtime = ctx.runtime()?;
+
+    let storage = runtime.block_on(ctx.async_storage())?;
     let build_queue = ctx.build_queue()?;
+
+    let mut conn = runtime.block_on(ctx.pool()?.get_async())?;
 
     for difference in iter {
         println!("{difference}");
@@ -92,7 +95,9 @@ where
         match difference {
             diff::Difference::CrateNotInIndex(name) => {
                 if !dry_run {
-                    if let Err(err) = delete::delete_crate(&mut conn, &storage, &config, name) {
+                    if let Err(err) =
+                        runtime.block_on(delete::delete_crate(&mut conn, &storage, &config, name))
+                    {
                         warn!("{:?}", err);
                     }
                 }
@@ -111,9 +116,9 @@ where
             }
             diff::Difference::ReleaseNotInIndex(name, version) => {
                 if !dry_run {
-                    if let Err(err) =
-                        delete::delete_version(&mut conn, &storage, &config, name, version)
-                    {
+                    if let Err(err) = runtime.block_on(delete::delete_version(
+                        &mut conn, &storage, &config, name, version,
+                    )) {
                         warn!("{:?}", err);
                     }
                 }
@@ -129,7 +134,7 @@ where
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
                 if !dry_run {
-                    if let Err(err) = build_queue.set_yanked(&mut conn, name, version, *yanked) {
+                    if let Err(err) = build_queue.set_yanked(name, version, *yanked) {
                         warn!("{:?}", err);
                     }
                 }

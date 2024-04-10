@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO cdn_invalidation_queue (\n                 crate, cdn_distribution_id, path_pattern, queued, created_in_cdn, cdn_reference\n             ) VALUES (\n                 'dummy',\n                 $1,\n                 '/doesnt_matter',\n                 CURRENT_TIMESTAMP,\n                 CURRENT_TIMESTAMP,\n                 $2\n             )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "daaad33196fdd4e48f6bd9c4153f689d8d22a3d022eef9bae74a5590395d3fce"
+}

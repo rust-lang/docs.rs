@@ -262,7 +262,7 @@ pub(crate) struct TestEnvironment {
     db: tokio::sync::OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     async_storage: tokio::sync::OnceCell<Arc<AsyncStorage>>,
-    cdn: OnceCell<Arc<CdnBackend>>,
+    cdn: tokio::sync::OnceCell<Arc<CdnBackend>>,
     index: OnceCell<Arc<Index>>,
     registry_api: OnceCell<Arc<RegistryApi>>,
     runtime: OnceCell<Arc<Runtime>>,
@@ -297,7 +297,7 @@ impl TestEnvironment {
             db: tokio::sync::OnceCell::new(),
             storage: OnceCell::new(),
             async_storage: tokio::sync::OnceCell::new(),
-            cdn: OnceCell::new(),
+            cdn: tokio::sync::OnceCell::new(),
             index: OnceCell::new(),
             registry_api: OnceCell::new(),
             instance_metrics: OnceCell::new(),
@@ -371,16 +371,17 @@ impl TestEnvironment {
                     self.db().pool(),
                     self.instance_metrics(),
                     self.config(),
-                    self.storage(),
                     self.runtime(),
+                    self.runtime().block_on(self.async_storage()),
                 ))
             })
             .clone()
     }
 
-    pub(crate) fn cdn(&self) -> Arc<CdnBackend> {
+    pub(crate) async fn cdn(&self) -> Arc<CdnBackend> {
         self.cdn
-            .get_or_init(|| Arc::new(CdnBackend::new(&self.config(), &self.runtime())))
+            .get_or_init(|| async { Arc::new(CdnBackend::new(&self.config()).await) })
+            .await
             .clone()
     }
 
@@ -427,7 +428,10 @@ impl TestEnvironment {
     pub(crate) fn service_metrics(&self) -> Arc<ServiceMetrics> {
         self.service_metrics
             .get_or_init(|| {
-                Arc::new(ServiceMetrics::new().expect("failed to initialize the service metrics"))
+                Arc::new(
+                    ServiceMetrics::new(self.runtime())
+                        .expect("failed to initialize the service metrics"),
+                )
             })
             .clone()
     }
@@ -544,8 +548,8 @@ impl Context for TestEnvironment {
         Ok(TestEnvironment::async_storage(self).await)
     }
 
-    fn cdn(&self) -> Result<Arc<CdnBackend>> {
-        Ok(TestEnvironment::cdn(self))
+    async fn cdn(&self) -> Result<Arc<CdnBackend>> {
+        Ok(TestEnvironment::cdn(self).await)
     }
 
     fn pool(&self) -> Result<Pool> {

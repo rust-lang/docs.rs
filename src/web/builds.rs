@@ -133,7 +133,7 @@ pub(crate) async fn build_list_json_handler(
 }
 
 async fn crate_version_exists(
-    mut conn: DbConnection,
+    conn: &mut sqlx::PgConnection,
     name: &String,
     version: &Version,
 ) -> Result<bool, anyhow::Error> {
@@ -153,22 +153,19 @@ async fn crate_version_exists(
 }
 
 async fn build_trigger_check(
-    conn: DbConnection,
+    conn: &mut sqlx::PgConnection,
     name: &String,
     version: &Version,
     build_queue: &Arc<BuildQueue>,
 ) -> AxumResult<impl IntoResponse> {
-    if !crate_version_exists(conn, name, version).await? {
+    if !crate_version_exists(&mut *conn, name, version).await? {
         return Err(AxumNope::VersionNotFound);
     }
 
-    let crate_version_is_in_queue = spawn_blocking({
-        let name = name.clone();
-        let version_string = version.to_string();
-        let build_queue = build_queue.clone();
-        move || build_queue.has_build_queued(&name, &version_string)
-    })
-    .await?;
+    let crate_version_is_in_queue = build_queue
+        .has_build_queued(name, &version.to_string())
+        .await?;
+
     if crate_version_is_in_queue {
         return Err(AxumNope::BadRequest(anyhow!(
             "crate {name} {version} already queued for rebuild"
@@ -184,7 +181,7 @@ const TRIGGERED_REBUILD_PRIORITY: i32 = 5;
 
 pub(crate) async fn build_trigger_rebuild_handler(
     Path((name, version)): Path<(String, Version)>,
-    conn: DbConnection,
+    mut conn: DbConnection,
     Extension(build_queue): Extension<Arc<BuildQueue>>,
     Extension(config): Extension<Arc<Config>>,
     opt_auth_header: Option<TypedHeader<Authorization<Bearer>>>,
@@ -207,7 +204,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
         )));
     }
 
-    build_trigger_check(conn, &name, &version, &build_queue)
+    build_trigger_check(&mut conn, &name, &version, &build_queue)
         .await
         .map_err(JsonAxumNope)?;
 
@@ -261,12 +258,23 @@ async fn get_builds(
 mod tests {
     use super::BuildStatus;
     use crate::{
-        test::{assert_cache_control, fake_release_that_failed_before_build, wrapper, FakeBuild},
+        test::{
+            assert_cache_control, fake_release_that_failed_before_build, wrapper, FakeBuild,
+            TestEnvironment,
+        },
         web::cache::CachePolicy,
     };
     use chrono::{DateTime, Duration, Utc};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
+
+    fn has_build_queued(env: &TestEnvironment, name: &str, version: &str) -> anyhow::Result<bool> {
+        env.runtime().block_on(async move {
+            let build_queue = env.build_queue();
+
+            build_queue.has_build_queued(name, version).await
+        })
+    }
 
     #[test]
     fn build_list_empty_build() {
@@ -499,7 +507,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 0);
-            assert!(!env.build_queue().has_build_queued("foo", "0.1.0")?);
+            assert!(!has_build_queued(env, "foo", "0.1.0")?);
 
             {
                 let response = env
@@ -513,7 +521,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 1);
-            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
+            assert!(has_build_queued(env, "foo", "0.1.0")?);
 
             {
                 let response = env
@@ -533,7 +541,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 1);
-            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
+            assert!(has_build_queued(env, "foo", "0.1.0")?);
 
             Ok(())
         });

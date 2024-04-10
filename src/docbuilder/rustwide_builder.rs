@@ -17,7 +17,6 @@ use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
-use postgres::Client;
 use regex::Regex;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
@@ -36,8 +35,10 @@ const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
-fn get_configured_toolchain(conn: &mut Client) -> Result<Toolchain> {
-    let name: String = get_config(conn, ConfigName::Toolchain)?.unwrap_or_else(|| "nightly".into());
+async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
+    let name: String = get_config(conn, ConfigName::Toolchain)
+        .await?
+        .unwrap_or_else(|| "nightly".into());
 
     // If the toolchain is all hex, assume it references an artifact from
     // CI, for instance an `@bors try` build.
@@ -99,10 +100,14 @@ impl RustwideBuilder {
         let config = context.config()?;
         let pool = context.pool()?;
         let runtime = context.runtime()?;
+        let toolchain = runtime.block_on(async {
+            let mut conn = pool.get_async().await?;
+            get_configured_toolchain(&mut conn).await
+        })?;
 
         Ok(RustwideBuilder {
             workspace: build_workspace(context)?,
-            toolchain: get_configured_toolchain(&mut *pool.get()?)?,
+            toolchain,
             config,
             db: pool,
             runtime: runtime.clone(),
@@ -143,7 +148,10 @@ impl RustwideBuilder {
     }
 
     pub fn update_toolchain(&mut self) -> Result<bool> {
-        self.toolchain = get_configured_toolchain(&mut *self.db.get()?)?;
+        self.toolchain = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            get_configured_toolchain(&mut conn).await
+        })?;
 
         // For CI builds, a lot of the normal update_toolchain things don't apply.
         // CI builds are only for one platform (https://forge.rust-lang.org/infra/docs/rustc-ci.html#try-builds)
@@ -265,7 +273,6 @@ impl RustwideBuilder {
 
         info!("building a dummy crate to get essential files");
 
-        let mut conn = self.db.get()?;
         let limits = self.get_limits(DUMMY_CRATE_NAME)?;
 
         // FIXME: for now, purge all build dirs before each build.
@@ -323,7 +330,10 @@ impl RustwideBuilder {
                     ))?;
                 }
 
-                set_config(&mut conn, ConfigName::RustcVersion, rustc_version)?;
+                self.runtime.block_on(async {
+                    let mut conn = self.db.get_async().await?;
+                    set_config(&mut conn, ConfigName::RustcVersion, rustc_version).await
+                })?;
                 Ok(())
             })?;
 
