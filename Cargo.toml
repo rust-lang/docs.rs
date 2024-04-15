@@ -35,7 +35,7 @@ crates-index = { version = "2.2.0", default-features = false, features = ["git",
 rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "23.0.0", features = [ "max-performance" ]}
-reqwest = { version = "0.12", features = ["json", "gzip"] } 
+reqwest = { version = "0.12", features = ["json", "gzip"] }
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
 r2d2 = "0.8"
@@ -126,7 +126,7 @@ http02 = { version = "0.2.11", package = "http"}
 rand = "0.8"
 mockito = "1.0.2"
 test-case = "3.0.0"
-reqwest = { version = "0.12", features = ["blocking", "json"] } 
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"
@@ -138,7 +138,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.61.0", default-features = false }
+gix = { version = "0.62.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
