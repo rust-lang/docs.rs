@@ -117,7 +117,7 @@ pub(crate) fn find_in_file<P: AsRef<Path> + std::fmt::Debug>(
 mod tests {
     use super::*;
     use std::io::Write;
-    use zip::write::FileOptions;
+    use zip::write::SimpleFileOptions;
 
     fn create_test_archive() -> fs::File {
         let mut tf = tempfile::tempfile().unwrap();
@@ -128,7 +128,7 @@ mod tests {
         archive
             .start_file(
                 "testfile1",
-                FileOptions::default().compression_method(zip::CompressionMethod::Bzip2),
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Bzip2),
             )
             .unwrap();
         archive.write_all(&objectcontent).unwrap();
