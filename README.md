@@ -62,7 +62,7 @@ cp .env.sample .env
 # Create the DOCSRS_PREFIX directory
 mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
-cargo build
+SQLX_OFFLINE=1 cargo build
 # Start the external services.
 # It may be `docker compose` in newer versions
 docker-compose up -d db s3
