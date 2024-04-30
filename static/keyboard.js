@@ -102,6 +102,7 @@
             switch (getKey(ev)) {
                 case "s":
                 case "S":
+                case "/":
                     ev.preventDefault();
                     focusSearchInput();
                     break;
