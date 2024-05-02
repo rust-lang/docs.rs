@@ -778,7 +778,7 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry_api::CrateOwner;
+    use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success, wrapper,
         TestFrontend,
@@ -1642,7 +1642,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
 

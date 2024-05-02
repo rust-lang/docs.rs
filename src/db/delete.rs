@@ -196,7 +196,7 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry_api::CrateOwner;
+    use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{assert_success, wrapper};
     use test_case::test_case;
 
@@ -328,7 +328,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "malicious actor".into(),
                     avatar: "https://example.org/malicious".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v1)?);
@@ -359,7 +359,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "Peter Rabbit".into(),
                     avatar: "https://example.org/peter".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
             assert!(release_exists(&mut db.conn(), v2)?);

@@ -13,7 +13,17 @@
       "Left": [
         "Varchar",
         "Varchar",
-        "Text"
+        {
+          "Custom": {
+            "name": "owner_kind",
+            "kind": {
+              "Enum": [
+                "user",
+                "team"
+              ]
+            }
+          }
+        }
       ]
     },
     "nullable": [

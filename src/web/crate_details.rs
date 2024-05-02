@@ -1,4 +1,5 @@
 use super::{markdown, match_version, MetaData};
+use crate::registry_api::OwnerKind;
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::web::rustdoc::RustdocHtmlParams;
 use crate::{
@@ -35,7 +36,7 @@ pub(crate) struct CrateDetails {
     name: String,
     pub version: Version,
     description: Option<String>,
-    owners: Vec<(String, String, String)>,
+    owners: Vec<(String, String, OwnerKind)>,
     dependencies: Option<Value>,
     #[serde(serialize_with = "optional_markdown")]
     readme: Option<String>,
@@ -264,10 +265,10 @@ impl CrateDetails {
 
         // get owners
         crate_details.owners = sqlx::query!(
-            "SELECT login, avatar, kind
+            r#"SELECT login, avatar, kind as "kind: OwnerKind"
              FROM owners
              INNER JOIN owner_rels ON owner_rels.oid = owners.id
-             WHERE cid = $1",
+             WHERE cid = $1"#,
             krate.crate_id,
         )
         .fetch(&mut *conn)
@@ -1253,7 +1254,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobar".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
 
@@ -1266,7 +1267,7 @@ mod tests {
                 vec![(
                     "foobar".into(),
                     "https://example.org/foobar".into(),
-                    "user".into()
+                    OwnerKind::User
                 )]
             );
 
@@ -1277,12 +1278,12 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "foobar".into(),
                     avatar: "https://example.org/foobarv2".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
 
@@ -1298,12 +1299,12 @@ mod tests {
                     (
                         "barfoo".into(),
                         "https://example.org/barfoo".into(),
-                        "user".into()
+                        OwnerKind::User
                     ),
                     (
                         "foobar".into(),
                         "https://example.org/foobarv2".into(),
-                        "user".into()
+                        OwnerKind::User
                     )
                 ]
             );
@@ -1315,7 +1316,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoo".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
 
@@ -1328,7 +1329,7 @@ mod tests {
                 vec![(
                     "barfoo".into(),
                     "https://example.org/barfoo".into(),
-                    "user".into()
+                    OwnerKind::User
                 )]
             );
 
@@ -1339,7 +1340,7 @@ mod tests {
                 .add_owner(CrateOwner {
                     login: "barfoo".into(),
                     avatar: "https://example.org/barfoov2".into(),
-                    kind: "user".into(),
+                    kind: OwnerKind::User,
                 })
                 .create()?;
 
@@ -1352,7 +1353,7 @@ mod tests {
                 vec![(
                     "barfoo".into(),
                     "https://example.org/barfoov2".into(),
-                    "user".into()
+                    OwnerKind::User
                 )]
             );
 

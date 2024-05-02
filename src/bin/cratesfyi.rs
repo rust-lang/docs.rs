@@ -25,7 +25,6 @@ use humantime::Duration;
 use once_cell::sync::OnceCell;
 use sentry::TransactionContext;
 use tokio::runtime::{Builder, Runtime};
-use tracing::info;
 use tracing_log::LogTracer;
 use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
 
@@ -516,9 +515,6 @@ enum DatabaseSubcommand {
     /// Backfill GitHub/Gitlab stats for crates.
     BackfillRepositoryStats,
 
-    /// Backfill crate owner kind from crates.io API
-    BackfillCrateOwnerKind,
-
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
@@ -603,37 +599,6 @@ impl DatabaseSubcommand {
             Self::BackfillRepositoryStats => {
                 ctx.runtime()?
                     .block_on(ctx.repository_stats_updater()?.backfill_repositories())?;
-            }
-
-            Self::BackfillCrateOwnerKind => {
-                let pool = ctx.pool()?;
-                ctx.runtime()?
-                    .block_on(async {
-                        let mut list_crates_conn = pool.get_async().await?;
-                        let mut update_crates_conn = pool.get_async().await?;
-
-                        let mut result_stream =
-                            sqlx::query!("SELECT id, name FROM crates ORDER BY name")
-                                .fetch(&mut *list_crates_conn);
-
-                        while let Some(row) = result_stream.next().await {
-                            let row = row?;
-                            let registry_data =
-                                ctx.registry_api()?.get_crate_data(&row.name).await?;
-
-                            info!("Updating crate {}", row.name);
-
-                            db::update_crate_data_in_db_by_id(
-                                &mut update_crates_conn,
-                                row.id,
-                                &registry_data,
-                            )
-                            .await?;
-                        }
-
-                        Ok::<(), anyhow::Error>(())
-                    })
-                    .context("Failed to backfill crate owner kind")?
             }
 
             Self::UpdateCrateRegistryFields { name } => ctx.runtime()?.block_on(async move {
