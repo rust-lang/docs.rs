@@ -182,7 +182,7 @@ where
 {
     type Database = sqlx::Postgres;
 
-    fn fetch_many<'e, 'q: 'e, E: 'q>(
+    fn fetch_many<'e, 'q: 'e, E>(
         self,
         query: E,
     ) -> BoxStream<
@@ -196,17 +196,17 @@ where
         >,
     >
     where
-        E: sqlx::Execute<'q, Self::Database>,
+        E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_many(query)
     }
 
-    fn fetch_optional<'e, 'q: 'e, E: 'q>(
+    fn fetch_optional<'e, 'q: 'e, E>(
         self,
         query: E,
     ) -> BoxFuture<'e, Result<Option<<sqlx::Postgres as sqlx::Database>::Row>, sqlx::Error>>
     where
-        E: sqlx::Execute<'q, Self::Database>,
+        E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_optional(query)
     }

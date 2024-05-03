@@ -552,10 +552,10 @@ pub(crate) async fn rustdoc_html_server_handler(
     let mut current_target = String::new();
     let target_redirect = if latest_release.build_status.is_success() {
         let target = if target.is_empty() {
-            current_target = krate.metadata.default_target.clone();
+            current_target.clone_from(&krate.metadata.default_target);
             &krate.metadata.default_target
         } else {
-            current_target = target.to_owned();
+            target.clone_into(&mut current_target);
             target
         };
         format!("/target-redirect/{target}/{inner_path}")

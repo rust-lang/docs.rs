@@ -669,8 +669,8 @@ mod test_calculations {
         assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args(&[]));
         let env = metadata.environment_variables();
         assert_eq!(env.get("DOCS_RS").map(String::as_str), Some("1"));
-        assert!(env.get("RUSTDOCFLAGS").is_none());
-        assert!(env.get("RUSTFLAGS").is_none());
+        assert!(!env.contains_key("RUSTDOCFLAGS"));
+        assert!(!env.contains_key("RUSTFLAGS"));
     }
 
     #[test]
