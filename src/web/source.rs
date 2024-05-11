@@ -153,6 +153,7 @@ struct SourcePage {
     file: Option<File>,
     file_content: Option<String>,
     canonical_url: CanonicalUrl,
+    is_file_too_large: bool,
     is_latest_url: bool,
     use_direct_platform_links: bool,
 }
@@ -226,7 +227,7 @@ pub(crate) async fn source_browser_handler(
 
     // try to get actual file first
     // skip if request is a directory
-    let blob = if !params.path.ends_with('/') {
+    let (blob, is_file_too_large) = if !params.path.ends_with('/') {
         match storage
             .fetch_source_file(
                 &params.name,
@@ -238,17 +239,23 @@ pub(crate) async fn source_browser_handler(
             .await
             .context("error fetching source file")
         {
-            Ok(blob) => Some(blob),
-            Err(err) => {
-                if err.is::<PathNotFoundError>() {
-                    None
-                } else {
-                    return Err(err.into());
+            Ok(blob) => (Some(blob), false),
+            Err(err) => match err {
+                err if err.is::<PathNotFoundError>() => (None, false),
+                // if file is too large, set is_file_too_large to true
+                err if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
+                    err.get_ref()
+                        .map(|err| err.is::<crate::error::SizeLimitReached>())
+                        .unwrap_or(false)
+                }) =>
+                {
+                    (None, true)
                 }
-            }
+                _ => return Err(err.into()),
+            },
         }
     } else {
-        None
+        (None, false)
     };
 
     let canonical_url = CanonicalUrl::from_path(format!(
@@ -305,6 +312,7 @@ pub(crate) async fn source_browser_handler(
         file,
         file_content,
         canonical_url,
+        is_file_too_large,
         is_latest_url: params.version.is_latest(),
         use_direct_platform_links: true,
     }
