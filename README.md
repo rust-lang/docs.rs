@@ -11,6 +11,12 @@ the nightly release of the Rust compiler.
 
 This readme is for developing docs.rs. See [the about page](https://docs.rs/about) for user-facing documentation.
 
+
+## How the documentation is generated
+
+docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/master/src/librustdoc) to generate the documentation for every crate release on crates.io.
+You can read the [the rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/what-is-rustdoc.html) for more details.
+
 ## Changing the build environment
 
 To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
