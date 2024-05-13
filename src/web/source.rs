@@ -737,4 +737,23 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn large_file_test() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("fake")
+                .version("0.1.0")
+                .source_file("large_file.rs", &[0; 50 * 1024 * 1024 + 1]) // 50MB + 1 byte
+                .create()?;
+
+            let web = env.frontend();
+            let response = web.get("/crate/fake/0.1.0/source/large_file.rs").send()?;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert!(response
+                .text()?
+                .contains("This file is too large to display"));
+            Ok(())
+        });
+    }
 }
