@@ -741,10 +741,14 @@ mod tests {
     #[test]
     fn large_file_test() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.max_file_size = 1;
+                config.max_file_size_html = 1;
+            });
             env.fake_release()
                 .name("fake")
                 .version("0.1.0")
-                .source_file("large_file.rs", &[0; 50 * 1024 * 1024 + 1]) // 50MB + 1 byte
+                .source_file("large_file.rs", b"some_random_content")
                 .create()?;
 
             let web = env.frontend();
