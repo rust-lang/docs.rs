@@ -12,7 +12,7 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Varchar",
+        "Text",
         "Timestamptz",
         "Json",
         "Varchar",
