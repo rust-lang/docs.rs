@@ -1860,6 +1860,25 @@ mod test {
     }
 
     #[test]
+    fn test_target_redirect_with_corrected_name() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("foo_ab")
+                .version("0.0.1")
+                .archive_storage(true)
+                .create()?;
+
+            let web = env.frontend();
+            assert_redirect_unchecked(
+                "/crate/foo-ab/0.0.1/target-redirect/x86_64-unknown-linux-gnu",
+                "/foo-ab/0.0.1/foo_ab/",
+                web,
+            )?;
+            Ok(())
+        })
+    }
+
+    #[test]
     fn test_target_redirect_not_found() {
         wrapper(|env| {
             let web = env.frontend();

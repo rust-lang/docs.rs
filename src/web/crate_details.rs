@@ -116,7 +116,7 @@ impl CrateDetails {
     ) -> Result<Self> {
         Ok(Self::new(
             conn,
-            &release.name,
+            &release.corrected_name.unwrap_or(release.name),
             &release.release.version,
             Some(release.req_version),
             release.all_releases,
