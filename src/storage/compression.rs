@@ -90,7 +90,7 @@ mod tests {
 
             let data = compress(orig.as_bytes(), alg).unwrap();
             assert_eq!(
-                decompress(data.as_slice(), alg, std::usize::MAX).unwrap(),
+                decompress(data.as_slice(), alg, usize::MAX).unwrap(),
                 orig.as_bytes()
             );
         }
