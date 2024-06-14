@@ -15,21 +15,21 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
                  releases.yanked
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
-             UNION ALL 
-             -- crates & releases that are already queued 
+             UNION ALL
+             -- crates & releases that are already queued
              -- don't have to be requeued.
              SELECT queue.name, queue.version, NULL as yanked
-             FROM queue 
-             LEFT OUTER JOIN crates ON crates.name = queue.name 
+             FROM queue
+             LEFT OUTER JOIN crates ON crates.name = queue.name
              LEFT OUTER JOIN releases ON (
-                 releases.crate_id = crates.id AND 
+                 releases.crate_id = crates.id AND
                  releases.version = queue.version
              )
              WHERE queue.attempt < $1 AND (
-                 crates.id IS NULL OR 
+                 crates.id IS NULL OR
                  releases.id IS NULL
              )
-         ) AS inp 
+         ) AS inp
          ORDER BY name, version",
         iter::once(config.build_attempts as i32),
     )?;
@@ -41,7 +41,7 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
         // we can use Itertools.group_by on it.
         .iterator()
         .map(|row| row.expect("error fetching rows"))
-        .group_by(|row| row.get("name"))
+        .chunk_by(|row| row.get("name"))
     {
         let releases: Releases = release_rows
             .map(|row| Release {
