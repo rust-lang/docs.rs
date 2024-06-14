@@ -66,7 +66,7 @@ impl DatabaseBackend {
     ) -> Result<Blob> {
         // The maximum size for a BYTEA (the type used for `content`) is 1GB, so this cast is safe:
         // https://www.postgresql.org/message-id/162867790712200946i7ba8eb92v908ac595c0c35aee%40mail.gmail.com
-        let max_size = max_size.min(std::i32::MAX as usize) as i32;
+        let max_size = max_size.min(i32::MAX as usize) as i32;
 
         struct Result {
             path: String,
