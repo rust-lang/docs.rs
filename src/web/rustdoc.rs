@@ -167,9 +167,9 @@ pub(crate) async fn rustdoc_redirector_handler(
     trace!(?matched_release, "matched version");
     let crate_name = matched_release.name.clone();
 
-    // we might get requests to crate-specific JS files here.
+    // we might get requests to crate-specific JS/CSS files here.
     if let Some(ref target) = params.target {
-        if target.ends_with(".js") {
+        if target.ends_with(".js") || target.ends_with(".css") {
             // this URL is actually from a crate-internal path, serve it there instead
             return async {
                 let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
@@ -207,7 +207,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                     }
                 }
             }
-            .instrument(info_span!("serve JS for crate"))
+            .instrument(info_span!("serve asset for crate"))
             .await;
         }
     }
@@ -2538,6 +2538,26 @@ mod test {
             assert!(env.storage().get_public_access("rustdoc/dummy/0.2.0.zip")?);
             Ok(())
         });
+    }
+
+    #[test_case("something.js")]
+    #[test_case("someting.css")]
+    fn serve_release_specific_static_assets(name: &str) {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .rustdoc_file_with(name, b"content")
+                .create()?;
+
+            let web = env.frontend();
+            let response = web.get(&format!("/dummy/0.1.0/{name}")).send()?;
+            assert!(response.status().is_success());
+            assert_eq!(response.text()?, "content");
+
+            Ok(())
+        })
     }
 
     #[test_case("search-1234.js")]
