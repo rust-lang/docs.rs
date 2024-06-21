@@ -832,7 +832,13 @@ pub(crate) async fn static_asset_handler(
 
 #[cfg(test)]
 mod test {
-    use crate::{test::*, utils::Dependency, web::cache::CachePolicy, Config};
+    use crate::{
+        registry_api::{CrateOwner, OwnerKind},
+        test::*,
+        utils::Dependency,
+        web::cache::CachePolicy,
+        Config,
+    };
     use anyhow::Context;
     use kuchikiki::traits::TendrilSink;
     use reqwest::{blocking::ClientBuilder, redirect, StatusCode};
@@ -2309,6 +2315,60 @@ mod test {
                     .unwrap()
                     .count(),
                 1,
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_owner_links_with_team() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("testing")
+                .version("0.1.0")
+                .add_owner(CrateOwner {
+                    login: "some-user".into(),
+                    kind: OwnerKind::User,
+                    avatar: "".into(),
+                })
+                .add_owner(CrateOwner {
+                    login: "some-team".into(),
+                    kind: OwnerKind::Team,
+                    avatar: "".into(),
+                })
+                .create()?;
+
+            let dom = kuchikiki::parse_html().one(
+                env.frontend()
+                    .get("/testing/0.1.0/testing/")
+                    .send()?
+                    .text()?,
+            );
+
+            let owner_links: Vec<_> = dom
+                .select(r#"#topbar-owners > li > a"#)
+                .expect("invalid selector")
+                .map(|el| {
+                    let attributes = el.attributes.borrow();
+                    let url = attributes.get("href").expect("href").trim().to_string();
+                    let name = el.text_contents().trim().to_string();
+                    (name, url)
+                })
+                .collect();
+
+            assert_eq!(
+                owner_links,
+                vec![
+                    (
+                        "some-user".into(),
+                        "https://crates.io/users/some-user".into()
+                    ),
+                    (
+                        "some-team".into(),
+                        "https://crates.io/teams/some-team".into()
+                    ),
+                ]
             );
 
             Ok(())
