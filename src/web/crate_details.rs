@@ -729,8 +729,8 @@ pub(crate) async fn get_all_platforms(
 mod tests {
     use super::*;
     use crate::test::{
-        assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper, wrapper,
-        FakeBuild, TestDatabase, TestEnvironment,
+        assert_cache_control, assert_redirect, assert_redirect_cached, async_wrapper,
+        fake_release_that_failed_before_build, wrapper, FakeBuild, TestDatabase, TestEnvironment,
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
@@ -1526,6 +1526,53 @@ mod tests {
                     .text()?,
             );
             assert!(page.select_first(r#"p[data-id="null-features"]"#).is_ok());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_minimal_failed_release_doesnt_error_features() {
+        wrapper(|env| {
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors")
+                    .await
+            })?;
+
+            let text_content = env
+                .frontend()
+                .get("/crate/foo/0.1.0/features")
+                .send()?
+                .error_for_status()?
+                .text()?;
+
+            assert!(text_content.contains(
+                "Feature flags are not available for this release because \
+                 the build failed before we could retrieve them"
+            ));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_minimal_failed_release_doesnt_error() {
+        wrapper(|env| {
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors")
+                    .await
+            })?;
+
+            let text_content = env
+                .frontend()
+                .get("/crate/foo/0.1.0")
+                .send()?
+                .error_for_status()?
+                .text()?;
+
+            assert!(text_content.contains("docs.rs failed to build foo"));
+
             Ok(())
         });
     }

@@ -786,10 +786,11 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::types::BuildStatus;
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success, wrapper,
-        TestFrontend,
+        FakeBuild, TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -814,8 +815,23 @@ mod tests {
                 .version("1.0.0")
                 .github_stats("ghost/bar", 20, 20, 20)
                 .create()?;
+            env.fake_release()
+                .name("bar")
+                .version("1.0.0")
+                .github_stats("ghost/bar", 20, 20, 20)
+                .create()?;
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
+
+            // release with only in-progress build (= in progress release) will not be shown
+            env.fake_release()
+                .name("in_progress")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .build_status(BuildStatus::InProgress)
+                    .rustc_version("rustc (blabla 2022-01-01)")
+                    .docsrs_version("docs.rs 4.0.0")])
+                .create()?;
 
             let releases = env
                 .runtime()
@@ -1272,6 +1288,16 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
+            // release with only in-progress build (= in progress release) will not be shown
+            env.fake_release()
+                .name("in_progress")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .build_status(BuildStatus::InProgress)
+                    .rustc_version("rustc (blabla 2022-01-01)")
+                    .docsrs_version("docs.rs 4.0.0")])
+                .create()?;
+
             let _m = crates_io
                 .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
@@ -1286,7 +1312,8 @@ mod tests {
                             { "name": "some_random_crate" },
                             { "name": "some_other_crate" },
                             { "name": "and_another_one" },
-                            { "name": "yet_another_crate" }
+                            { "name": "yet_another_crate" },
+                            { "name": "in_progress" }
                         ],
                         "meta": {
                             "next_page": null,

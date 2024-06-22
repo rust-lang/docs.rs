@@ -42,7 +42,7 @@ impl File {
 }
 
 /// A list of source files
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Default)]
 struct FileList {
     files: Vec<File>,
 }
@@ -303,7 +303,7 @@ pub(crate) async fn source_browser_handler(
         current_folder,
     )
     .await?
-    .ok_or(AxumNope::ResourceNotFound)?;
+    .unwrap_or_default();
 
     Ok(SourcePage {
         file_list,
@@ -484,7 +484,7 @@ mod tests {
                 &[&release_id],
             )?;
 
-            assert_eq!(web.get(path).send()?.status(), StatusCode::NOT_FOUND);
+            assert!(web.get(path).send()?.status().is_success());
 
             Ok(())
         });
@@ -523,7 +523,7 @@ mod tests {
                 .version("0.2.0")
                 .create()?;
             let web = env.frontend();
-            assert_not_found("/crate/mbedtls/0.2.0/source/test/", web)?;
+            assert_success("/crate/mbedtls/0.2.0/source/test/", web)?;
             Ok(())
         })
     }

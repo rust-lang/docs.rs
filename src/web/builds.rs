@@ -90,21 +90,21 @@ pub(crate) async fn build_list_json_handler(
             get_builds(&mut conn, &name, &version)
                 .await?
                 .iter()
-                .filter_map(|build| {
+                .map(|build| {
                     // for backwards compatibility in this API, we
-                    // * filter out in-progress builds
                     // * convert the build status to a boolean
-                    if build.build_status != BuildStatus::InProgress {
-                        Some(serde_json::json!({
-                            "id": build.id,
-                            "rustc_version": build.rustc_version,
-                            "docsrs_version": build.docsrs_version,
-                            "build_status": build.build_status.is_success(),
-                            "build_time": build.build_time,
-                        }))
-                    } else {
-                        None
-                    }
+                    // * already filter out in-progress builds
+                    //
+                    // even when we start showing in-progress builds in the UI,
+                    // we might still not show them here for backwards
+                    // compatibility.
+                    serde_json::json!({
+                        "id": build.id,
+                        "rustc_version": build.rustc_version,
+                        "docsrs_version": build.docsrs_version,
+                        "build_status": build.build_status.is_success(),
+                        "build_time": build.build_time,
+                    })
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -129,7 +129,10 @@ async fn get_builds(
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE crates.name = $1 AND releases.version = $2
+         WHERE
+            crates.name = $1 AND
+            releases.version = $2 AND
+            builds.build_status != 'in_progress'
          ORDER BY id DESC"#,
         name,
         version.to_string(),
@@ -142,12 +145,42 @@ async fn get_builds(
 mod tests {
     use super::BuildStatus;
     use crate::{
-        test::{assert_cache_control, wrapper, FakeBuild},
+        test::{assert_cache_control, fake_release_that_failed_before_build, wrapper, FakeBuild},
         web::cache::CachePolicy,
     };
     use chrono::{DateTime, Duration, Utc};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
+
+    #[test]
+    fn build_list_empty_build() {
+        wrapper(|env| {
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors")
+                    .await
+            })?;
+
+            let response = env
+                .frontend()
+                .get("/crate/foo/0.1.0/builds")
+                .send()?
+                .error_for_status()?;
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            let page = kuchikiki::parse_html().one(response.text()?);
+
+            let rows: Vec<_> = page
+                .select("ul > li a.release")
+                .unwrap()
+                .map(|row| row.text_contents())
+                .collect();
+
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
+
+            Ok(())
+        });
+    }
 
     #[test]
     fn build_list() {
@@ -166,6 +199,10 @@ mod tests {
                     FakeBuild::default()
                         .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0"),
+                    FakeBuild::default()
+                        .build_status(BuildStatus::InProgress)
+                        .rustc_version("rustc (blabla 2022-01-01)")
+                        .docsrs_version("docs.rs 4.0.0"),
                 ])
                 .create()?;
 

@@ -609,6 +609,118 @@ mod test {
     use test_case::test_case;
 
     #[test]
+    fn test_set_build_to_error() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+            let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            update_build_with_error(&mut conn, build_id, Some("error message")).await?;
+
+            let row = sqlx::query!(
+                r#"SELECT
+                rustc_version,
+                docsrs_version,
+                build_status as "build_status: BuildStatus",
+                errors
+                FROM builds
+                WHERE id = $1"#,
+                build_id
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+
+            assert!(row.rustc_version.is_none());
+            assert!(row.docsrs_version.is_none());
+            assert_eq!(row.build_status, BuildStatus::Failure);
+            assert_eq!(row.errors, Some("error message".into()));
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_finish_build_success() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+            let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            finish_build(
+                &mut conn,
+                build_id,
+                "rustc_version",
+                "docsrs_version",
+                BuildStatus::Success,
+                None,
+            )
+            .await?;
+
+            let row = sqlx::query!(
+                r#"SELECT
+                rustc_version,
+                docsrs_version,
+                build_status as "build_status: BuildStatus",
+                errors
+                FROM builds
+                WHERE id = $1"#,
+                build_id
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+
+            assert_eq!(row.rustc_version, Some("rustc_version".into()));
+            assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
+            assert_eq!(row.build_status, BuildStatus::Success);
+            assert!(row.errors.is_none());
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_finish_build_error() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+            let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            finish_build(
+                &mut conn,
+                build_id,
+                "rustc_version",
+                "docsrs_version",
+                BuildStatus::Failure,
+                Some("error message"),
+            )
+            .await?;
+
+            let row = sqlx::query!(
+                r#"SELECT
+                rustc_version,
+                docsrs_version,
+                build_status as "build_status: BuildStatus",
+                errors
+                FROM builds
+                WHERE id = $1"#,
+                build_id
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+
+            assert_eq!(row.rustc_version, Some("rustc_version".into()));
+            assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
+            assert_eq!(row.build_status, BuildStatus::Failure);
+            assert_eq!(row.errors, Some("error message".into()));
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn new_keywords() {
         wrapper(|env| {
             let mut conn = env.db().conn();
