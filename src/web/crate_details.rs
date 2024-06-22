@@ -504,9 +504,9 @@ pub(crate) async fn get_all_releases(
         .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
 
     if matched_release.build_status() != BuildStatus::Success {
-        // this handler should only be used for successful builds, so then we have all rows in the
+        // This handler should only be used for successful builds, so then we have all rows in the
         // `releases` table filled with data.
-        // If we at some point need this view for in-progress releases or failed releases, we need
+        // If we need this view at some point for in-progress releases or failed releases, we need
         // to handle empty doc targets.
         return Err(AxumNope::CrateNotFound);
     }
@@ -640,8 +640,8 @@ pub(crate) async fn get_all_platforms_inner(
         || krate.default_target.is_none()
         || matched_release.target_name().is_none()
     {
-        // FIXME: is this really OK?  just return an empty platform list in case of
-        // an early failure?
+        // when the build wasn't finished, we don't have any target platforms
+        // we could read from.
         return Ok(PlatformList {
             metadata: ShortMetadata {
                 name: params.name,
