@@ -132,7 +132,7 @@ pub(crate) async fn build_details_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{wrapper, FakeBuild};
+    use crate::test::{fake_release_that_failed_before_build, wrapper, FakeBuild};
     use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
 
@@ -147,6 +147,37 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn test_partial_build_result() {
+        wrapper(|env| {
+            let (_, build_id) = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                fake_release_that_failed_before_build(
+                    &mut conn,
+                    "foo",
+                    "0.1.0",
+                    "some random error",
+                )
+                .await
+            })?;
+
+            let page = kuchikiki::parse_html().one(
+                env.frontend()
+                    .get(&format!("/crate/foo/0.1.0/builds/{build_id}"))
+                    .send()?
+                    .error_for_status()?
+                    .text()?,
+            );
+
+            let info_text = page.select("pre").unwrap().next().unwrap().text_contents();
+
+            assert!(info_text.contains("# pre-build errors"), "{}", info_text);
+            assert!(info_text.contains("some random error"), "{}", info_text);
+
+            Ok(())
+        });
     }
 
     #[test]

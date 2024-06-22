@@ -1062,13 +1062,16 @@ mod tests {
             let mut conn = env.db().conn();
             let row = conn
                 .query_one(
-                    "SELECT
+                    r#"SELECT
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
                         r.archive_storage,
                         cov.total_items,
-                        b.id as build_id
+                        b.id as build_id,
+                        b.build_status::TEXT as build_status,
+                        b.docsrs_version,
+                        b.rustc_version
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
@@ -1076,7 +1079,7 @@ mod tests {
                         LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
                     WHERE
                         c.name = $1 AND
-                        r.version = $2",
+                        r.version = $2"#,
                     &[&crate_, &version],
                 )
                 .unwrap();
@@ -1085,6 +1088,9 @@ mod tests {
             assert_eq!(row.get::<_, String>("default_target"), default_target);
             assert!(row.get::<_, Option<i32>>("total_items").is_some());
             assert!(row.get::<_, bool>("archive_storage"));
+            assert!(!row.get::<_, String>("docsrs_version").is_empty());
+            assert!(!row.get::<_, String>("rustc_version").is_empty());
+            assert_eq!(row.get::<_, String>("build_status"), "success");
 
             let mut targets: Vec<String> = row
                 .get::<_, Value>("doc_targets")
@@ -1359,6 +1365,49 @@ mod tests {
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_failures_before_build() {
+        wrapper(|env| {
+            // https://github.com/rust-lang/docs.rs/issues/2491
+            // package without Cargo.toml, so fails directly in the fetch stage.
+            let crate_ = "emheap";
+            let version = "0.1.0";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
+
+            // `Result` is `Ok`, but the build-result is `false`
+            assert!(!builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            let row = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(
+                    r#"SELECT
+                       rustc_version,
+                       docsrs_version,
+                       build_status as "build_status: BuildStatus",
+                       errors
+                       FROM
+                       crates as c
+                       INNER JOIN releases as r on c.id = r.crate_id
+                       INNER JOIN builds as b on b.rid = r.id
+                       WHERE c.name = $1 and r.version = $2"#,
+                    crate_,
+                    version,
+                )
+                .fetch_one(&mut *conn)
+                .await
+            })?;
+
+            assert!(row.rustc_version.is_none());
+            assert!(row.docsrs_version.is_none());
+            assert_eq!(row.build_status, BuildStatus::Failure);
+            assert!(row.errors.unwrap().contains("missing Cargo.toml"));
+
             Ok(())
         });
     }

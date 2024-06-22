@@ -1,6 +1,6 @@
 mod fakes;
 
-pub(crate) use self::fakes::FakeBuild;
+pub(crate) use self::fakes::{fake_release_that_failed_before_build, FakeBuild};
 use crate::cdn::CdnBackend;
 use crate::db::{self, AsyncPoolClient, Pool, PoolClient};
 use crate::error::Result;

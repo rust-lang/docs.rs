@@ -1,6 +1,7 @@
 use super::TestDatabase;
 
 use crate::db::types::BuildStatus;
+use crate::db::{initialize_build, initialize_crate, initialize_release, update_build_status};
 use crate::docbuilder::DocCoverage;
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
@@ -16,6 +17,36 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tracing::debug;
+
+/// Create a fake release in the database that failed before the build.
+/// This is a temporary small factory function only until we refactored the
+/// `FakeRelelease` and `FakeBuild` factories to be more flexible.
+pub(crate) async fn fake_release_that_failed_before_build(
+    conn: &mut sqlx::PgConnection,
+    name: &str,
+    version: &str,
+    errors: &str,
+) -> Result<(i32, i32)> {
+    let crate_id = initialize_crate(&mut *conn, name).await?;
+    let release_id = initialize_release(&mut *conn, crate_id, version).await?;
+    let build_id = initialize_build(&mut *conn, release_id).await?;
+
+    sqlx::query_scalar!(
+        "UPDATE builds
+         SET
+             build_status = 'failure',
+             errors = $2
+         WHERE id = $1",
+        build_id,
+        errors,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    update_build_status(conn, release_id).await?;
+
+    Ok((release_id, build_id))
+}
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {
@@ -613,6 +644,7 @@ impl FakeBuild {
         default_target: &str,
     ) -> Result<()> {
         let build_id = crate::db::initialize_build(&mut *conn, release_id).await?;
+
         crate::db::finish_build(
             &mut *conn,
             build_id,
@@ -653,6 +685,7 @@ impl FakeBuild {
 }
 
 impl Default for FakeBuild {
+    /// create a default fake _finished_ build
     fn default() -> Self {
         Self {
             s3_build_log: Some("It works!".into()),
