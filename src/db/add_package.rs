@@ -1110,4 +1110,42 @@ mod test {
             Ok(())
         })
     }
+
+    #[test]
+    fn test_long_crate_name() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+
+            let name: String = "krate".repeat(100);
+            let crate_id = initialize_crate(&mut conn, &name).await?;
+
+            let db_name = sqlx::query_scalar!("SELECT name FROM crates WHERE id = $1", crate_id)
+                .fetch_one(&mut *conn)
+                .await?;
+
+            assert_eq!(db_name, name);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_long_relaase_version() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+            let version: String = "version".repeat(100);
+            let release_id = initialize_release(&mut conn, crate_id, &version).await?;
+
+            let db_version =
+                sqlx::query_scalar!("SELECT version FROM releases WHERE id = $1", release_id)
+                    .fetch_one(&mut *conn)
+                    .await?;
+
+            assert_eq!(db_version, version);
+
+            Ok(())
+        })
+    }
 }
