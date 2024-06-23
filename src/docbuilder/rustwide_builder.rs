@@ -466,6 +466,22 @@ impl RustwideBuilder {
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
+                let mut algs = HashSet::new();
+
+                debug!("adding sources into database");
+                let files_list = {
+                    let (files_list, new_alg) = self
+                        .runtime
+                        .block_on(add_path_into_remote_archive(
+                            &self.async_storage,
+                            &source_archive_path(name, version),
+                            build.host_source_dir(),
+                            false,
+                        ))
+                        .map_err(|e| failure::Error::from_boxed_compat(e.into()))?;
+                    algs.insert(new_alg);
+                    files_list
+                };
                 let metadata = Metadata::from_crate_root(build.host_source_dir())?;
                 let BuildTargets {
                     default_target,
@@ -528,7 +544,6 @@ impl RustwideBuilder {
                         }
                     }
 
-                    let mut algs = HashSet::new();
                     let mut target_build_logs = HashMap::new();
                     if has_docs {
                         debug!("adding documentation for the default target to the database");
@@ -562,20 +577,6 @@ impl RustwideBuilder {
                             true,
                         ))?;
                         algs.insert(new_alg);
-                    };
-
-                    // Store the sources even if the build fails
-                    debug!("adding sources into database");
-                    let files_list = {
-                        let (files_list, new_alg) =
-                            self.runtime.block_on(add_path_into_remote_archive(
-                                &self.async_storage,
-                                &source_archive_path(name, version),
-                                build.host_source_dir(),
-                                false,
-                            ))?;
-                        algs.insert(new_alg);
-                        files_list
                     };
 
                     let has_examples = build.host_source_dir().join("examples").is_dir();
@@ -1365,6 +1366,34 @@ mod tests {
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(builder.build_package(crate_, version, PackageKind::CratesIo)?);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sources_are_added_even_for_build_failures_before_build() {
+        wrapper(|env| {
+            // https://github.com/rust-lang/docs.rs/issues/2523
+            // package with invalid cargo metadata.
+            // Will succeed in the crate fetch step, so sources are
+            // added. Will fail when we try to build.
+            let crate_ = "simconnect-sys";
+            let version = "0.23.1";
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
+
+            // `Result` is `Ok`, but the build-result is `false`
+            assert!(!builder.build_package(crate_, version, PackageKind::CratesIo)?);
+
+            // source archice exists
+            let source_archive = source_archive_path(crate_, version);
+            assert!(
+                env.storage().exists(&source_archive)?,
+                "archive doesnt exist: {}",
+                source_archive
+            );
+
             Ok(())
         });
     }
