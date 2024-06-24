@@ -10,6 +10,7 @@ use axum::{
     Json,
 };
 use std::borrow::Cow;
+use tracing::error;
 
 use super::AxumErrorPage;
 
@@ -166,10 +167,20 @@ impl ErrorResponse {
             )
                 .into_response(),
             ErrorResponse::Redirect(response) => response,
-            ErrorResponse::Search(search) => panic!(
-                "expecting that handlers that return JSON error responses \
-                 don't return Search, but got: {search:?}"
-            ),
+            ErrorResponse::Search(search) => {
+                // FUTURE: this runtime error is avoidable by
+                // splitting `enum AxumNope` into hierarchical parts,
+                // see above.
+                error!(
+                    "expecting that handlers that return JSON error responses \
+                     don't return Search, but got: {search:?}"
+                );
+                AxumNope::InternalError(anyhow!(
+                    "bug: search HTML page returned from endpoint that returns JSON"
+                ))
+                .into_error_response()
+                .into_json_response()
+            }
         }
     }
 }
