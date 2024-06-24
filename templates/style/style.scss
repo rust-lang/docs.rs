@@ -280,7 +280,7 @@ div.recent-releases-container {
         background-color: var(--background-color);
     }
 
-    .release {
+    .release, .build-in-progress {
         display: block;
         border-bottom: 1px solid var(--color-border);
         padding: 0.4em $search-result-right-left-padding;
@@ -297,11 +297,13 @@ div.recent-releases-container {
     }
 
     .release:hover,
-    a.release:focus {
+    a.release:focus,
+    .build-in-progress:hover {
         background-color: var(--color-background-code);
     }
 
-    li:last-of-type .release {
+    li:last-of-type .release,
+    li:last-of-type .build-in-progress {
         border-bottom: none;
     }
 

@@ -107,7 +107,10 @@ pub(crate) async fn build_list_json_handler(
             get_builds(&mut conn, &name, &version)
                 .await?
                 .iter()
-                .map(|build| {
+                .filter_map(|build| {
+                    if build.build_status == BuildStatus::InProgress {
+                        return None;
+                    }
                     // for backwards compatibility in this API, we
                     // * convert the build status to a boolean
                     // * already filter out in-progress builds
@@ -115,13 +118,13 @@ pub(crate) async fn build_list_json_handler(
                     // even when we start showing in-progress builds in the UI,
                     // we might still not show them here for backwards
                     // compatibility.
-                    serde_json::json!({
+                    Some(serde_json::json!({
                         "id": build.id,
                         "rustc_version": build.rustc_version,
                         "docsrs_version": build.docsrs_version,
                         "build_status": build.build_status.is_success(),
                         "build_time": build.build_time,
-                    })
+                    }))
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -245,8 +248,7 @@ async fn get_builds(
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
             crates.name = $1 AND
-            releases.version = $2 AND
-            builds.build_status != 'in_progress'
+            releases.version = $2
          ORDER BY id DESC"#,
         name,
         version.to_string(),
@@ -548,29 +550,25 @@ mod tests {
 
             let response = env.frontend().get("/crate/foo/0.1.0/builds").send()?;
 
-            // FIXME: temporarily we don't show in-progress releases anywhere, which means we don't
-            // show releases without builds anywhere.
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            let page = kuchikiki::parse_html().one(response.text()?);
 
-            // assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
-            // let page = kuchikiki::parse_html().one(response.text()?);
+            let rows: Vec<_> = page
+                .select("ul > li a.release")
+                .unwrap()
+                .map(|row| row.text_contents())
+                .collect();
 
-            // let rows: Vec<_> = page
-            //     .select("ul > li a.release")
-            //     .unwrap()
-            //     .map(|row| row.text_contents())
-            //     .collect();
+            assert!(rows.is_empty());
 
-            // assert!(rows.is_empty());
+            let warning = page
+                .select_first(".warning")
+                .expect("missing warning element")
+                .text_contents();
 
-            // let warning = page
-            //     .select_first(".warning")
-            //     .expect("missing warning element")
-            //     .text_contents();
-
-            // assert!(warning.contains("has not built"));
-            // assert!(warning.contains("queued"));
-            // assert!(warning.contains("open an issue"));
+            assert!(warning.contains("has not built"));
+            assert!(warning.contains("queued"));
+            assert!(warning.contains("open an issue"));
 
             Ok(())
         });

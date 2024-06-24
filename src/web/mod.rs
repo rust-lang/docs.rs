@@ -308,7 +308,7 @@ async fn match_version(
     };
 
     // when matching semver requirements, we only want to look at non-yanked releases.
-    let flt = |r: &&Release| r.yanked == Some(false);
+    let flt = |r: &&Release| r.yanked.is_none() || r.yanked == Some(false);
 
     if let Some(release) = releases
         .iter()

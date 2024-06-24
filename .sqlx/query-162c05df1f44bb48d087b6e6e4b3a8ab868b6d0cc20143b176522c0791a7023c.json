@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             releases.id,\n             releases.version,\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.target_name\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             releases.crate_id = $1 AND\n             release_build_status.build_status != 'in_progress'",
+  "query": "SELECT\n             releases.id,\n             releases.version,\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.target_name\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             releases.crate_id = $1",
   "describe": {
     "columns": [
       {
@@ -65,5 +65,5 @@
       true
     ]
   },
-  "hash": "1dae7bb925d677bb997ec28130f7de41c195510e87fa643a4cae57864552962c"
+  "hash": "162c05df1f44bb48d087b6e6e4b3a8ab868b6d0cc20143b176522c0791a7023c"
 }
