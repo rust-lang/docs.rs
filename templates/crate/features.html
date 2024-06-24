@@ -73,13 +73,14 @@
                     <p>This version has <b>{{ sorted_features | length }}</b> feature flags, <b data-id="default-feature-len">{{ default_len }}</b> of them enabled by <b>default</b>.</p>
                     {%- for name in sorted_features -%}
                         {%- set feature = all_features | get(key=name) -%}
+                        {%- set is_parent_default = feature.is_default -%}
                         <h3 id="{{ name }}">{{ name }} {%- if feature.is_default -%}*{%- endif -%}</h3>
                         <ul class="pure-menu-list">
                             {%- if feature.subfeatures -%}
                                 {%- for name in feature.subfeatures -%}
-                                    {%- set feature = all_features | get(key=name, default=false) -%}
+                                    {%- set feature = all_features | get(key=name, default=is_parent_default) -%}
                                     <li class="pure-menu-item">
-                                        <span>{{ name }} {%- if feature and feature.is_default -%}*{%- endif -%}</span>
+                                        <span>{{ name }} {%- if feature or feature.is_default -%}*{%- endif -%}</span>
                                     </li>
                                 {%- endfor -%}
                             {%- else -%}
