@@ -59,10 +59,14 @@ centered
                                         {{ release.stars }}
                                         {{ "star" | fas }}
                                     </div>
-                                {%- else -%}
+                                {%- elif release.build_time -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
                                         title="{{ release.build_time | date(format='%FT%TZ') }}">
                                         {{ release.build_time | timeformat(relative=true) }}
+                                    </div>
+                                {%- else -%}
+                                    <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                        &mdash;
                                     </div>
                                 {%- endif %}
                             </div>

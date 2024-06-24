@@ -789,8 +789,8 @@ mod tests {
     use crate::db::types::BuildStatus;
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
-        assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success, wrapper,
-        FakeBuild, TestFrontend,
+        assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success,
+        fake_release_that_failed_before_build, wrapper, FakeBuild, TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -1298,6 +1298,18 @@ mod tests {
                     .docsrs_version("docs.rs 4.0.0")])
                 .create()?;
 
+            // release that failed in the fetch-step, will miss some details
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                fake_release_that_failed_before_build(
+                    &mut conn,
+                    "failed_hard",
+                    "0.1.0",
+                    "some random error",
+                )
+                .await
+            })?;
+
             let _m = crates_io
                 .mock("GET", "/api/v1/crates")
                 .match_query(Matcher::AllOf(vec![
@@ -1313,7 +1325,8 @@ mod tests {
                             { "name": "some_other_crate" },
                             { "name": "and_another_one" },
                             { "name": "yet_another_crate" },
-                            { "name": "in_progress" }
+                            { "name": "in_progress" },
+                            { "name": "failed_hard" }
                         ],
                         "meta": {
                             "next_page": null,
@@ -1327,7 +1340,7 @@ mod tests {
             let links = get_release_links("/releases/search?query=some_random_crate", web)?;
 
             // `some_other_crate` won't be shown since we don't have it yet
-            assert_eq!(links.len(), 3);
+            assert_eq!(links.len(), 4);
             // * `max_version` from the crates.io search result will be ignored since we
             //   might not have it yet, or the doc-build might be in progress.
             // * ranking/order from crates.io result is preserved
@@ -1335,6 +1348,7 @@ mod tests {
             assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
             assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
             assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
+            assert_eq!(links[3], "/crate/failed_hard/0.1.0");
             Ok(())
         })
     }
