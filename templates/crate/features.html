@@ -39,7 +39,7 @@
                                 {%- set feature = all_features | get(key=name) -%}
                                 <li class="pure-menu-item">
                                     <a href="#{{ name }}" class="pure-menu-link text-center">
-                                        {{ name }} {%- if feature.is_default -%}*{%- endif -%}
+                                        {{ name }} {%- if feature.is_default -%}&nbsp;(default){%- endif -%}
                                     </a>
                                 </li>
                             {%- endfor -%}
@@ -74,13 +74,13 @@
                     {%- for name in sorted_features -%}
                         {%- set feature = all_features | get(key=name) -%}
                         {%- set is_parent_default = feature.is_default -%}
-                        <h3 id="{{ name }}">{{ name }} {%- if feature.is_default -%}*{%- endif -%}</h3>
+                        <h3 id="{{ name }}">{{ name }} {%- if feature.is_default -%}&nbsp;(default){%- endif -%}</h3>
                         <ul class="pure-menu-list">
                             {%- if feature.subfeatures -%}
                                 {%- for name in feature.subfeatures -%}
                                     {%- set feature = all_features | get(key=name, default=is_parent_default) -%}
                                     <li class="pure-menu-item">
-                                        <span>{{ name }} {%- if feature or feature.is_default -%}*{%- endif -%}</span>
+                                        <span>{{ name }} {%- if feature or feature.is_default -%}&nbsp;(default){%- endif -%}</span>
                                     </li>
                                 {%- endfor -%}
                             {%- else -%}
