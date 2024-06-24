@@ -28,6 +28,8 @@ pub enum AxumNope {
     VersionNotFound,
     #[error("Search yielded no results")]
     NoResults,
+    #[error("Unauthorized: {0}")]
+    Unauthorized(&'static str),
     #[error("internal error")]
     InternalError(anyhow::Error),
     #[error("bad request")]
@@ -92,6 +94,11 @@ impl AxumNope {
                 title: "Bad request",
                 message: Cow::Owned(source.to_string()),
                 status: StatusCode::BAD_REQUEST,
+            }),
+            AxumNope::Unauthorized(what) => ErrorResponse::ErrorInfo(ErrorInfo {
+                title: "Unauthorized",
+                message: what.into(),
+                status: StatusCode::UNAUTHORIZED,
             }),
             AxumNope::InternalError(source) => {
                 crate::utils::report_error(&source);
