@@ -7,10 +7,12 @@ use anyhow::Context as _;
 use fn_error_context::context;
 use sqlx::Connection;
 
+use super::update_latest_version_id;
+
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
 static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
-static BINARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
+static OTHER_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
 
 #[derive(Debug, thiserror::Error)]
 enum CrateDeletionError {
@@ -31,7 +33,7 @@ pub async fn delete_crate(
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
-        BINARY_STORAGE_PATHS_TO_DELETE
+        OTHER_STORAGE_PATHS_TO_DELETE
     };
 
     for prefix in paths {
@@ -69,7 +71,7 @@ pub async fn delete_version(
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
-        BINARY_STORAGE_PATHS_TO_DELETE
+        OTHER_STORAGE_PATHS_TO_DELETE
     };
 
     for prefix in paths {
@@ -139,23 +141,15 @@ async fn delete_version_from_database(
         version,
     )
     .fetch_one(&mut *transaction)
-    .await?;
+    .await?
+    .unwrap_or(false);
 
-    sqlx::query!(
-        "UPDATE crates SET latest_version_id = (
-            SELECT id FROM releases WHERE release_time = (
-                SELECT MAX(release_time) FROM releases WHERE crate_id = $1
-            )
-        ) WHERE id = $1",
-        crate_id,
-    )
-    .execute(&mut *transaction)
-    .await?;
+    update_latest_version_id(&mut transaction, crate_id).await?;
 
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
-        BINARY_STORAGE_PATHS_TO_DELETE
+        OTHER_STORAGE_PATHS_TO_DELETE
     };
     for prefix in paths {
         sqlx::query!(
@@ -221,7 +215,7 @@ async fn delete_crate_from_database(
 mod tests {
     use super::*;
     use crate::registry_api::{CrateOwner, OwnerKind};
-    use crate::test::{assert_success, wrapper};
+    use crate::test::async_wrapper;
     use test_case::test_case;
 
     async fn crate_exists(conn: &mut sqlx::PgConnection, name: &str) -> Result<bool> {
