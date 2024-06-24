@@ -1,22 +1,33 @@
-use super::{cache::CachePolicy, error::AxumNope, headers::CanonicalUrl};
+use super::{
+    cache::CachePolicy,
+    error::{AxumNope, JsonAxumNope, JsonAxumResult},
+    headers::CanonicalUrl,
+};
 use crate::{
     db::types::BuildStatus,
     docbuilder::Limits,
     impl_axum_webpage,
+    utils::spawn_blocking,
     web::{
+        crate_details::CrateDetails,
         error::AxumResult,
         extractors::{DbConnection, Path},
         match_version, MetaData, ReqVersion,
     },
-    Config,
+    BuildQueue, Config,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use axum::{
     extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
+};
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
 };
 use chrono::{DateTime, Utc};
 use semver::Version;
 use serde::Serialize;
+use serde_json::json;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -109,6 +120,81 @@ pub(crate) async fn build_list_json_handler(
         ),
     )
         .into_response())
+}
+
+async fn build_trigger_check(
+    mut conn: DbConnection,
+    name: &String,
+    version: &Version,
+    build_queue: &Arc<BuildQueue>,
+) -> AxumResult<impl IntoResponse> {
+    let _ = CrateDetails::new(&mut *conn, &name, &version, None, vec![])
+        .await?
+        .ok_or(AxumNope::VersionNotFound)?;
+
+    let crate_version_is_in_queue = spawn_blocking({
+        let name = name.clone();
+        let version_string = version.to_string();
+        let build_queue = build_queue.clone();
+        move || build_queue.has_build_queued(&name, &version_string)
+    })
+    .await?;
+    if crate_version_is_in_queue {
+        return Err(AxumNope::BadRequest(anyhow!(
+            "crate {name} {version} already queued for rebuild"
+        )));
+    }
+
+    Ok(())
+}
+
+// Priority according to issue #2442; positive here as it's inverted.
+// FUTURE: move to a crate-global enum with all special priorities?
+const TRIGGERED_REBUILD_PRIORITY: i32 = 5;
+
+pub(crate) async fn build_trigger_rebuild_handler(
+    Path((name, version)): Path<(String, Version)>,
+    conn: DbConnection,
+    Extension(build_queue): Extension<Arc<BuildQueue>>,
+    Extension(config): Extension<Arc<Config>>,
+    opt_auth_header: Option<TypedHeader<Authorization<Bearer>>>,
+) -> JsonAxumResult<impl IntoResponse> {
+    let expected_token =
+        config
+            .trigger_rebuild_token
+            .as_ref()
+            .ok_or(JsonAxumNope(AxumNope::InternalError(anyhow!(
+                "access token `trigger_rebuild_token` \
+                     is not configured"
+            ))))?;
+
+    // (Future: would it be better to have standard middleware handle auth?)
+    let TypedHeader(auth_header) =
+        opt_auth_header.ok_or(JsonAxumNope(AxumNope::MissingAuthenticationToken))?;
+    if auth_header.token() != expected_token {
+        return Err(JsonAxumNope(AxumNope::InvalidAuthenticationToken));
+    }
+
+    build_trigger_check(conn, &name, &version, &build_queue)
+        .await
+        .map_err(JsonAxumNope)?;
+
+    spawn_blocking({
+        let name = name.clone();
+        let version_string = version.to_string();
+        move || {
+            build_queue.add_crate(
+                &name,
+                &version_string,
+                TRIGGERED_REBUILD_PRIORITY,
+                None, /* because crates.io is the only service that calls this endpoint */
+            )
+        }
+    })
+    .await
+    .map_err(|e| JsonAxumNope(e.into()))?;
+
+    Ok(Json(json!({})))
 }
 
 async fn get_builds(
@@ -271,6 +357,119 @@ mod tests {
                 value.pointer("/2/build_time").unwrap().as_str().unwrap()
                     < value.pointer("/1/build_time").unwrap().as_str().unwrap()
             );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn build_trigger_rebuild_missing_config() {
+        wrapper(|env| {
+            env.fake_release().name("foo").version("0.1.0").create()?;
+
+            {
+                let response = env.frontend().get("/crate/regex/1.3.1/rebuild").send()?;
+                // Needs POST
+                assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+            }
+
+            {
+                let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
+                assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+                let text = response.text()?;
+                assert!(text.contains("access token `trigger_rebuild_token` is not configured"));
+                let json: serde_json::Value = serde_json::from_str(&text)?;
+                assert_eq!(
+                    json,
+                    serde_json::json!({
+                        "title": "Internal Server Error",
+                        "message": "access token `trigger_rebuild_token` is not configured"
+                    })
+                );
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn build_trigger_rebuild_with_config() {
+        wrapper(|env| {
+            let correct_token = "foo137";
+            env.override_config(|config| config.trigger_rebuild_token = Some(correct_token.into()));
+
+            env.fake_release().name("foo").version("0.1.0").create()?;
+
+            {
+                let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+                let text = response.text()?;
+                let json: serde_json::Value = serde_json::from_str(&text)?;
+                assert_eq!(
+                    json,
+                    serde_json::json!({
+                        "title": "Missing authentication token",
+                        "message": "The token used for authentication is missing"
+                    })
+                );
+            }
+
+            {
+                let response = env
+                    .frontend()
+                    .post("/crate/regex/1.3.1/rebuild")
+                    .bearer_auth("someinvalidtoken")
+                    .send()?;
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+                let text = response.text()?;
+                let json: serde_json::Value = serde_json::from_str(&text)?;
+                assert_eq!(
+                    json,
+                    serde_json::json!({
+                        "title": "Invalid authentication token",
+                        "message": "The token used for authentication is not valid"
+                    })
+                );
+            }
+
+            assert_eq!(env.build_queue().pending_count()?, 0);
+            assert!(!env.build_queue().has_build_queued("foo", "0.1.0")?);
+
+            {
+                let response = env
+                    .frontend()
+                    .post("/crate/foo/0.1.0/rebuild")
+                    .bearer_auth(correct_token)
+                    .send()?;
+                assert_eq!(response.status(), StatusCode::OK);
+                let text = response.text()?;
+                let json: serde_json::Value = serde_json::from_str(&text)?;
+                assert_eq!(json, serde_json::json!({}));
+            }
+
+            assert_eq!(env.build_queue().pending_count()?, 1);
+            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
+
+            {
+                let response = env
+                    .frontend()
+                    .post("/crate/foo/0.1.0/rebuild")
+                    .bearer_auth(correct_token)
+                    .send()?;
+                assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+                let text = response.text()?;
+                let json: serde_json::Value = serde_json::from_str(&text)?;
+                assert_eq!(
+                    json,
+                    serde_json::json!({
+                        "title": "Bad request",
+                        "message": "crate foo 0.1.0 already queued for rebuild"
+                    })
+                );
+            }
+
+            assert_eq!(env.build_queue().pending_count()?, 1);
+            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
 
             Ok(())
         });

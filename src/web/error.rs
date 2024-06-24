@@ -174,7 +174,6 @@ impl ErrorResponse {
             }) => (
                 status,
                 Json(serde_json::json!({
-                    "result": "err", // XXX
                     "title": title,
                     "message": message,
                 })),

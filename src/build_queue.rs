@@ -151,7 +151,7 @@ impl BuildQueue {
             .collect())
     }
 
-    fn has_build_queued(&self, name: &str, version: &str) -> Result<bool> {
+    pub(crate) fn has_build_queued(&self, name: &str, version: &str) -> Result<bool> {
         Ok(self
             .db
             .get()?
