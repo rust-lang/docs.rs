@@ -34,15 +34,16 @@
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
                         <li class="pure-menu-heading">Feature flags</li>
-                        {%- if features -%}
-                            {%- for feature in features -%}
+                        {%- if sorted_features -%}
+                            {%- for name in sorted_features -%}
+                                {%- set feature = all_features | get(key=name) -%}
                                 <li class="pure-menu-item">
-                                    <a href="#{{ feature.name }}" class="pure-menu-link text-center">
-                                        {{ feature.name }}
+                                    <a href="#{{ name }}" class="pure-menu-link text-center">
+                                        {{ name }} {%- if feature.is_default -%}*{%- endif -%}
                                     </a>
                                 </li>
                             {%- endfor -%}
-                        {%- elif features is iterable -%}
+                        {%- elif sorted_features is iterable -%}
                             <li class="pure-menu-item">
                                 <span class="documented-info">This release does not have any feature flags.</span>
                             </li>
@@ -68,15 +69,17 @@
                     <a href="/crate/{{ metadata.name }}/{{ metadata.req_version }}/source/Cargo.toml.orig">Cargo.toml</a>
                     in case the author documented the features in them.
                 </div>
-                {%- if features -%}
-                    <p>This version has <b>{{ features | length }}</b> feature flags, <b data-id="default-feature-len">{{ default_len }}</b> of them enabled by <b>default</b>.</p>
-                    {%- for feature in features -%}
-                        <h3 id="{{ feature.name }}">{{ feature.name }}</h3>
+                {%- if sorted_features -%}
+                    <p>This version has <b>{{ sorted_features | length }}</b> feature flags, <b data-id="default-feature-len">{{ default_len }}</b> of them enabled by <b>default</b>.</p>
+                    {%- for name in sorted_features -%}
+                        {%- set feature = all_features | get(key=name) -%}
+                        <h3 id="{{ name }}">{{ name }} {%- if feature.is_default -%}*{%- endif -%}</h3>
                         <ul class="pure-menu-list">
                             {%- if feature.subfeatures -%}
-                                {%- for subfeature in feature.subfeatures -%}
+                                {%- for name in feature.subfeatures -%}
+                                    {%- set feature = all_features | get(key=name, default=false) -%}
                                     <li class="pure-menu-item">
-                                        <span>{{ subfeature }}</span>
+                                        <span>{{ name }} {%- if feature and feature.is_default -%}*{%- endif -%}</span>
                                     </li>
                                 {%- endfor -%}
                             {%- else -%}
@@ -84,7 +87,7 @@
                             {%- endif -%}
                         </ul>
                     {%- endfor -%}
-                {%- elif features is iterable  -%}
+                {%- elif sorted_features is iterable -%}
                     <p data-id="empty-features">This release does not have any feature flags.</p>
                 {%- else -%}
                 <p data-id="null-features">
