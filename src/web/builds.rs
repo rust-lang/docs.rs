@@ -169,10 +169,13 @@ pub(crate) async fn build_trigger_rebuild_handler(
             ))))?;
 
     // (Future: would it be better to have standard middleware handle auth?)
-    let TypedHeader(auth_header) =
-        opt_auth_header.ok_or(JsonAxumNope(AxumNope::MissingAuthenticationToken))?;
+    let TypedHeader(auth_header) = opt_auth_header.ok_or(JsonAxumNope(AxumNope::Unauthorized(
+        "Missing authentication token",
+    )))?;
     if auth_header.token() != expected_token {
-        return Err(JsonAxumNope(AxumNope::InvalidAuthenticationToken));
+        return Err(JsonAxumNope(AxumNope::Unauthorized(
+            "The token used for authentication is not valid",
+        )));
     }
 
     build_trigger_check(conn, &name, &version, &build_queue)
@@ -377,7 +380,6 @@ mod tests {
                 let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
                 assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
                 let text = response.text()?;
-                assert!(text.contains("access token `trigger_rebuild_token` is not configured"));
                 let json: serde_json::Value = serde_json::from_str(&text)?;
                 assert_eq!(
                     json,
@@ -408,8 +410,8 @@ mod tests {
                 assert_eq!(
                     json,
                     serde_json::json!({
-                        "title": "Missing authentication token",
-                        "message": "The token used for authentication is missing"
+                        "title": "Unauthorized",
+                        "message": "Missing authentication token"
                     })
                 );
             }
@@ -426,7 +428,7 @@ mod tests {
                 assert_eq!(
                     json,
                     serde_json::json!({
-                        "title": "Invalid authentication token",
+                        "title": "Unauthorized",
                         "message": "The token used for authentication is not valid"
                     })
                 );

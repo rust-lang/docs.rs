@@ -28,10 +28,8 @@ pub enum AxumNope {
     VersionNotFound,
     #[error("Search yielded no results")]
     NoResults,
-    #[error("Missing authentication token")]
-    MissingAuthenticationToken,
-    #[error("Invalid authentication token")]
-    InvalidAuthenticationToken,
+    #[error("Unauthorized: {0}")]
+    Unauthorized(&'static str),
     #[error("internal error")]
     InternalError(anyhow::Error),
     #[error("bad request")]
@@ -97,14 +95,9 @@ impl AxumNope {
                 message: Cow::Owned(source.to_string()),
                 status: StatusCode::BAD_REQUEST,
             }),
-            AxumNope::MissingAuthenticationToken => ErrorResponse::ErrorInfo(ErrorInfo {
-                title: "Missing authentication token",
-                message: "The token used for authentication is missing".into(),
-                status: StatusCode::UNAUTHORIZED,
-            }),
-            AxumNope::InvalidAuthenticationToken => ErrorResponse::ErrorInfo(ErrorInfo {
-                title: "Invalid authentication token",
-                message: "The token used for authentication is not valid".into(),
+            AxumNope::Unauthorized(what) => ErrorResponse::ErrorInfo(ErrorInfo {
+                title: "Unauthorized",
+                message: what.into(),
                 status: StatusCode::UNAUTHORIZED,
             }),
             AxumNope::InternalError(source) => {
