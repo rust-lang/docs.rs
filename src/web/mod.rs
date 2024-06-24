@@ -572,7 +572,7 @@ where
 fn axum_cached_redirect<U>(
     uri: U,
     cache_policy: cache::CachePolicy,
-) -> Result<impl IntoResponse, Error>
+) -> Result<axum::response::Response, Error>
 where
     U: TryInto<http::Uri> + std::fmt::Debug,
     <U as TryInto<http::Uri>>::Error: std::fmt::Debug,

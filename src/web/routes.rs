@@ -6,7 +6,7 @@ use axum::{
     handler::Handler as AxumHandler,
     middleware::{self, Next},
     response::{IntoResponse, Redirect},
-    routing::{get, MethodRouter},
+    routing::{get, post, MethodRouter},
     Router as AxumRouter,
 };
 use axum_extra::routing::RouterExt;
@@ -35,6 +35,18 @@ where
     S: Clone + Send + Sync + 'static,
 {
     get(handler).route_layer(middleware::from_fn(|request, next| async {
+        request_recorder(request, next, None).await
+    }))
+}
+
+#[instrument(skip_all)]
+fn post_internal<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
+where
+    H: AxumHandler<T, S>,
+    T: 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    post(handler).route_layer(middleware::from_fn(|request, next| async {
         request_recorder(request, next, None).await
     }))
 }
