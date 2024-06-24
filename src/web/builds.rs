@@ -163,10 +163,9 @@ pub(crate) async fn build_trigger_rebuild_handler(
         config
             .trigger_rebuild_token
             .as_ref()
-            .ok_or(JsonAxumNope(AxumNope::InternalError(anyhow!(
-                "access token `trigger_rebuild_token` \
-                     is not configured"
-            ))))?;
+            .ok_or(JsonAxumNope(AxumNope::Unauthorized(
+                "Endpoint is not configured",
+            )))?;
 
     // (Future: would it be better to have standard middleware handle auth?)
     let TypedHeader(auth_header) = opt_auth_header.ok_or(JsonAxumNope(AxumNope::Unauthorized(
@@ -378,14 +377,14 @@ mod tests {
 
             {
                 let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
-                assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
                 let text = response.text()?;
                 let json: serde_json::Value = serde_json::from_str(&text)?;
                 assert_eq!(
                     json,
                     serde_json::json!({
-                        "title": "Internal Server Error",
-                        "message": "access token `trigger_rebuild_token` is not configured"
+                        "title": "Unauthorized",
+                        "message": "Endpoint is not configured"
                     })
                 );
             }
