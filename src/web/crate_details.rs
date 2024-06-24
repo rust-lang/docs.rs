@@ -374,8 +374,7 @@ pub(crate) async fn releases_for_crate(
          FROM releases
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
          WHERE
-             releases.crate_id = $1 AND
-             release_build_status.build_status != 'in_progress'"#,
+             releases.crate_id = $1"#,
         crate_id,
     )
     .fetch(&mut *conn)
@@ -1341,25 +1340,22 @@ mod tests {
                 .create()?;
 
             let response = env.frontend().get("/crate/foo/latest").send()?;
-            // FIXME: temporarily we don't show in-progress releases anywhere, which means we don't
-            // show releases without builds anywhere.
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-            // let page = kuchikiki::parse_html().one(response.text()?);
-            // let link = page
-            //     .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
-            //     .unwrap();
+            let page = kuchikiki::parse_html().one(response.text()?);
+            let link = page
+                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
+                .unwrap();
 
-            // assert_eq!(
-            //     link.as_node()
-            //         .as_element()
-            //         .unwrap()
-            //         .attributes
-            //         .borrow()
-            //         .get("title")
-            //         .unwrap(),
-            //     "foo-0.1.0 is currently being built"
-            // );
+            assert_eq!(
+                link.as_node()
+                    .as_element()
+                    .unwrap()
+                    .attributes
+                    .borrow()
+                    .get("title")
+                    .unwrap(),
+                "foo-0.1.0 is currently being built"
+            );
 
             Ok(())
         });
