@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO queue (name, version, priority, attempt, last_attempt )\n                VALUES ('failed_crate', '0.1.1', 0, 99, NOW())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4504bbfe4e4b21c82c4f56562d42e904426f9899fbf95f177e61b1f6be226ae4"
+}

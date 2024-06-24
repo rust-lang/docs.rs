@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM releases WHERE crate_id = $1;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aaa2cc1b0b88255cb0be16259e6b53571ead374e51fc62b9a646a77fc84b4d6d"
+}
