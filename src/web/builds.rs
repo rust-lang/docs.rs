@@ -379,8 +379,7 @@ mod tests {
             {
                 let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
                 assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let text = response.text()?;
-                let json: serde_json::Value = serde_json::from_str(&text)?;
+                let json: serde_json::Value = response.json()?;
                 assert_eq!(
                     json,
                     serde_json::json!({
@@ -405,8 +404,7 @@ mod tests {
             {
                 let response = env.frontend().post("/crate/regex/1.3.1/rebuild").send()?;
                 assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let text = response.text()?;
-                let json: serde_json::Value = serde_json::from_str(&text)?;
+                let json: serde_json::Value = response.json()?;
                 assert_eq!(
                     json,
                     serde_json::json!({
@@ -423,8 +421,7 @@ mod tests {
                     .bearer_auth("someinvalidtoken")
                     .send()?;
                 assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let text = response.text()?;
-                let json: serde_json::Value = serde_json::from_str(&text)?;
+                let json: serde_json::Value = response.json()?;
                 assert_eq!(
                     json,
                     serde_json::json!({
@@ -444,8 +441,7 @@ mod tests {
                     .bearer_auth(correct_token)
                     .send()?;
                 assert_eq!(response.status(), StatusCode::CREATED);
-                let text = response.text()?;
-                let json: serde_json::Value = serde_json::from_str(&text)?;
+                let json: serde_json::Value = response.json()?;
                 assert_eq!(json, serde_json::json!({}));
             }
 
@@ -459,8 +455,7 @@ mod tests {
                     .bearer_auth(correct_token)
                     .send()?;
                 assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-                let text = response.text()?;
-                let json: serde_json::Value = serde_json::from_str(&text)?;
+                let json: serde_json::Value = response.json()?;
                 assert_eq!(
                     json,
                     serde_json::json!({
