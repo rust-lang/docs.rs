@@ -162,7 +162,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
 ) -> JsonAxumResult<impl IntoResponse> {
     let expected_token =
         config
-            .trigger_rebuild_token
+            .cratesio_token
             .as_ref()
             .ok_or(JsonAxumNope(AxumNope::Unauthorized(
                 "Endpoint is not configured",
@@ -398,7 +398,7 @@ mod tests {
     fn build_trigger_rebuild_with_config() {
         wrapper(|env| {
             let correct_token = "foo137";
-            env.override_config(|config| config.trigger_rebuild_token = Some(correct_token.into()));
+            env.override_config(|config| config.cratesio_token = Some(correct_token.into()));
 
             env.fake_release().name("foo").version("0.1.0").create()?;
 

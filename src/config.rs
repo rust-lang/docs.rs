@@ -41,9 +41,8 @@ pub struct Config {
     // Gitlab authentication
     pub(crate) gitlab_accesstoken: Option<String>,
 
-    // Access token for rebuild trigger at path
-    // "/crate/:name/:version/rebuild"
-    pub(crate) trigger_rebuild_token: Option<String>,
+    // Access token for APIs for crates.io
+    pub(crate) cratesio_token: Option<String>,
 
     // amount of retries for external API calls, mostly crates.io
     pub crates_io_api_call_retries: u32,
@@ -180,7 +179,7 @@ impl Config {
 
             gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
 
-            trigger_rebuild_token: maybe_env("DOCSRS_TRIGGER_REBUILD_TOKEN")?,
+            cratesio_token: maybe_env("DOCSRS_CRATESIO_TOKEN")?,
 
             max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
