@@ -25,6 +25,7 @@ use axum_extra::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
+use http::StatusCode;
 use semver::Version;
 use serde::Serialize;
 use serde_json::json;
@@ -196,7 +197,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
     .await
     .map_err(|e| JsonAxumNope(e.into()))?;
 
-    Ok(Json(json!({})))
+    Ok((StatusCode::CREATED, Json(json!({}))))
 }
 
 async fn get_builds(
@@ -442,7 +443,7 @@ mod tests {
                     .post("/crate/foo/0.1.0/rebuild")
                     .bearer_auth(correct_token)
                     .send()?;
-                assert_eq!(response.status(), StatusCode::OK);
+                assert_eq!(response.status(), StatusCode::CREATED);
                 let text = response.text()?;
                 let json: serde_json::Value = serde_json::from_str(&text)?;
                 assert_eq!(json, serde_json::json!({}));
