@@ -57,7 +57,6 @@ impl Index {
         Ok(diff)
     }
 
-    #[cfg(feature = "consistency_check")]
     pub(crate) fn crates(&self) -> Result<crates_index::GitIndex> {
         tracing::debug!("Opening with `crates_index`");
         // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
