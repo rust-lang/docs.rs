@@ -566,7 +566,6 @@ enum DatabaseSubcommand {
     },
 
     /// Compares the database with the index and resolves inconsistencies
-    #[cfg(feature = "consistency_check")]
     Synchronize {
         /// Don't actually resolve the inconsistencies, just log them
         #[arg(long)]
@@ -672,7 +671,6 @@ impl DatabaseSubcommand {
 
             Self::Limits { command } => command.handle_args(ctx)?,
 
-            #[cfg(feature = "consistency_check")]
             Self::Synchronize { dry_run } => {
                 docs_rs::utils::consistency::run_check(&ctx, dry_run)?;
             }
