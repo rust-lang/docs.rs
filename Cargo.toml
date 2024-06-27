@@ -16,9 +16,6 @@ exclude = [
     ".rustwide-docker",
 ]
 
-[features]
-consistency_check = ["crates-index", "itertools"]
-
 [dependencies]
 sentry = "0.34.0"
 sentry-panic = "0.34.0"
@@ -31,7 +28,7 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
 tracing-log = "0.2.0"
 regex = "1"
 clap = { version = "4.0.22", features = [ "derive" ] }
-crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-performance", "parallel"], optional = true }
+crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-performance", "parallel"] }
 rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "25.0.0", features = [ "max-performance" ]}
@@ -66,7 +63,7 @@ postgres-types = { version = "0.2", features = ["derive"] }
 zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.4.4"
 getrandom = "0.2.1"
-itertools = { version = "0.13.0", optional = true}
+itertools = { version = "0.13.0" }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 hex = "0.4.3"
 
