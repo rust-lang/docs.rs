@@ -126,7 +126,7 @@ impl CrateDetails {
         .unwrap())
     }
 
-    pub(crate) async fn new(
+    async fn new(
         conn: &mut sqlx::PgConnection,
         name: &str,
         version: &Version,

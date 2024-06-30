@@ -9,7 +9,6 @@ use crate::{
     impl_axum_webpage,
     utils::spawn_blocking,
     web::{
-        crate_details::CrateDetails,
         error::AxumResult,
         extractors::{DbConnection, Path},
         match_version, MetaData, ReqVersion,
@@ -124,15 +123,35 @@ pub(crate) async fn build_list_json_handler(
         .into_response())
 }
 
-async fn build_trigger_check(
+async fn crate_version_exists(
     mut conn: DbConnection,
+    name: &String,
+    version: &Version,
+) -> Result<bool, anyhow::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT 1 as "dummy"
+        FROM releases
+        INNER JOIN crates ON crates.id = releases.crate_id
+        WHERE crates.name = $1 AND releases.version = $2
+        LIMIT 1"#,
+        name,
+        version.to_string(),
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.is_some())
+}
+
+async fn build_trigger_check(
+    conn: DbConnection,
     name: &String,
     version: &Version,
     build_queue: &Arc<BuildQueue>,
 ) -> AxumResult<impl IntoResponse> {
-    let _ = CrateDetails::new(&mut *conn, &name, &version, None, vec![])
-        .await?
-        .ok_or(AxumNope::VersionNotFound)?;
+    if !crate_version_exists(conn, name, version).await? {
+        return Err(AxumNope::VersionNotFound);
+    }
 
     let crate_version_is_in_queue = spawn_blocking({
         let name = name.clone();
