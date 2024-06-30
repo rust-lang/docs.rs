@@ -41,7 +41,8 @@ pub struct Config {
     // Gitlab authentication
     pub(crate) gitlab_accesstoken: Option<String>,
 
-    // Access token for APIs for crates.io
+    // Access token for APIs for crates.io (careful: use
+    // constant_time_eq for comparisons!)
     pub(crate) cratesio_token: Option<String>,
 
     // amount of retries for external API calls, mostly crates.io
