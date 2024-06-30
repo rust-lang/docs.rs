@@ -109,6 +109,7 @@ chrono = { version = "0.4.11", default-features = false, features = ["clock", "s
 # Transitive dependencies we don't use directly but need to have specific versions of
 thread_local = "1.1.3"
 humantime = "2.1.0"
+constant_time_eq = "0.3.0"
 
 [dependencies.postgres]
 version = "0.19"

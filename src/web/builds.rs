@@ -24,6 +24,7 @@ use axum_extra::{
     TypedHeader,
 };
 use chrono::{DateTime, Utc};
+use constant_time_eq::constant_time_eq;
 use http::StatusCode;
 use semver::Version;
 use serde::Serialize;
@@ -192,7 +193,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
     let TypedHeader(auth_header) = opt_auth_header.ok_or(JsonAxumNope(AxumNope::Unauthorized(
         "Missing authentication token",
     )))?;
-    if auth_header.token() != expected_token {
+    if !constant_time_eq(auth_header.token().as_bytes(), expected_token.as_bytes()) {
         return Err(JsonAxumNope(AxumNope::Unauthorized(
             "The token used for authentication is not valid",
         )));
