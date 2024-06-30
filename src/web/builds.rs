@@ -129,16 +129,17 @@ async fn crate_version_exists(
 ) -> Result<bool, anyhow::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT COUNT(*) as "count!"
+        SELECT 1 as "dummy"
         FROM releases
         INNER JOIN crates ON crates.id = releases.crate_id
-        WHERE crates.name = $1 AND releases.version = $2"#,
+        WHERE crates.name = $1 AND releases.version = $2
+        LIMIT 1"#,
         name,
         version.to_string(),
     )
-    .fetch_one(&mut *conn)
+    .fetch_optional(&mut *conn)
     .await?;
-    Ok(row.count > 0)
+    Ok(row.is_some())
 }
 
 async fn build_trigger_check(
