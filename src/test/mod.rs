@@ -777,6 +777,12 @@ impl TestFrontend {
         self.client.request(Method::GET, url)
     }
 
+    pub(crate) fn post(&self, url: &str) -> RequestBuilder {
+        let url = self.build_url(url);
+        debug!("posting {url}");
+        self.client.request(Method::POST, url)
+    }
+
     pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
         let url = self.build_url(url);
         debug!("getting {url} (no redirects)");

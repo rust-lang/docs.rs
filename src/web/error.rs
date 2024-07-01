@@ -1,14 +1,18 @@
 use crate::{
     db::PoolError,
     storage::PathNotFoundError,
-    web::{cache::CachePolicy, encode_url_path, releases::Search, AxumErrorPage},
+    web::{cache::CachePolicy, encode_url_path, releases::Search},
 };
 use anyhow::anyhow;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
+    Json,
 };
 use std::borrow::Cow;
+use tracing::error;
+
+use super::AxumErrorPage;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AxumNope {
@@ -24,6 +28,8 @@ pub enum AxumNope {
     VersionNotFound,
     #[error("Search yielded no results")]
     NoResults,
+    #[error("Unauthorized: {0}")]
+    Unauthorized(&'static str),
     #[error("internal error")]
     InternalError(anyhow::Error),
     #[error("bad request")]
@@ -32,54 +38,96 @@ pub enum AxumNope {
     Redirect(String, CachePolicy),
 }
 
-impl IntoResponse for AxumNope {
-    fn into_response(self) -> AxumResponse {
+// FUTURE: Ideally, the split between the 3 kinds of responses would
+// be done by having multiple nested enums in the first place instead
+// of just `AxumNope`, to keep everything statically type-checked
+// throughout instead of having the potential for a runtime error.
+
+impl AxumNope {
+    fn into_error_info(self) -> ErrorInfo {
         match self {
             AxumNope::ResourceNotFound => {
                 // user tried to navigate to a resource (doc page/file) that doesn't exist
-                AxumErrorPage {
+                ErrorInfo {
                     title: "The requested resource does not exist",
                     message: "no such resource".into(),
                     status: StatusCode::NOT_FOUND,
                 }
-                .into_response()
             }
-
-            AxumNope::BuildNotFound => AxumErrorPage {
+            AxumNope::BuildNotFound => ErrorInfo {
                 title: "The requested build does not exist",
                 message: "no such build".into(),
                 status: StatusCode::NOT_FOUND,
-            }
-            .into_response(),
-
+            },
             AxumNope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
                 // TODO: Display the attempted crate and a link to a search for said crate
-                AxumErrorPage {
+                ErrorInfo {
                     title: "The requested crate does not exist",
                     message: "no such crate".into(),
                     status: StatusCode::NOT_FOUND,
                 }
-                .into_response()
             }
-
-            AxumNope::OwnerNotFound => AxumErrorPage {
+            AxumNope::OwnerNotFound => ErrorInfo {
                 title: "The requested owner does not exist",
                 message: "no such owner".into(),
                 status: StatusCode::NOT_FOUND,
-            }
-            .into_response(),
-
+            },
             AxumNope::VersionNotFound => {
                 // user tried to navigate to a crate with a version that does not exist
                 // TODO: Display the attempted crate and version
-                AxumErrorPage {
+                ErrorInfo {
                     title: "The requested version does not exist",
                     message: "no such version for this crate".into(),
                     status: StatusCode::NOT_FOUND,
                 }
-                .into_response()
             }
+            AxumNope::NoResults => {
+                // user did a search with no search terms
+                unreachable!()
+            }
+            AxumNope::BadRequest(source) => ErrorInfo {
+                title: "Bad request",
+                message: Cow::Owned(source.to_string()),
+                status: StatusCode::BAD_REQUEST,
+            },
+            AxumNope::Unauthorized(what) => ErrorInfo {
+                title: "Unauthorized",
+                message: what.into(),
+                status: StatusCode::UNAUTHORIZED,
+            },
+            AxumNope::InternalError(source) => {
+                crate::utils::report_error(&source);
+                ErrorInfo {
+                    title: "Internal Server Error",
+                    message: Cow::Owned(source.to_string()),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                }
+            }
+            AxumNope::Redirect(_target, _cache_policy) => unreachable!(),
+        }
+    }
+}
+
+struct ErrorInfo {
+    // For the title of the page
+    pub title: &'static str,
+    // The error message, displayed as a description
+    pub message: Cow<'static, str>,
+    // The status code of the response
+    pub status: StatusCode,
+}
+
+fn redirect_with_policy(target: String, cache_policy: CachePolicy) -> AxumResponse {
+    match super::axum_cached_redirect(encode_url_path(&target), cache_policy) {
+        Ok(response) => response.into_response(),
+        Err(err) => AxumNope::InternalError(err).into_response(),
+    }
+}
+
+impl IntoResponse for AxumNope {
+    fn into_response(self) -> AxumResponse {
+        match self {
             AxumNope::NoResults => {
                 // user did a search with no search terms
                 Search {
@@ -89,28 +137,50 @@ impl IntoResponse for AxumNope {
                 }
                 .into_response()
             }
-            AxumNope::BadRequest(source) => AxumErrorPage {
-                title: "Bad request",
-                message: Cow::Owned(source.to_string()),
-                status: StatusCode::BAD_REQUEST,
-            }
-            .into_response(),
-            AxumNope::InternalError(source) => {
-                let web_error = crate::web::AxumErrorPage {
-                    title: "Internal Server Error",
-                    message: Cow::Owned(source.to_string()),
-                    status: StatusCode::INTERNAL_SERVER_ERROR,
-                };
-
-                crate::utils::report_error(&source);
-
-                web_error.into_response()
-            }
-            AxumNope::Redirect(target, cache_policy) => {
-                match super::axum_cached_redirect(&encode_url_path(&target), cache_policy) {
-                    Ok(response) => response.into_response(),
-                    Err(err) => AxumNope::InternalError(err).into_response(),
+            AxumNope::Redirect(target, cache_policy) => redirect_with_policy(target, cache_policy),
+            _ => {
+                let ErrorInfo {
+                    title,
+                    message,
+                    status,
+                } = self.into_error_info();
+                AxumErrorPage {
+                    title,
+                    message,
+                    status,
                 }
+                .into_response()
+            }
+        }
+    }
+}
+
+/// `AxumNope` but generating error responses in JSON (for API).
+pub(crate) struct JsonAxumNope(pub AxumNope);
+
+impl IntoResponse for JsonAxumNope {
+    fn into_response(self) -> AxumResponse {
+        match self.0 {
+            AxumNope::NoResults => {
+                // user did a search with no search terms; invalid,
+                // return 404
+                StatusCode::NOT_FOUND.into_response()
+            }
+            AxumNope::Redirect(target, cache_policy) => redirect_with_policy(target, cache_policy),
+            _ => {
+                let ErrorInfo {
+                    title,
+                    message,
+                    status,
+                } = self.0.into_error_info();
+                (
+                    status,
+                    Json(serde_json::json!({
+                        "title": title,
+                        "message": message,
+                    })),
+                )
+                    .into_response()
             }
         }
     }
@@ -141,6 +211,7 @@ impl From<PoolError> for AxumNope {
 }
 
 pub(crate) type AxumResult<T> = Result<T, AxumNope>;
+pub(crate) type JsonAxumResult<T> = Result<T, JsonAxumNope>;
 
 #[cfg(test)]
 mod tests {
