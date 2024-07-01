@@ -45,13 +45,12 @@ url = { version = "2.1.1", features = ["serde"] }
 docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
-failure = "0.1.8"
 thiserror = "1.0.26"
 comrak = { version = "0.24.1", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
-rustwide = { version = "0.16.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { version = "0.17.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
 hostname = "0.4.0"
