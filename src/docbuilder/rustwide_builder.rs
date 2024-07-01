@@ -17,7 +17,6 @@ use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage};
 use anyhow::{anyhow, bail, Context as _, Error};
 use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
-use failure::Error as FailureError;
 use postgres::Client;
 use regex::Regex;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
@@ -69,10 +68,8 @@ fn build_workspace(context: &dyn Context) -> Result<Workspace> {
         builder = builder.fast_init(true);
     }
 
-    let workspace = builder.init().map_err(FailureError::compat)?;
-    workspace
-        .purge_all_build_dirs()
-        .map_err(FailureError::compat)?;
+    let workspace = builder.init()?;
+    workspace.purge_all_build_dirs()?;
     Ok(workspace)
 }
 
@@ -141,9 +138,7 @@ impl RustwideBuilder {
     }
 
     pub fn purge_caches(&self) -> Result<()> {
-        self.workspace
-            .purge_all_caches()
-            .map_err(FailureError::compat)?;
+        self.workspace.purge_all_caches()?;
         Ok(())
     }
 
@@ -159,9 +154,7 @@ impl RustwideBuilder {
         // we fake the rustc version and install from scratch every time since we can't detect
         // the already-installed rustc version.
         if self.toolchain.as_ci().is_some() {
-            self.toolchain
-                .install(&self.workspace)
-                .map_err(FailureError::compat)?;
+            self.toolchain.install(&self.workspace)?;
             self.add_essential_files()?;
             return Ok(true);
         }
@@ -180,7 +173,7 @@ impl RustwideBuilder {
                 if let Some(&ToolchainError::NotInstalled) = err.downcast_ref::<ToolchainError>() {
                     Vec::new()
                 } else {
-                    return Err(err.compat().into());
+                    return Err(err);
                 }
             }
         };
@@ -199,20 +192,14 @@ impl RustwideBuilder {
         // and will not be reinstalled until explicitly requested by a crate.
         for target in installed_targets {
             if !targets_to_install.remove(&target) {
-                self.toolchain
-                    .remove_target(&self.workspace, &target)
-                    .map_err(FailureError::compat)?;
+                self.toolchain.remove_target(&self.workspace, &target)?;
             }
         }
 
-        self.toolchain
-            .install(&self.workspace)
-            .map_err(FailureError::compat)?;
+        self.toolchain.install(&self.workspace)?;
 
         for target in &targets_to_install {
-            self.toolchain
-                .add_target(&self.workspace, target)
-                .map_err(FailureError::compat)?;
+            self.toolchain.add_target(&self.workspace, target)?;
         }
         // NOTE: rustup will automatically refuse to update the toolchain
         // if `rustfmt` is not available in the newer version
@@ -290,9 +277,7 @@ impl RustwideBuilder {
         // fill up disk space.
         // This also prevents having multiple builders using the same rustwide workspace,
         // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        self.workspace
-            .purge_all_build_dirs()
-            .map_err(FailureError::compat)?;
+        self.workspace.purge_all_build_dirs()?;
 
         let mut build_dir = self
             .workspace
@@ -300,56 +285,49 @@ impl RustwideBuilder {
 
         // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        krate.fetch(&self.workspace).map_err(FailureError::compat)?;
+        krate.fetch(&self.workspace)?;
 
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                (|| -> Result<()> {
-                    let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+                let metadata = Metadata::from_crate_root(build.host_source_dir())?;
 
-                    let res =
-                        self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
-                    if !res.result.successful {
-                        bail!("failed to build dummy crate for {}", rustc_version);
-                    }
+                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
+                if !res.result.successful {
+                    bail!("failed to build dummy crate for {}", rustc_version);
+                }
 
-                    info!("copying essential files for {}", rustc_version);
-                    assert!(!metadata.proc_macro);
-                    let source = build.host_target_dir().join(HOST_TARGET).join("doc");
-                    let dest = tempfile::Builder::new()
-                        .prefix("essential-files")
-                        .tempdir()?;
-                    copy_dir_all(source, &dest)?;
+                info!("copying essential files for {}", rustc_version);
+                assert!(!metadata.proc_macro);
+                let source = build.host_target_dir().join(HOST_TARGET).join("doc");
+                let dest = tempfile::Builder::new()
+                    .prefix("essential-files")
+                    .tempdir()?;
+                copy_dir_all(source, &dest)?;
 
-                    // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
-                    // put in their own directory, "static.files". To make sure those files are
-                    // available at --static-root-path, we add files from that subdirectory, if present.
-                    let static_files = dest.as_ref().join("static.files");
-                    if static_files.try_exists()? {
-                        self.runtime.block_on(add_path_into_database(
-                            &self.async_storage,
-                            RUSTDOC_STATIC_STORAGE_PREFIX,
-                            &static_files,
-                        ))?;
-                    } else {
-                        self.runtime.block_on(add_path_into_database(
-                            &self.async_storage,
-                            RUSTDOC_STATIC_STORAGE_PREFIX,
-                            &dest,
-                        ))?;
-                    }
+                // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
+                // put in their own directory, "static.files". To make sure those files are
+                // available at --static-root-path, we add files from that subdirectory, if present.
+                let static_files = dest.as_ref().join("static.files");
+                if static_files.try_exists()? {
+                    self.runtime.block_on(add_path_into_database(
+                        &self.async_storage,
+                        RUSTDOC_STATIC_STORAGE_PREFIX,
+                        &static_files,
+                    ))?;
+                } else {
+                    self.runtime.block_on(add_path_into_database(
+                        &self.async_storage,
+                        RUSTDOC_STATIC_STORAGE_PREFIX,
+                        &dest,
+                    ))?;
+                }
 
-                    set_config(&mut conn, ConfigName::RustcVersion, rustc_version)?;
-                    Ok(())
-                })()
-                .map_err(|e| failure::Error::from_boxed_compat(e.into()))
-            })
-            .map_err(|e| e.compat())?;
+                set_config(&mut conn, ConfigName::RustcVersion, rustc_version)?;
+                Ok(())
+            })?;
 
-        krate
-            .purge_from_cache(&self.workspace)
-            .map_err(FailureError::compat)?;
+        krate.purge_from_cache(&self.workspace)?;
         Ok(())
     }
 
@@ -437,11 +415,7 @@ impl RustwideBuilder {
         // fill up disk space.
         // This also prevents having multiple builders using the same rustwide workspace,
         // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        info_span!("purge_all_build_dirs").in_scope(|| {
-            self.workspace
-                .purge_all_build_dirs()
-                .map_err(FailureError::compat)
-        })?;
+        info_span!("purge_all_build_dirs").in_scope(|| self.workspace.purge_all_build_dirs())?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
 
@@ -456,7 +430,7 @@ impl RustwideBuilder {
                     Crate::registry(AlternativeRegistry::new(registry), name, version)
                 }
             };
-            krate.fetch(&self.workspace).map_err(FailureError::compat)?;
+            krate.fetch(&self.workspace)?;
             krate
         };
 
@@ -470,15 +444,13 @@ impl RustwideBuilder {
 
                 debug!("adding sources into database");
                 let files_list = {
-                    let (files_list, new_alg) = self
-                        .runtime
-                        .block_on(add_path_into_remote_archive(
+                    let (files_list, new_alg) =
+                        self.runtime.block_on(add_path_into_remote_archive(
                             &self.async_storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
                             false,
-                        ))
-                        .map_err(|e| failure::Error::from_boxed_compat(e.into()))?;
+                        ))?;
                     algs.insert(new_alg);
                     files_list
                 };
@@ -496,209 +468,199 @@ impl RustwideBuilder {
                     build.fetch_build_std_dependencies(&targets)?;
                 }
 
-                (|| -> Result<bool> {
-                    let mut has_docs = false;
-                    let mut successful_targets = Vec::new();
+                let mut has_docs = false;
+                let mut successful_targets = Vec::new();
 
-                    // Perform an initial build
-                    let mut res =
+                // Perform an initial build
+                let mut res =
+                    self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+
+                // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
+                let cargo_lock = build.host_source_dir().join("Cargo.lock");
+                if !res.result.successful && cargo_lock.exists() {
+                    info!("removing lockfile and reattempting build");
+                    std::fs::remove_file(cargo_lock)?;
+                    {
+                        let _span = info_span!("cargo_generate_lockfile").entered();
+                        Command::new(&self.workspace, self.toolchain.cargo())
+                            .cd(build.host_source_dir())
+                            .args(&["generate-lockfile"])
+                            .run()?;
+                    }
+                    {
+                        let _span = info_span!("cargo fetch --locked").entered();
+                        Command::new(&self.workspace, self.toolchain.cargo())
+                            .cd(build.host_source_dir())
+                            .args(&["fetch", "--locked"])
+                            .run()?;
+                    }
+                    res =
                         self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+                }
 
-                    // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
-                    let cargo_lock = build.host_source_dir().join("Cargo.lock");
-                    if !res.result.successful && cargo_lock.exists() {
-                        info!("removing lockfile and reattempting build");
-                        std::fs::remove_file(cargo_lock)?;
-                        {
-                            let _span = info_span!("cargo_generate_lockfile").entered();
-                            Command::new(&self.workspace, self.toolchain.cargo())
-                                .cd(build.host_source_dir())
-                                .args(&["generate-lockfile"])
-                                .run()?;
-                        }
-                        {
-                            let _span = info_span!("cargo fetch --locked").entered();
-                            Command::new(&self.workspace, self.toolchain.cargo())
-                                .cd(build.host_source_dir())
-                                .args(&["fetch", "--locked"])
-                                .run()?;
-                        }
-                        res = self.execute_build(
-                            default_target,
-                            true,
+                if res.result.successful {
+                    if let Some(name) = res.cargo_metadata.root().library_name() {
+                        let host_target = build.host_target_dir();
+                        has_docs = host_target
+                            .join(default_target)
+                            .join("doc")
+                            .join(name)
+                            .is_dir();
+                    }
+                }
+
+                let mut target_build_logs = HashMap::new();
+                if has_docs {
+                    debug!("adding documentation for the default target to the database");
+                    self.copy_docs(
+                        &build.host_target_dir(),
+                        local_storage.path(),
+                        default_target,
+                        true,
+                    )?;
+
+                    successful_targets.push(res.target.clone());
+
+                    // Then build the documentation for all the targets
+                    // Limit the number of targets so that no one can try to build all 200000 possible targets
+                    for target in other_targets.into_iter().take(limits.targets()) {
+                        debug!("building package {} {} for {}", name, version, target);
+                        let target_res = self.build_target(
+                            target,
                             build,
                             &limits,
+                            local_storage.path(),
+                            &mut successful_targets,
                             &metadata,
-                            false,
                         )?;
+                        target_build_logs.insert(target, target_res.build_log);
                     }
-
-                    if res.result.successful {
-                        if let Some(name) = res.cargo_metadata.root().library_name() {
-                            let host_target = build.host_target_dir();
-                            has_docs = host_target
-                                .join(default_target)
-                                .join("doc")
-                                .join(name)
-                                .is_dir();
-                        }
-                    }
-
-                    let mut target_build_logs = HashMap::new();
-                    if has_docs {
-                        debug!("adding documentation for the default target to the database");
-                        self.copy_docs(
-                            &build.host_target_dir(),
-                            local_storage.path(),
-                            default_target,
-                            true,
-                        )?;
-
-                        successful_targets.push(res.target.clone());
-
-                        // Then build the documentation for all the targets
-                        // Limit the number of targets so that no one can try to build all 200000 possible targets
-                        for target in other_targets.into_iter().take(limits.targets()) {
-                            debug!("building package {} {} for {}", name, version, target);
-                            let target_res = self.build_target(
-                                target,
-                                build,
-                                &limits,
-                                local_storage.path(),
-                                &mut successful_targets,
-                                &metadata,
-                            )?;
-                            target_build_logs.insert(target, target_res.build_log);
-                        }
-                        let (_, new_alg) = self.runtime.block_on(add_path_into_remote_archive(
-                            &self.async_storage,
-                            &rustdoc_archive_path(name, version),
-                            local_storage.path(),
-                            true,
-                        ))?;
-                        algs.insert(new_alg);
-                    };
-
-                    let has_examples = build.host_source_dir().join("examples").is_dir();
-                    if res.result.successful {
-                        self.metrics.successful_builds.inc();
-                    } else if res.cargo_metadata.root().is_library() {
-                        self.metrics.failed_builds.inc();
-                    } else {
-                        self.metrics.non_library_builds.inc();
-                    }
-
-                    let release_data = if !is_local {
-                        match self
-                            .runtime
-                            .block_on(self.registry_api.get_release_data(name, version))
-                            .with_context(|| {
-                                format!("could not fetch releases-data for {name}-{version}")
-                            }) {
-                            Ok(data) => Some(data),
-                            Err(err) => {
-                                report_error(&err);
-                                None
-                            }
-                        }
-                    } else {
-                        None
-                    }
-                    .unwrap_or_default();
-
-                    let cargo_metadata = res.cargo_metadata.root();
-                    let repository = self.get_repo(cargo_metadata)?;
-
-                    let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-
-                    let release_id = self.runtime.block_on(add_package_into_database(
-                        &mut async_conn,
-                        cargo_metadata,
-                        &build.host_source_dir(),
-                        &res.target,
-                        files_list,
-                        successful_targets,
-                        &release_data,
-                        has_docs,
-                        has_examples,
-                        algs,
-                        repository,
+                    let (_, new_alg) = self.runtime.block_on(add_path_into_remote_archive(
+                        &self.async_storage,
+                        &rustdoc_archive_path(name, version),
+                        local_storage.path(),
                         true,
                     ))?;
+                    algs.insert(new_alg);
+                };
 
-                    if let Some(doc_coverage) = res.doc_coverage {
-                        self.runtime.block_on(add_doc_coverage(
-                            &mut async_conn,
-                            release_id,
-                            doc_coverage,
-                        ))?;
+                let has_examples = build.host_source_dir().join("examples").is_dir();
+                if res.result.successful {
+                    self.metrics.successful_builds.inc();
+                } else if res.cargo_metadata.root().is_library() {
+                    self.metrics.failed_builds.inc();
+                } else {
+                    self.metrics.non_library_builds.inc();
+                }
+
+                let release_data = if !is_local {
+                    match self
+                        .runtime
+                        .block_on(self.registry_api.get_release_data(name, version))
+                        .with_context(|| {
+                            format!("could not fetch releases-data for {name}-{version}")
+                        }) {
+                        Ok(data) => Some(data),
+                        Err(err) => {
+                            report_error(&err);
+                            None
+                        }
                     }
+                } else {
+                    None
+                }
+                .unwrap_or_default();
 
-                    let build_status = if res.result.successful {
-                        BuildStatus::Success
-                    } else {
-                        BuildStatus::Failure
-                    };
-                    self.runtime.block_on(finish_build(
+                let cargo_metadata = res.cargo_metadata.root();
+                let repository = self.get_repo(cargo_metadata)?;
+
+                let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+
+                let release_id = self.runtime.block_on(add_package_into_database(
+                    &mut async_conn,
+                    cargo_metadata,
+                    &build.host_source_dir(),
+                    &res.target,
+                    files_list,
+                    successful_targets,
+                    &release_data,
+                    has_docs,
+                    has_examples,
+                    algs,
+                    repository,
+                    true,
+                ))?;
+
+                if let Some(doc_coverage) = res.doc_coverage {
+                    self.runtime.block_on(add_doc_coverage(
                         &mut async_conn,
-                        build_id,
-                        &res.result.rustc_version,
-                        &res.result.docsrs_version,
-                        build_status,
-                        None,
+                        release_id,
+                        doc_coverage,
                     ))?;
+                }
 
+                let build_status = if res.result.successful {
+                    BuildStatus::Success
+                } else {
+                    BuildStatus::Failure
+                };
+                self.runtime.block_on(finish_build(
+                    &mut async_conn,
+                    build_id,
+                    &res.result.rustc_version,
+                    &res.result.docsrs_version,
+                    build_status,
+                    None,
+                ))?;
+
+                {
+                    let _span = info_span!("store_build_logs").entered();
+                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                    self.storage.store_one(build_log_path, res.build_log)?;
+                    for (target, log) in target_build_logs {
+                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
+                        self.storage.store_one(build_log_path, log)?;
+                    }
+                }
+
+                // Some crates.io crate data is mutable, so we proactively update it during a release
+                if !is_local {
+                    match self
+                        .runtime
+                        .block_on(self.registry_api.get_crate_data(name))
                     {
-                        let _span = info_span!("store_build_logs").entered();
-                        let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
-                        self.storage.store_one(build_log_path, res.build_log)?;
-                        for (target, log) in target_build_logs {
-                            let build_log_path = format!("build-logs/{build_id}/{target}.txt");
-                            self.storage.store_one(build_log_path, log)?;
-                        }
+                        Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
+                            &mut async_conn,
+                            name,
+                            &crate_data,
+                        ))?,
+                        Err(err) => warn!("{:#?}", err),
                     }
+                }
 
-                    // Some crates.io crate data is mutable, so we proactively update it during a release
-                    if !is_local {
-                        match self
-                            .runtime
-                            .block_on(self.registry_api.get_crate_data(name))
-                        {
-                            Ok(crate_data) => self.runtime.block_on(
-                                update_crate_data_in_database(&mut async_conn, name, &crate_data),
-                            )?,
-                            Err(err) => warn!("{:#?}", err),
-                        }
+                if res.result.successful {
+                    // delete eventually existing files from pre-archive storage.
+                    // we're doing this in the end so eventual problems in the build
+                    // won't lead to non-existing docs.
+                    for prefix in &["rustdoc", "sources"] {
+                        let prefix = format!("{prefix}/{name}/{version}/");
+                        debug!("cleaning old storage folder {}", prefix);
+                        self.storage.delete_prefix(&prefix)?;
                     }
+                }
 
-                    if res.result.successful {
-                        // delete eventually existing files from pre-archive storage.
-                        // we're doing this in the end so eventual problems in the build
-                        // won't lead to non-existing docs.
-                        for prefix in &["rustdoc", "sources"] {
-                            let prefix = format!("{prefix}/{name}/{version}/");
-                            debug!("cleaning old storage folder {}", prefix);
-                            self.storage.delete_prefix(&prefix)?;
-                        }
-                    }
+                self.runtime.block_on(async move {
+                    // we need to drop the async connection inside an async runtime context
+                    // so sqlx can use a runtime to handle the pool.
+                    drop(async_conn);
+                });
 
-                    self.runtime.block_on(async move {
-                        // we need to drop the async connection inside an async runtime context
-                        // so sqlx can use a runtime to handle the pool.
-                        drop(async_conn);
-                    });
-
-                    Ok(res.result.successful)
-                })()
-                .map_err(|e| failure::Error::from_boxed_compat(e.into()))
-            })
-            .map_err(|e| e.compat())?;
+                Ok(res.result.successful)
+            })?;
 
         {
             let _span = info_span!("purge_from_cache").entered();
-            krate
-                .purge_from_cache(&self.workspace)
-                .map_err(FailureError::compat)?;
+            krate.purge_from_cache(&self.workspace)?;
             local_storage.close()?;
         }
         Ok(successful)
@@ -927,9 +889,7 @@ impl RustwideBuilder {
         }) || cargo_args.last().unwrap().starts_with("-Zbuild-std");
         if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) && !has_build_std {
             // This is a no-op if the target is already installed.
-            self.toolchain
-                .add_target(&self.workspace, target)
-                .map_err(FailureError::compat)?;
+            self.toolchain.add_target(&self.workspace, target)?;
         }
 
         let mut command = build
