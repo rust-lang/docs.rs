@@ -1,4 +1,4 @@
-{%- extends "base.html" -%}
+{% extends "base.html" %}
 
 {%- block title -%}Docs.rs{%- endblock title -%}
 
@@ -8,7 +8,7 @@ centered
 
 {%- block body -%}
     <div class="container landing">
-        <h1 class="brand">{{ "cubes" | fas }} Docs.rs</h1>
+        <h1 class="brand">{{ "cubes"|fas(false, false, "") }} Docs.rs</h1>
 
         <form action="/releases/search" method="GET" class="landing-search-form">
             <div>
@@ -32,20 +32,20 @@ centered
                     <strong>Recent Releases</strong>
                 </a>
                 <a href="/releases/feed" title="Atom feed">
-                    {{ "square-rss" | fas }}
+                    {{ "square-rss"|fas(false, false, "") }}
                 </a>
             </div>
 
             <ul>
                 {%- for release in recent_releases -%}
                     {%- if release.rustdoc_status -%}
-                        {%- set release_url = "/" ~ release.name ~ "/" ~ release.version ~ "/" ~ release.target_name ~ "/" -%}
+                        {%- set release_url = "/{}/{}/{}/"|format(release.name, release.version, release.target_name) -%}
                     {%- else -%}
-                        {%- set release_url = "/crate/" ~ release.name ~ "/" ~ release.version -%}
+                        {%- set release_url = "/crate/{}/{}"|format(release.name, release.version) -%}
                     {%- endif -%}
 
                     <li>
-                        <a href="{{ release_url | safe }}"
+                        <a href="{{ release_url|safe }}"
                             class="release">
                             <div class="pure-g">
                                 <div class="pure-u-1 pure-u-sm-6-24 pure-u-md-5-24 name">
@@ -58,12 +58,12 @@ centered
                                 {%- if varsb.show_stars -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
                                         {{ release.stars }}
-                                        {{ "star" | fas }}
+                                        {{ "star"|fas(false, false, "") }}
                                     </div>
                                 {%- else -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="{{ release.build_time | date(format='%FT%TZ') }}">
-                                        {{ release.build_time | timeformat(relative=true) }}
+                                        title="{{ release.build_time|date("%FT%TZ") }}">
+                                        {{ release.build_time|timeformat }}
                                     </div>
                                 {%- endif -%}
                             </div>
@@ -76,5 +76,5 @@ centered
 {%- endblock body -%}
 
 {%- block javascript -%}
-    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ docsrs_version() | slugify }}"></script>
+    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ crate::BUILD_VERSION|slugify }}"></script>
 {%- endblock javascript -%}

@@ -2,10 +2,11 @@ use crate::{
     db::types::BuildStatus,
     impl_axum_webpage,
     web::{
+        crate_details::CrateDetails,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         file::File,
-        MetaData,
+        filters, MetaData,
     },
     AsyncStorage, Config,
 };
@@ -13,6 +14,7 @@ use anyhow::Context as _;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
+use rinja::Template;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -28,6 +30,8 @@ pub(crate) struct BuildDetails {
     errors: Option<String>,
 }
 
+#[derive(Template)]
+#[template(path = "crate/build_details.html")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct BuildDetailsPage {
     metadata: MetaData,
@@ -35,10 +39,20 @@ struct BuildDetailsPage {
     use_direct_platform_links: bool,
     all_log_filenames: Vec<String>,
     current_filename: Option<String>,
+    csp_nonce: String,
 }
 
-impl_axum_webpage! {
-    BuildDetailsPage = "crate/build_details.html",
+impl_axum_webpage! { BuildDetailsPage }
+
+// Used for template rendering.
+impl BuildDetailsPage {
+    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
+        None
+    }
+
+    pub(crate) fn permalink_path(&self) -> &str {
+        ""
+    }
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -126,6 +140,7 @@ pub(crate) async fn build_details_handler(
         use_direct_platform_links: true,
         all_log_filenames,
         current_filename,
+        csp_nonce: String::new(),
     }
     .into_response())
 }

@@ -1,4 +1,6 @@
 {% import "macros.html" as macros %}
+{% set target = "" %}
+{% set inner_path = "{}/index.html"|format(releases[0].target_name) %}
 <ul class="pure-menu-list">
-{{ macros::releases_list(name=crate_name, releases=releases, target=target, inner_path=inner_path) }}
+{% call macros::releases_list(crate_name, releases, target, inner_path) %}
 </ul>
