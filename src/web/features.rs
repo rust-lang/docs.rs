@@ -1,5 +1,5 @@
 use crate::{
-    db::types::Feature,
+    db::types::Feature as DbFeature,
     impl_axum_webpage,
     web::{
         cache::CachePolicy,
@@ -17,9 +17,33 @@ use std::collections::{HashMap, VecDeque};
 const DEFAULT_NAME: &str = "default";
 
 #[derive(Debug, Clone, Serialize)]
+struct Feature {
+    name: String,
+    subfeatures: Vec<String>,
+    is_default: bool,
+}
+
+/// The sub-feature enabled by a [`Feature`]
+enum SubFeature {
+    /// A normal feature, like `"feature-name"`.
+    Feature(String),
+    /// A dependency, like `"dep:package-name"`.
+    Dependency(String),
+    /// A dependency feature, like `"package-name?/feature-name"`.
+    DependencyFeature {
+        dependency: String,
+        optional: bool,
+        feature: String,
+    },
+}
+
+type AllFeatures = HashMap<String, Feature>;
+
+#[derive(Debug, Clone, Serialize)]
 struct FeaturesPage {
     metadata: MetaData,
-    features: Option<Vec<Feature>>,
+    all_features: AllFeatures,
+    sorted_features: Option<Vec<String>>,
     default_len: usize,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
@@ -55,7 +79,7 @@ pub(crate) async fn build_features_handler(
 
     let row = sqlx::query!(
         r#"
-        SELECT releases.features as "features?: Vec<Feature>"
+        SELECT releases.features as "features?: Vec<DbFeature>"
         FROM releases
         INNER JOIN crates ON crates.id = releases.crate_id
         WHERE crates.name = $1 AND releases.version = $2"#,
@@ -66,18 +90,21 @@ pub(crate) async fn build_features_handler(
     .await?
     .ok_or_else(|| anyhow!("missing release"))?;
 
-    let mut features = None;
+    let mut all_features = HashMap::new();
+    let mut sorted_features = None;
     let mut default_len = 0;
 
     if let Some(raw_features) = row.features {
         let result = order_features_and_count_default_len(raw_features);
-        features = Some(result.0);
-        default_len = result.1;
+        all_features = result.0;
+        sorted_features = Some(result.1);
+        default_len = result.2;
     }
 
     Ok(FeaturesPage {
         metadata,
-        features,
+        all_features,
+        sorted_features,
         default_len,
         is_latest_url: req_version.is_latest(),
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
@@ -86,40 +113,64 @@ pub(crate) async fn build_features_handler(
     .into_response())
 }
 
-fn order_features_and_count_default_len(raw: Vec<Feature>) -> (Vec<Feature>, usize) {
-    let mut feature_map = get_feature_map(raw);
-    let mut features = get_tree_structure_from_default(&mut feature_map);
-    let mut remaining = Vec::from_iter(feature_map.into_values());
-    remaining.sort_by_key(|feature| feature.subfeatures.len());
+fn order_features_and_count_default_len(raw: Vec<DbFeature>) -> (AllFeatures, Vec<String>, usize) {
+    let mut all_features = get_all_features(raw);
+    let sorted_features = get_sorted_features(&mut all_features);
 
-    let default_len = features.len();
+    let default_len = all_features.values().filter(|f| f.is_default).count();
 
-    features.extend(remaining.into_iter().rev());
-    (features, default_len)
+    (all_features, sorted_features, default_len)
 }
 
-fn get_tree_structure_from_default(feature_map: &mut HashMap<String, Feature>) -> Vec<Feature> {
-    let mut features = Vec::new();
-    let mut queue: VecDeque<String> = VecDeque::new();
+/// This flags all features as being reachable from `"default"`,
+/// and returns them as a sorted list.
+///
+/// The sorting order depends on depth-first traversal of the default features,
+/// and alphabetically otherwise.
+fn get_sorted_features(all_features: &mut AllFeatures) -> Vec<String> {
+    let mut sorted_features = Vec::new();
+    let mut working_features: HashMap<&str, &mut Feature> = all_features
+        .iter_mut()
+        .map(|(k, v)| (k.as_str(), v))
+        .collect();
 
-    queue.push_back(DEFAULT_NAME.into());
-    while !queue.is_empty() {
-        let name = queue.pop_front().unwrap();
-        if let Some(feature) = feature_map.remove(&name) {
+    // this does a depth-first traversal starting at the special `"default"` feature
+    let mut queue: VecDeque<&str> = VecDeque::new();
+    queue.push_back(DEFAULT_NAME);
+
+    while let Some(name) = queue.pop_front() {
+        if let Some(feature) = working_features.remove(name) {
             feature
                 .subfeatures
                 .iter()
-                .for_each(|sub| queue.push_back(sub.clone()));
-            features.push(feature);
+                .for_each(|sub| queue.push_back(sub.as_str()));
+            feature.is_default = true;
+            sorted_features.push(feature.name.clone());
         }
     }
-    features
+
+    // the rest of the features not reachable from `"default"` are sorted alphabetically
+    let mut remaining = Vec::from_iter(working_features.into_values());
+    remaining.sort_by(|f1, f2| f2.name.cmp(&f1.name));
+    sorted_features.extend(remaining.into_iter().map(|f| f.name.clone()).rev());
+
+    sorted_features
 }
 
-fn get_feature_map(raw: Vec<Feature>) -> HashMap<String, Feature> {
+/// Parses the raw [`DbFeature`] into a map of the more structured [`DocsFeature`].
+fn get_all_features(raw: Vec<DbFeature>) -> AllFeatures {
     raw.into_iter()
         .filter(|feature| !feature.is_private())
-        .map(|feature| (feature.name.clone(), feature))
+        .map(|feature| {
+            (
+                feature.name.clone(),
+                Feature {
+                    name: feature.name,
+                    subfeatures: feature.subfeatures,
+                    is_default: false,
+                },
+            )
+        })
         .collect()
 }
 
@@ -131,27 +182,27 @@ mod tests {
 
     #[test]
     fn test_feature_map_filters_private() {
-        let private1 = Feature::new("_private1".into(), vec!["feature1".into()]);
-        let feature2 = Feature::new("feature2".into(), Vec::new());
+        let private1 = DbFeature::new("_private1".into(), vec!["feature1".into()]);
+        let feature2 = DbFeature::new("feature2".into(), Vec::new());
 
         let raw = vec![private1.clone(), feature2.clone()];
-        let feature_map = get_feature_map(raw);
+        let all_features = get_all_features(raw);
 
-        assert_eq!(feature_map.len(), 1);
-        assert!(feature_map.contains_key(&feature2.name));
-        assert!(!feature_map.contains_key(&private1.name));
+        assert_eq!(all_features.len(), 1);
+        assert!(all_features.contains_key(&feature2.name));
+        assert!(!all_features.contains_key(&private1.name));
     }
 
     #[test]
     fn test_default_tree_structure_with_nested_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), vec!["feature1".into()]);
-        let non_default = Feature::new("non-default".into(), Vec::new());
-        let feature1 = Feature::new(
+        let default = DbFeature::new(DEFAULT_NAME.into(), vec!["feature1".into()]);
+        let non_default = DbFeature::new("non-default".into(), Vec::new());
+        let feature1 = DbFeature::new(
             "feature1".into(),
             vec!["feature2".into(), "feature3".into()],
         );
-        let feature2 = Feature::new("feature2".into(), Vec::new());
-        let feature3 = Feature::new("feature3".into(), Vec::new());
+        let feature2 = DbFeature::new("feature2".into(), Vec::new());
+        let feature3 = DbFeature::new("feature3".into(), Vec::new());
 
         let raw = vec![
             default.clone(),
@@ -160,86 +211,98 @@ mod tests {
             feature2.clone(),
             feature1.clone(),
         ];
-        let mut feature_map = get_feature_map(raw);
-        let default_tree = get_tree_structure_from_default(&mut feature_map);
+        let mut all_features = get_all_features(raw);
+        let sorted_features = get_sorted_features(&mut all_features);
 
-        assert_eq!(feature_map.len(), 1);
-        assert_eq!(default_tree.len(), 4);
-        assert!(feature_map.contains_key(&non_default.name));
-        assert!(!feature_map.contains_key(&default.name));
-        assert_eq!(default_tree[0], default);
-        assert_eq!(default_tree[1], feature1);
-        assert_eq!(default_tree[2], feature2);
-        assert_eq!(default_tree[3], feature3);
+        assert_eq!(all_features.len(), 5);
+
+        assert_eq!(
+            sorted_features,
+            vec![
+                "default".to_string(),
+                "feature1".into(),
+                "feature2".into(),
+                "feature3".into(),
+                "non-default".into()
+            ]
+        );
+        assert!(all_features["feature3"].is_default);
+        assert!(!all_features["non-default"].is_default);
     }
 
     #[test]
     fn test_default_tree_structure_without_default() {
-        let feature1 = Feature::new(
+        let feature1 = DbFeature::new(
             "feature1".into(),
             vec!["feature2".into(), "feature3".into()],
         );
-        let feature2 = Feature::new("feature2".into(), Vec::new());
-        let feature3 = Feature::new("feature3".into(), Vec::new());
+        let feature2 = DbFeature::new("feature2".into(), Vec::new());
+        let feature3 = DbFeature::new("feature3".into(), Vec::new());
 
         let raw = vec![feature3.clone(), feature2.clone(), feature1.clone()];
-        let mut feature_map = get_feature_map(raw);
-        let default_tree = get_tree_structure_from_default(&mut feature_map);
+        let mut all_features = get_all_features(raw);
+        let sorted_features = get_sorted_features(&mut all_features);
 
-        assert_eq!(feature_map.len(), 3);
-        assert_eq!(default_tree.len(), 0);
-        assert!(feature_map.contains_key(&feature1.name));
-        assert!(feature_map.contains_key(&feature2.name));
-        assert!(feature_map.contains_key(&feature3.name));
+        assert_eq!(
+            sorted_features,
+            vec!["feature1".to_string(), "feature2".into(), "feature3".into()]
+        );
+        assert!(!all_features["feature1"].is_default);
+        assert!(!all_features["feature2"].is_default);
+        assert!(!all_features["feature3"].is_default);
     }
 
     #[test]
     fn test_default_tree_structure_single_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), Vec::new());
-        let non_default = Feature::new("non-default".into(), Vec::new());
+        let default = DbFeature::new(DEFAULT_NAME.into(), Vec::new());
+        let non_default = DbFeature::new("non-default".into(), Vec::new());
 
         let raw = vec![default.clone(), non_default.clone()];
-        let mut feature_map = get_feature_map(raw);
-        let default_tree = get_tree_structure_from_default(&mut feature_map);
+        let mut all_features = get_all_features(raw);
+        let sorted_features = get_sorted_features(&mut all_features);
 
-        assert_eq!(feature_map.len(), 1);
-        assert_eq!(default_tree.len(), 1);
-        assert!(feature_map.contains_key(&non_default.name));
-        assert!(!feature_map.contains_key(&default.name));
-        assert_eq!(default_tree[0], default);
+        assert_eq!(
+            sorted_features,
+            vec!["default".to_string(), "non-default".into()]
+        );
+        assert!(all_features["default"].is_default);
+        assert!(!all_features["non-default"].is_default);
     }
 
     #[test]
     fn test_order_features_and_get_len_without_default() {
-        let feature1 = Feature::new(
+        let feature1 = DbFeature::new(
             "feature1".into(),
             vec!["feature10".into(), "feature11".into()],
         );
-        let feature2 = Feature::new("feature2".into(), vec!["feature20".into()]);
-        let feature3 = Feature::new("feature3".into(), Vec::new());
+        let feature2 = DbFeature::new("feature2".into(), vec!["feature20".into()]);
+        let feature3 = DbFeature::new("feature3".into(), Vec::new());
 
         let raw = vec![feature3.clone(), feature2.clone(), feature1.clone()];
-        let (features, default_len) = order_features_and_count_default_len(raw);
+        let (_all_features, sorted_features, default_len) =
+            order_features_and_count_default_len(raw);
 
-        assert_eq!(features.len(), 3);
+        assert_eq!(
+            sorted_features,
+            vec!["feature1".to_string(), "feature2".into(), "feature3".into()]
+        );
         assert_eq!(default_len, 0);
-        assert_eq!(features[0], feature1);
-        assert_eq!(features[1], feature2);
-        assert_eq!(features[2], feature3);
     }
 
     #[test]
     fn test_order_features_and_get_len_single_default() {
-        let default = Feature::new(DEFAULT_NAME.into(), Vec::new());
-        let non_default = Feature::new("non-default".into(), Vec::new());
+        let default = DbFeature::new(DEFAULT_NAME.into(), Vec::new());
+        let non_default = DbFeature::new("non-default".into(), Vec::new());
 
         let raw = vec![default.clone(), non_default.clone()];
-        let (features, default_len) = order_features_and_count_default_len(raw);
+        let (_all_features, sorted_features, default_len) =
+            order_features_and_count_default_len(raw);
 
-        assert_eq!(features.len(), 2);
+        assert_eq!(
+            sorted_features,
+            vec!["default".to_string(), "non-default".into()]
+        );
         assert_eq!(default_len, 1);
-        assert_eq!(features[0], default);
-        assert_eq!(features[1], non_default);
     }
 
     #[test]
