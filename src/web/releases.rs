@@ -120,7 +120,7 @@ pub(crate) async fn get_releases(
             version: row.get(1),
             description: row.get(2),
             target_name: row.get(3),
-            rustdoc_status: row.get(4),
+            rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
             build_time: row.get(5),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
             has_unyanked_releases: None,
@@ -787,10 +787,11 @@ pub(crate) async fn build_queue_handler(
 mod tests {
     use super::*;
     use crate::db::types::BuildStatus;
+    use crate::db::{finish_build, initialize_build, initialize_crate, initialize_release};
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
         assert_cache_control, assert_redirect, assert_redirect_unchecked, assert_success,
-        fake_release_that_failed_before_build, wrapper, FakeBuild, TestFrontend,
+        async_wrapper, fake_release_that_failed_before_build, wrapper, FakeBuild, TestFrontend,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -799,6 +800,40 @@ mod tests {
     use reqwest::StatusCode;
     use serde_json::json;
     use test_case::test_case;
+
+    #[test]
+    fn test_release_list_with_incomplete_release_and_successful_build() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
+
+            let crate_id = initialize_crate(&mut conn, "foo").await?;
+            let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            finish_build(
+                &mut conn,
+                build_id,
+                "rustc-version",
+                "docs.rs 4.0.0",
+                BuildStatus::Success,
+                None,
+            )
+            .await?;
+
+            let releases = get_releases(&mut conn, 1, 10, Order::ReleaseTime, false).await?;
+
+            assert_eq!(
+                vec!["foo"],
+                releases
+                    .iter()
+                    .map(|release| release.name.as_str())
+                    .collect::<Vec<_>>(),
+            );
+
+            Ok(())
+        })
+    }
 
     #[test]
     fn get_releases_by_stars() {
