@@ -26,7 +26,8 @@ fn build_static_css_response(content: &'static str) -> impl IntoResponse {
 }
 
 async fn set_needed_static_headers(req: Request, next: Next) -> Response {
-    let is_opensearch_xml = req.uri().path().ends_with("/opensearch.xml");
+    let req_path = req.uri().path();
+    let is_opensearch_xml = req_path.ends_with("/opensearch.xml");
 
     let mut response = next.run(req).await;
 

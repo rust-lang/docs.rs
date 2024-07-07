@@ -311,7 +311,7 @@ impl IconType {
             IconType::Brand => font_awesome_as_a_crate::Type::Brands,
         };
 
-        let icon_file_string = font_awesome_as_a_crate::svg(type_, &icon_name[..]).unwrap_or("");
+        let icon_file_string = font_awesome_as_a_crate::svg(type_, icon_name).unwrap_or("");
 
         let mut classes = vec!["fa-svg"];
         if fw {

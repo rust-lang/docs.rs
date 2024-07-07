@@ -1,4 +1,3 @@
-use super::TemplateData;
 use crate::web::{csp::Csp, error::AxumNope};
 use axum::{
     body::Body,
@@ -25,7 +24,7 @@ macro_rules! impl_axum_webpage {
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
     ) => {
-        impl crate::web::page::web_page::AddCspNonce for $page {
+        impl $crate::web::page::web_page::AddCspNonce for $page {
             fn render_with_csp_nonce(&mut self, csp_nonce: String) -> rinja::Result<String> {
                 self.csp_nonce = csp_nonce;
                 self.render()
@@ -103,7 +102,6 @@ pub(crate) struct DelayedTemplateRender {
 
 fn render_response(
     mut response: AxumResponse,
-    bla: Arc<TemplateData>,
     csp_nonce: String,
 ) -> BoxFuture<'static, AxumResponse> {
     async move {
@@ -138,7 +136,6 @@ fn render_response(
                     } else {
                         return render_response(
                             AxumNope::InternalError(err.into()).into_response(),
-                            bla,
                             csp_nonce,
                         )
                         .await;
@@ -159,12 +156,6 @@ fn render_response(
 }
 
 pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) -> AxumResponse {
-    let templates: Arc<TemplateData> = req
-        .extensions()
-        .get::<Arc<TemplateData>>()
-        .expect("template data request extension not found")
-        .clone();
-
     let csp_nonce = req
         .extensions()
         .get::<Arc<Csp>>()
@@ -174,5 +165,5 @@ pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) ->
 
     let response = next.run(req).await;
 
-    render_response(response, templates, csp_nonce).await
+    render_response(response, csp_nonce).await
 }
