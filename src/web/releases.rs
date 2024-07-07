@@ -1657,12 +1657,13 @@ mod tests {
         wrapper(|env| {
             let web = env.frontend();
 
-            let empty_data = format!("data: [{}]", vec!["0"; 30].join(","));
+            let empty_data = format!("data: [{}]", vec!["0"; 30].join(", "));
 
             // no data / only zeros without releases
             let response = web.get("/releases/activity/").send()?;
             assert!(response.status().is_success());
-            assert_eq!(response.text().unwrap().matches(&empty_data).count(), 2);
+            let text = response.text();
+            assert_eq!(text.unwrap().matches(&empty_data).count(), 2);
 
             env.fake_release().name("some_random_crate").create()?;
             env.fake_release()
@@ -1690,9 +1691,9 @@ mod tests {
             assert!(response.status().is_success());
             let text = response.text().unwrap();
             // counts contain both releases
-            assert!(text.contains(&format!("data: [{},2]", vec!["0"; 29].join(","))));
+            assert!(text.contains(&format!("data: [{}, 2]", vec!["0"; 29].join(", "))));
             // failures only one
-            assert!(text.contains(&format!("data: [{},1]", vec!["0"; 29].join(","))));
+            assert!(text.contains(&format!("data: [{}, 1]", vec!["0"; 29].join(", "))));
 
             Ok(())
         })
