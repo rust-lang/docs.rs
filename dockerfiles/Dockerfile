@@ -55,7 +55,7 @@ COPY build.rs build.rs
 RUN touch build.rs
 COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
-COPY templates/style templates/style
+COPY templates templates/
 COPY vendor vendor/
 COPY assets assets/
 COPY .sqlx .sqlx/
