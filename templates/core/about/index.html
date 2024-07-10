@@ -37,8 +37,23 @@
         <h3 id="version"> <a href="#version">Version</a> </h3>
         <p>Currently running Docs.rs version is: <strong>{{ docsrs_version() }}</strong></p>
 
-        <h3 id="builds"> <a href="#builds">Version</a> </h3>
+        <h3 id="builds"> <a href="#builds">Builds</a> </h3>
         <p>Summaries of the documentation build processes <a href="/releases">are available at /releases/</a>.</p>
+
+        <h3 id="javascript"> <a href="#javascript">JavaScript</a> </h3>
+        <p>
+            JavaScript in support of documentation is allowed but not guaranteed to work on docs.rs. What that
+            means: If you write documentation that inlines some JavaScript (like
+            <a href="https://katex.org/">KaTeX</a>), that's allowed, and
+            will probably work today but may break in the future.
+        </p>
+
+        <p>
+            However, it's not allowed to put JavaScript or other content in docs
+            published on docs.rs for the purpose of tracking visitors. For instance, adding Google Analytics
+            scripts, tracking pixels, or site verification for services like Google Search Console.  Crates
+            that do this will have the relevant versions removed and may be blocked from docs.rs.
+        </p>
 
         <h3 id="contact"> <a href="#contact">Contact</a> </h3>
         {%- set governance_link = "https://www.rust-lang.org/governance/teams/dev-tools#docs-rs" -%}
