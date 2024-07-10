@@ -158,7 +158,7 @@ mod tests {
             assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
-                Some(&"application/javascript".parse().unwrap()),
+                Some(&"text/javascript".parse().unwrap()),
             );
             assert!(resp.content_length().unwrap() > 10);
             assert!(resp.text()?.contains(expected_content));

@@ -813,7 +813,7 @@ fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
                 Some("markdown") => "text/markdown",
                 Some("css") => "text/css",
                 Some("toml") => "text/toml",
-                Some("js") => "application/javascript",
+                Some("js") => "text/javascript",
                 Some("json") => "application/json",
                 _ => mime,
             }
@@ -852,7 +852,7 @@ mod test {
         check_mime(".gitignore", "text/plain");
         check_mime("hello.toml", "text/toml");
         check_mime("hello.css", "text/css");
-        check_mime("hello.js", "application/javascript");
+        check_mime("hello.js", "text/javascript");
         check_mime("hello.html", "text/html");
         check_mime("hello.hello.md", "text/markdown");
         check_mime("hello.markdown", "text/markdown");
