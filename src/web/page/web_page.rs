@@ -1,4 +1,4 @@
-use crate::web::{csp::Csp, error::AxumNope};
+use crate::web::{csp::Csp, error::AxumNope, TemplateData};
 use axum::{
     body::Body,
     extract::Request as AxumRequest,
@@ -96,38 +96,38 @@ macro_rules! impl_axum_webpage {
 #[derive(Clone)]
 pub(crate) struct DelayedTemplateRender {
     pub template: Arc<Box<dyn AddCspNonce + Send + Sync>>,
-    #[allow(dead_code)]
     pub cpu_intensive_rendering: bool,
 }
 
 fn render_response(
     mut response: AxumResponse,
+    templates: Arc<TemplateData>,
     csp_nonce: String,
 ) -> BoxFuture<'static, AxumResponse> {
     async move {
         if let Some(render) = response.extensions_mut().remove::<DelayedTemplateRender>() {
-            let DelayedTemplateRender { template, .. } = render;
+            let DelayedTemplateRender {
+                template,
+                cpu_intensive_rendering,
+            } = render;
+            let mut template = Arc::into_inner(template).unwrap();
+            let csp_nonce_clone = csp_nonce.clone();
 
-            // let rendered = if cpu_intensive_rendering {
-            //     templates
-            //         .render_in_threadpool(move |templates| {
-            //             templates
-            //                 .templates
-            //                 .render(&template, &context)
-            //                 .map_err(Into::into)
-            //         })
-            //         .await
-            // } else {
-            //     templates
-            //         .templates
-            //         .render(&template, &context)
-            //         .map_err(Error::new)
-            // };
+            let result: Result<String, anyhow::Error> = if cpu_intensive_rendering {
+                templates
+                    .render_in_threadpool(move || {
+                        template
+                            .render_with_csp_nonce(csp_nonce_clone)
+                            .map_err(|err| err.into())
+                    })
+                    .await
+            } else {
+                template
+                    .render_with_csp_nonce(csp_nonce_clone)
+                    .map_err(|err| err.into())
+            };
 
-            let rendered = match Arc::into_inner(template)
-                .unwrap()
-                .render_with_csp_nonce(csp_nonce.clone())
-            {
+            let rendered = match result {
                 Ok(content) => content,
                 Err(err) => {
                     if response.status().is_server_error() {
@@ -135,7 +135,8 @@ fn render_response(
                         panic!("error while serving error page: {err:?}");
                     } else {
                         return render_response(
-                            AxumNope::InternalError(err.into()).into_response(),
+                            AxumNope::InternalError(err).into_response(),
+                            templates,
                             csp_nonce,
                         )
                         .await;
@@ -156,6 +157,12 @@ fn render_response(
 }
 
 pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) -> AxumResponse {
+    let templates: Arc<TemplateData> = req
+        .extensions()
+        .get::<Arc<TemplateData>>()
+        .expect("template data request extension not found")
+        .clone();
+
     let csp_nonce = req
         .extensions()
         .get::<Arc<Csp>>()
@@ -165,5 +172,5 @@ pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) ->
 
     let response = next.run(req).await;
 
-    render_response(response, csp_nonce).await
+    render_response(response, templates, csp_nonce).await
 }
