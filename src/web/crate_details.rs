@@ -1,4 +1,4 @@
-use super::{markdown, match_version, MetaData};
+use super::{match_version, MetaData};
 use crate::registry_api::OwnerKind;
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::web::rustdoc::RustdocHtmlParams;
@@ -27,22 +27,19 @@ use log::warn;
 use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
-use serde::{ser::Serializer, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
 // TODO: Add target name and versions
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrateDetails {
     pub(crate) name: String,
     pub(crate) version: Version,
     pub(crate) description: Option<String>,
     pub(crate) owners: Vec<(String, String, OwnerKind)>,
     pub(crate) dependencies: Option<Value>,
-    #[serde(serialize_with = "optional_markdown")]
     readme: Option<String>,
-    #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
     release_time: Option<DateTime<Utc>>,
     build_status: BuildStatus,
@@ -71,7 +68,7 @@ pub(crate) struct CrateDetails {
     pub(crate) release_id: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct RepositoryMetadata {
     stars: i32,
     forks: i32,
@@ -79,17 +76,7 @@ struct RepositoryMetadata {
     name: Option<String>,
 }
 
-fn optional_markdown<S>(markdown: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    markdown
-        .as_ref()
-        .map(|markdown| markdown::render(markdown))
-        .serialize(serializer)
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct Release {
     pub id: i32,
     pub version: semver::Version,
@@ -425,7 +412,7 @@ pub(crate) async fn releases_for_crate(
 
 #[derive(Template)]
 #[template(path = "crate/details.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct CrateDetailsPage {
     details: CrateDetails,
     csp_nonce: String,
@@ -507,7 +494,7 @@ pub(crate) async fn crate_details_handler(
 
 #[derive(Template)]
 #[template(path = "rustdoc/releases.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct ReleaseList {
     releases: Vec<Release>,
     crate_name: String,
@@ -600,7 +587,7 @@ pub(crate) async fn get_all_releases(
     Ok(res.into_response())
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct ShortMetadata {
     name: String,
     version: Version,
@@ -617,7 +604,7 @@ impl ShortMetadata {
 
 #[derive(Template)]
 #[template(path = "rustdoc/platforms.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct PlatformList {
     metadata: ShortMetadata,
     inner_path: String,

@@ -290,7 +290,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(|| async {
                 #[derive(Template)]
                 #[template(path = "storage-change-detection.html")]
-                #[derive(Debug, Clone, serde::Serialize)]
+                #[derive(Debug, Clone)]
                 struct StorageChangeDetection {
                     csp_nonce: String,
                 }

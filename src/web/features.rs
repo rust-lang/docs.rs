@@ -14,14 +14,13 @@ use crate::{
 use anyhow::anyhow;
 use axum::response::IntoResponse;
 use rinja::Template;
-use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 
 const DEFAULT_NAME: &str = "default";
 
 #[derive(Template)]
 #[template(path = "crate/features.html")]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 struct FeaturesPage {
     metadata: MetaData,
     features: Option<Vec<Feature>>,

@@ -14,12 +14,12 @@ use axum::{response::IntoResponse, Extension};
 use axum_extra::headers::HeaderMapExt;
 use rinja::Template;
 use semver::Version;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
 
 /// A source file's name and mime type
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 struct File {
     /// The name of the file
     name: String,
@@ -43,7 +43,7 @@ impl File {
 }
 
 /// A list of source files
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 struct FileList {
     files: Vec<File>,
 }
@@ -145,7 +145,7 @@ impl FileList {
 
 #[derive(Template)]
 #[template(path = "crate/source.html")]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 struct SourcePage {
     file_list: FileList,
     metadata: MetaData,
@@ -155,7 +155,6 @@ struct SourcePage {
     canonical_url: CanonicalUrl,
     is_file_too_large: bool,
     is_latest_url: bool,
-    use_direct_platform_links: bool,
     csp_nonce: String,
 }
 
@@ -340,7 +339,6 @@ pub(crate) async fn source_browser_handler(
         canonical_url,
         is_file_too_large,
         is_latest_url: params.version.is_latest(),
-        use_direct_platform_links: true,
         csp_nonce: String::new(),
     }
     .into_response())

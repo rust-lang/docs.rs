@@ -16,10 +16,10 @@ use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
 use rinja::Template;
 use semver::Version;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BuildDetails {
     id: i32,
     rustc_version: Option<String>,
@@ -32,7 +32,7 @@ pub(crate) struct BuildDetails {
 
 #[derive(Template)]
 #[template(path = "crate/build_details.html")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BuildDetailsPage {
     metadata: MetaData,
     build_details: BuildDetails,

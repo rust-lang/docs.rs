@@ -28,7 +28,7 @@ use axum::{
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
 use semver::Version;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
@@ -257,12 +257,10 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct RustdocPage {
     pub latest_path: String,
     pub permalink_path: String,
-    pub latest_version: String,
-    pub target: String,
     pub inner_path: String,
     // true if we are displaying the latest version of the crate, regardless
     // of whether the URL specifies a version number or the string "latest."
@@ -604,12 +602,6 @@ pub(crate) async fn rustdoc_html_server_handler(
         .recently_accessed_releases
         .record(krate.crate_id, krate.release_id, target);
 
-    let target = if target.is_empty() {
-        String::new()
-    } else {
-        format!("{target}/")
-    };
-
     // Build the page of documentation,
     templates
         .render_in_threadpool({
@@ -619,8 +611,6 @@ pub(crate) async fn rustdoc_html_server_handler(
                 Ok(RustdocPage {
                     latest_path,
                     permalink_path,
-                    latest_version: latest_version.to_string(),
-                    target,
                     inner_path,
                     is_latest_version,
                     is_latest_url: params.version.is_latest(),
