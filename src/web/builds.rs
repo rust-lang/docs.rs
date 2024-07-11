@@ -29,11 +29,9 @@ use constant_time_eq::constant_time_eq;
 use http::StatusCode;
 use rinja::Template;
 use semver::Version;
-use serde::Serialize;
-use serde_json::json;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Build {
     id: i32,
     rustc_version: Option<String>,
@@ -45,7 +43,7 @@ pub(crate) struct Build {
 
 #[derive(Template)]
 #[template(path = "crate/builds.html")]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
@@ -235,7 +233,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
     .await
     .map_err(|e| JsonAxumNope(e.into()))?;
 
-    Ok((StatusCode::CREATED, Json(json!({}))))
+    Ok((StatusCode::CREATED, Json(serde_json::json!({}))))
 }
 
 async fn get_builds(

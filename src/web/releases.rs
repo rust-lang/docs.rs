@@ -301,7 +301,7 @@ async fn get_search_results(
 
 #[derive(Template)]
 #[template(path = "core/home.html")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct HomePage {
     recent_releases: Vec<Release>,
     csp_nonce: String,
@@ -330,7 +330,7 @@ pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoRes
 
 #[derive(Template)]
 #[template(path = "releases/feed.xml")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ReleaseFeed {
     recent_releases: Vec<Release>,
     csp_nonce: String,
@@ -352,7 +352,7 @@ pub(crate) async fn releases_feed_handler(mut conn: DbConnection) -> AxumResult<
 
 #[derive(Template)]
 #[template(path = "releases/releases.html")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ViewReleases {
     releases: Vec<Release>,
     description: String,
@@ -372,8 +372,7 @@ impl ViewReleases {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ReleaseType {
     Recent,
     Stars,
@@ -496,7 +495,7 @@ pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl 
 
 #[derive(Template)]
 #[template(path = "releases/search_results.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub(super) struct Search {
     pub(super) title: String,
     pub(super) releases: Vec<Release>,
@@ -506,7 +505,6 @@ pub(super) struct Search {
     pub(super) next_page_link: Option<String>,
     /// This should always be `ReleaseType::Search`
     pub(super) release_type: ReleaseType,
-    #[serde(skip)]
     pub(super) status: http::StatusCode,
     pub(super) csp_nonce: String,
 }
@@ -732,7 +730,7 @@ pub(crate) async fn search_handler(
 
 #[derive(Template)]
 #[template(path = "releases/activity.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct ReleaseActivity {
     description: &'static str,
     dates: Vec<String>,

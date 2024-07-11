@@ -49,7 +49,6 @@ use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use semver::{Version, VersionReq};
-use serde::Serialize;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     borrow::{Borrow, Cow},
@@ -618,7 +617,8 @@ where
 }
 
 /// MetaData used in header
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub(crate) struct MetaData {
     pub(crate) name: String,
     /// The exact version of the release being shown.
@@ -721,13 +721,12 @@ impl MetaData {
 
 #[derive(Template)]
 #[template(path = "error.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AxumErrorPage {
     /// The title of the page
     pub title: &'static str,
     /// The error message, displayed as a description
     pub message: Cow<'static, str>,
-    #[serde(skip)]
     pub status: StatusCode,
     pub csp_nonce: String,
 }

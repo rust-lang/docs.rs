@@ -15,13 +15,12 @@ use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use chrono::{TimeZone, Utc};
 use futures_util::stream::TryStreamExt;
 use rinja::Template;
-use serde::Serialize;
 use std::sync::Arc;
 
 /// sitemap index
 #[derive(Template)]
 #[template(path = "core/sitemapindex.xml")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapIndexXml {
     sitemaps: Vec<char>,
     csp_nonce: String,
@@ -41,7 +40,7 @@ pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapRow {
     crate_name: String,
     last_modified: String,
@@ -51,7 +50,7 @@ struct SitemapRow {
 /// The sitemap
 #[derive(Template)]
 #[template(path = "core/sitemap.xml")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapXml {
     releases: Vec<SitemapRow>,
     csp_nonce: String,
@@ -112,7 +111,7 @@ pub(crate) async fn sitemap_handler(
 
 #[derive(Template)]
 #[template(path = "core/about/builds.html")]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct AboutBuilds {
     /// The current version of rustc that docs.rs is using to build crates
     rustc_version: Option<String>,
