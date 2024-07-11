@@ -119,31 +119,33 @@ mod tests {
     use std::io::Write;
     use zip::write::SimpleFileOptions;
 
-    fn create_test_archive() -> fs::File {
+    fn create_test_archive(file_count: u32) -> fs::File {
         let mut tf = tempfile::tempfile().unwrap();
 
         let objectcontent: Vec<u8> = (0..255).collect();
 
         let mut archive = zip::ZipWriter::new(tf);
-        archive
-            .start_file(
-                "testfile1",
-                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Bzip2),
-            )
-            .unwrap();
-        archive.write_all(&objectcontent).unwrap();
+        for i in 0..file_count {
+            archive
+                .start_file(
+                    format!("testfile{i}"),
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Bzip2),
+                )
+                .unwrap();
+            archive.write_all(&objectcontent).unwrap();
+        }
         tf = archive.finish().unwrap();
         tf
     }
 
     #[test]
     fn index_create_save_load_sqlite() {
-        let mut tf = create_test_archive();
+        let mut tf = create_test_archive(1);
 
         let tempfile = tempfile::NamedTempFile::new().unwrap().into_temp_path();
         create(&mut tf, &tempfile).unwrap();
 
-        let fi = find_in_file(&tempfile, "testfile1").unwrap().unwrap();
+        let fi = find_in_file(&tempfile, "testfile0").unwrap().unwrap();
 
         assert_eq!(fi.range, FileRange::new(39, 459));
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
@@ -151,5 +153,26 @@ mod tests {
         assert!(find_in_file(&tempfile, "some_other_file",)
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn archive_with_more_than_65k_files() {
+        let mut tf = create_test_archive(100_000);
+
+        let tempfile = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+        create(&mut tf, &tempfile).unwrap();
+
+        let connection = Connection::open_with_flags(
+            tempfile,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .unwrap();
+        let mut stmt = connection.prepare("SELECT count(*) FROM files").unwrap();
+
+        let count = stmt
+            .query_row([], |row| Ok(row.get::<_, usize>(0)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(count, 100_000);
     }
 }
