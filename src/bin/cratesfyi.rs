@@ -583,8 +583,8 @@ impl DatabaseSubcommand {
                             "
                             SELECT c.name, r.version, r.release_time
                             FROM crates c, releases r
-                            WHERE c.id = r.crate_id
-                            ORDER BY r.id
+                            WHERE c.id = r.crate_id AND r.release_time IS NOT NULL
+                            ORDER BY r.release_time DESC
                         "
                         )
                         .fetch(&mut *conn);
