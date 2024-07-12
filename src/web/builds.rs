@@ -427,6 +427,7 @@ mod tests {
     #[test]
     fn build_trigger_rebuild_missing_config() {
         wrapper(|env| {
+            env.override_config(|config| config.cratesio_token = None);
             env.fake_release().name("foo").version("0.1.0").create()?;
 
             {
