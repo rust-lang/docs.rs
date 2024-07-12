@@ -28,7 +28,7 @@ type FileRange = RangeInclusive<u64>;
 
 #[derive(Debug, thiserror::Error)]
 #[error("path not found")]
-pub(crate) struct PathNotFoundError;
+pub struct PathNotFoundError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
@@ -304,7 +304,7 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(super) async fn download_archive_index(
+    pub async fn download_archive_index(
         &self,
         archive_path: &str,
         latest_build_id: i32,
@@ -823,11 +823,11 @@ fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
     }
 }
 
-pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
+pub fn rustdoc_archive_path(name: &str, version: &str) -> String {
     format!("rustdoc/{name}/{version}.zip")
 }
 
-pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
+pub fn source_archive_path(name: &str, version: &str) -> String {
     format!("sources/{name}/{version}.zip")
 }
 
