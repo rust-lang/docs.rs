@@ -577,6 +577,23 @@ impl DatabaseSubcommand {
                 let build_queue = ctx.build_queue()?;
                 ctx.runtime()?
                     .block_on(async {
+                        async fn queue_rebuild(
+                            build_queue: Arc<BuildQueue>,
+                            name: &str,
+                            version: &str,
+                        ) -> Result<()> {
+                            spawn_blocking({
+                                let name = name.to_owned();
+                                let version = version.to_owned();
+                                move || {
+                                    if !build_queue.has_build_queued(&name, &version)? {
+                                        build_queue.add_crate(&name, &version, 5, None)?;
+                                    }
+                                    Ok(())
+                                }
+                            })
+                            .await
+                        }
                         let storage = ctx.async_storage().await?;
                         let mut conn = pool.get_async().await?;
                         let mut result_stream = sqlx::query!(
@@ -615,11 +632,18 @@ impl DatabaseSubcommand {
                                 };
 
                                 let count = {
-                                    let connection = Connection::open_with_flags(
+                                    let connection = match Connection::open_with_flags(
                                         &local_archive_index_filename,
                                         OpenFlags::SQLITE_OPEN_READ_ONLY
                                             | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-                                    )?;
+                                    ) {
+                                        Ok(conn) => conn,
+                                        Err(err) => {
+                                            println!("... error opening sqlite db, queueing rebuild: {:?}", err);
+                                            queue_rebuild(build_queue.clone(), &row.name, &row.version).await?;
+                                            continue;
+                                        }
+                                    };
                                     let mut stmt =
                                         connection.prepare("SELECT count(*) FROM files")?;
 
@@ -630,13 +654,8 @@ impl DatabaseSubcommand {
 
                                 if count >= 65000 {
                                     println!("...big index, queueing rebuild");
-                                    spawn_blocking({
-                                        let build_queue = build_queue.clone();
-                                        let name = row.name.clone();
-                                        let version = row.version.clone();
-                                        move || build_queue.add_crate(&name, &version, 5, None)
-                                    })
-                                    .await?;
+                                    queue_rebuild(build_queue.clone(), &row.name, &row.version)
+                                        .await?;
                                 }
                             }
                         }
