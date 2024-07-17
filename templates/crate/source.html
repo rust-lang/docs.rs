@@ -127,8 +127,15 @@
                 {% else %}
                     {% set file_name = "" %}
                 {% endif %}
-                <div id="source-code" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
-                    {{- file_content|highlight(file_name)|safe -}}
+                <div id="source-code-container" class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24">
+                    <div data-nosnippet class="source-code"><pre id="line-numbers"><code>
+                        {%- for line in 1..=file_content.lines().count() -%}
+                            <a href="#{{line|safe}}" id="{{line|safe}}">{{line|safe}}</a>
+                        {%~ endfor -%}
+                    </code></pre></div>
+                    <div id="source-code" class="source-code">
+                        {{- file_content|highlight(file_name)|safe -}}
+                    </div>
                 </div>
             {%- endif -%}
         </div>

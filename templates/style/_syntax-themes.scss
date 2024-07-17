@@ -15,6 +15,8 @@ html {
   --color-syntax-question-mark: #ff9011;
   --color-syntax-self: #c82829;
   --color-syntax-string: #718c00;
+  --color-line-number: #c67e2d;
+  --color-line-number-highlighted: #fdffd3;
 }
 
 // To add a new theme, copy the above theme into a new `html[data-docs-rs-theme="name"]`
@@ -37,6 +39,8 @@ html[data-docs-rs-theme="dark"] {
   --color-syntax-question-mark: #ff9011;
   --color-syntax-self: #ee6868;
   --color-syntax-string: #83a300;
+  --color-line-number: #3b91e2;
+  --color-line-number-highlighted: #0a042f;
 }
 
 html[data-docs-rs-theme="ayu"] {
@@ -56,4 +60,6 @@ html[data-docs-rs-theme="ayu"] {
   --color-syntax-question-mark: #ff9011;
   --color-syntax-self: #36a3d9;
   --color-syntax-string: #b8cc52;
+  --color-line-number: #708090;
+  --color-line-number-highlighted: #272b2e;
 }
