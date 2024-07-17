@@ -1,5 +1,13 @@
 @import "syntax-themes";
 
+#line-numbers > code > a, #line-numbers > code > a:visited  {
+  color: var(--color-line-number);
+}
+
+.line-number-highlighted {
+  background-color: var(--color-line-number-highlighted);
+}
+
 pre > code {
   color: var(--color-syntax-foreground);
   background-color: var(--color-syntax-background);

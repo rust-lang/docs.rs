@@ -886,23 +886,40 @@ ul.pure-menu-list {
         }
     }
 
-    #source-code {
-        pre {
-            margin-top: 0;
-            margin-bottom: 0;
-            height: 100%;
-
-            code {
-                height: 100%;
-            }
-        }
-
-        &.expanded {
-            width: calc(100% - 46px);
-        }
-    }
-
     #source-warning {
         height: 100%;
     }
+}
+
+#source-code-container {
+    display: inline-flex;
+    overflow: scroll;
+}
+#line-numbers {
+    text-align: right;
+    letter-spacing: normal;
+}
+#line-numbers > code > a  {
+    padding: 0 8px;
+}
+// This class is used to the source code and the line number container in the
+// `crate/**/source/*` view
+.source-code {
+    pre {
+        margin-top: 0;
+        margin-bottom: 0;
+        height: 100%;
+
+        code {
+            height: 100%;
+        }
+    }
+
+    &.expanded {
+        width: calc(100% - 46px);
+    }
+}
+#source-code {
+    overflow: scroll;
+    width: 100%;
 }
