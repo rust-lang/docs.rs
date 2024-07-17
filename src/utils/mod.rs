@@ -110,7 +110,7 @@ where
 /// })
 /// .await?
 /// ```
-pub async fn spawn_blocking<F, R>(f: F) -> Result<R>
+pub(crate) async fn spawn_blocking<F, R>(f: F) -> Result<R>
 where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
