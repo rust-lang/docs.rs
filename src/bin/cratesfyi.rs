@@ -1,9 +1,9 @@
+use std::env;
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{env, fs};
 
 use anyhow::{anyhow, Context as _, Error, Result};
 use axum::async_trait;
@@ -11,10 +11,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
 use docs_rs::repositories::RepositoryStatsUpdater;
-use docs_rs::storage::{rustdoc_archive_path, source_archive_path, PathNotFoundError};
 use docs_rs::utils::{
     get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-    remove_crate_priority, set_config, set_crate_priority, spawn_blocking, ConfigName,
+    remove_crate_priority, set_config, set_crate_priority, ConfigName,
 };
 use docs_rs::{
     start_background_metrics_webserver, start_web_server, AsyncStorage, BuildQueue, Config,
@@ -24,7 +23,6 @@ use docs_rs::{
 use futures_util::StreamExt;
 use humantime::Duration;
 use once_cell::sync::OnceCell;
-use rusqlite::{Connection, OpenFlags};
 use sentry::TransactionContext;
 use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
@@ -511,9 +509,6 @@ enum DatabaseSubcommand {
     /// temporary commant to update the `crates.latest_version_id` field
     UpdateLatestVersionId,
 
-    /// temporary command to rebuild a subset of the archive indexes
-    FixBrokenArchiveIndexes,
-
     /// Updates Github/Gitlab stats for crates.
     UpdateRepositoryFields,
 
@@ -572,99 +567,6 @@ impl DatabaseSubcommand {
                     .context("Failed to run database migrations")?
             }
 
-            Self::FixBrokenArchiveIndexes => {
-                let pool = ctx.pool()?;
-                let build_queue = ctx.build_queue()?;
-                ctx.runtime()?
-                    .block_on(async {
-                        async fn queue_rebuild(
-                            build_queue: Arc<BuildQueue>,
-                            name: &str,
-                            version: &str,
-                        ) -> Result<()> {
-                            spawn_blocking({
-                                let name = name.to_owned();
-                                let version = version.to_owned();
-                                move || {
-                                    if !build_queue.has_build_queued(&name, &version)? {
-                                        build_queue.add_crate(&name, &version, 5, None)?;
-                                    }
-                                    Ok(())
-                                }
-                            })
-                            .await
-                        }
-                        let storage = ctx.async_storage().await?;
-                        let mut conn = pool.get_async().await?;
-                        let mut result_stream = sqlx::query!(
-                            "
-                            SELECT c.name, r.version, r.release_time
-                            FROM crates c, releases r
-                            WHERE c.id = r.crate_id AND r.release_time IS NOT NULL
-                            ORDER BY r.release_time DESC
-                        "
-                        )
-                        .fetch(&mut *conn);
-
-                        while let Some(row) = result_stream.next().await {
-                            let row = row?;
-
-                            println!(
-                                "checking index for {} {} ({:?})",
-                                row.name, row.version, row.release_time
-                            );
-
-                            for path in &[
-                                rustdoc_archive_path(&row.name, &row.version),
-                                source_archive_path(&row.name, &row.version),
-                            ] {
-                                let local_archive_index_filename = match storage
-                                    .download_archive_index(path, 42)
-                                    .await
-                                {
-                                    Ok(path) => path,
-                                    Err(err)
-                                        if err.downcast_ref::<PathNotFoundError>().is_some() =>
-                                    {
-                                        continue
-                                    }
-                                    Err(err) => return Err(err),
-                                };
-
-                                let count = {
-                                    let connection = match Connection::open_with_flags(
-                                        &local_archive_index_filename,
-                                        OpenFlags::SQLITE_OPEN_READ_ONLY
-                                            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-                                    ) {
-                                        Ok(conn) => conn,
-                                        Err(err) => {
-                                            println!("... error opening sqlite db, queueing rebuild: {:?}", err);
-                                            queue_rebuild(build_queue.clone(), &row.name, &row.version).await?;
-                                            continue;
-                                        }
-                                    };
-                                    let mut stmt =
-                                        connection.prepare("SELECT count(*) FROM files")?;
-
-                                    stmt.query_row([], |row| Ok(row.get::<_, usize>(0)))??
-                                };
-
-                                fs::remove_file(&local_archive_index_filename)?;
-
-                                if count >= 65000 {
-                                    println!("...big index, queueing rebuild");
-                                    queue_rebuild(build_queue.clone(), &row.name, &row.version)
-                                        .await?;
-                                }
-                            }
-                        }
-
-                        Ok::<(), anyhow::Error>(())
-                    })
-                    .context("Failed to queue rebuilds for big documentation sizes")?
-            }
-
             Self::UpdateLatestVersionId => {
                 let pool = ctx.pool()?;
                 ctx.runtime()?
@@ -679,7 +581,7 @@ impl DatabaseSubcommand {
                         while let Some(row) = result_stream.next().await {
                             let row = row?;
 
-                            println!("handling crate {} ", row.name);
+                            println!("handling crate {}", row.name);
 
                             db::update_latest_version_id(&mut update_conn, row.id).await?;
                         }
