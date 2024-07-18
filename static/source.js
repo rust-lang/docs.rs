@@ -39,8 +39,7 @@
         });
     });
 
-    // This code has been adapted from the rustdoc implementation here:
-    // https://github.com/rust-lang/rust/blob/5c848860/src/librustdoc/html/static/js/src-script.js#L152-L204
+    // This code has been adapted from the rustdoc implementation
     function highlightLineNumbers() {
         const match = window.location.hash.match(/^#?(\d+)(?:-(\d+))?$/);
         if (!match) {
@@ -76,7 +75,7 @@
         }
     }
 
-    const handleLineNumbers = (function () {
+    const handleLineNumbers = (function() {
         let prev_line_id = 0;
 
         const set_fragment = name => {
@@ -122,7 +121,7 @@
         };
     }());
 
-    window.addEventListener("hashchange", highlightLineNumbers)
+    window.addEventListener("hashchange", highlightLineNumbers);
 
     Array.from(document.getElementById("line-numbers").children[0].children).forEach(el => {
         el.addEventListener("click", handleLineNumbers);
