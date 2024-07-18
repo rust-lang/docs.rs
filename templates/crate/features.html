@@ -73,12 +73,12 @@
                     {%- else -%}
                         <p>This version has <b>{{ features.len() }}</b> feature flags, <b data-id="default-feature-len">{{ default_features.len() }}</b> of them enabled by <b>default</b>.</p>
                         {%- for feature in features -%}
-                            {%- let is_default = feature.name != "default" && self.is_default_feature(feature.name) -%}
+                            {%- let is_default = feature.name != "default" && is_default_feature(feature.name) -%}
                             <h3 id="{{ feature.name }}">{{ feature.name }}{%- if is_default  %} (default){%- endif -%}</h3>
                             {%- if !feature.subfeatures.is_empty() -%}
                                 <ul class="pure-menu-list">
                                     {%- for (name, feature) in feature.subfeatures -%}
-                                        {%- let is_default = self.is_default_feature(name) -%}
+                                        {%- let is_default = is_default_feature(name) -%}
                                         <li class="pure-menu-item">
                                             {%- match feature -%}
                                                 {%- when SubFeature::Feature with (feature) -%}
@@ -86,12 +86,12 @@
                                                         {{- feature -}}
                                                     </a>
                                                 {% when SubFeature::Dependency with (dependency) %}
-                                                    {%- let version = self.dependency_version(dependency) -%}
+                                                    {%- let version = dependency_version(dependency) -%}
                                                     dep:<a href="/crate/{{ dependency }}/{{ version }}">
                                                         {{- dependency -}}
                                                     </a>
                                                 {% when SubFeature::DependencyFeature with {dependency, feature, optional} %}
-                                                    {%- let version = self.dependency_version(dependency) -%}
+                                                    {%- let version = dependency_version(dependency) -%}
                                                     <a href="/crate/{{ dependency }}/{{ version }}">
                                                         {{- dependency -}}
                                                     </a>
