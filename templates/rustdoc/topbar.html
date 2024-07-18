@@ -16,7 +16,7 @@
             "version": {{ metadata.version|json_encode|safe }}
         }
     </script>
-    {%- if let Some(krate) = self.krate() -%}
+    {%- if let Some(krate) = krate() -%}
         <li class="pure-menu-item pure-menu-has-children">
             <a href="#" class="pure-menu-link crate-name" title="{{ krate.description.as_deref().unwrap_or_default() }}">
                 {{ "cube"|fas(false, false, "")|safe }}
