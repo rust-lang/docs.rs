@@ -20,6 +20,7 @@ load_metric_type!(HistogramVec as vec);
 /// the measured times from cdn invalidations, meaning:
 /// * how long an invalidation took, or
 /// * how long the invalidation was queued
+///
 /// will be put into these buckets (seconds,
 /// each entry is the upper bound).
 /// Prometheus only gets the counts per bucket in a certain

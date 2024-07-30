@@ -6,6 +6,7 @@ use std::{
 };
 
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(font_awesome_out_dir)");
     println!("cargo:rustc-cfg=font_awesome_out_dir");
     write_fontawesome_sprite();
 }

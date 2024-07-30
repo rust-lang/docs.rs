@@ -412,7 +412,7 @@ impl AsyncStorage {
 
                         let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
                         for file_path in get_file_list(&root_dir)? {
-                            let mut file = fs::File::open(&root_dir.join(&file_path))?;
+                            let mut file = fs::File::open(root_dir.join(&file_path))?;
 
                             zip.start_file(file_path.to_str().unwrap(), options)?;
                             io::copy(&mut file, &mut zip)?;
