@@ -90,6 +90,7 @@ pub(crate) struct Release {
     /// * the rest is all builds are in-progress -> InProgress
     ///   -> if we have any builds, and the previous conditions don't match, we end
     ///      up here, but we still check.
+    ///
     /// calculated in a database view : `release_build_status`
     pub build_status: BuildStatus,
     pub yanked: Option<bool>,
