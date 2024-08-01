@@ -808,7 +808,8 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
-    active_deployments: Vec<String>,
+    active_cdn_deployments: Vec<String>,
+    in_progress_builds: Vec<(String, String)>,
     csp_nonce: String,
 }
 
@@ -823,8 +824,9 @@ impl BuildQueuePage {
 pub(crate) async fn build_queue_handler(
     Extension(build_queue): Extension<Arc<BuildQueue>>,
     Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let (queue, active_deployments) = spawn_blocking(move || {
+    let (queue, active_cdn_deployments) = spawn_blocking(move || {
         let mut queue = build_queue.queued_crates()?;
         for krate in queue.iter_mut() {
             // The priority here is inverted: in the database if a crate has a higher priority it
@@ -850,10 +852,28 @@ pub(crate) async fn build_queue_handler(
     })
     .await?;
 
+    let in_progress_builds: Vec<(String, String)> = sqlx::query!(
+        r#"SELECT
+            crates.name,
+            releases.version
+         FROM builds
+         INNER JOIN releases ON releases.id = builds.rid
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE
+            builds.build_status = 'in_progress'
+         ORDER BY builds.id ASC"#
+    )
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|rec| (rec.name, rec.version))
+    .collect();
+
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
         queue,
-        active_deployments,
+        active_cdn_deployments,
+        in_progress_builds,
         csp_nonce: String::new(),
     })
 }
@@ -1725,9 +1745,9 @@ mod tests {
 
             let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             assert!(empty
-                .select(".release > strong")
+                .select(".release > div > strong")
                 .expect("missing heading")
-                .any(|el| el.text_contents().contains("active CDN deployments")));
+                .any(|el| dbg!(el.text_contents()).contains("active CDN deployments")));
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             let items = full
