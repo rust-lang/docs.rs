@@ -104,6 +104,7 @@ impl TemplateData {
 pub mod filters {
     use super::IconType;
     use chrono::{DateTime, Utc};
+    use rinja::filters::Safe;
     use std::borrow::Cow;
     use std::fmt;
 
@@ -229,7 +230,10 @@ pub mod filters {
 
     pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<String> {
         let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
-        Ok(format!("<pre><code>{}</code></pre>", highlighted_code))
+        Ok(format!(
+            "<pre><code>{}</code></pre>",
+            highlighted_code
+        ))
     }
 
     pub fn slugify<T: AsRef<str>>(code: T) -> rinja::Result<String> {

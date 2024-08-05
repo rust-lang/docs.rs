@@ -31,7 +31,7 @@
     <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
     <p>
         To recognize Docs.rs from your Rust code, you can test for the <code>docsrs</code> cfg, e.g.:
-        {% filter dedent(None)|highlight("rust")|safe -%}
+        {% filter dedent(None)|highlight("rust") -%}
             #[cfg(docsrs)]
             mod documentation;
         {%- endfilter %}
@@ -40,7 +40,7 @@
     </p>
     <p>
         To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
-        {% filter dedent(3)|highlight("rust")|safe -%}
+        {% filter dedent(3)|highlight("rust") -%}
             if std::env::var("DOCS_RS").is_ok() {
                 // ... your code here ...
             }
@@ -55,7 +55,7 @@
 
     <p>
         You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
-        {% filter dedent(None)|highlight("toml")|safe -%}
+        {% filter dedent(None)|highlight("toml") -%}
             [package.metadata.docs.rs]
             rustc-args = ["--cfg", "my_cfg"]
         {%- endfilter %}

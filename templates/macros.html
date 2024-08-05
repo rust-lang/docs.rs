@@ -143,10 +143,10 @@
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
                 {% if warning %}
-                    {{ "triangle-exclamation"|fas(false, false, "")|safe }}
+                    {{ "triangle-exclamation"|fas(false, false, "") }}
                 {% endif %}
                 {% if release.build_status == "in_progress" %}
-                    {{ "gear"|fas(true, true, "")|safe }}
+                    {{ "gear"|fas(true, true, "") }}
                 {% endif %}
                 {{ release.version }}
             </a>
