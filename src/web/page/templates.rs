@@ -216,24 +216,24 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn fas(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
-        IconType::Strong.render(value, fw, spin, extra)
+    pub fn fas(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
+        IconType::Strong.render(value, fw, spin, extra).map(Safe)
     }
 
-    pub fn far(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
-        IconType::Regular.render(value, fw, spin, extra)
+    pub fn far(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
+        IconType::Regular.render(value, fw, spin, extra).map(Safe)
     }
 
-    pub fn fab(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
-        IconType::Brand.render(value, fw, spin, extra)
+    pub fn fab(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
+        IconType::Brand.render(value, fw, spin, extra).map(Safe)
     }
 
-    pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<String> {
+    pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
         let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
-        Ok(format!(
+        Ok(Safe(format!(
             "<pre><code>{}</code></pre>",
             highlighted_code
-        ))
+        )))
     }
 
     pub fn slugify<T: AsRef<str>>(code: T) -> rinja::Result<String> {

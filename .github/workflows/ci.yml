@@ -46,7 +46,7 @@ jobs:
         run: |
           cp .env.sample .env
           mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db
+          docker compose up -d db
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
@@ -69,7 +69,7 @@ jobs:
             --target-version 0
 
       - name: Clean up the database
-        run: docker-compose down --volumes
+        run: docker compose down --volumes
 
   test:
     env:
@@ -94,7 +94,7 @@ jobs:
         run: |
           cp .env.sample .env
           mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db s3
+          docker compose up -d db s3
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
@@ -111,7 +111,7 @@ jobs:
           cargo test --locked -- --ignored --test-threads=1
 
       - name: Clean up the database
-        run: docker-compose down --volumes
+        run: docker compose down --volumes
 
   GUI_test:
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
         run: |
           cp .env.sample .env
           mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker-compose up -d db s3
+          docker compose up -d db s3
           # Give the database enough time to start up
           sleep 5
           # Make sure the database is actually working
@@ -141,7 +141,7 @@ jobs:
         run: ./dockerfiles/run-gui-tests.sh
 
       - name: Clean up the database
-        run: docker-compose down --volumes
+        run: docker compose down --volumes
 
   fmt:
     name: Rustfmt
