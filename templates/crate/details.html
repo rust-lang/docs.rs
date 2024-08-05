@@ -48,7 +48,7 @@
                         {%- if let Some(homepage_url) = details.homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ homepage_url }}" class="pure-menu-link">
-                                    {{ "house"|fas(false, false, "")|safe }} Homepage
+                                    {{ "house"|fas(false, false, "") }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -57,7 +57,7 @@
                         {%- if let Some(documentation_url) = details.documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ "file-lines"|far(false, false, "")|safe }} Documentation
+                                    {{ "file-lines"|far(false, false, "") }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -69,20 +69,20 @@
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
                                     {%- if let Some(repository_metadata) = details.repository_metadata -%}
-                                        {{ "code-branch"|fab(false, false, "")|safe }}
+                                        {{ "code-branch"|fab(false, false, "") }}
                                         {% if let Some(name) = repository_metadata.name %}
                                             {{name}}
                                         {% else %}
                                             Repository
                                         {% endif %}
                                         <br>
-                                        {{ "star"|fas(false, false, "left-margin")|safe }} {{ repository_metadata.stars }}
-                                        {{ "code-branch"|fas(false, false, "")|safe }} {{ repository_metadata.forks }}
-                                        {{ "circle-exclamation"|fas(false, false, "")|safe }} {{ repository_metadata.issues }}
+                                        {{ "star"|fas(false, false, "left-margin") }} {{ repository_metadata.stars }}
+                                        {{ "code-branch"|fas(false, false, "") }} {{ repository_metadata.forks }}
+                                        {{ "circle-exclamation"|fas(false, false, "") }} {{ repository_metadata.issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        {{ "code-branch"|fas(false, false, "")|safe }} Repository
+                                        {{ "code-branch"|fas(false, false, "") }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -92,7 +92,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
                                 title="See {{ details.name }} on crates.io">
-                                {{ "cube"|fas(false, false, "")|safe }} crates.io
+                                {{ "cube"|fas(false, false, "") }} crates.io
                             </a>
                         </li>
 
@@ -165,7 +165,7 @@
                     </div>
                 {%- elif details.build_status == "in_progress" -%}
                     <div class="info">
-                        {{ "gear"|fas(false, true, "")|safe }}
+                        {{ "gear"|fas(false, true, "") }}
                         Build is in progress, it will be available soon
                     </div>
                 {%- endif -%}

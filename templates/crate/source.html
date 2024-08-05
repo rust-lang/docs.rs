@@ -36,13 +36,13 @@
                         {# If we are displaying a file, we also add a button to hide the file sidebar #}
                         {% if has_file_content %}
                             <li class="pure-menu-item toggle-source">
-                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left"|fas(false, false, "")|safe }}</span><span class="right">{{ "chevron-right"|fas(false, false, "")|safe }}</span> <span class="text">Hide files</span></button>
+                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ "chevron-left"|fas(false, false, "") }}</span><span class="right">{{ "chevron-right"|fas(false, false, "") }}</span> <span class="text">Hide files</span></button>
                             </li>
                         {% endif %}
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ "folder-open"|far(false, false, "")|safe }} <span class="text">..</span></a>
+                                <a href="../" class="pure-menu-link">{{ "folder-open"|far(false, false, "") }} <span class="text">..</span></a>
                             </li>
                         {%- endif -%}
 
@@ -55,23 +55,23 @@
                                 <a href="./{{ file.name }}{% if file.mime == "dir" %}/{% endif %}" class="pure-menu-link">
                                     {# Directories #}
                                     {%- if file.mime == "dir" -%}
-                                        {{ "folder-open"|far(false, false, "")|safe }}
+                                        {{ "folder-open"|far(false, false, "") }}
 
                                     {# Rust files #}
                                     {%- elif file.mime == "text/rust" -%}
-                                        {{ "rust"|fab(false, false, "")|safe }}
+                                        {{ "rust"|fab(false, false, "") }}
 
                                     {# Cargo.lock #}
                                     {%- elif file.mime == "text/plain" && file.name == "Cargo.lock" -%}
-                                        {{ "lock"|fas(false, false, "")|safe }}
+                                        {{ "lock"|fas(false, false, "") }}
 
                                     {# Markdown files #}
                                     {% elif file.mime == "text/markdown" %}
-                                        {{ "markdown"|fab(false, false, "")|safe }}
+                                        {{ "markdown"|fab(false, false, "") }}
 
                                     {# .gitignore #}
                                     {% elif file.mime == "text/plain" && file.name == ".gitignore" %}
-                                        {{ "git-alt"|fab(false, false, "")|safe }}
+                                        {{ "git-alt"|fab(false, false, "") }}
 
                                     {#
                                         More ideas
@@ -93,11 +93,11 @@
 
                                     {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" || file.mime|split_first("/") == Some("text") -%}
-                                        {{ "file-alt"|far(false, false, "")|safe }}
+                                        {{ "file-alt"|far(false, false, "") }}
 
                                         {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ "file-archive"|far(false, false, "")|safe }}
+                                        {{ "file-archive"|far(false, false, "") }}
                                     {%- endif -%}
 
                                     <span class="text">{{ file.name }}</span>
@@ -134,7 +134,7 @@
                         {%~ endfor -%}
                     </code></pre></div>
                     <div id="source-code" class="source-code">
-                        {{- file_content|highlight(file_name)|safe -}}
+                        {{- file_content|highlight(file_name) -}}
                     </div>
                 </div>
             {%- endif -%}
