@@ -33,14 +33,22 @@ fn main() {
     // through rustwide.
     rustwide::logging::init_with(LogTracer::new());
 
-    let tracing_registry = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
-                .with_env_var("DOCSRS_LOG")
-                .from_env_lossy(),
-        );
+    let log_formatter = {
+        let log_format = env::var("DOCSRS_LOG_FORMAT").unwrap_or_default();
+
+        if log_format == "json" {
+            tracing_subscriber::fmt::layer().json().boxed()
+        } else {
+            tracing_subscriber::fmt::layer().boxed()
+        }
+    };
+
+    let tracing_registry = tracing_subscriber::registry().with(log_formatter).with(
+        EnvFilter::builder()
+            .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
+            .with_env_var("DOCSRS_LOG")
+            .from_env_lossy(),
+    );
 
     let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
         tracing::subscriber::set_global_default(tracing_registry.with(
