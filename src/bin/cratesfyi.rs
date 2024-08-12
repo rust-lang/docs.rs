@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::Write;
+use std::io::{self, IsTerminal};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -33,8 +34,13 @@ fn main() {
     // through rustwide.
     rustwide::logging::init_with(LogTracer::new());
 
+    let is_interactive_terminal = {
+        let stdout = io::stdout();
+        stdout.is_terminal()
+    };
+
     let tracing_registry = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_ansi(is_interactive_terminal))
         .with(
             EnvFilter::builder()
                 .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
