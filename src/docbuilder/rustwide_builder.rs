@@ -734,7 +734,7 @@ impl RustwideBuilder {
                     }
                 }
             })
-            .log_output(false)
+            .log_output(true)
             .run()?;
 
         Ok(
