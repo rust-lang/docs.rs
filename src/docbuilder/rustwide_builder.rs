@@ -827,11 +827,10 @@ impl RustwideBuilder {
         })
     }
 
-    fn run_command(&self, command: Command) -> Result<(), CommandError> {
-        let mut storage = LogStorage::new(log::LevelFilter::Info);
-        let result = logging::capture(&storage, move || command.run());
-
-        result
+    fn capture_output<R>(f: impl FnOnce() -> R) -> (R, String) {
+        let storage = LogStorage::new(log::LevelFilter::Info);
+        let result = logging::capture(&storage, f);
+        (result, storage.to_string())
     }
 
     fn prepare_command<'ws, 'pl>(
