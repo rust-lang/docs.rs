@@ -340,7 +340,7 @@ impl RustwideBuilder {
         self.build_package(&package.name, &package.version, PackageKind::Local(path))
     }
 
-    #[instrument(name = "docbuilder.build_package", parent = None, skip(self))]
+    #[instrument(name = "docbuilder.build_package", parent = None, skip(self, name), fields(krate=name))]
     pub fn build_package(
         &mut self,
         name: &str,
