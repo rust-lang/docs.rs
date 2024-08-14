@@ -24,6 +24,7 @@ use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -35,6 +36,28 @@ const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
+
+#[derive(thiserror::Error, Debug)]
+struct CommandErrorWithOutput {
+    #[source]
+    err: CommandError,
+    output: String,
+}
+
+impl Display for CommandErrorWithOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\nCaptured output: {}", self.err, self.output)
+    }
+}
+
+fn capture_error_output(cmd: Command) -> Result<(), CommandErrorWithOutput> {
+    let storage = LogStorage::new(log::LevelFilter::Info);
+    let result = logging::capture(&storage, || cmd.log_output(true).run());
+    result.map_err(|err| CommandErrorWithOutput {
+        err,
+        output: storage.to_string(),
+    })
+}
 
 fn get_configured_toolchain(conn: &mut Client) -> Result<Toolchain> {
     let name: String = get_config(conn, ConfigName::Toolchain)?.unwrap_or_else(|| "nightly".into());
@@ -482,17 +505,19 @@ impl RustwideBuilder {
                     std::fs::remove_file(cargo_lock)?;
                     {
                         let _span = info_span!("cargo_generate_lockfile").entered();
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["generate-lockfile"])
-                            .run()?;
+                        capture_error_output(
+                            Command::new(&self.workspace, self.toolchain.cargo())
+                                .cd(build.host_source_dir())
+                                .args(&["generate-lockfile"]),
+                        )?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["fetch", "--locked"])
-                            .run()?;
+                        capture_error_output(
+                            Command::new(&self.workspace, self.toolchain.cargo())
+                                .cd(build.host_source_dir())
+                                .args(&["fetch", "--locked"]),
+                        )?;
                     }
                     res =
                         self.execute_build(default_target, true, build, &limits, &metadata, false)?;
@@ -825,12 +850,6 @@ impl RustwideBuilder {
             build_log: storage.to_string(),
             target: target.to_string(),
         })
-    }
-
-    fn capture_output<R>(f: impl FnOnce() -> R) -> (R, String) {
-        let storage = LogStorage::new(log::LevelFilter::Info);
-        let result = logging::capture(&storage, f);
-        (result, storage.to_string())
     }
 
     fn prepare_command<'ws, 'pl>(
