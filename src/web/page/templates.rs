@@ -36,9 +36,28 @@ macro_rules! rustdoc_page {
     };
 }
 
-rustdoc_page!(Head, "rustdoc/head.html");
-rustdoc_page!(Vendored, "rustdoc/vendored.html");
-rustdoc_page!(Body, "rustdoc/body.html");
+#[derive(Template)]
+#[template(path = "rustdoc/head.html")]
+pub struct Head<'a> {
+    rustdoc_css_file: &'a Option<String>,
+}
+
+impl<'a> Head<'a> {
+    pub fn new(inner: &'a RustdocPage) -> Self {
+        Self {
+            rustdoc_css_file: &inner.metadata.rustdoc_css_file,
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "rustdoc/vendored.html")]
+pub struct Vendored;
+
+#[derive(Template)]
+#[template(path = "rustdoc/body.html")]
+pub struct Body;
+
 rustdoc_page!(Topbar, "rustdoc/topbar.html", get_metadata);
 
 /// Holds all data relevant to templating
