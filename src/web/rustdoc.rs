@@ -14,8 +14,9 @@ use crate::{
         extractors::{DbConnection, Path},
         file::File,
         match_version,
+        page::templates::RustdocPage,
         page::TemplateData,
-        MetaData, ReqVersion,
+        ReqVersion,
     },
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
@@ -255,22 +256,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         )?
         .into_response())
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct RustdocPage {
-    pub latest_path: String,
-    pub permalink_path: String,
-    pub inner_path: String,
-    // true if we are displaying the latest version of the crate, regardless
-    // of whether the URL specifies a version number or the string "latest."
-    pub is_latest_version: bool,
-    // true if the URL specifies a version using the string "latest."
-    pub is_latest_url: bool,
-    pub is_prerelease: bool,
-    pub krate: CrateDetails,
-    pub metadata: MetaData,
-    pub current_target: String,
 }
 
 impl RustdocPage {

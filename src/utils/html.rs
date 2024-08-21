@@ -1,5 +1,4 @@
-use crate::web::page::templates::{Body, Head, Topbar, Vendored};
-use crate::web::rustdoc::RustdocPage;
+use crate::web::page::templates::{Body, Head, RustdocPage, Vendored};
 use lol_html::element;
 use lol_html::errors::RewritingError;
 use rinja::Template;
@@ -21,7 +20,7 @@ pub(crate) fn rewrite_lol(
     let head_html = Head::new(data).render().unwrap();
     let vendored_html = Vendored.render().unwrap();
     let body_html = Body.render().unwrap();
-    let topbar_html = Topbar::new(data).render().unwrap();
+    let topbar_html = data.render().unwrap();
 
     // Before: <body> ... rustdoc content ... </body>
     // After:

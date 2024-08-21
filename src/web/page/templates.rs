@@ -1,10 +1,9 @@
 use crate::error::Result;
 use crate::web::crate_details::CrateDetails;
-use crate::web::rustdoc::RustdocPage;
 use crate::web::MetaData;
 use anyhow::Context;
 use rinja::Template;
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{fmt, sync::Arc};
 use tracing::trace;
 
 #[derive(Template)]
@@ -31,34 +30,20 @@ pub struct Body;
 
 #[derive(Template)]
 #[template(path = "rustdoc/topbar.html")]
-pub struct Topbar<'a> {
-    inner: &'a RustdocPage,
-    permalink_path: &'a str,
-    krate: &'a CrateDetails,
-    metadata: &'a MetaData,
-    current_target: &'a str,
-    latest_path: &'a str,
-}
-
-impl<'a> Topbar<'a> {
-    pub fn new(inner: &'a RustdocPage) -> Self {
-        Self {
-            inner,
-            permalink_path: &inner.permalink_path,
-            krate: &inner.krate,
-            metadata: &inner.metadata,
-            current_target: &inner.current_target,
-            latest_path: &inner.latest_path,
-        }
-    }
-}
-
-impl<'a> Deref for Topbar<'a> {
-    type Target = RustdocPage;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner
-    }
+#[derive(Debug, Clone)]
+pub struct RustdocPage {
+    pub latest_path: String,
+    pub permalink_path: String,
+    pub inner_path: String,
+    // true if we are displaying the latest version of the crate, regardless
+    // of whether the URL specifies a version number or the string "latest."
+    pub is_latest_version: bool,
+    // true if the URL specifies a version using the string "latest."
+    pub is_latest_url: bool,
+    pub is_prerelease: bool,
+    pub krate: CrateDetails,
+    pub metadata: MetaData,
+    pub current_target: String,
 }
 
 /// Holds all data relevant to templating
