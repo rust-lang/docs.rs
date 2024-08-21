@@ -6,36 +6,6 @@ use rinja::Template;
 use std::{fmt, ops::Deref, sync::Arc};
 use tracing::trace;
 
-macro_rules! rustdoc_page {
-    ($name:ident, $path:literal $(, $meta:ident)?) => {
-        #[derive(Template)]
-        #[template(path = $path)]
-        pub struct $name<'a> {
-            inner: &'a RustdocPage,
-        }
-
-        impl<'a> $name<'a> {
-            pub fn new(inner: &'a RustdocPage) -> Self {
-                Self { inner }
-            }
-
-            $(
-                pub(crate) fn $meta(&self) -> Option<&MetaData> {
-                    Some(&self.inner.metadata)
-                }
-            )?
-        }
-
-        impl<'a> Deref for $name<'a> {
-            type Target = RustdocPage;
-
-            fn deref(&self) -> &Self::Target {
-                self.inner
-            }
-        }
-    };
-}
-
 #[derive(Template)]
 #[template(path = "rustdoc/head.html")]
 pub struct Head<'a> {
@@ -58,7 +28,33 @@ pub struct Vendored;
 #[template(path = "rustdoc/body.html")]
 pub struct Body;
 
-rustdoc_page!(Topbar, "rustdoc/topbar.html", get_metadata);
+#[derive(Template)]
+#[template(path = "rustdoc/topbar.html")]
+pub struct Topbar<'a> {
+    inner: &'a RustdocPage,
+    permalink_path: &'a str,
+}
+
+impl<'a> Topbar<'a> {
+    pub fn new(inner: &'a RustdocPage) -> Self {
+        Self {
+            inner,
+            permalink_path: &inner.permalink_path,
+        }
+    }
+
+    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
+        Some(&self.inner.metadata)
+    }
+}
+
+impl<'a> Deref for Topbar<'a> {
+    type Target = RustdocPage;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
 
 /// Holds all data relevant to templating
 #[derive(Debug)]
