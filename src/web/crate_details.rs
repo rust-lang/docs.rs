@@ -426,10 +426,6 @@ impl_axum_webpage! {
 
 // Used by templates.
 impl CrateDetailsPage {
-    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
-        None
-    }
-
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.details.metadata)
     }

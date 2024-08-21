@@ -313,11 +313,6 @@ impl RustdocPage {
             .into_response())
     }
 
-    // Used for template rendering.
-    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
-        Some(&self.krate)
-    }
-
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         !self.latest_path.contains("/target-redirect/")
     }

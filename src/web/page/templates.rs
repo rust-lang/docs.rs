@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::web::crate_details::CrateDetails;
 use crate::web::rustdoc::RustdocPage;
 use crate::web::MetaData;
 use anyhow::Context;
@@ -33,6 +34,7 @@ pub struct Body;
 pub struct Topbar<'a> {
     inner: &'a RustdocPage,
     permalink_path: &'a str,
+    krate: &'a CrateDetails,
 }
 
 impl<'a> Topbar<'a> {
@@ -40,6 +42,7 @@ impl<'a> Topbar<'a> {
         Self {
             inner,
             permalink_path: &inner.permalink_path,
+            krate: &inner.krate,
         }
     }
 

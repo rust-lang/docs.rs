@@ -3,7 +3,6 @@ use crate::{
     impl_axum_webpage,
     web::{
         cache::CachePolicy,
-        crate_details::CrateDetails,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         filters,
@@ -113,9 +112,6 @@ impl_axum_webpage! {
 }
 
 impl FeaturesPage {
-    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
-        None
-    }
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.metadata)
     }
