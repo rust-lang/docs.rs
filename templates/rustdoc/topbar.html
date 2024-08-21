@@ -203,7 +203,7 @@
         {%- endif -%}
 
         <li class="pure-menu-item">
-            <a href="{{ latest_path|safe }}" class="pure-menu-link warn"
+            <a href="{% if latest_path is defined %}{{ latest_path|safe }}{% endif %}" class="pure-menu-link warn"
                 data-fragment="retain"
                 title="{{ tooltip }}">
                 {{ "triangle-exclamation"|fas(false, false, "") }}
