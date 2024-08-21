@@ -4,8 +4,8 @@ use crate::{
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
-        cache::CachePolicy, crate_details::CrateDetails, error::AxumNope, extractors::Path,
-        file::File as DbFile, filters, headers::CanonicalUrl, MetaData, ReqVersion,
+        cache::CachePolicy, error::AxumNope, extractors::Path, file::File as DbFile, filters,
+        headers::CanonicalUrl, MetaData, ReqVersion,
     },
     AsyncStorage,
 };
@@ -173,9 +173,6 @@ impl_axum_webpage! {
 impl SourcePage {
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.metadata)
-    }
-    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
-        None
     }
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         true

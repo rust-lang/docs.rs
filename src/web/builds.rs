@@ -9,7 +9,6 @@ use crate::{
     impl_axum_webpage,
     utils::spawn_blocking,
     web::{
-        crate_details::CrateDetails,
         error::AxumResult,
         extractors::{DbConnection, Path},
         filters, match_version, MetaData, ReqVersion,
@@ -55,9 +54,6 @@ struct BuildsPage {
 impl_axum_webpage! { BuildsPage }
 
 impl BuildsPage {
-    pub(crate) fn krate(&self) -> Option<&CrateDetails> {
-        None
-    }
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.metadata)
     }
