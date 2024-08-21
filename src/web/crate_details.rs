@@ -430,10 +430,6 @@ impl CrateDetailsPage {
         None
     }
 
-    pub(crate) fn permalink_path(&self) -> &str {
-        ""
-    }
-
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.details.metadata)
     }

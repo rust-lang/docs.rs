@@ -318,11 +318,6 @@ impl RustdocPage {
         Some(&self.krate)
     }
 
-    // Used for template rendering.
-    pub(crate) fn permalink_path(&self) -> &str {
-        &self.permalink_path
-    }
-
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         !self.latest_path.contains("/target-redirect/")
     }

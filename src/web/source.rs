@@ -174,9 +174,6 @@ impl SourcePage {
     pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
         Some(&self.metadata)
     }
-    pub(crate) fn permalink_path(&self) -> &str {
-        ""
-    }
     pub(crate) fn krate(&self) -> Option<&CrateDetails> {
         None
     }
