@@ -100,7 +100,7 @@ tempfile = "3.1.0"
 fn-error-context = "0.2.0"
 
 # Templating
-rinja = "0.3"
+rinja = "0.3.1"
 walkdir = "2"
 
 # Date and Time utilities
