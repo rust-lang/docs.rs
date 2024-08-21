@@ -11,7 +11,7 @@
                   id="nav-search-form"
                   class="landing-search-form-nav {%
                   if !is_latest_version %}not-latest{% endif
-                  %} {% if let Some(meta) = get_metadata() %}{% if meta.yanked.unwrap_or_default() %}yanked{% endif %}{% endif %}">
+                  %} {% if metadata is defined && metadata.yanked.unwrap_or_default() %}yanked{% endif %}">
 
                 {# The top-left logo and name #}
                 <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
