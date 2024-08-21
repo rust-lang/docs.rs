@@ -54,9 +54,6 @@ struct BuildsPage {
 impl_axum_webpage! { BuildsPage }
 
 impl BuildsPage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        Some(&self.metadata)
-    }
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         true
     }

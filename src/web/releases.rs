@@ -12,7 +12,7 @@ use crate::{
         extractors::{DbConnection, Path},
         match_version,
         page::templates::filters,
-        MetaData, ReqVersion,
+        ReqVersion,
     },
     BuildQueue, Config, InstanceMetrics,
 };
@@ -312,12 +312,6 @@ impl_axum_webpage! {
     cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
 }
 
-impl HomePage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
-
 pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
@@ -365,12 +359,6 @@ struct ViewReleases {
 }
 
 impl_axum_webpage! { ViewReleases }
-
-impl ViewReleases {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ReleaseType {
@@ -522,12 +510,6 @@ impl Default for Search {
             status: http::StatusCode::OK,
             csp_nonce: String::new(),
         }
-    }
-}
-
-impl Search {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
     }
 }
 
@@ -739,12 +721,6 @@ struct ReleaseActivity {
     csp_nonce: String,
 }
 
-impl ReleaseActivity {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
-
 impl_axum_webpage! { ReleaseActivity }
 
 pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
@@ -813,12 +789,6 @@ struct BuildQueuePage {
 }
 
 impl_axum_webpage! { BuildQueuePage }
-
-impl BuildQueuePage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
 
 pub(crate) async fn build_queue_handler(
     Extension(build_queue): Extension<Arc<BuildQueue>>,

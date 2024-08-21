@@ -7,7 +7,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         page::templates::filters,
-        AxumErrorPage, MetaData,
+        AxumErrorPage,
     },
     Config,
 };
@@ -122,12 +122,6 @@ struct AboutBuilds {
     csp_nonce: String,
 }
 
-impl AboutBuilds {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
-
 impl_axum_webpage!(AboutBuilds);
 
 pub(crate) async fn about_builds_handler(
@@ -158,12 +152,6 @@ macro_rules! about_page {
         }
 
         impl_axum_webpage! { $ty }
-
-        impl $ty {
-            pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-                None
-            }
-        }
     };
 }
 

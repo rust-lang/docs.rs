@@ -1,7 +1,6 @@
 use super::{match_version, MetaData};
 use crate::registry_api::OwnerKind;
 use crate::utils::{get_correct_docsrs_style_file, report_error};
-use crate::web::rustdoc::RustdocHtmlParams;
 use crate::{
     db::types::BuildStatus,
     impl_axum_webpage,
@@ -12,6 +11,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         page::templates::filters,
+        rustdoc::RustdocHtmlParams,
         MatchedRelease, ReqVersion,
     },
     AsyncStorage,
@@ -32,6 +32,8 @@ use std::sync::Arc;
 
 // TODO: Add target name and versions
 
+#[derive(Template)]
+#[template(path = "crate/details.html")]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrateDetails {
     pub(crate) name: String,
@@ -66,6 +68,12 @@ pub(crate) struct CrateDetails {
     pub(crate) crate_id: i32,
     /// Database id for this release
     pub(crate) release_id: i32,
+    pub(crate) csp_nonce: String,
+}
+
+impl_axum_webpage! {
+    CrateDetails,
+    cpu_intensive_rendering = true,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -251,6 +259,7 @@ impl CrateDetails {
             items_with_examples: krate.items_with_examples,
             crate_id: krate.crate_id,
             release_id: krate.release_id,
+            csp_nonce: String::new(),
         };
 
         // get owners
@@ -342,6 +351,11 @@ impl CrateDetails {
     pub fn latest_release(&self) -> Result<&Release> {
         latest_release(&self.releases).ok_or_else(|| anyhow!("crate without releases"))
     }
+
+    // Used by templates.
+    pub(crate) fn use_direct_platform_links(&self) -> bool {
+        true
+    }
 }
 
 pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
@@ -411,30 +425,6 @@ pub(crate) async fn releases_for_crate(
     Ok(releases)
 }
 
-#[derive(Template)]
-#[template(path = "crate/details.html")]
-#[derive(Debug, Clone, PartialEq)]
-struct CrateDetailsPage {
-    details: CrateDetails,
-    csp_nonce: String,
-}
-
-impl_axum_webpage! {
-    CrateDetailsPage,
-    cpu_intensive_rendering = true,
-}
-
-// Used by templates.
-impl CrateDetailsPage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        Some(&self.details.metadata)
-    }
-
-    pub(crate) fn use_direct_platform_links(&self) -> bool {
-        true
-    }
-}
-
 #[derive(Deserialize, Clone, Debug)]
 pub(crate) struct CrateDetailHandlerParams {
     name: String,
@@ -471,11 +461,7 @@ pub(crate) async fn crate_details_handler(
         Err(e) => warn!("error fetching readme: {:?}", &e),
     }
 
-    let mut res = CrateDetailsPage {
-        details,
-        csp_nonce: String::new(),
-    }
-    .into_response();
+    let mut res = details.into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if req_version.is_latest() {
             CachePolicy::ForeverInCdn

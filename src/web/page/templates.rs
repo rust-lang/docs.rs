@@ -35,6 +35,8 @@ pub struct Topbar<'a> {
     inner: &'a RustdocPage,
     permalink_path: &'a str,
     krate: &'a CrateDetails,
+    metadata: &'a MetaData,
+    current_target: &'a str,
 }
 
 impl<'a> Topbar<'a> {
@@ -43,11 +45,9 @@ impl<'a> Topbar<'a> {
             inner,
             permalink_path: &inner.permalink_path,
             krate: &inner.krate,
+            metadata: &inner.metadata,
+            current_target: &inner.current_target,
         }
-    }
-
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        Some(&self.inner.metadata)
     }
 }
 

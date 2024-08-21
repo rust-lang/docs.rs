@@ -2,18 +2,16 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {% call macros::doc_title(name=details.name, version=details.version) %}
+    {% call macros::doc_title(name=name, version=version) %}
 {%- endblock title -%}
 
 {%- block meta -%}
-    <link rel="canonical" href="https://docs.rs/crate/{{ details.name }}/latest" />
+    <link rel="canonical" href="https://docs.rs/crate/{{ name }}/latest" />
 {%- endblock meta -%}
 
 {%- block topbar -%}
-  {%- set current_target = String::new() -%}
-  {%- set metadata = details.metadata -%}
   {%- set latest_path = "" -%}
-  {%- set inner_path = details.metadata.target_name_url() -%}
+  {%- set inner_path = metadata.target_name_url() -%}
   {%- set is_latest_version = true -%}
   {%- set is_prerelease = false -%}
   {%- include "rustdoc/topbar.html" -%}
@@ -21,7 +19,7 @@
 
 {%- block header -%}
     {# Set the active tab to the `crate` tab #}
-    {% call navigation::package_navigation(metadata=details.metadata, active_tab="crate") %}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="crate") %}
 {%- endblock header -%}
 
 {%- block body -%}
@@ -30,14 +28,14 @@
             <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
-                        {%- if let (Some(documented), Some(total)) = (details.documented_items, details.total_items) -%}
+                        {%- if let (Some(documented), Some(total)) = (documented_items, total_items) -%}
                             {% set documented_f32 = documented|as_f32 %}
                             {% set total_f32 = total|as_f32 %}
                             {% set percent = documented_f32 * 100f32 / total_f32 %}
                             <li class="pure-menu-heading">Coverage</li>
                             <li class="pure-menu-item text-center"><b>{{ percent|round(2) }}%</b><br>
                                 <span class="documented-info"><b>{{ documented }}</b> out of <b>{{ total }}</b> items documented</span>
-                                {%- if let (Some(needing_examples), Some(with_examples)) = (details.total_items_needing_examples, details.items_with_examples) -%}
+                                {%- if let (Some(needing_examples), Some(with_examples)) = (total_items_needing_examples, items_with_examples) -%}
                                     <span class="documented-info"><b>{{ with_examples }}</b> out of <b>{{ needing_examples }}</b> items with examples</span>
                                 {%- endif -%}
                             </li>
@@ -45,7 +43,7 @@
                         <li class="pure-menu-heading">Links</li>
 
                         {# If the crate has a homepage, show it #}
-                        {%- if let Some(homepage_url) = details.homepage_url -%}
+                        {%- if let Some(homepage_url) = homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ homepage_url }}" class="pure-menu-link">
                                     {{ "house"|fas(false, false, "") }} Homepage
@@ -54,7 +52,7 @@
                         {%- endif -%}
 
                         {# If the crate has a custom doc url, show it #}
-                        {%- if let Some(documentation_url) = details.documentation_url -%}
+                        {%- if let Some(documentation_url) = documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
                                     {{ "file-lines"|far(false, false, "") }} Documentation
@@ -63,12 +61,12 @@
                         {%- endif -%}
 
                         {# If the release has a repository, show it #}
-                        {%- if let Some(repository_url) = details.repository_url -%}
+                        {%- if let Some(repository_url) = repository_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ repository_url }}" class="pure-menu-link">
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
-                                    {%- if let Some(repository_metadata) = details.repository_metadata -%}
+                                    {%- if let Some(repository_metadata) = repository_metadata -%}
                                         {{ "code-branch"|fab(false, false, "") }}
                                         {% if let Some(name) = repository_metadata.name %}
                                             {{name}}
@@ -90,8 +88,8 @@
 
                         {# Show a link to the crate's crates.io page #}
                         <li class="pure-menu-item">
-                            <a href="https://crates.io/crates/{{ details.name }}" class="pure-menu-link"
-                                title="See {{ details.name }} on crates.io">
+                            <a href="https://crates.io/crates/{{ name }}" class="pure-menu-link"
+                                title="See {{ name }} on crates.io">
                                 {{ "cube"|fas(false, false, "") }} crates.io
                             </a>
                         </li>
@@ -101,7 +99,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# List all dependencies that the current release has #}
-                                    {% call macros::dependencies_list(link_prefix="/crate", dependencies=details.dependencies, if_empty="&mdash;") %}
+                                    {% call macros::dependencies_list(link_prefix="/crate", dependencies=dependencies, if_empty="&mdash;") %}
                                 </ul>
                             </div>
                         </li>
@@ -111,7 +109,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {% call macros::releases_list(name=details.name, releases=details.releases, target="", inner_path="") %}
+                                    {% call macros::releases_list(name=name, releases=releases, target="", inner_path="") %}
                                 </ul>
                             </div>
                         </li>
@@ -119,7 +117,7 @@
                         {# Display the crate owner's profile picture and a link to their docs.rs profile #}
                         <li class="pure-menu-heading">Owners</li>
                         <li class="pure-menu-item">
-                            {%- for owner in details.owners -%}
+                            {%- for owner in owners -%}
                                 <a href="https://crates.io/users/{{ owner.0 }}">
                                     <img src="{{ owner.1 }}" alt="{{ owner.0 }}" class="owner">
                                 </a>
@@ -131,39 +129,39 @@
 
             <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
                 {# If the release is not a library #}
-                {%- if details.is_library == Some(false) -%}
+                {%- if is_library == Some(false) -%}
                     <div class="warning">
-                        {{ details.name }}-{{ details.version }} is not a library.
+                        {{ self.name }}-{{ version }} is not a library.
                     </div>
 
                 {# If the release has been yanked and is a library #}
-                {%- elif details.metadata.yanked.unwrap_or_default() -%}
+                {%- elif metadata.yanked.unwrap_or_default() -%}
                     <div class="warning">
-                        {{ details.name }}-{{ details.version }} has been yanked.
+                        {{ self.name }}-{{ version }} has been yanked.
                     </div>
 
                 {# If the build succeeded, isn't yanked and is a library #}
-                {%- elif details.build_status == "success" -%}
+                {%- elif build_status == "success" -%}
                     {# If there are no docs display a warning #}
-                    {%- if !details.rustdoc_status.unwrap_or_default() -%}
-                        <div class="warning">{{ details.name }}-{{ details.version }} doesn't have any documentation.</div>
+                    {%- if !rustdoc_status.unwrap_or_default() -%}
+                        <div class="warning">{{ self.name }}-{{ version }} doesn't have any documentation.</div>
                     {%- endif -%}
 
                 {# If the build failed, the release isn't yanked and the release is a library #}
-                {%- elif details.build_status == "failure" -%}
+                {%- elif build_status == "failure" -%}
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
-                        docs.rs failed to build {{ details.name }}-{{ details.version }}
+                        docs.rs failed to build {{ self.name }}-{{ version }}
                         <br>
                         Please check the
-                        <a href="/crate/{{ details.name }}/{{ details.version }}/builds">build logs</a> for more information.
+                        <a href="/crate/{{ self.name }}/{{ version }}/builds">build logs</a> for more information.
                         <br>
                         See <a href="/about/builds">Builds</a> for ideas on how to fix a failed build,
                         or <a href="/about/metadata">Metadata</a> for how to configure docs.rs builds.
                         <br>
                         If you believe this is docs.rs' fault, <a href="https://github.com/rust-lang/docs.rs/issues/new/choose">open an issue</a>.
                     </div>
-                {%- elif details.build_status == "in_progress" -%}
+                {%- elif build_status == "in_progress" -%}
                     <div class="info">
                         {{ "gear"|fas(false, true, "") }}
                         Build is in progress, it will be available soon
@@ -171,21 +169,21 @@
                 {%- endif -%}
 
                 {# If there is one, display the next most recent successful build #}
-                {%- if let Some(last_successful_build) = details.last_successful_build -%}
+                {%- if let Some(last_successful_build) = last_successful_build -%}
                     <div class="info">
                         Visit the last successful build:
-                        <a href="/crate/{{ details.name }}/{{ last_successful_build }}">
-                            {{ details.name }}-{{ last_successful_build }}
+                        <a href="/crate/{{ self.name }}/{{ last_successful_build }}">
+                            {{ self.name }}-{{ last_successful_build }}
                         </a>
                     </div>
                 {%- endif -%}
 
                 {# If there's a readme, display it #}
-                {%- if let Some(readme) = details.readme -%}
+                {%- if let Some(readme) = readme -%}
                     {{ crate::web::markdown::render(readme)|safe }}
 
                 {# If there's not a readme then attempt to display the long description #}
-                {%- elif let Some(rustdoc) = details.rustdoc -%}
+                {%- elif let Some(rustdoc) = rustdoc -%}
                     {{ rustdoc|safe }}
                 {%- endif -%}
             </div>

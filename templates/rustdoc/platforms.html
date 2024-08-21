@@ -16,7 +16,7 @@
         {%- endif -%}
 
         {%- set current -%}
-        {%- if current_target == target|deref -%}
+        {%- if current_target is defined && current_target == target|deref -%}
             {%- set current = " current" -%}
         {%- else -%}
             {%- set current = "" -%}

@@ -171,9 +171,6 @@ impl_axum_webpage! {
 
 // Used in templates.
 impl SourcePage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        Some(&self.metadata)
-    }
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         true
     }

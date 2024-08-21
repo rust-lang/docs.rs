@@ -731,12 +731,6 @@ pub(crate) struct AxumErrorPage {
     pub csp_nonce: String,
 }
 
-impl AxumErrorPage {
-    pub(crate) fn get_metadata(&self) -> Option<&MetaData> {
-        None
-    }
-}
-
 impl_axum_webpage! {
     AxumErrorPage,
     status = |err| err.status,
