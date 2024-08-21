@@ -19,8 +19,8 @@ pub(crate) fn rewrite_lol(
     use lol_html::{HtmlRewriter, MemorySettings, Settings};
 
     let head_html = Head::new(data).render().unwrap();
-    let vendored_html = Vendored::new(data).render().unwrap();
-    let body_html = Body::new(data).render().unwrap();
+    let vendored_html = Vendored.render().unwrap();
+    let body_html = Body.render().unwrap();
     let topbar_html = Topbar::new(data).render().unwrap();
 
     // Before: <body> ... rustdoc content ... </body>
