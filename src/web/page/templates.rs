@@ -37,6 +37,7 @@ pub struct Topbar<'a> {
     krate: &'a CrateDetails,
     metadata: &'a MetaData,
     current_target: &'a str,
+    latest_path: &'a str,
 }
 
 impl<'a> Topbar<'a> {
@@ -47,6 +48,7 @@ impl<'a> Topbar<'a> {
             krate: &inner.krate,
             metadata: &inner.metadata,
             current_target: &inner.current_target,
+            latest_path: &inner.latest_path,
         }
     }
 }
