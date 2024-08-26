@@ -1,4 +1,5 @@
-use crate::web::page::templates::{Body, Head, RustdocPage, Vendored};
+use crate::web::page::templates::{Body, Head, Vendored};
+use crate::web::rustdoc::RustdocPage;
 use lol_html::element;
 use lol_html::errors::RewritingError;
 use rinja::Template;
