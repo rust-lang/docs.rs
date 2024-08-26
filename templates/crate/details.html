@@ -130,30 +130,30 @@
                 {# If the release is not a library #}
                 {%- if is_library == Some(false) -%}
                     <div class="warning">
-                        {{ self.name }}-{{ version }} is not a library.
+                        {{ name }}-{{ version }} is not a library.
                     </div>
 
                 {# If the release has been yanked and is a library #}
                 {%- elif metadata.yanked.unwrap_or_default() -%}
                     <div class="warning">
-                        {{ self.name }}-{{ version }} has been yanked.
+                        {{ name }}-{{ version }} has been yanked.
                     </div>
 
                 {# If the build succeeded, isn't yanked and is a library #}
                 {%- elif build_status == "success" -%}
                     {# If there are no docs display a warning #}
                     {%- if !rustdoc_status.unwrap_or_default() -%}
-                        <div class="warning">{{ self.name }}-{{ version }} doesn't have any documentation.</div>
+                        <div class="warning">{{ name }}-{{ version }} doesn't have any documentation.</div>
                     {%- endif -%}
 
                 {# If the build failed, the release isn't yanked and the release is a library #}
                 {%- elif build_status == "failure" -%}
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
-                        docs.rs failed to build {{ self.name }}-{{ version }}
+                        docs.rs failed to build {{ name }}-{{ version }}
                         <br>
                         Please check the
-                        <a href="/crate/{{ self.name }}/{{ version }}/builds">build logs</a> for more information.
+                        <a href="/crate/{{ name }}/{{ version }}/builds">build logs</a> for more information.
                         <br>
                         See <a href="/about/builds">Builds</a> for ideas on how to fix a failed build,
                         or <a href="/about/metadata">Metadata</a> for how to configure docs.rs builds.
@@ -171,8 +171,8 @@
                 {%- if let Some(last_successful_build) = last_successful_build -%}
                     <div class="info">
                         Visit the last successful build:
-                        <a href="/crate/{{ self.name }}/{{ last_successful_build }}">
-                            {{ self.name }}-{{ last_successful_build }}
+                        <a href="/crate/{{ name }}/{{ last_successful_build }}">
+                            {{ name }}-{{ last_successful_build }}
                         </a>
                     </div>
                 {%- endif -%}
