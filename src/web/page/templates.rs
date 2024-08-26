@@ -1,6 +1,5 @@
 use crate::error::Result;
-use crate::web::crate_details::CrateDetails;
-use crate::web::MetaData;
+use crate::web::rustdoc::RustdocPage;
 use anyhow::Context;
 use rinja::Template;
 use std::{fmt, sync::Arc};
@@ -27,24 +26,6 @@ pub struct Vendored;
 #[derive(Template)]
 #[template(path = "rustdoc/body.html")]
 pub struct Body;
-
-#[derive(Template)]
-#[template(path = "rustdoc/topbar.html")]
-#[derive(Debug, Clone)]
-pub struct RustdocPage {
-    pub latest_path: String,
-    pub permalink_path: String,
-    pub inner_path: String,
-    // true if we are displaying the latest version of the crate, regardless
-    // of whether the URL specifies a version number or the string "latest."
-    pub is_latest_version: bool,
-    // true if the URL specifies a version using the string "latest."
-    pub is_latest_url: bool,
-    pub is_prerelease: bool,
-    pub krate: CrateDetails,
-    pub metadata: MetaData,
-    pub current_target: String,
-}
 
 /// Holds all data relevant to templating
 #[derive(Debug)]
