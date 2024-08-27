@@ -8,13 +8,13 @@ use tracing::trace;
 #[derive(Template)]
 #[template(path = "rustdoc/head.html")]
 pub struct Head<'a> {
-    rustdoc_css_file: &'a Option<String>,
+    rustdoc_css_file: Option<&'a str>,
 }
 
 impl<'a> Head<'a> {
     pub fn new(inner: &'a RustdocPage) -> Self {
         Self {
-            rustdoc_css_file: &inner.metadata.rustdoc_css_file,
+            rustdoc_css_file: inner.metadata.rustdoc_css_file.as_deref(),
         }
     }
 }
