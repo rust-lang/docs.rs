@@ -31,9 +31,6 @@ use serde_json::Value;
 use std::sync::Arc;
 
 // TODO: Add target name and versions
-
-#[derive(Template)]
-#[template(path = "crate/details.html")]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrateDetails {
     pub(crate) name: String,
@@ -68,12 +65,6 @@ pub(crate) struct CrateDetails {
     pub(crate) crate_id: i32,
     /// Database id for this release
     pub(crate) release_id: i32,
-    pub(crate) csp_nonce: String,
-}
-
-impl_axum_webpage! {
-    CrateDetails,
-    cpu_intensive_rendering = true,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -259,7 +250,6 @@ impl CrateDetails {
             items_with_examples: krate.items_with_examples,
             crate_id: krate.crate_id,
             release_id: krate.release_id,
-            csp_nonce: String::new(),
         };
 
         // get owners
@@ -351,11 +341,6 @@ impl CrateDetails {
     pub fn latest_release(&self) -> Result<&Release> {
         latest_release(&self.releases).ok_or_else(|| anyhow!("crate without releases"))
     }
-
-    // Used by templates.
-    pub(crate) fn use_direct_platform_links(&self) -> bool {
-        true
-    }
 }
 
 pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
@@ -425,6 +410,45 @@ pub(crate) async fn releases_for_crate(
     Ok(releases)
 }
 
+#[derive(Template)]
+#[template(path = "crate/details.html")]
+#[derive(Debug, Clone, PartialEq)]
+struct CrateDetailsPage {
+    version: Version,
+    name: String,
+    owners: Vec<(String, String, OwnerKind)>,
+    metadata: MetaData,
+    documented_items: Option<i32>,
+    total_items: Option<i32>,
+    total_items_needing_examples: Option<i32>,
+    items_with_examples: Option<i32>,
+    homepage_url: Option<String>,
+    documentation_url: Option<String>,
+    repository_url: Option<String>,
+    repository_metadata: Option<RepositoryMetadata>,
+    dependencies: Option<Value>,
+    releases: Vec<Release>,
+    readme: Option<String>,
+    build_status: BuildStatus,
+    rustdoc_status: Option<bool>,
+    is_library: Option<bool>,
+    last_successful_build: Option<String>,
+    rustdoc: Option<String>, // this is description_long in database
+    csp_nonce: String,
+}
+
+impl CrateDetailsPage {
+    // Used by templates.
+    pub(crate) fn use_direct_platform_links(&self) -> bool {
+        true
+    }
+}
+
+impl_axum_webpage! {
+    CrateDetailsPage,
+    cpu_intensive_rendering = true,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub(crate) struct CrateDetailHandlerParams {
     name: String,
@@ -461,7 +485,54 @@ pub(crate) async fn crate_details_handler(
         Err(e) => warn!("error fetching readme: {:?}", &e),
     }
 
-    let mut res = details.into_response();
+    let CrateDetails {
+        version,
+        name,
+        owners,
+        metadata,
+        documented_items,
+        total_items,
+        total_items_needing_examples,
+        items_with_examples,
+        homepage_url,
+        documentation_url,
+        repository_url,
+        repository_metadata,
+        dependencies,
+        releases,
+        readme,
+        build_status,
+        rustdoc_status,
+        is_library,
+        last_successful_build,
+        rustdoc,
+        ..
+    } = details;
+
+    let mut res = CrateDetailsPage {
+        version,
+        name,
+        owners,
+        metadata,
+        documented_items,
+        total_items,
+        total_items_needing_examples,
+        items_with_examples,
+        homepage_url,
+        documentation_url,
+        repository_url,
+        repository_metadata,
+        dependencies,
+        releases,
+        readme,
+        build_status,
+        rustdoc_status,
+        is_library,
+        last_successful_build,
+        rustdoc,
+        csp_nonce: String::new(),
+    }
+    .into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if req_version.is_latest() {
             CachePolicy::ForeverInCdn
