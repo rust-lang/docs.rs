@@ -194,7 +194,7 @@
         {%- if yanked -%}
             {%- set tooltip = "You are seeing a yanked version of the {} crate. Click here to go to the latest version."|format(metadata.name) -%}
             {%- set title = "This release has been yanked, go to latest version" -%}
-        {%- elif is_prerelease -%}
+        {%- elif is_prerelease is defined && is_prerelease -%}
             {%- set tooltip = "You are seeing a pre-release version of the {} crate. Click here to go to the latest stable version."|format(metadata.name) -%}
             {%- set title = "Go to latest stable release" -%}
         {%- else -%}
