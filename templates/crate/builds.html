@@ -14,8 +14,6 @@
 {%- endblock body_classes -%}
 
 {%- block topbar -%}
-  {%- set latest_version = "" -%}
-  {%- set target = "" -%}
   {%- set inner_path = metadata.target_name_url() -%}
   {%- set is_latest_version = true -%}
   {%- include "rustdoc/topbar.html" -%}
