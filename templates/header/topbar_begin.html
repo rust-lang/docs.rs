@@ -10,7 +10,7 @@
                   method="GET"
                   id="nav-search-form"
                   class="landing-search-form-nav {%
-                  if !is_latest_version %}not-latest{% endif
+                  if is_latest_version is defined && !is_latest_version %}not-latest{% endif
                   %} {% if metadata is defined && metadata.yanked.unwrap_or_default() %}yanked{% endif %}">
 
                 {# The top-left logo and name #}
