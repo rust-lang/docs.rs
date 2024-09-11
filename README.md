@@ -278,5 +278,5 @@ When updating Font Awesome, make sure to change `$fa-font-path` in `scss/_variab
 
 ### Contact
 
-Docs.rs is run and maintained by the [docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#docs-rs).
+Docs.rs is run and maintained by the [docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#team-docs-rs).
 You can find us in #t-docs-rs on [zulip](https://rust-lang.zulipchat.com/#narrow/stream/t-docs-rs)
