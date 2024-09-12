@@ -130,7 +130,9 @@ fn delete_version_from_database(conn: &mut Client, name: &str, version: &str) ->
             "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
             &[&crate_id, &version],
         )?
-        .get("is_library");
+        .get::<_, Option<bool>>("is_library")
+        .unwrap_or(false);
+
     transaction.execute(
         "UPDATE crates SET latest_version_id = (
             SELECT id FROM releases WHERE release_time = (
@@ -174,7 +176,8 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
         )?;
     }
     transaction.execute("DELETE FROM owner_rels WHERE cid = $1;", &[&crate_id])?;
-    let has_library = transaction
+
+    let has_library: bool = transaction
         .query_one(
             "SELECT
                 BOOL_OR(releases.is_library) AS has_library
@@ -183,7 +186,9 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
             ",
             &[&crate_id],
         )?
-        .get("has_library");
+        .get::<_, Option<bool>>("has_library")
+        .unwrap_or(false);
+
     transaction.execute("DELETE FROM releases WHERE crate_id = $1;", &[&crate_id])?;
     transaction.execute("DELETE FROM crates WHERE id = $1;", &[&crate_id])?;
 
@@ -197,7 +202,7 @@ fn delete_crate_from_database(conn: &mut Client, name: &str, crate_id: i32) -> R
 mod tests {
     use super::*;
     use crate::registry_api::{CrateOwner, OwnerKind};
-    use crate::test::{assert_success, wrapper};
+    use crate::test::{assert_success, fake_release_that_failed_before_build, wrapper};
     use test_case::test_case;
 
     fn crate_exists(conn: &mut Client, name: &str) -> Result<bool> {
@@ -416,6 +421,51 @@ mod tests {
             let web = env.frontend();
             assert_success("/a/2.0.0/a/", web)?;
             assert_eq!(web.get("/a/1.0.0/a/").send()?.status(), 404);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_delete_incomplete_version() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let (release_id, _) = env
+                .runtime()
+                .block_on(async {
+                    let mut conn = db.async_conn().await;
+                    fake_release_that_failed_before_build(&mut conn, "a", "1.0.0", "some-error")
+                        .await
+                })
+                .unwrap();
+
+            delete_version(&mut db.conn(), &env.storage(), &env.config(), "a", "1.0.0")?;
+
+            assert!(!release_exists(&mut db.conn(), release_id)?);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_delete_incomplete_crate() {
+        wrapper(|env| {
+            let db = env.db();
+
+            let (release_id, _) = env
+                .runtime()
+                .block_on(async {
+                    let mut conn = db.async_conn().await;
+                    fake_release_that_failed_before_build(&mut conn, "a", "1.0.0", "some-error")
+                        .await
+                })
+                .unwrap();
+
+            delete_crate(&mut db.conn(), &env.storage(), &env.config(), "a")?;
+
+            assert!(!crate_exists(&mut db.conn(), "a")?);
+            assert!(!release_exists(&mut db.conn(), release_id)?);
 
             Ok(())
         })
