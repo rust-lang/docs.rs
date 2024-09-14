@@ -1,10 +1,10 @@
-use crate::cdn;
 use crate::db::{delete_crate, delete_version, update_latest_version_id, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::Storage;
 use crate::utils::{get_config, get_crate_priority, report_error, retry, set_config, ConfigName};
 use crate::Context;
+use crate::{cdn, BuildPackageSummary};
 use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
 use anyhow::Context as _;
 use fn_error_context::context;
@@ -168,7 +168,10 @@ impl BuildQueue {
             .is_some())
     }
 
-    fn process_next_crate(&self, f: impl FnOnce(&QueuedCrate) -> Result<()>) -> Result<()> {
+    fn process_next_crate(
+        &self,
+        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
+    ) -> Result<()> {
         let mut conn = self.db.get()?;
         let mut transaction = conn.transaction()?;
 
@@ -204,14 +207,11 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = self.metrics.build_time.observe_closure_duration(|| {
-            f(&to_process).with_context(|| {
-                format!(
-                    "Failed to build package {}-{} from queue",
-                    to_process.name, to_process.version
-                )
-            })
-        });
+        let res = self
+            .metrics
+            .build_time
+            .observe_closure_duration(|| f(&to_process));
+
         self.metrics.total_builds.inc();
         if let Err(err) =
             cdn::queue_crate_invalidation(&mut transaction, &self.config, &to_process.name)
@@ -219,29 +219,44 @@ impl BuildQueue {
             report_error(&err);
         }
 
-        match res {
-            Ok(()) => {
-                transaction.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
-            }
-            Err(e) => {
-                // Increase attempt count
-                let attempt: i32 = transaction
-                    .query_one(
-                        "UPDATE queue
+        let mut increase_attempt_count = || -> Result<()> {
+            let attempt: i32 = transaction
+                .query_one(
+                    "UPDATE queue
                          SET
                             attempt = attempt + 1,
                             last_attempt = NOW()
                          WHERE id = $1
                          RETURNING attempt;",
-                        &[&to_process.id],
-                    )?
-                    .get(0);
+                    &[&to_process.id],
+                )?
+                .get(0);
 
-                if attempt >= self.max_attempts {
-                    self.metrics.failed_builds.inc();
-                }
+            if attempt >= self.max_attempts {
+                self.metrics.failed_builds.inc();
+            }
+            Ok(())
+        };
 
-                report_error(&e);
+        match res {
+            Ok(BuildPackageSummary {
+                should_reattempt: false,
+                successful: _,
+            }) => {
+                transaction.execute("DELETE FROM queue WHERE id = $1;", &[&to_process.id])?;
+            }
+            Ok(BuildPackageSummary {
+                should_reattempt: true,
+                successful: _,
+            }) => {
+                increase_attempt_count()?;
+            }
+            Err(e) => {
+                increase_attempt_count()?;
+                report_error(&e.context(format!(
+                    "Failed to build package {}-{} from queue",
+                    to_process.name, to_process.version
+                )))
             }
         }
 
@@ -521,8 +536,7 @@ impl BuildQueue {
                 return Err(err);
             }
 
-            builder.build_package(&krate.name, &krate.version, kind)?;
-            Ok(())
+            builder.build_package(&krate.name, &krate.version, kind)
         })?;
 
         Ok(processed)
@@ -644,7 +658,7 @@ mod tests {
             queue.process_next_crate(|krate| {
                 assert_eq!(krate.name, "krate");
                 handled = true;
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
 
             assert!(handled);
@@ -680,7 +694,7 @@ mod tests {
             let assert_next = |name| -> Result<()> {
                 queue.process_next_crate(|krate| {
                     assert_eq!(name, krate.name);
-                    Ok(())
+                    Ok(BuildPackageSummary::default())
                 })?;
                 Ok(())
             };
@@ -720,7 +734,7 @@ mod tests {
             let mut called = false;
             queue.process_next_crate(|_| {
                 called = true;
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
             assert!(!called, "there were still items in the queue");
 
@@ -755,7 +769,7 @@ mod tests {
 
             queue.process_next_crate(|krate| {
                 assert_eq!("will_succeed", krate.name);
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
 
             let queued_invalidations = cdn::queued_or_active_crate_invalidations(&mut *conn)?;
@@ -793,7 +807,7 @@ mod tests {
 
             queue.process_next_crate(|krate| {
                 assert_eq!("foo", krate.name);
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
             assert_eq!(queue.pending_count()?, 1);
 
@@ -816,7 +830,7 @@ mod tests {
 
             queue.process_next_crate(|krate| {
                 assert_eq!("bar", krate.name);
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
             assert_eq!(queue.prioritized_count()?, 1);
 
@@ -841,7 +855,7 @@ mod tests {
             );
 
             while queue.pending_count()? > 0 {
-                queue.process_next_crate(|_| Ok(()))?;
+                queue.process_next_crate(|_| Ok(BuildPackageSummary::default()))?;
             }
             assert!(queue.pending_count_by_priority()?.is_empty());
 
@@ -850,7 +864,44 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_count() {
+    fn test_failed_count_for_reattempts() {
+        const MAX_ATTEMPTS: u16 = 3;
+        crate::test::wrapper(|env| {
+            env.override_config(|config| {
+                config.build_attempts = MAX_ATTEMPTS;
+                config.delay_between_build_attempts = Duration::ZERO;
+            });
+            let queue = env.build_queue();
+
+            assert_eq!(queue.failed_count()?, 0);
+            queue.add_crate("foo", "1.0.0", -100, None)?;
+            assert_eq!(queue.failed_count()?, 0);
+            queue.add_crate("bar", "1.0.0", 0, None)?;
+
+            for _ in 0..MAX_ATTEMPTS {
+                assert_eq!(queue.failed_count()?, 0);
+                queue.process_next_crate(|krate| {
+                    assert_eq!("foo", krate.name);
+                    Ok(BuildPackageSummary {
+                        should_reattempt: true,
+                        ..Default::default()
+                    })
+                })?;
+            }
+            assert_eq!(queue.failed_count()?, 1);
+
+            queue.process_next_crate(|krate| {
+                assert_eq!("bar", krate.name);
+                Ok(BuildPackageSummary::default())
+            })?;
+            assert_eq!(queue.failed_count()?, 1);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_failed_count_after_error() {
         const MAX_ATTEMPTS: u16 = 3;
         crate::test::wrapper(|env| {
             env.override_config(|config| {
@@ -875,7 +926,7 @@ mod tests {
 
             queue.process_next_crate(|krate| {
                 assert_eq!("bar", krate.name);
-                Ok(())
+                Ok(BuildPackageSummary::default())
             })?;
             assert_eq!(queue.failed_count()?, 1);
 
