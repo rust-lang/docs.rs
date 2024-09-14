@@ -46,7 +46,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "1.0.26"
-comrak = { version = "0.26.0", default-features = false }
+comrak = { version = "0.28.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -67,7 +67,7 @@ zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.4.4"
 getrandom = "0.2.1"
 itertools = { version = "0.13.0", optional = true}
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+rusqlite = { version = "0.32.1", features = ["bundled"] }
 hex = "0.4.3"
 
 # Async
@@ -90,7 +90,7 @@ serde_with = "3.4.0"
 axum = { version = "0.7.3", features = ["macros"] }
 axum-extra = { version = "0.9.1", features = ["typed-header"] }
 hyper = { version = "1.1.0", default-features = false }
-tower = "0.4.11"
+tower = "0.5.1"
 tower-service = "0.3.2"
 tower-http = { version = "0.5.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
@@ -139,7 +139,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.64.0", default-features = false }
+gix = { version = "0.66.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
