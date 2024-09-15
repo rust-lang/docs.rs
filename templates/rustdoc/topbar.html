@@ -1,7 +1,6 @@
 {# The url of the current release, `/crate/:name/:version` #}
 {%- import "macros.html" as macros -%}
 
-{% set search_query = Some(String::new()) %}
 {%- include "header/topbar_begin.html" -%}
 {%- set crate_url = "/crate/{}/{}"|format(metadata.name, metadata.req_version) -%}
 {%- set rest_menu_url -%}

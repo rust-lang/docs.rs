@@ -66,7 +66,14 @@
                     {# If there is a search query, put it in the search bar #}
                     {# The tabindex="-1" is used to prevent it to be the first input focused on the page when using the browser shortcut #}
                     <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
-                        placeholder="Find crate" {%- if let Some(query) = search_query %}{% if !query.is_empty() %} value="{{ query }}" {%- endif %}{% endif %}>
+                        placeholder="Find crate"
+                        {% if search_query is defined %}
+                            {%- if let Some(query) = search_query %}
+                                {%- if !query.is_empty() +%}
+                                    value="{{ query }}"
+                                {%- endif %}
+                            {%- endif %}
+                        {%- endif %}>
                 </div>
             </form>
         </div>
