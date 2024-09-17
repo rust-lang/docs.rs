@@ -263,10 +263,6 @@ pub mod filters {
         Ok(serde_json::to_string(value).expect("`encode_json` failed"))
     }
 
-    pub fn as_f32(value: &i32) -> rinja::Result<f32> {
-        Ok(*value as f32)
-    }
-
     pub fn rest_menu_url(current_target: &str, inner_path: &str) -> rinja::Result<String> {
         if current_target.is_empty() {
             return Ok(String::new());
