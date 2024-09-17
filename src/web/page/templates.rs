@@ -247,10 +247,6 @@ pub mod filters {
         }
     }
 
-    pub fn unwrap<T: fmt::Display>(value: &Option<T>) -> rinja::Result<&T> {
-        Ok(value.as_ref().expect("`unwrap` filter failed"))
-    }
-
     pub fn split_first<'a>(value: &'a str, pat: &str) -> rinja::Result<Option<&'a str>> {
         Ok(value.split(pat).next())
     }
