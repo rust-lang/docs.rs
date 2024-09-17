@@ -92,7 +92,6 @@ pub mod filters {
     use chrono::{DateTime, Utc};
     use rinja::filters::Safe;
     use std::borrow::Cow;
-    use std::fmt;
 
     // Copied from `tera`.
     pub fn escape_html(input: &str) -> rinja::Result<Cow<'_, str>> {
@@ -249,10 +248,6 @@ pub mod filters {
 
     pub fn split_first<'a>(value: &'a str, pat: &str) -> rinja::Result<Option<&'a str>> {
         Ok(value.split(pat).next())
-    }
-
-    pub fn to_string<T: fmt::Display>(value: &T) -> rinja::Result<String> {
-        Ok(value.to_string())
     }
 
     pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> rinja::Result<String> {
