@@ -149,8 +149,8 @@
                     </div>
                 </div>
                 {%- if let (Some(documented), Some(total)) = (krate.documented_items, krate.total_items) -%}
-                    {% set documented = documented|as_f32 %}
-                    {% set total = total|as_f32 %}
+                    {% set documented = documented as f32 %}
+                    {% set total = total as f32 %}
                     {% set percent = documented * 100f32 / total %}
                     <div class="pure-g">
                         <div class="pure-u-1">

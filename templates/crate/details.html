@@ -26,8 +26,8 @@
                 <div class="pure-menu package-menu">
                     <ul class="pure-menu-list">
                         {%- if let (Some(documented), Some(total)) = (documented_items, total_items) -%}
-                            {% set documented_f32 = documented|as_f32 %}
-                            {% set total_f32 = total|as_f32 %}
+                            {% set documented_f32 = documented as f32 %}
+                            {% set total_f32 = total as f32 %}
                             {% set percent = documented_f32 * 100f32 / total_f32 %}
                             <li class="pure-menu-heading">Coverage</li>
                             <li class="pure-menu-item text-center"><b>{{ percent|round(2) }}%</b><br>
