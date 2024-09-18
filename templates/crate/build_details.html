@@ -22,7 +22,7 @@
     <div class="container">
         <div class="recent-releases-container">
             <div class="release">
-                <strong>Build #{{ build_details.id }} {%- if let Some(build_time) = build_details.build_time %} {{ build_time|date("%+") }}{% endif %}</strong>
+                <strong>Build #{{ build_details.id }} {%- if let Some(build_time) = build_details.build_time %} {{ build_time.format("%+") }}{% endif %}</strong>
             </div>
 
             <ul>
