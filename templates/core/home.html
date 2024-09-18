@@ -62,7 +62,7 @@ centered
 
                                 {%- if let Some(build_time) = release.build_time -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
-                                        title="{{ build_time|date("%FT%TZ") }}">
+                                        title="{{ build_time.format("%FT%TZ") }}">
                                         {{ build_time|timeformat }}
                                     </div>
                                 {%- endif -%}

@@ -230,13 +230,9 @@ pub mod filters {
         Ok(((multiplier * *value).round() / multiplier).to_string())
     }
 
-    pub fn date(value: &DateTime<Utc>, format: &str) -> rinja::Result<String> {
-        Ok(format!("{}", value.format(format)))
-    }
-
     pub fn opt_date(value: &Option<DateTime<Utc>>, format: &str) -> rinja::Result<String> {
         if let Some(value) = value {
-            date(value, format)
+            Ok(value.format(format).to_string())
         } else {
             Ok(String::new())
         }
