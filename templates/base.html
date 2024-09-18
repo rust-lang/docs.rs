@@ -7,9 +7,10 @@
         <meta name="generator" content="docs.rs {{ crate::BUILD_VERSION }}">
         {%- block meta -%}{%- endblock meta -%}
 
-        {# Docs.rs styles #}
-        <link rel="stylesheet" href="/-/static/vendored.css?{{ crate::BUILD_VERSION|slugify }}" media="all" />
-        <link rel="stylesheet" href="/-/static/style.css?{{ crate::BUILD_VERSION|slugify }}" media="all" />
+        {#- Docs.rs styles -#}
+        {%- set build_slug = slug::slugify(crate::BUILD_VERSION) -%}
+        <link rel="stylesheet" href="/-/static/vendored.css?{{ build_slug }}" media="all" />
+        <link rel="stylesheet" href="/-/static/style.css?{{ build_slug }}" media="all" />
 
         <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 
@@ -18,8 +19,8 @@
         <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
         {%- block css -%}{%- endblock css -%}
 
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ crate::BUILD_VERSION|slugify }}"></script>
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ crate::BUILD_VERSION|slugify }}"></script>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/menu.js?{{ build_slug }}"></script>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/index.js?{{ build_slug }}"></script>
     </head>
 
     <body class="{% block body_classes %}{% endblock body_classes %}">
