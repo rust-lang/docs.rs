@@ -102,5 +102,5 @@ centered
 {%- endblock body -%}
 
 {%- block javascript -%}
-    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ crate::BUILD_VERSION|slugify }}"></script>
+    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ build_slug }}"></script>
 {%- endblock javascript -%}

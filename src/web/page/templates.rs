@@ -221,10 +221,6 @@ pub mod filters {
         )))
     }
 
-    pub fn slugify<T: AsRef<str>>(code: T) -> rinja::Result<String> {
-        Ok(slug::slugify(code.as_ref()))
-    }
-
     pub fn round(value: &f32, precision: u32) -> rinja::Result<String> {
         let multiplier = if precision == 0 {
             1.0
