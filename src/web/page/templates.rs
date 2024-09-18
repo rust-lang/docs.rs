@@ -234,8 +234,10 @@ pub mod filters {
         Ok(value.split(pat).next())
     }
 
-    pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> rinja::Result<String> {
-        Ok(serde_json::to_string(value).expect("`encode_json` failed"))
+    pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> rinja::Result<Safe<String>> {
+        Ok(Safe(
+            serde_json::to_string(value).expect("`encode_json` failed"),
+        ))
     }
 
     pub fn rest_menu_url(current_target: &str, inner_path: &str) -> rinja::Result<String> {
