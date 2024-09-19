@@ -4,10 +4,10 @@
 {%- include "header/topbar_begin.html" -%}
 {%- set crate_url = "/crate/{}/{}"|format(metadata.name, metadata.req_version) -%}
 {%- set rest_menu_url -%}
-{%- if current_target is defined -%}
-    {%- set rest_menu_url = current_target|rest_menu_url(inner_path) -%}
+{%- if current_target is defined && !current_target.is_empty() -%}
+    {%- set rest_menu_url = format!("/{}/{}", self.current_target, self.inner_path) -%}
 {%- else -%}
-    {%- set rest_menu_url = ""|rest_menu_url(inner_path) -%}
+    {%- set rest_menu_url = String::new() -%}
 {%- endif -%}
 {%- set platform_menu_url = "{}/menus/platforms{}"|format(crate_url, rest_menu_url) -%}
 {%- set releases_menu_url = "{}/menus/releases{}"|format(crate_url, rest_menu_url) -%}
