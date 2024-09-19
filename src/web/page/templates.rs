@@ -239,13 +239,6 @@ pub mod filters {
             serde_json::to_string(value).expect("`encode_json` failed"),
         ))
     }
-
-    pub fn rest_menu_url(current_target: &str, inner_path: &str) -> rinja::Result<String> {
-        if current_target.is_empty() {
-            return Ok(String::new());
-        }
-        Ok(format!("/{current_target}/{inner_path}"))
-    }
 }
 
 enum IconType {
