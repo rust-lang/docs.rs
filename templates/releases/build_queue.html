@@ -15,56 +15,56 @@
 {%- block body -%}
     <div class="container">
         <div class="recent-releases-container">
-                <div class="release pure-g">
-                    <div class="pure-u-1-2">
-                        <strong>currently being built</strong>
-                    </div>
-                    <div class="pure-u-1-2">
-                        {%- if !active_cdn_deployments.is_empty() %}
-                            <strong>active CDN deployments</strong>
-                        {%- endif %}
-                    </div>
+            <div class="release pure-g">
+                <div class="pure-u-1-2">
+                    <strong>currently being built</strong>
                 </div>
+                <div class="pure-u-1-2">
+                    {%- if !active_cdn_deployments.is_empty() %}
+                        <strong>active CDN deployments</strong>
+                    {%- endif %}
+                </div>
+            </div>
 
-                <div class = "pure-g">
-                    <div class="pure-u-1-2">
-                        {%- if !in_progress_builds.is_empty() %}
-                            <ol class="queue-list">
-                                {% for release in in_progress_builds -%}
-                                    <li>
-                                        <a href="/crate/{{ release.0 }}/{{ release.1 }}/builds">
-                                            {{ release.0 }} {{ release.1 }}
-                                        </a>
-                                    </li>
-                                {%- endfor %}
-                            </ol>
-                        {%- else %}
-                            <div class="about">
-                                <p><strong>There is nothing currently being built</strong></p>
-                            </div>
-                        {%- endif %}
-                    </div>
-                    <div class="pure-u-1-2">
-                        {%- if !active_cdn_deployments.is_empty() %}
-                            <ol class="queue-list">
-                                {% for krate in active_cdn_deployments -%}
-                                    <li>
-                                        <a href="/{{ krate }}">
-                                            {{ krate }}
-                                        </a>
-                                    </li>
-                                {%- endfor %}
-                            </ol>
-                            <div class="about">
-                                <p>
-                                    After the build finishes it may take up to 20 minutes for all documentation
-                                    pages to be up-to-date and available to everybody.
-                                </p>
-                                <p>Especially <code>/latest/</code> URLs might be affected.</p>
-                            </div>
-                        {%- endif %}
-                    </div>
+            <div class = "pure-g">
+                <div class="pure-u-1-2">
+                    {%- if !in_progress_builds.is_empty() %}
+                        <ol class="queue-list">
+                            {% for release in in_progress_builds -%}
+                                <li>
+                                    <a href="/crate/{{ release.0 }}/{{ release.1 }}/builds">
+                                        {{ release.0 }} {{ release.1 }}
+                                    </a>
+                                </li>
+                            {%- endfor %}
+                        </ol>
+                    {%- else %}
+                        <div class="about">
+                            <p><strong>There is nothing currently being built</strong></p>
+                        </div>
+                    {%- endif %}
                 </div>
+                <div class="pure-u-1-2">
+                    {%- if !active_cdn_deployments.is_empty() %}
+                        <ol class="queue-list">
+                            {% for krate in active_cdn_deployments -%}
+                                <li>
+                                    <a href="/{{ krate }}">
+                                        {{ krate }}
+                                    </a>
+                                </li>
+                            {%- endfor %}
+                        </ol>
+                        <div class="about">
+                            <p>
+                                After the build finishes it may take up to 20 minutes for all documentation
+                                pages to be up-to-date and available to everybody.
+                            </p>
+                            <p>Especially <code>/latest/</code> URLs might be affected.</p>
+                        </div>
+                    {%- endif %}
+                </div>
+            </div>
 
             <div class="release">
                 <strong>Build Queue</strong>
