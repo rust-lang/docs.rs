@@ -43,7 +43,7 @@
                                         {%- if build.build_status == "success" -%}
                                             {{ "check"|fas(false, false, "") }}
                                         {%- elif build.build_status == "failure" -%}
-                                            {{ "times"|fas(false, false, "") }}
+                                            {{ "triangle-exclamation"|fas(false, false, "") }}
                                         {%- elif build.build_status == "in_progress" -%}
                                             {{ "gear"|fas(false, true, "") }}
                                         {%- else -%}
