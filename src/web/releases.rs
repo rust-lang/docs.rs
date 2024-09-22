@@ -1717,7 +1717,7 @@ mod tests {
             assert!(empty
                 .select(".release > div > strong")
                 .expect("missing heading")
-                .any(|el| dbg!(el.text_contents()).contains("active CDN deployments")));
+                .any(|el| el.text_contents().contains("active CDN deployments")));
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
             let items = full
