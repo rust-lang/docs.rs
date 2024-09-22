@@ -86,11 +86,11 @@
 
                                     {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" || file.mime|split_first("/") == Some("text") -%}
-                                        {{ "file-alt"|far(false, false, "") }}
+                                        {{ "file-lines"|far(false, false, "") }}
 
                                         {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ "file-archive"|far(false, false, "") }}
+                                        {{ "file"|far(false, false, "") }}
                                     {%- endif -%}
 
                                     <span class="text">{{ file.name }}</span>
