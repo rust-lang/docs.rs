@@ -241,6 +241,7 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
     req: &VersionReq,
     filter: F,
 ) -> Option<&'a Release> {
+    // first try standard semver match using `VersionReq::match`, should handle most cases.
     if let Some(release) = releases
         .iter()
         .filter(|release| filter(release))
@@ -249,8 +250,9 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
         Some(release)
     } else if req == &VersionReq::STAR {
         // semver `*` does not match pre-releases.
-        // When someone wants the latest release and we have only pre-releases
-        // just return the latest prerelease.
+        // So when we only have pre-releases, `VersionReq::STAR` would lead to an
+        // empty result.
+        // In this case we just return the latest latest prerelase instead of nothing.
         return releases.iter().find(|release| filter(release));
     } else {
         None
