@@ -4,6 +4,10 @@ on:
       - master
     types: [closed]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   update-labels:
     if: ${{ github.event.pull_request.merged }}
