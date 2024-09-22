@@ -236,6 +236,27 @@ impl MatchedRelease {
     }
 }
 
+fn semver_match<'a, F: Fn(&Release) -> bool>(
+    releases: &'a [Release],
+    req: &VersionReq,
+    filter: F,
+) -> Option<&'a Release> {
+    if let Some(release) = releases
+        .iter()
+        .filter(|release| filter(release))
+        .find(|release| req.matches(&release.version))
+    {
+        Some(release)
+    } else if req == &VersionReq::STAR {
+        // semver `*` does not match pre-releases.
+        // When someone wants the latest release and we have only pre-releases
+        // just return the latest prerelease.
+        return releases.iter().find(|release| filter(release));
+    } else {
+        None
+    }
+}
+
 /// Checks the database for crate releases that match the given name and version.
 ///
 /// `version` may be an exact version number or loose semver version requirement. The return value
@@ -307,14 +328,12 @@ async fn match_version(
         ReqVersion::Semver(version_req) => version_req.clone(),
     };
 
-    // when matching semver requirements, we only want to look at non-yanked releases.
-    let flt = |r: &&Release| r.yanked.is_none() || r.yanked == Some(false);
-
-    if let Some(release) = releases
-        .iter()
-        .filter(flt)
-        .find(|release| req_semver.matches(&release.version))
-    {
+    // when matching semver requirements,
+    // we generally only want to look at non-yanked releases,
+    // excluding releases which just contain in-progress builds
+    if let Some(release) = semver_match(&releases, &req_semver, |r: &Release| {
+        r.build_status != BuildStatus::InProgress && (r.yanked.is_none() || r.yanked == Some(false))
+    }) {
         return Ok(MatchedRelease {
             name: name.to_owned(),
             corrected_name,
@@ -324,22 +343,17 @@ async fn match_version(
         });
     }
 
-    // semver `*` does not match pre-releases.
-    // When someone wants the latest release and we have only pre-releases
-    // just return the latest prerelease.
-    if req_semver == VersionReq::STAR {
-        return releases
-            .iter()
-            .find(flt)
-            .cloned()
-            .map(|release| MatchedRelease {
-                name: name.to_owned(),
-                corrected_name: corrected_name.clone(),
-                req_version: input_version.clone(),
-                release,
-                all_releases: releases,
-            })
-            .ok_or(AxumNope::VersionNotFound);
+    // when we don't find any match with "normal" releases, we also look into in-progress releases
+    if let Some(release) = semver_match(&releases, &req_semver, |r: &Release| {
+        r.yanked.is_none() || r.yanked == Some(false)
+    }) {
+        return Ok(MatchedRelease {
+            name: name.to_owned(),
+            corrected_name,
+            req_version: input_version.clone(),
+            release: release.clone(),
+            all_releases: releases,
+        });
     }
 
     // Since we return with a CrateNotFound earlier if the db reply is empty,
@@ -1048,6 +1062,35 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn in_progress_releases_are_ignored_when_others_match() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+
+            // normal release
+            release("1.0.0", &env).await;
+
+            // in progress release
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("1.1.0")
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                ])
+                .create_async()
+                .await?;
+
+            // STAR gives me the prod release
+            assert_eq!(version(Some("*"), db).await, exact("1.0.0"));
+
+            // exact-match query gives me the in progress release
+            assert_eq!(version(Some("=1.1.0"), db).await, exact("1.1.0"));
+
+            Ok(())
+        })
     }
 
     #[test]
