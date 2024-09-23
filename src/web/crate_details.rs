@@ -1584,6 +1584,44 @@ mod tests {
     }
 
     #[test]
+    fn details_with_repository_and_stats_can_render_icon() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("library")
+                .version("0.1.0")
+                .repo("https://github.com/org/repo")
+                .github_stats("org/repo", 10, 10, 10)
+                .create()?;
+
+            let page = kuchikiki::parse_html().one(
+                env.frontend()
+                    .get("/crate/library/0.1.0/")
+                    .send()?
+                    .error_for_status()?
+                    .text()?,
+            );
+
+            let link = page
+                .select_first("a.pure-menu-link[href='https://github.com/org/repo']")
+                .unwrap();
+
+            let icon_node = link.as_node().children().nth(1).unwrap();
+            assert_eq!(
+                icon_node
+                    .as_element()
+                    .unwrap()
+                    .attributes
+                    .borrow()
+                    .get("class")
+                    .unwrap(),
+                "fa-svg"
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn feature_flags_report_null() {
         wrapper(|env| {
             let id = env
