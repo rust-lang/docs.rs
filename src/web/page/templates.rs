@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::web::rustdoc::RustdocPage;
-use anyhow::Context;
+use crate::web::{report_error, rustdoc::RustdocPage};
+use anyhow::{anyhow, Context};
 use rinja::Template;
 use std::{fmt, sync::Arc};
 use tracing::trace;
@@ -267,8 +267,16 @@ impl IconType {
             IconType::Brand => font_awesome_as_a_crate::Type::Brands,
         };
 
-        let icon_file_string = font_awesome_as_a_crate::svg(type_, icon_name)
-            .map_err(|err| rinja::Error::Custom(Box::new(err)))?;
+        let icon_file_string = match font_awesome_as_a_crate::svg(type_, icon_name) {
+            Ok(s) => s,
+            Err(err) => {
+                report_error(&anyhow!(err).context(format!(
+                    "error trying to render icon with name \"{}\"",
+                    icon_name
+                )));
+                ""
+            }
+        };
 
         let mut classes = vec!["fa-svg"];
         if fw {
