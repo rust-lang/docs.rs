@@ -13,7 +13,6 @@ pub struct Config {
 
     // Database connection params
     pub(crate) database_url: String,
-    pub(crate) max_legacy_pool_size: u32,
     pub(crate) max_pool_size: u32,
     pub(crate) min_pool_idle: u32,
 
@@ -153,8 +152,7 @@ impl Config {
             prefix: prefix.clone(),
 
             database_url: require_env("DOCSRS_DATABASE_URL")?,
-            max_legacy_pool_size: env("DOCSRS_MAX_LEGACY_POOL_SIZE", 45)?,
-            max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 45)?,
+            max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
 
             storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?,

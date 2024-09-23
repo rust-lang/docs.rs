@@ -12,7 +12,7 @@ pub use self::{
     delete::{delete_crate, delete_version},
     file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,
-    pool::{AsyncPoolClient, Pool, PoolClient, PoolError},
+    pool::{AsyncPoolClient, Pool, PoolError},
 };
 
 mod add_package;

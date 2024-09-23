@@ -25,11 +25,15 @@ const BUILD_PRIORITY: i32 = 15;
 /// Even when activities fail, the command can just be re-run. While the diff calculation will
 /// be repeated, we won't re-execute fixing activities.
 pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
-    let mut conn = ctx.pool()?.get()?;
     let index = ctx.index()?;
 
     info!("Loading data from database...");
-    let db_data = db::load(&mut conn, &*ctx.config()?)
+    let db_data = ctx
+        .runtime()?
+        .block_on(async {
+            let mut conn = ctx.pool()?.get_async().await?;
+            db::load(&mut conn, &*ctx.config()?).await
+        })
         .context("Loading crate data from database for consistency check")?;
 
     tracing::info!("Loading data from index...");
@@ -148,27 +152,33 @@ where
 
 #[cfg(test)]
 mod tests {
-    use postgres_types::FromSql;
-
     use super::diff::Difference;
     use super::*;
     use crate::test::{wrapper, TestEnvironment};
+    use sqlx::Row as _;
 
     fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
-        Ok(env.db().conn().query_one(sql, &[])?.get::<_, i64>(0))
+        Ok(env.runtime().block_on(async {
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query_scalar(sql).fetch_one(&mut *conn).await
+        })?)
     }
 
-    fn single_row<T>(env: &TestEnvironment, sql: &str) -> Result<Vec<T>>
+    fn single_row<O>(env: &TestEnvironment, sql: &str) -> Result<Vec<O>>
     where
-        T: for<'a> FromSql<'a>,
+        O: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
     {
-        Ok(env
-            .db()
-            .conn()
-            .query(sql, &[])?
-            .iter()
-            .map(|row| row.get::<_, T>(0))
-            .collect())
+        env.runtime().block_on(async {
+            let mut conn = env.async_db().await.async_conn().await;
+            Ok::<_, anyhow::Error>(
+                sqlx::query(sql)
+                    .fetch_all(&mut *conn)
+                    .await?
+                    .into_iter()
+                    .map(|row| row.get(0))
+                    .collect(),
+            )
+        })
     }
 
     #[test]

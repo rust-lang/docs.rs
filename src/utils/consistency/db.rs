@@ -2,12 +2,13 @@ use super::data::{Crate, Crates, Release, Releases};
 use crate::Config;
 use anyhow::Result;
 use itertools::Itertools;
-use postgres::fallible_iterator::FallibleIterator;
-use std::iter;
 
-pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crates> {
-    let rows = conn.query_raw(
-        "SELECT name, version, yanked
+pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Result<Crates> {
+    let rows = sqlx::query!(
+        r#"SELECT
+            name as "name!",
+            version as "version!",
+            yanked
          FROM (
              SELECT
                  crates.name,
@@ -18,7 +19,10 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
              UNION ALL
              -- crates & releases that are already queued
              -- don't have to be requeued.
-             SELECT queue.name, queue.version, NULL as yanked
+             SELECT
+                 queue.name,
+                 queue.version,
+                 NULL as yanked
              FROM queue
              LEFT OUTER JOIN crates ON crates.name = queue.name
              LEFT OUTER JOIN releases ON (
@@ -30,23 +34,19 @@ pub(super) fn load(conn: &mut postgres::Client, config: &Config) -> Result<Crate
                  releases.id IS NULL
              )
          ) AS inp
-         ORDER BY name, version",
-        iter::once(config.build_attempts as i32),
-    )?;
+         ORDER BY name, version"#,
+        config.build_attempts as i32,
+    )
+    .fetch_all(conn)
+    .await?;
 
     let mut crates = Crates::new();
 
-    for (crate_name, release_rows) in &rows
-        // `rows` is a `FallibleIterator` which needs to be converted before
-        // we can use Itertools.group_by on it.
-        .iterator()
-        .map(|row| row.expect("error fetching rows"))
-        .chunk_by(|row| row.get("name"))
-    {
+    for (crate_name, release_rows) in &rows.iter().chunk_by(|row| row.name.clone()) {
         let releases: Releases = release_rows
             .map(|row| Release {
-                version: row.get("version"),
-                yanked: row.get("yanked"),
+                version: row.version.clone(),
+                yanked: row.yanked,
             })
             .collect();
 
@@ -75,8 +75,13 @@ mod tests {
                 .yanked(true)
                 .create()?;
 
+            let result = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                load(&mut conn, &env.config()).await
+            })?;
+
             assert_eq!(
-                load(&mut env.db().conn(), &env.config())?,
+                result,
                 vec![
                     Crate {
                         name: "krate".into(),

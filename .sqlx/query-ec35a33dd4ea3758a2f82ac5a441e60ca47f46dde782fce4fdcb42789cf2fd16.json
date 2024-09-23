@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec35a33dd4ea3758a2f82ac5a441e60ca47f46dde782fce4fdcb42789cf2fd16"
+}

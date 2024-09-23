@@ -1630,9 +1630,12 @@ mod tests {
                 .version("0.1.0")
                 .create()?;
 
-            env.db()
-                .conn()
-                .query("UPDATE releases SET features = NULL WHERE id = $1", &[&id])?;
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!("UPDATE releases SET features = NULL WHERE id = $1", id)
+                    .execute(&mut *conn)
+                    .await
+            })?;
 
             let page = kuchikiki::parse_html().one(
                 env.frontend()

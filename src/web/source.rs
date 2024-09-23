@@ -487,12 +487,17 @@ mod tests {
             let web = env.frontend();
             assert_success(path, web)?;
 
-            env.db().conn().execute(
-                "UPDATE releases
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(
+                    "UPDATE releases
                      SET files = NULL
                      WHERE id = $1",
-                &[&release_id],
-            )?;
+                    release_id,
+                )
+                .execute(&mut *conn)
+                .await
+            })?;
 
             assert!(web.get(path).send()?.status().is_success());
 
