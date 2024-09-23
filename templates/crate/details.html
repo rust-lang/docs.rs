@@ -64,7 +64,7 @@
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
                                     {%- if let Some(repository_metadata) = repository_metadata -%}
-                                        {{ "code-branch"|fab(false, false, "") }}
+                                        {{ "code-branch"|fas(false, false, "") }}
                                         {% if let Some(name) = repository_metadata.name %}
                                             {{name}}
                                         {% else %}
