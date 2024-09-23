@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context as _, Error, Result};
 use axum::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
-use docs_rs::db::{self, add_path_into_database, Overrides, Pool, PoolClient};
+use docs_rs::db::{self, add_path_into_database, Overrides, Pool};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
     get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
@@ -771,22 +771,27 @@ enum BlacklistSubcommand {
 
 impl BlacklistSubcommand {
     fn handle_args(self, ctx: BinContext) -> Result<()> {
-        let conn = &mut *ctx.conn()?;
-        match self {
-            Self::List => {
-                let crates = db::blacklist::list_crates(conn)
-                    .context("failed to list crates on blacklist")?;
+        ctx.runtime()?.block_on(async {
+            let conn = &mut *ctx.pool()?.get_async().await?;
+            match self {
+                Self::List => {
+                    let crates = db::blacklist::list_crates(conn)
+                        .await
+                        .context("failed to list crates on blacklist")?;
 
-                println!("{}", crates.join("\n"));
+                    println!("{}", crates.join("\n"));
+                }
+
+                Self::Add { crate_name } => db::blacklist::add_crate(conn, &crate_name)
+                    .await
+                    .context("failed to add crate to blacklist")?,
+
+                Self::Remove { crate_name } => db::blacklist::remove_crate(conn, &crate_name)
+                    .await
+                    .context("failed to remove crate from blacklist")?,
             }
-
-            Self::Add { crate_name } => db::blacklist::add_crate(conn, &crate_name)
-                .context("failed to add crate to blacklist")?,
-
-            Self::Remove { crate_name } => db::blacklist::remove_crate(conn, &crate_name)
-                .context("failed to remove crate from blacklist")?,
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -839,10 +844,6 @@ impl BinContext {
             repository_stats_updater: OnceCell::new(),
             runtime: OnceCell::new(),
         }
-    }
-
-    fn conn(&self) -> Result<PoolClient> {
-        Ok(self.pool()?.get()?)
     }
 }
 

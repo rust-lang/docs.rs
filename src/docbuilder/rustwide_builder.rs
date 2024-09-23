@@ -394,10 +394,15 @@ impl RustwideBuilder {
         kind: PackageKind<'_>,
         build_id: i32,
     ) -> Result<bool> {
-        let mut conn = self.db.get()?;
         info!("building package {} {}", name, version);
 
-        if is_blacklisted(&mut conn, name)? {
+        let is_blacklisted = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+
+            is_blacklisted(&mut conn, name).await
+        })?;
+
+        if is_blacklisted {
             info!("skipping build of {}, crate has been blacklisted", name);
             return Ok(false);
         }
@@ -1000,8 +1005,31 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_redirect, assert_success, wrapper, TestEnvironment};
-    use serde_json::Value;
+    use crate::{
+        db::types::Feature,
+        test::{assert_redirect, assert_success, wrapper, TestEnvironment},
+    };
+
+    fn get_features(
+        env: &TestEnvironment,
+        name: &str,
+        version: &str,
+    ) -> Result<Option<Vec<Feature>>, sqlx::Error> {
+        env.runtime().block_on(async {
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query_scalar!(
+                r#"SELECT
+                        releases.features "features?: Vec<Feature>"
+                     FROM releases
+                     INNER JOIN crates ON crates.id = releases.crate_id
+                     WHERE crates.name = $1 AND releases.version = $2"#,
+                name,
+                version,
+            )
+            .fetch_one(&mut *conn)
+            .await
+        })
+    }
 
     fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &str) -> Result<()> {
         let paths = [
@@ -1057,9 +1085,9 @@ mod tests {
             );
 
             // check release record in the db (default and other targets)
-            let mut conn = env.db().conn();
-            let row = conn
-                .query_one(
+            let row = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(
                     r#"SELECT
                         r.rustdoc_status,
                         r.default_target,
@@ -1078,20 +1106,24 @@ mod tests {
                     WHERE
                         c.name = $1 AND
                         r.version = $2"#,
-                    &[&crate_, &version],
+                    crate_,
+                    version,
                 )
-                .unwrap();
+                .fetch_one(&mut *conn)
+                .await
+            })?;
 
-            assert!(row.get::<_, bool>("rustdoc_status"));
-            assert_eq!(row.get::<_, String>("default_target"), default_target);
-            assert!(row.get::<_, Option<i32>>("total_items").is_some());
-            assert!(row.get::<_, bool>("archive_storage"));
-            assert!(!row.get::<_, String>("docsrs_version").is_empty());
-            assert!(!row.get::<_, String>("rustc_version").is_empty());
-            assert_eq!(row.get::<_, String>("build_status"), "success");
+            assert_eq!(row.rustdoc_status, Some(true));
+            assert_eq!(row.default_target, Some(default_target.into()));
+            assert!(row.total_items.is_some());
+            assert!(row.archive_storage);
+            assert!(!row.docsrs_version.unwrap().is_empty());
+            assert!(!row.rustc_version.unwrap().is_empty());
+            assert_eq!(row.build_status.unwrap(), "success");
 
             let mut targets: Vec<String> = row
-                .get::<_, Value>("doc_targets")
+                .doc_targets
+                .unwrap()
                 .as_array()
                 .unwrap()
                 .iter()
@@ -1172,10 +1204,7 @@ mod tests {
                     assert_success(&target_url, web)?;
 
                     assert!(storage
-                        .exists(&format!(
-                            "build-logs/{}/{target}.txt",
-                            row.get::<_, i32>("build_id")
-                        ))
+                        .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
                         .unwrap());
                 }
             }
@@ -1207,9 +1236,9 @@ mod tests {
             );
 
             // check release record in the db (default and other targets)
-            let mut conn = env.db().conn();
-            let rows = conn
-                .query(
+            let row = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(
                     "SELECT
                         r.rustdoc_status,
                         r.is_library
@@ -1220,13 +1249,15 @@ mod tests {
                     WHERE
                         c.name = $1 AND
                         r.version = $2",
-                    &[&crate_, &version],
+                    crate_,
+                    version
                 )
-                .unwrap();
-            let row = rows.first().unwrap();
+                .fetch_one(&mut *conn)
+                .await
+            })?;
 
-            assert!(!row.get::<_, bool>("rustdoc_status"));
-            assert!(!row.get::<_, bool>("is_library"));
+            assert_eq!(row.rustdoc_status, Some(false));
+            assert_eq!(row.is_library, Some(false));
 
             // doc archive exists
             let doc_archive = rustdoc_archive_path(crate_, version);
@@ -1483,18 +1514,10 @@ mod tests {
                     .successful
             );
 
-            let mut conn = env.db().conn();
-            let features: Vec<crate::db::types::Feature> = conn
-                .query_opt(
-                    "SELECT releases.features FROM releases
-                     INNER JOIN crates ON crates.id = releases.crate_id
-                     WHERE crates.name = $1 AND releases.version = $2",
-                    &[&crate_, &version],
-                )?
-                .context("missing release")?
-                .get(0);
-
-            assert!(features.iter().any(|f| f.name == "serde_derive"));
+            assert!(get_features(env, crate_, version)?
+                .unwrap()
+                .iter()
+                .any(|f| f.name == "serde_derive"));
 
             Ok(())
         });
@@ -1514,18 +1537,10 @@ mod tests {
                     .successful
             );
 
-            let mut conn = env.db().conn();
-            let features: Vec<crate::db::types::Feature> = conn
-                .query_opt(
-                    "SELECT releases.features FROM releases
-                     INNER JOIN crates ON crates.id = releases.crate_id
-                     WHERE crates.name = $1 AND releases.version = $2",
-                    &[&crate_, &version],
-                )?
-                .context("missing release")?
-                .get(0);
-
-            assert!(!features.iter().any(|f| f.name == "with_builtin_macros"));
+            assert!(!get_features(env, crate_, version)?
+                .unwrap()
+                .iter()
+                .any(|f| f.name == "with_builtin_macros"));
 
             Ok(())
         });

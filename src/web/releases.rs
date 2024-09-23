@@ -984,7 +984,7 @@ mod tests {
     #[test]
     fn im_feeling_lucky_with_stars() {
         wrapper(|env| {
-            {
+            env.runtime().block_on(async {
                 // The normal test-setup will offset all primary sequences by 10k
                 // to prevent errors with foreign key relations.
                 // Random-crate-search relies on the sequence for the crates-table
@@ -992,9 +992,11 @@ mod tests {
                 // crate in the db breaks this test.
                 // That's why we reset the id-sequence to zero for this test.
 
-                let mut conn = env.db().conn();
-                conn.execute(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#, &[])?;
-            }
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#)
+                    .execute(&mut *conn)
+                    .await
+            })?;
 
             let web = env.frontend();
             env.fake_release()

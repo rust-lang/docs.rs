@@ -1,8 +1,7 @@
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromSql, ToSql, sqlx::Type)]
-#[postgres(name = "feature")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::Type)]
+#[sqlx(type_name = "feature")]
 pub struct Feature {
     pub(crate) name: String,
     pub(crate) subfeatures: Vec<String>,
