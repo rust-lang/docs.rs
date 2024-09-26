@@ -806,14 +806,6 @@ pub(crate) async fn build_queue_handler(
     // reverse the list, so the oldest comes first
     active_cdn_deployments.reverse();
 
-    let mut queue = build_queue.queued_crates().await?;
-    for krate in queue.iter_mut() {
-        // The priority here is inverted: in the database if a crate has a higher priority it
-        // will be built after everything else, which is counter-intuitive for people not
-        // familiar with docs.rs's inner workings.
-        krate.priority = -krate.priority;
-    }
-
     let in_progress_builds: Vec<(String, String)> = sqlx::query!(
         r#"SELECT
             crates.name,
@@ -830,6 +822,26 @@ pub(crate) async fn build_queue_handler(
     .into_iter()
     .map(|rec| (rec.name, rec.version))
     .collect();
+
+    let queue: Vec<QueuedCrate> = build_queue
+        .queued_crates()
+        .await?
+        .into_iter()
+        .filter(|krate| {
+            !in_progress_builds.iter().any(|(name, version)| {
+                // use `.any` instead of `.contains` to avoid cloning name& version for the match
+                *name == krate.name && *version == krate.version
+            })
+        })
+        .map(|mut krate| {
+            // The priority here is inverted: in the database if a crate has a higher priority it
+            // will be built after everything else, which is counter-intuitive for people not
+            // familiar with docs.rs's inner workings.
+            krate.priority = -krate.priority;
+
+            krate
+        })
+        .collect();
 
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
@@ -1710,14 +1722,13 @@ mod tests {
                 cdn::queue_crate_invalidation(&mut conn, &env.config(), "krate_2").await
             })?;
 
-            let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
-            assert!(empty
+            let content = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            assert!(content
                 .select(".release > div > strong")
                 .expect("missing heading")
                 .any(|el| el.text_contents().contains("active CDN deployments")));
 
-            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
-            let items = full
+            let items = content
                 .select(".queue-list > li")
                 .expect("missing list items")
                 .collect::<Vec<_>>();
@@ -1775,6 +1786,53 @@ mod tests {
                         .contains(&format!("priority: {priority}")));
                 }
             }
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_releases_queue_in_progress() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            // we have two queued releases, where the build for one is already in progress
+            let queue = env.build_queue();
+            queue.add_crate("foo", "1.0.0", 0, None)?;
+            queue.add_crate("bar", "0.1.0", 0, None)?;
+
+            env.fake_release()
+                .name("foo")
+                .version("1.0.0")
+                .builds(vec![FakeBuild::default()
+                    .build_status(BuildStatus::InProgress)
+                    .rustc_version("rustc (blabla 2022-01-01)")
+                    .docsrs_version("docs.rs 4.0.0")])
+                .create()?;
+
+            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+
+            let lists = full
+                .select(".queue-list")
+                .expect("missing queues")
+                .collect::<Vec<_>>();
+            assert_eq!(lists.len(), 2);
+
+            let in_progress_items: Vec<_> = lists[0]
+                .as_node()
+                .select("li > a")
+                .expect("missing in progress list items")
+                .map(|node| node.text_contents().trim().to_string())
+                .collect();
+            assert_eq!(in_progress_items, vec!["foo 1.0.0"]);
+
+            let queued_items: Vec<_> = lists[1]
+                .as_node()
+                .select("li > a")
+                .expect("missing queued list items")
+                .map(|node| node.text_contents().trim().to_string())
+                .collect();
+            assert_eq!(queued_items, vec!["bar 0.1.0"]);
 
             Ok(())
         });
