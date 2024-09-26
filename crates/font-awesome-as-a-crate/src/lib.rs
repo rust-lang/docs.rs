@@ -87,6 +87,29 @@ pub const fn svg(type_: Type, name: &str) -> Result<&'static str, NameError> {
     Ok(svg)
 }
 
+pub trait IconStr {
+    /// Name of the icon, like "triangle-exclamation".
+    fn icon_name(&self) -> &'static str;
+    /// The SVG content of the icon.
+    fn icon_str(&self) -> &'static str;
+}
+
+pub trait Brands: IconStr {
+    fn get_type() -> Type {
+        Type::Brands
+    }
+}
+pub trait Regular: IconStr {
+    fn get_type() -> Type {
+        Type::Regular
+    }
+}
+pub trait Solid: IconStr {
+    fn get_type() -> Type {
+        Type::Solid
+    }
+}
+
 #[cfg(test)]
 mod tests {
     const fn usable_as_const_() {
