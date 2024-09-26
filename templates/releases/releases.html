@@ -50,7 +50,7 @@ centered
                                     {{ release.name }}-{{ release.version }}
                                     {% if !has_unyanked_releases %}
                                         <span class="yanked" title="all releases of {{ release.name }} have been yanked">
-                                            {{ "trash"|fas(false, false, "") }}
+                                            {{ crate::f_a::icons::IconTrash|fas(false, false, "") }}
                                             Yanked
                                         </span>
                                     {% endif %}
@@ -64,7 +64,7 @@ centered
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {% if let Some(build_time) = release.build_time -%}
                                         title="Published {{ build_time|timeformat }}" {%- endif -%}>
                                         {{ release.stars }}
-                                        {{ "star"|fas(false, false, "") }}
+                                        {{ crate::f_a::icons::IconStar|fas(false, false, "") }}
                                     </div>
                                 {%- elif let Some(build_time) = release.build_time -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date"
@@ -86,13 +86,13 @@ centered
                 {% block pagination %}
                     {%- if show_previous_page -%}
                         <a class="pure-button pure-button-normal" href="/releases/{{ release_type.as_str() }}/{{ page_number - 1 }}">
-                            {{ "arrow-left"|fas(false, false, "") }} Previous Page
+                            {{ crate::f_a::icons::IconArrowLeft|fas(false, false, "") }} Previous Page
                         </a>
                     {%- endif -%}
 
                     {%- if show_next_page -%}
                         <a class="pure-button pure-button-normal" href="/releases/{{ release_type.as_str() }}/{{ page_number + 1 }}">
-                            Next Page {{ "arrow-right"|fas(false, false, "") }}
+                            Next Page {{ crate::f_a::icons::IconArrowRight|fas(false, false, "") }}
                         </a>
                     {%- endif -%}
                 {% endblock pagination %}
