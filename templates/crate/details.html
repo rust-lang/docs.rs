@@ -43,7 +43,7 @@
                         {%- if let Some(homepage_url) = homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ homepage_url }}" class="pure-menu-link">
-                                    {{ "house"|fas(false, false, "") }} Homepage
+                                    {{ crate::f_a::icons::IconHouse|fas(false, false, "") }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -52,7 +52,7 @@
                         {%- if let Some(documentation_url) = documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ "file-lines"|far(false, false, "") }} Documentation
+                                    {{ crate::f_a::icons::IconFileLines|far(false, false, "") }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -64,20 +64,20 @@
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
                                     {%- if let Some(repository_metadata) = repository_metadata -%}
-                                        {{ "code-branch"|fas(false, false, "") }}
+                                        {{ crate::f_a::icons::IconCodeBranch|fas(false, false, "") }}
                                         {% if let Some(name) = repository_metadata.name %}
                                             {{name}}
                                         {% else %}
                                             Repository
                                         {% endif %}
                                         <br>
-                                        {{ "star"|fas(false, false, "left-margin") }} {{ repository_metadata.stars }}
-                                        {{ "code-branch"|fas(false, false, "") }} {{ repository_metadata.forks }}
-                                        {{ "circle-exclamation"|fas(false, false, "") }} {{ repository_metadata.issues }}
+                                        {{ crate::f_a::icons::IconStar|fas(false, false, "left-margin") }} {{ repository_metadata.stars }}
+                                        {{ crate::f_a::icons::IconCodeBranch|fas(false, false, "") }} {{ repository_metadata.forks }}
+                                        {{ crate::f_a::icons::IconCircleExclamation|fas(false, false, "") }} {{ repository_metadata.issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        {{ "code-branch"|fas(false, false, "") }} Repository
+                                        {{ crate::f_a::icons::IconCodeBranch|fas(false, false, "") }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -87,7 +87,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ name }}" class="pure-menu-link"
                                 title="See {{ name }} on crates.io">
-                                {{ "cube"|fas(false, false, "") }} crates.io
+                                {{ crate::f_a::icons::IconCube|fas(false, false, "") }} crates.io
                             </a>
                         </li>
 
@@ -160,7 +160,7 @@
                     </div>
                 {%- elif build_status == "in_progress" -%}
                     <div class="info">
-                        {{ "gear"|fas(false, true, "") }}
+                        {{ crate::f_a::icons::IconGear|fas(false, true, "") }}
                         Build is in progress, it will be available soon
                     </div>
                 {%- endif -%}

@@ -1,8 +1,8 @@
 use crate::error::Result;
 use crate::web::rustdoc::RustdocPage;
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use rinja::Template;
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 use tracing::trace;
 
 #[derive(Template)]
@@ -88,7 +88,6 @@ impl TemplateData {
 }
 
 pub mod filters {
-    use super::IconType;
     use chrono::{DateTime, Utc};
     use rinja::filters::Safe;
     use std::borrow::Cow;
@@ -201,16 +200,31 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn fas(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
-        IconType::Strong.render(value, fw, spin, extra).map(Safe)
+    pub fn fas<T: font_awesome_as_a_crate::Solid>(
+        value: T,
+        fw: bool,
+        spin: bool,
+        extra: &str,
+    ) -> rinja::Result<Safe<String>> {
+        super::render_icon(value.icon_str(), fw, spin, extra)
     }
 
-    pub fn far(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
-        IconType::Regular.render(value, fw, spin, extra).map(Safe)
+    pub fn far<T: font_awesome_as_a_crate::Regular>(
+        value: T,
+        fw: bool,
+        spin: bool,
+        extra: &str,
+    ) -> rinja::Result<Safe<String>> {
+        super::render_icon(value.icon_str(), fw, spin, extra)
     }
 
-    pub fn fab(value: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<Safe<String>> {
-        IconType::Brand.render(value, fw, spin, extra).map(Safe)
+    pub fn fab<T: font_awesome_as_a_crate::Brands>(
+        value: T,
+        fw: bool,
+        spin: bool,
+        extra: &str,
+    ) -> rinja::Result<Safe<String>> {
+        super::render_icon(value.icon_str(), fw, spin, extra)
     }
 
     pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
@@ -241,59 +255,27 @@ pub mod filters {
     }
 }
 
-enum IconType {
-    Strong,
-    Regular,
-    Brand,
-}
-
-impl fmt::Display for IconType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let icon = match self {
-            Self::Strong => "solid",
-            Self::Regular => "regular",
-            Self::Brand => "brands",
-        };
-
-        f.write_str(icon)
+fn render_icon(
+    icon_str: &str,
+    fw: bool,
+    spin: bool,
+    extra: &str,
+) -> rinja::Result<rinja::filters::Safe<String>> {
+    let mut classes = vec!["fa-svg"];
+    if fw {
+        classes.push("fa-svg-fw");
     }
-}
-
-impl IconType {
-    fn render(self, icon_name: &str, fw: bool, spin: bool, extra: &str) -> rinja::Result<String> {
-        let type_ = match self {
-            IconType::Strong => font_awesome_as_a_crate::Type::Solid,
-            IconType::Regular => font_awesome_as_a_crate::Type::Regular,
-            IconType::Brand => font_awesome_as_a_crate::Type::Brands,
-        };
-
-        let icon_file_string = font_awesome_as_a_crate::svg(type_, icon_name).map_err(|err| {
-            rinja::Error::Custom(
-                anyhow!(err)
-                    .context(format!(
-                        "error trying to render icon with name \"{}\" and type \"{}\"",
-                        icon_name, type_,
-                    ))
-                    .into(),
-            )
-        })?;
-
-        let mut classes = vec!["fa-svg"];
-        if fw {
-            classes.push("fa-svg-fw");
-        }
-        if spin {
-            classes.push("fa-svg-spin");
-        }
-        if !extra.is_empty() {
-            classes.push(extra);
-        }
-        let icon = format!(
-            "\
-<span class=\"{class}\" aria-hidden=\"true\">{icon_file_string}</span>",
-            class = classes.join(" "),
-        );
-
-        Ok(icon)
+    if spin {
+        classes.push("fa-svg-spin");
     }
+    if !extra.is_empty() {
+        classes.push(extra);
+    }
+    let icon = format!(
+        "\
+<span class=\"{class}\" aria-hidden=\"true\">{icon_str}</span>",
+        class = classes.join(" "),
+    );
+
+    Ok(rinja::filters::Safe(icon))
 }

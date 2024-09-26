@@ -23,14 +23,14 @@
                     <ul class="pure-menu-list">
                         <li class="pure-menu-item">
                             <a href="/releases" class="pure-menu-link{% if *tab == "recent" %} pure-menu-active{% endif %}">
-                                {{ "leaf"|fas(false, false, "") }}
+                                {{ crate::f_a::icons::IconLeaf|fas(false, false, "") }}
                                 <span class="title">Recent</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
                             <a href="/releases/stars" class="pure-menu-link{% if *tab == "stars" %} pure-menu-active{% endif %}">
-                                {{ "star"|fas(false, false, "") }}
+                                {{ crate::f_a::icons::IconStar|fas(false, false, "") }}
                                 <span class="title">Stars</span>
                             </a>
                         </li>
@@ -38,7 +38,7 @@
                         <li class="pure-menu-item">
                             <a href="/releases/recent-failures"
                                 class="pure-menu-link{% if *tab == "recent-failures" %} pure-menu-active{% endif %}">
-                                {{ "triangle-exclamation"|fas(false, false, "") }}
+                                {{ crate::f_a::icons::IconTriangleExclamation|fas(false, false, "") }}
                                 <span class="title">Recent Failures</span>
                             </a>
                         </li>
@@ -46,7 +46,7 @@
                         <li class="pure-menu-item">
                             <a href="/releases/failures"
                                 class="pure-menu-link{% if *tab == "failures" %} pure-menu-active{% endif %}">
-                                {{ "star"|far(false, false, "") }}
+                                {{ crate::f_a::icons::IconStar|far(false, false, "") }}
                                 <span class="title">Failures By Stars</span>
                             </a>
                         </li>
@@ -54,14 +54,14 @@
                         <li class="pure-menu-item">
                             <a href="/releases/activity"
                                 class="pure-menu-link{% if *tab == "activity" %} pure-menu-active{% endif %}">
-                                {{ "chart-line"|fas(false, false, "") }}
+                                {{ crate::f_a::icons::IconChartLine|fas(false, false, "") }}
                                 <span class="title">Activity</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
                             <a href="/releases/queue" class="pure-menu-link{% if *tab == "queue" %} pure-menu-active{% endif %}">
-                                {{ "list"|fas(false, false, "") }}
+                                {{ crate::f_a::icons::IconList|fas(false, false, "") }}
                                 <span class="title">Queue</span>
                             </a>
                         </li>
@@ -69,7 +69,7 @@
                         {%- if !owner.is_empty() -%}
                             <li class="pure-menu-item">
                                 <a href="#" class="pure-menu-link{% if *tab == "owner" %} pure-menu-active{% endif %}">
-                                    {{ "user"|fas(false, false, "") }}
+                                    {{ crate::f_a::icons::IconUser|fas(false, false, "") }}
                                     <span class="title">{{ owner }}</span>
                                 </a>
                             </li>
