@@ -6,3 +6,8 @@ license = "CC-BY-4.0 AND MIT"
 description = "Font Awesome Free, packaged as a crate"
 repository = "https://github.com/rust-lang/docs.rs"
 
+[build-dependencies]
+quote = "1.0.37"
+proc-macro2 = "1.0.86"
+syn = "2.0.77"
+prettyplease = "0.2.22"
