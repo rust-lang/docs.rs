@@ -105,12 +105,13 @@ pub async fn delete_version(
 }
 
 async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
-    Ok(
-        sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", name)
-            .fetch_optional(&mut *conn)
-            .await?
-            .ok_or_else(|| CrateDeletionError::MissingCrate(name.into()))?,
+    Ok(sqlx::query_scalar!(
+        "SELECT id FROM crates WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+        name
     )
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| CrateDeletionError::MissingCrate(name.into()))?)
 }
 
 // metaprogramming!
@@ -231,6 +232,23 @@ mod tests {
             .fetch_optional(conn)
             .await?
             .is_some())
+    }
+
+    #[test]
+    fn test_get_id_uses_normalization() {
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("Some_Package")
+                .version("1.0.0")
+                .create_async()
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+            assert!(get_id(&mut conn, "some-package").await.is_ok());
+
+            Ok(())
+        })
     }
 
     #[test_case(true)]
