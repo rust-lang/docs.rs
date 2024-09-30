@@ -200,33 +200,6 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn fas<T: font_awesome_as_a_crate::Solid>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
-    pub fn far<T: font_awesome_as_a_crate::Regular>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
-    pub fn fab<T: font_awesome_as_a_crate::Brands>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
     pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
         let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
         Ok(Safe(format!(
@@ -253,29 +226,4 @@ pub mod filters {
             serde_json::to_string(value).expect("`encode_json` failed"),
         ))
     }
-}
-
-fn render_icon(
-    icon_str: &str,
-    fw: bool,
-    spin: bool,
-    extra: &str,
-) -> rinja::Result<rinja::filters::Safe<String>> {
-    let mut classes = vec!["fa-svg"];
-    if fw {
-        classes.push("fa-svg-fw");
-    }
-    if spin {
-        classes.push("fa-svg-spin");
-    }
-    if !extra.is_empty() {
-        classes.push(extra);
-    }
-    let icon = format!(
-        "\
-<span class=\"{class}\" aria-hidden=\"true\">{icon_str}</span>",
-        class = classes.join(" "),
-    );
-
-    Ok(rinja::filters::Safe(icon))
 }

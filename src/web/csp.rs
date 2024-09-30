@@ -54,7 +54,7 @@ impl Csp {
         // the MIME type to allow loading favicons.
         //
         // Images from other HTTPS origins are also temporary allowed until issue #66 is fixed.
-        result.push_str("; img-src 'self' https:");
+        result.push_str("; img-src 'self' https: data:");
 
         match content_type {
             ContentType::Html => self.render_html(&mut result),

@@ -15,7 +15,7 @@
     <div class="item-end">
         <span>Sort by</span>
         <label for="nav-sort">
-            {{ crate::f_a::icons::IconList|fas(false, false, "") }}
+            {{ crate::icons::IconListSolid.render(false, false, "") }}
         </label>
         {% set search_sort_by_val = search_sort_by.as_deref().unwrap_or_default() %}
         <select form="nav-search-form" name="sort" id="nav-sort" aria-label="Find crate by the sort by select-box"  tabindex="-1">
@@ -32,13 +32,13 @@
 {% block pagination %}
     {%- if let Some(previous_page_link) = previous_page_link -%}
         <a class="pure-button pure-button-normal" href="{{ previous_page_link }}">
-            {{ crate::f_a::icons::IconArrowLeft|fas(false, false, "") }} Previous Page
+            {{ crate::icons::IconArrowLeftSolid.render(false, false, "") }} Previous Page
         </a>
     {%- endif -%}
 
     {%- if let Some(next_page_link) = next_page_link -%}
         <a class="pure-button pure-button-normal" href="{{ next_page_link }}">
-            Next Page {{ crate::f_a::icons::IconArrowRight|fas(false, false, "") }}
+            Next Page {{ crate::icons::IconArrowRightSolid.render(false, false, "") }}
         </a>
     {%- endif -%}
 {% endblock pagination %}

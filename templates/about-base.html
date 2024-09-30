@@ -11,27 +11,27 @@ centered
                 <h1 id="crate-title" class="no-description">Docs.rs documentation</h1>
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
-                        {% set text = crate::f_a::icons::IconCircleInfo|fas(false, false, "") %}
+                        {% set text = crate::icons::IconCircleInfoSolid.render(false, false, "") %}
                         {% set text = "{} <span class='title'>About</span>"|format(text) %}
                         {% call macros::active_link(expected="index", href="/about", text=text) %}
 
-                        {% set text = crate::f_a::icons::IconFonticons|fab(false, false, "") %}
+                        {% set text = crate::icons::IconFonticonsBrands.render(false, false, "") %}
                         {% set text = "{} <span class='title'>Badges</span>"|format(text) %}
                         {% call macros::active_link(expected="badges", href="/about/badges", text=text) %}
 
-                        {% set text = crate::f_a::icons::IconGears|fas(false, false, "") %}
+                        {% set text = crate::icons::IconGearsSolid.render(false, false, "") %}
                         {% set text = "{} <span class='title'>Builds</span>"|format(text) %}
                         {% call macros::active_link(expected="builds", href="/about/builds", text=text) %}
 
-                        {% set text = crate::f_a::icons::IconTable|fas(false, false, "") %}
+                        {% set text = crate::icons::IconTableSolid.render(false, false, "") %}
                         {% set text = "{} <span class='title'>Metadata</span>"|format(text) %}
                         {% call macros::active_link(expected="metadata", href="/about/metadata", text=text) %}
 
-                        {% set text = crate::f_a::icons::IconRoad|fas(false, false, "") %}
+                        {% set text = crate::icons::IconRoadSolid.render(false, false, "") %}
                         {% set text = "{} <span class='title'>Shorthand URLs</span>"|format(text) %}
                         {% call macros::active_link(expected="redirections", href="/about/redirections", text=text) %}
 
-                        {% set text = crate::f_a::icons::IconDownload|fas(false, false, "") %}
+                        {% set text = crate::icons::IconDownloadSolid.render(false, false, "") %}
                         {% set text = "{} <span class='title'>Download</span>"|format(text) %}
                         {% call macros::active_link(expected="download", href="/about/download", text=text) %}
                     </ul>
