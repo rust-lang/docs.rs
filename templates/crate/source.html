@@ -29,13 +29,13 @@
                         {# If we are displaying a file, we also add a button to hide the file sidebar #}
                         {% if has_file_content %}
                             <li class="pure-menu-item toggle-source">
-                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ crate::f_a::icons::IconChevronLeft|fas(false, false, "") }}</span><span class="right">{{ crate::f_a::icons::IconChevronRight|fas(false, false, "") }}</span> <span class="text">Hide files</span></button>
+                                <button aria-label="Hide source sidebar" title="Hide source sidebar" aria-expanded="true"><span class="left">{{ crate::icons::IconChevronLeftSolid.render(false, false, "") }}</span><span class="right">{{ crate::icons::IconChevronRightSolid.render(false, false, "") }}</span> <span class="text">Hide files</span></button>
                             </li>
                         {% endif %}
                         {# If this isn't the root folder, show a 'back' button #}
                         {%- if show_parent_link -%}
                             <li class="pure-menu-item">
-                                <a href="../" class="pure-menu-link">{{ crate::f_a::icons::IconFolderOpen|far(false, false, "") }} <span class="text">..</span></a>
+                                <a href="../" class="pure-menu-link">{{ crate::icons::IconFolderOpenRegular.render(false, false, "") }} <span class="text">..</span></a>
                             </li>
                         {%- endif -%}
 
@@ -48,23 +48,23 @@
                                 <a href="./{{ file.name }}{% if file.mime == "dir" %}/{% endif %}" class="pure-menu-link">
                                     {# Directories #}
                                     {%- if file.mime == "dir" -%}
-                                        {{ crate::f_a::icons::IconFolderOpen|far(false, false, "") }}
+                                        {{ crate::icons::IconFolderOpenRegular.render(false, false, "") }}
 
                                     {# Rust files #}
                                     {%- elif file.mime == "text/rust" -%}
-                                        {{ crate::f_a::icons::IconRust|fab(false, false, "") }}
+                                        {{ crate::icons::IconRustBrands.render(false, false, "") }}
 
                                     {# Cargo.lock #}
                                     {%- elif file.mime == "text/plain" && file.name == "Cargo.lock" -%}
-                                        {{ crate::f_a::icons::IconLock|fas(false, false, "") }}
+                                        {{ crate::icons::IconLockSolid.render(false, false, "") }}
 
                                     {# Markdown files #}
                                     {% elif file.mime == "text/markdown" %}
-                                        {{ crate::f_a::icons::IconMarkdown|fab(false, false, "") }}
+                                        {{ crate::icons::IconMarkdownBrands.render(false, false, "") }}
 
                                     {# .gitignore #}
                                     {% elif file.mime == "text/plain" && file.name == ".gitignore" %}
-                                        {{ crate::f_a::icons::IconGitAlt|fab(false, false, "") }}
+                                        {{ crate::icons::IconGitAltBrands.render(false, false, "") }}
 
                                     {#
                                         More ideas
@@ -86,11 +86,11 @@
 
                                     {# Text files or files which mime starts with `text` #}
                                     {%- elif file.mime == "text/plain" || file.mime|split_first("/") == Some("text") -%}
-                                        {{ crate::f_a::icons::IconFileLines|far(false, false, "") }}
+                                        {{ crate::icons::IconFileLinesRegular.render(false, false, "") }}
 
                                         {# Binary files and any unrecognized types #}
                                     {% else -%}
-                                        {{ crate::f_a::icons::IconFile|far(false, false, "") }}
+                                        {{ crate::icons::IconFileRegular.render(false, false, "") }}
                                     {%- endif -%}
 
                                     <span class="text">{{ file.name }}</span>

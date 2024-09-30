@@ -143,10 +143,10 @@
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
                 {% if warning %}
-                    {{ crate::f_a::icons::IconTriangleExclamation|fas(false, false, "") }}
+                    {{ crate::icons::IconTriangleExclamationSolid.render(false, false, "") }}
                 {% endif %}
                 {% if release.build_status == "in_progress" %}
-                    {{ crate::f_a::icons::IconGear|fas(true, true, "") }}
+                    {{ crate::icons::IconGearSolid.render(true, true, "") }}
                 {% endif %}
                 {{ release.version }}
             </a>

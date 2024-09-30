@@ -1,13 +1,12 @@
 .fa-svg {
     display: inline-block;
-}
-
-.fa-svg svg {
+    background-color: currentColor;
     width: 1em;
     height: 1em;
-    fill: currentColor;
     /* pull icon about one stroke width into the descenders */
     margin-bottom: -0.1em;
+    -webkit-mask-size: contain !important;
+    mask-size: contain !important;
 }
 
 .fa-svg.left-margin {

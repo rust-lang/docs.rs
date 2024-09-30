@@ -6,7 +6,7 @@ If you have problems, [contact us](https://github.com/rust-lang/docs.rs/issues),
 */
 
 use std::error::Error;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 
 #[cfg(font_awesome_out_dir)]
 include!(concat!(env!("OUT_DIR"), "/fontawesome.rs"));
@@ -94,18 +94,18 @@ pub trait IconStr {
     fn icon_str(&self) -> &'static str;
 }
 
-pub trait Brands: IconStr {
-    fn get_type() -> Type {
+pub trait Brands: IconStr + Debug {
+    fn get_type(&self) -> Type {
         Type::Brands
     }
 }
-pub trait Regular: IconStr {
-    fn get_type() -> Type {
+pub trait Regular: IconStr + Debug {
+    fn get_type(&self) -> Type {
         Type::Regular
     }
 }
-pub trait Solid: IconStr {
-    fn get_type() -> Type {
+pub trait Solid: IconStr + Debug {
+    fn get_type(&self) -> Type {
         Type::Solid
     }
 }
