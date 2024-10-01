@@ -1614,7 +1614,7 @@ mod tests {
                     .borrow()
                     .get("class")
                     .unwrap(),
-                "fa-svg"
+                "f-a_code-branch_solid fa-svg"
             );
 
             Ok(())
