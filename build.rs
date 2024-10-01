@@ -87,9 +87,15 @@ fn main() -> Result<()> {
     println!("cargo::rustc-check-cfg=cfg(icons_out_dir)");
     println!("cargo:rustc-cfg=icons_out_dir");
 
-    let package_dir = env::var("CARGO_MANIFEST_DIR").context("missing CARGO_MANIFEST_DIR")?;
-    let package_dir = Path::new(&package_dir);
-    generate_css_icons(package_dir.join("static/icons.css"), out_dir)?;
+    let out_css = "static/icons.css";
+    let out_css = if std::env::var("RUN_IN_DOCKER").is_ok() {
+        let _ = std::fs::create_dir_all("/srv/docsrs/static");
+        Path::new("/srv/docsrs/").join(out_css)
+    } else {
+        let package_dir = env::var("CARGO_MANIFEST_DIR").context("missing CARGO_MANIFEST_DIR")?;
+        Path::new(&package_dir).join(out_css)
+    };
+    generate_css_icons(out_css, out_dir)?;
 
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
