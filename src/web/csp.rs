@@ -169,7 +169,7 @@ mod tests {
     fn test_csp_other() {
         let csp = Csp::new();
         assert_eq!(
-            Some("default-src 'none'; base-uri 'none'; img-src 'self' https:".into()),
+            Some("default-src 'none'; base-uri 'none'; img-src 'self' https: data:".into()),
             csp.render(ContentType::Other)
         );
     }
@@ -179,7 +179,7 @@ mod tests {
         let csp = Csp::new();
         assert_eq!(
             Some(
-                "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
+                "default-src 'none'; base-uri 'none'; img-src 'self' https: data:; \
                  style-src 'self' 'unsafe-inline'"
                     .into()
             ),
@@ -192,7 +192,7 @@ mod tests {
         let csp = Csp::new();
         assert_eq!(
             Some(format!(
-                "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
+                "default-src 'none'; base-uri 'none'; img-src 'self' https: data:; \
                  style-src 'self'; font-src 'self'; connect-src 'self'; script-src 'nonce-{}'",
                 csp.nonce()
             )),
