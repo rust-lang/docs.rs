@@ -6,7 +6,7 @@ pub mod page;
 use crate::db::types::BuildStatus;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
-use crate::web::page::templates::filters;
+use crate::web::page::templates::{filters, RenderSolid};
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum_extra::middleware::option_layer;
 use rinja::Template;

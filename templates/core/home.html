@@ -12,7 +12,7 @@ centered
 
 {%- block body -%}
     <div class="container landing">
-        <h1 class="brand">{{ crate::icons::IconCubesSolid.render(false, false, "") }} Docs.rs</h1>
+        <h1 class="brand">{{ crate::icons::IconCubes.render_solid(false, false, "") }} Docs.rs</h1>
 
         <form action="/releases/search" method="GET" class="landing-search-form">
             <div>
@@ -36,7 +36,7 @@ centered
                     <strong>Recent Releases</strong>
                 </a>
                 <a href="/releases/feed" title="Atom feed">
-                    {{ crate::icons::IconSquareRssSolid.render(false, false, "") }}
+                    {{ crate::icons::IconSquareRss.render_solid(false, false, "") }}
                 </a>
             </div>
 

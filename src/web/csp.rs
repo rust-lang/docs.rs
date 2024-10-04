@@ -54,7 +54,7 @@ impl Csp {
         // the MIME type to allow loading favicons.
         //
         // Images from other HTTPS origins are also temporary allowed until issue #66 is fixed.
-        result.push_str("; img-src 'self' https: data:");
+        result.push_str("; img-src 'self' https:");
 
         match content_type {
             ContentType::Html => self.render_html(&mut result),
@@ -169,7 +169,7 @@ mod tests {
     fn test_csp_other() {
         let csp = Csp::new();
         assert_eq!(
-            Some("default-src 'none'; base-uri 'none'; img-src 'self' https: data:".into()),
+            Some("default-src 'none'; base-uri 'none'; img-src 'self' https:".into()),
             csp.render(ContentType::Other)
         );
     }
@@ -179,7 +179,7 @@ mod tests {
         let csp = Csp::new();
         assert_eq!(
             Some(
-                "default-src 'none'; base-uri 'none'; img-src 'self' https: data:; \
+                "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
                  style-src 'self' 'unsafe-inline'"
                     .into()
             ),
@@ -192,7 +192,7 @@ mod tests {
         let csp = Csp::new();
         assert_eq!(
             Some(format!(
-                "default-src 'none'; base-uri 'none'; img-src 'self' https: data:; \
+                "default-src 'none'; base-uri 'none'; img-src 'self' https:; \
                  style-src 'self'; font-src 'self'; connect-src 'self'; script-src 'nonce-{}'",
                 csp.nonce()
             )),

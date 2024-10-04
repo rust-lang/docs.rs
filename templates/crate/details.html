@@ -43,7 +43,7 @@
                         {%- if let Some(homepage_url) = homepage_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ homepage_url }}" class="pure-menu-link">
-                                    {{ crate::icons::IconHouseSolid.render(false, false, "") }} Homepage
+                                    {{ crate::icons::IconHouse.render_solid(false, false, "") }} Homepage
                                 </a>
                             </li>
                         {%- endif -%}
@@ -52,7 +52,7 @@
                         {%- if let Some(documentation_url) = documentation_url -%}
                             <li class="pure-menu-item">
                                 <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                    {{ crate::icons::IconFileLinesRegular.render(false, false, "") }} Documentation
+                                    {{ crate::icons::IconFileLines.render_regular(false, false, "") }} Documentation
                                 </a>
                             </li>
                         {%- endif -%}
@@ -64,20 +64,20 @@
                                     {# If the repo link is for github or gitlab, show some stats #}
                                     {# TODO: add support for hosts besides github and gitlab (#35) #}
                                     {%- if let Some(repository_metadata) = repository_metadata -%}
-                                        {{ crate::icons::IconCodeBranchSolid.render(false, false, "") }}
+                                        {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }}
                                         {% if let Some(name) = repository_metadata.name %}
                                             {{name}}
                                         {% else %}
                                             Repository
                                         {% endif %}
                                         <br>
-                                        {{ crate::icons::IconStarSolid.render(false, false, "left-margin") }} {{ repository_metadata.stars }}
-                                        {{ crate::icons::IconCodeBranchSolid.render(false, false, "") }} {{ repository_metadata.forks }}
-                                        {{ crate::icons::IconCircleExclamationSolid.render(false, false, "") }} {{ repository_metadata.issues }}
+                                        {{ crate::icons::IconStar.render_solid(false, false, "left-margin") }} {{ repository_metadata.stars }}
+                                        {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }} {{ repository_metadata.forks }}
+                                        {{ crate::icons::IconCircleExclamation.render_solid(false, false, "") }} {{ repository_metadata.issues }}
 
                                     {# If the repo link is unknown, just show a normal link #}
                                     {%- else -%}
-                                        {{ crate::icons::IconCodeBranchSolid.render(false, false, "") }} Repository
+                                        {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }} Repository
                                     {%- endif -%}
                                 </a>
                             </li>
@@ -87,7 +87,7 @@
                         <li class="pure-menu-item">
                             <a href="https://crates.io/crates/{{ name }}" class="pure-menu-link"
                                 title="See {{ name }} on crates.io">
-                                {{ crate::icons::IconCubeSolid.render(false, false, "") }} crates.io
+                                {{ crate::icons::IconCube.render_solid(false, false, "") }} crates.io
                             </a>
                         </li>
 
@@ -160,7 +160,7 @@
                     </div>
                 {%- elif build_status == "in_progress" -%}
                     <div class="info">
-                        {{ crate::icons::IconGearSolid.render(false, true, "") }}
+                        {{ crate::icons::IconGear.render_solid(false, true, "") }}
                         Build is in progress, it will be available soon
                     </div>
                 {%- endif -%}

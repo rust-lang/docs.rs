@@ -54,6 +54,7 @@ once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.22"
 strum = { version = "0.26.1", features = ["derive"] }
 lol_html = "1.0.0"
+font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "6.0.0"
 string_cache = "0.8.0"
 zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
@@ -135,7 +136,6 @@ anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
-font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 
 [[bench]]
 name = "compression"

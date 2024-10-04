@@ -10,7 +10,9 @@ use crate::{
     web::{
         error::AxumResult,
         extractors::{DbConnection, Path},
-        filters, match_version, MetaData, ReqVersion,
+        filters, match_version,
+        page::templates::{RenderRegular, RenderSolid},
+        MetaData, ReqVersion,
     },
     AsyncBuildQueue, Config,
 };

@@ -10,7 +10,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        page::templates::filters,
+        page::templates::{filters, RenderRegular, RenderSolid},
         rustdoc::RustdocHtmlParams,
         MatchedRelease, ReqVersion,
     },
@@ -1614,7 +1614,7 @@ mod tests {
                     .borrow()
                     .get("class")
                     .unwrap(),
-                "f-a_code-branch_solid fa-svg"
+                "fa fa-solid fa-code-branch "
             );
 
             Ok(())

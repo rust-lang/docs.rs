@@ -78,7 +78,7 @@ fn write_fontawesome_sprite() {
 pub struct {type_name};
 impl IconStr for {type_name} {{
     fn icon_name(&self) -> &'static str {{ r#\"{icon}\"# }}
-    fn icon_str(&self) -> &'static str {{ r#\"{data}\"# }}
+    fn icon_svg(&self) -> &'static str {{ r#\"{data}\"# }}
 }}
 {kinds}"
                 )

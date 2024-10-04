@@ -4,7 +4,7 @@
 {%- if let Some(global_alert) = crate::GLOBAL_ALERT -%}
     <li class="pure-menu-item">
         <a href="{{ global_alert.url|safe }}" class="pure-menu-link {{ global_alert.css_class }}">
-            {{- global_alert.fa_icon.render(false, false, "") }}
+            {{- global_alert.fa_icon.render_solid(false, false, "") }}
             {{ global_alert.text -}}
         </a>
     </li>
