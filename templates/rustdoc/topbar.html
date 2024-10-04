@@ -23,7 +23,7 @@
     {%- if krate is defined -%}
         <li class="pure-menu-item pure-menu-has-children">
             <a href="#" class="pure-menu-link crate-name" title="{{ krate.description.as_deref().unwrap_or_default() }}">
-                {{ crate::icons::IconCubeSolid.render(false, false, "") }}
+                {{ crate::icons::IconCube.render_solid(false, false, "") }}
                 <span class="title">{{ krate.name }}-{{ krate.version }}</span>
             </a>
 
@@ -33,26 +33,26 @@
                 <ul class="pure-menu-list menu-item-divided">
                     <li class="pure-menu-heading" id="crate-title">
                         {{ krate.name }} {{ krate.version }}
-                        <span id="clipboard" class="fa-svg fa-svg-fw svg-clipboard" title="Copy crate name and version information"></span>
+                        <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
                     </li>
 
                     {%- if metadata.req_version.to_string() == "latest" -%}
                     <li class="pure-menu-item">
                         <a href="{% if permalink_path is defined %}{{permalink_path|safe}}{% endif %}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
-                            {{ crate::icons::IconLinkSolid.render(false, false, "") }} Permalink
+                            {{ crate::icons::IconLink.render_solid(false, false, "") }} Permalink
                         </a>
                     </li>
                     {%- endif -%}
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url|safe }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
-                            {{ crate::icons::IconCubeSolid.render(false, false, "") }} Docs.rs crate page
+                            {{ crate::icons::IconCube.render_solid(false, false, "") }} Docs.rs crate page
                         </a>
                     </li>
 
                     <li class="pure-menu-item">
                         <a href="{{ crate_url|safe }}" class="pure-menu-link">
-                            {{ crate::icons::IconScaleUnbalancedFlipSolid.render(false, false, "") }} {{ krate.license.as_deref().unwrap_or_default() }}
+                            {{ crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }} {{ krate.license.as_deref().unwrap_or_default() }}
                         </a>
                     </li>
                 </ul>
@@ -66,7 +66,7 @@
                             {%- if let Some(homepage_url) = krate.homepage_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ homepage_url }}" class="pure-menu-link">
-                                        {{ crate::icons::IconHouseSolid.render(false, false, "") }} Homepage
+                                        {{ crate::icons::IconHouse.render_solid(false, false, "") }} Homepage
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -75,7 +75,7 @@
                             {%- if let Some(documentation_url) = krate.documentation_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ crate::icons::IconFileLinesRegular.render(false, false, "") }} Documentation
+                                        {{ crate::icons::IconFileLines.render_regular(false, false, "") }} Documentation
                                     </a>
                                 </li>
                             {%- endif -%}
@@ -84,21 +84,21 @@
                             {%- if let Some(repository_url) = krate.repository_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ repository_url }}" class="pure-menu-link">
-                                        {{ crate::icons::IconCodeBranchSolid.render(false, false, "") }} Repository
+                                        {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }} Repository
                                     </a>
                                 </li>
                             {%- endif -%}
 
                             <li class="pure-menu-item">
                                 <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
-                                    {{ crate::icons::IconCubeSolid.render(false, false, "") }} crates.io
+                                    {{ crate::icons::IconCube.render_solid(false, false, "") }} crates.io
                                 </a>
                             </li>
 
                             {# A link to the release's source view #}
                             <li class="pure-menu-item">
                                 <a href="{{ crate_url|safe }}/source/" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                                    {{ crate::icons::IconFolderOpenSolid.render(false, false, "") }} Source
+                                    {{ crate::icons::IconFolderOpen.render_solid(false, false, "") }} Source
                                 </a>
                             </li>
                         </ul>
@@ -112,7 +112,7 @@
                             {%- for owner in krate.owners -%}
                                 <li class="pure-menu-item">
                                     <a href="https://crates.io/{{ owner.2 }}s/{{ owner.0 }}" class="pure-menu-link">
-                                        {{ crate::icons::IconUserSolid.render(false, false, "") }} {{ owner.0 }}
+                                        {{ crate::icons::IconUser.render_solid(false, false, "") }} {{ owner.0 }}
                                     </a>
                                 </li>
                             {%- endfor -%}
@@ -142,7 +142,7 @@
 
                             <li class="pure-menu-item">
                                 <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="{{ releases_menu_url }}">
-                                    <span class="rotate">{{ crate::icons::IconSpinnerSolid.render(false, false, "") }}</span>
+                                    <span class="rotate">{{ crate::icons::IconSpinner.render_solid(false, false, "") }}</span>
                                 </div>
                             </li>
                         </ul>
@@ -170,7 +170,7 @@
     {%- else -%}
         <li class="pure-menu-item">
             <a href="{{ crate_url|safe }}" class="pure-menu-link crate-name" {% if let Some(description) = metadata.description %}title="{{description}}"{% endif %}>
-                {{ crate::icons::IconCubeSolid.render(false, false, "") }}
+                {{ crate::icons::IconCube.render_solid(false, false, "") }}
                 <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>
         </li>
@@ -181,7 +181,7 @@
     {%- if (is_latest_version is not defined || is_latest_version) && yanked -%}
         <li class="pure-menu-item">
             <span class="pure-menu-link warn">
-                {{ crate::icons::IconTriangleExclamationSolid.render(false, false, "") }}
+                {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
                 <span class="title">This release has been yanked</span>
             </span>
         </li>
@@ -205,7 +205,7 @@
             <a href="{% if latest_path is defined %}{{ latest_path|safe }}{% endif %}" class="pure-menu-link warn"
                 data-fragment="retain"
                 title="{{ tooltip }}">
-                {{ crate::icons::IconTriangleExclamationSolid.render(false, false, "") }}
+                {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
                 <span class="title">{{ title }}</span>
             </a>
         </li>
@@ -216,7 +216,7 @@
         {%- if !doc_targets.is_empty() -%}
             <li class="pure-menu-item pure-menu-has-children">
                 <a href="#" class="pure-menu-link" aria-label="Platform">
-                    {{ crate::icons::IconGearsSolid.render(false, false, "") }}
+                    {{ crate::icons::IconGears.render_solid(false, false, "") }}
                     <span class="title">Platform</span>
                 </a>
 
@@ -226,14 +226,14 @@
                         {%- set use_direct_platform_links = use_direct_platform_links() -%}
                         {%- include "rustdoc/platforms.html" -%}
                     {%- else -%}
-                        <span class="rotate">{{ crate::icons::IconSpinnerSolid.render(false, false, "") }}</span>
+                        <span class="rotate">{{ crate::icons::IconSpinner.render_solid(false, false, "") }}</span>
                     {%- endif -%}
                 </ul>
             </li>
             {#- Display the features available in current build -#}
             <li class="pure-menu-item">
                 <a href="{{ crate_url|safe }}/features" title="Browse available feature flags of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                    {{ crate::icons::IconFlagSolid.render(false, false, "") }}
+                    {{ crate::icons::IconFlag.render_solid(false, false, "") }}
                     <span class="title">Feature flags</span>
                 </a>
             </li>

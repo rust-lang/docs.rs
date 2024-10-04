@@ -9,7 +9,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         match_version,
-        page::templates::filters,
+        page::templates::{filters, RenderRegular, RenderSolid},
         ReqVersion,
     },
     BuildQueue, Config, InstanceMetrics,

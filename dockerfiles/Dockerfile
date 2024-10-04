@@ -61,7 +61,6 @@ COPY assets assets/
 COPY .sqlx .sqlx/
 COPY migrations migrations/
 
-ENV RUN_IN_DOCKER="1"
 RUN cargo build --profile=$PROFILE
 
 ######################

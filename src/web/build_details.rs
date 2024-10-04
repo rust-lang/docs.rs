@@ -5,7 +5,9 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         file::File,
-        filters, MetaData,
+        filters,
+        page::templates::{RenderRegular, RenderSolid},
+        MetaData,
     },
     AsyncStorage, Config,
 };

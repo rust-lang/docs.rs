@@ -8,5 +8,5 @@ pub(crate) struct GlobalAlert {
     pub(crate) url: &'static str,
     pub(crate) text: &'static str,
     pub(crate) css_class: &'static str,
-    pub(crate) fa_icon: crate::icons::IconTriangleExclamationSolid,
+    pub(crate) fa_icon: crate::icons::IconTriangleExclamation,
 }
