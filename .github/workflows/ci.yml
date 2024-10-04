@@ -39,9 +39,6 @@ jobs:
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
-      - name: Build
-        run: cargo build --workspace --locked
-
       - name: Launch postgres
         run: |
           cp .env.sample .env
@@ -52,11 +49,11 @@ jobs:
           # Make sure the database is actually working
           psql "${DOCSRS_DATABASE_URL}"
 
-      - name: run database migrations
-        run: cargo run -- database migrate
-
       - name: install SQLX CLI
         run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: run database migrations
+        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
 
       - name: run sqlx prepare --check
         run: just sqlx-check
@@ -99,7 +96,7 @@ jobs:
           sleep 5
           # Make sure the database is actually working
           psql "${DOCSRS_DATABASE_URL}"
-      
+
       - name: run workspace tests
         run: |
           cargo test --workspace --locked --no-fail-fast
