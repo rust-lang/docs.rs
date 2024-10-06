@@ -2,16 +2,14 @@
 mod macros;
 
 use self::macros::MetricFromOpts;
-use crate::{cdn, db::Pool, target::TargetAtom, BuildQueue, Config};
+use crate::{cdn, db::Pool, target::TargetAtom, AsyncBuildQueue, Config};
 use anyhow::Error;
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
 use std::{
     collections::HashSet,
-    sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::runtime::Runtime;
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -250,15 +248,13 @@ pub struct ServiceMetrics {
     pub queued_cdn_invalidations_by_distribution: IntGaugeVec,
 
     registry: prometheus::Registry,
-    runtime: Arc<Runtime>,
 }
 
 impl ServiceMetrics {
-    pub fn new(runtime: Arc<Runtime>) -> Result<Self, prometheus::Error> {
+    pub fn new() -> Result<Self, prometheus::Error> {
         let registry = prometheus::Registry::new();
         Ok(Self {
             registry: registry.clone(),
-            runtime,
             queued_crates_count: metric_from_opts(
                 &registry,
                 "queued_crates_count",
@@ -298,18 +294,19 @@ impl ServiceMetrics {
         })
     }
 
-    pub(crate) fn gather(
+    pub(crate) async fn gather(
         &self,
         pool: &Pool,
-        queue: &BuildQueue,
+        queue: &AsyncBuildQueue,
         config: &Config,
     ) -> Result<Vec<MetricFamily>, Error> {
-        self.queue_is_locked.set(queue.is_locked()? as i64);
-        self.queued_crates_count.set(queue.pending_count()? as i64);
+        self.queue_is_locked.set(queue.is_locked().await? as i64);
+        self.queued_crates_count
+            .set(queue.pending_count().await? as i64);
         self.prioritized_crates_count
-            .set(queue.prioritized_count()? as i64);
+            .set(queue.prioritized_count().await? as i64);
 
-        let queue_pending_count = queue.pending_count_by_priority()?;
+        let queue_pending_count = queue.pending_count_by_priority().await?;
 
         // gauges keep their old value per label when it's not removed, reset to zero or updated.
         // When a priority is used at least once, it would be kept in the metric and the last
@@ -336,20 +333,18 @@ impl ServiceMetrics {
                 .set(*count as i64);
         }
 
-        self.runtime.block_on(async {
-            let mut conn = pool.get_async().await?;
-            for (distribution_id, count) in
-                cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut conn, config)
-                    .await?
-            {
-                self.queued_cdn_invalidations_by_distribution
-                    .with_label_values(&[&distribution_id])
-                    .set(count);
-            }
-            Ok::<_, Error>(())
-        })?;
+        let mut conn = pool.get_async().await?;
+        for (distribution_id, count) in
+            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut conn, config)
+                .await?
+        {
+            self.queued_cdn_invalidations_by_distribution
+                .with_label_values(&[&distribution_id])
+                .set(count);
+        }
 
-        self.failed_crates_count.set(queue.failed_count()? as i64);
+        self.failed_crates_count
+            .set(queue.failed_count().await? as i64);
         Ok(self.registry.gather())
     }
 }

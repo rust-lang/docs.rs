@@ -7,13 +7,12 @@ use crate::{
     db::types::BuildStatus,
     docbuilder::Limits,
     impl_axum_webpage,
-    utils::spawn_blocking,
     web::{
         error::AxumResult,
         extractors::{DbConnection, Path},
         filters, match_version, MetaData, ReqVersion,
     },
-    BuildQueue, Config,
+    AsyncBuildQueue, Config,
 };
 use anyhow::{anyhow, Result};
 use axum::{
@@ -156,7 +155,7 @@ async fn build_trigger_check(
     conn: &mut sqlx::PgConnection,
     name: &String,
     version: &Version,
-    build_queue: &Arc<BuildQueue>,
+    build_queue: &Arc<AsyncBuildQueue>,
 ) -> AxumResult<impl IntoResponse> {
     if !crate_version_exists(&mut *conn, name, version).await? {
         return Err(AxumNope::VersionNotFound);
@@ -182,7 +181,7 @@ const TRIGGERED_REBUILD_PRIORITY: i32 = 5;
 pub(crate) async fn build_trigger_rebuild_handler(
     Path((name, version)): Path<(String, Version)>,
     mut conn: DbConnection,
-    Extension(build_queue): Extension<Arc<BuildQueue>>,
+    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
     Extension(config): Extension<Arc<Config>>,
     opt_auth_header: Option<TypedHeader<Authorization<Bearer>>>,
 ) -> JsonAxumResult<impl IntoResponse> {
@@ -208,20 +207,15 @@ pub(crate) async fn build_trigger_rebuild_handler(
         .await
         .map_err(JsonAxumNope)?;
 
-    spawn_blocking({
-        let name = name.clone();
-        let version_string = version.to_string();
-        move || {
-            build_queue.add_crate(
-                &name,
-                &version_string,
-                TRIGGERED_REBUILD_PRIORITY,
-                None, /* because crates.io is the only service that calls this endpoint */
-            )
-        }
-    })
-    .await
-    .map_err(|e| JsonAxumNope(e.into()))?;
+    build_queue
+        .add_crate(
+            &name,
+            &version.to_string(),
+            TRIGGERED_REBUILD_PRIORITY,
+            None, /* because crates.io is the only service that calls this endpoint */
+        )
+        .await
+        .map_err(|e| JsonAxumNope(e.into()))?;
 
     Ok((StatusCode::CREATED, Json(serde_json::json!({}))))
 }
@@ -259,23 +253,12 @@ mod tests {
     use super::BuildStatus;
     use crate::{
         db::Overrides,
-        test::{
-            assert_cache_control, fake_release_that_failed_before_build, wrapper, FakeBuild,
-            TestEnvironment,
-        },
+        test::{assert_cache_control, fake_release_that_failed_before_build, wrapper, FakeBuild},
         web::cache::CachePolicy,
     };
     use chrono::{DateTime, Utc};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
-
-    fn has_build_queued(env: &TestEnvironment, name: &str, version: &str) -> anyhow::Result<bool> {
-        env.runtime().block_on(async move {
-            let build_queue = env.build_queue();
-
-            build_queue.has_build_queued(name, version).await
-        })
-    }
 
     #[test]
     fn build_list_empty_build() {
@@ -508,7 +491,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 0);
-            assert!(!has_build_queued(env, "foo", "0.1.0")?);
+            assert!(!env.build_queue().has_build_queued("foo", "0.1.0")?);
 
             {
                 let response = env
@@ -522,7 +505,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 1);
-            assert!(has_build_queued(env, "foo", "0.1.0")?);
+            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
 
             {
                 let response = env
@@ -542,7 +525,7 @@ mod tests {
             }
 
             assert_eq!(env.build_queue().pending_count()?, 1);
-            assert!(has_build_queued(env, "foo", "0.1.0")?);
+            assert!(env.build_queue().has_build_queued("foo", "0.1.0")?);
 
             Ok(())
         });
