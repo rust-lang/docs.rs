@@ -6,33 +6,34 @@ use crate::{
     cdn,
     utils::{queue_builder, report_error},
     web::start_web_server,
-    BuildQueue, Config, Context, Index, RustwideBuilder,
+    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
 };
 use anyhow::{anyhow, Context as _, Error};
 use std::future::Future;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
+use std::time::Duration;
+use tokio::{runtime::Runtime, task::spawn_blocking, time::Instant};
 use tracing::{debug, info};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub fn watch_registry(
-    build_queue: Arc<BuildQueue>,
+pub async fn watch_registry(
+    build_queue: Arc<AsyncBuildQueue>,
     config: Arc<Config>,
     index: Arc<Index>,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
     loop {
-        if build_queue.is_locked()? {
+        if build_queue.is_locked().await? {
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
             match build_queue
                 .get_new_crates(&index)
+                .await
                 .context("Failed to get new crates")
             {
                 Ok(n) => debug!("{} crates added to queue", n),
@@ -41,26 +42,29 @@ pub fn watch_registry(
         }
 
         if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-            index.run_git_gc();
+            spawn_blocking({
+                let index = index.clone();
+                move || index.run_git_gc()
+            })
+            .await?;
             last_gc = Instant::now();
         }
-        thread::sleep(Duration::from_secs(60));
+        tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
 
 fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
-    let build_queue = context.build_queue()?;
+    let build_queue = context.runtime()?.block_on(context.async_build_queue())?;
     let config = context.config()?;
     let index = context.index()?;
+    let runtime = context.runtime()?;
 
-    thread::Builder::new()
-        .name("registry index reader".to_string())
-        .spawn(move || {
-            // space this out to prevent it from clashing against the queue-builder thread on launch
-            thread::sleep(Duration::from_secs(30));
+    runtime.spawn(async {
+        // space this out to prevent it from clashing against the queue-builder thread on launch
+        tokio::time::sleep(Duration::from_secs(30)).await;
 
-            watch_registry(build_queue, config, index)
-        })?;
+        watch_registry(build_queue, config, index).await
+    });
 
     Ok(())
 }

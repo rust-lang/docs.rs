@@ -7,7 +7,10 @@ use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{AsyncStorage, Storage, StorageKind};
 use crate::web::{build_axum_app, cache, page::TemplateData};
-use crate::{BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi, ServiceMetrics};
+use crate::{
+    AsyncBuildQueue, BuildQueue, Config, Context, Index, InstanceMetrics, RegistryApi,
+    ServiceMetrics,
+};
 use anyhow::Context as _;
 use axum::async_trait;
 use fn_error_context::context;
@@ -258,6 +261,7 @@ pub(crate) fn assert_redirect_cached(
 
 pub(crate) struct TestEnvironment {
     build_queue: OnceCell<Arc<BuildQueue>>,
+    async_build_queue: tokio::sync::OnceCell<Arc<AsyncBuildQueue>>,
     config: OnceCell<Arc<Config>>,
     db: tokio::sync::OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
@@ -293,6 +297,7 @@ impl TestEnvironment {
         init_logger();
         Self {
             build_queue: OnceCell::new(),
+            async_build_queue: tokio::sync::OnceCell::new(),
             config: OnceCell::new(),
             db: tokio::sync::OnceCell::new(),
             storage: OnceCell::new(),
@@ -363,15 +368,27 @@ impl TestEnvironment {
         }
     }
 
+    pub(crate) async fn async_build_queue(&self) -> Arc<AsyncBuildQueue> {
+        self.async_build_queue
+            .get_or_init(|| async {
+                Arc::new(AsyncBuildQueue::new(
+                    self.async_db().await.pool(),
+                    self.instance_metrics(),
+                    self.config(),
+                    self.async_storage().await,
+                ))
+            })
+            .await
+            .clone()
+    }
+
     pub(crate) fn build_queue(&self) -> Arc<BuildQueue> {
+        let runtime = self.runtime();
         self.build_queue
             .get_or_init(|| {
                 Arc::new(BuildQueue::new(
-                    self.db().pool(),
-                    self.instance_metrics(),
-                    self.config(),
-                    self.runtime(),
-                    self.runtime().block_on(self.async_storage()),
+                    runtime.clone(),
+                    runtime.block_on(self.async_build_queue()),
                 ))
             })
             .clone()
@@ -427,10 +444,7 @@ impl TestEnvironment {
     pub(crate) fn service_metrics(&self) -> Arc<ServiceMetrics> {
         self.service_metrics
             .get_or_init(|| {
-                Arc::new(
-                    ServiceMetrics::new(self.runtime())
-                        .expect("failed to initialize the service metrics"),
-                )
+                Arc::new(ServiceMetrics::new().expect("failed to initialize the service metrics"))
             })
             .clone()
     }
@@ -533,6 +547,10 @@ impl TestEnvironment {
 impl Context for TestEnvironment {
     fn config(&self) -> Result<Arc<Config>> {
         Ok(TestEnvironment::config(self))
+    }
+
+    async fn async_build_queue(&self) -> Result<Arc<AsyncBuildQueue>> {
+        Ok(TestEnvironment::async_build_queue(self).await)
     }
 
     fn build_queue(&self) -> Result<Arc<BuildQueue>> {

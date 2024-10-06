@@ -1,6 +1,6 @@
 use crate::{
-    db::Pool, metrics::duration_to_seconds, utils::spawn_blocking, web::error::AxumResult,
-    BuildQueue, Config, InstanceMetrics, ServiceMetrics,
+    db::Pool, metrics::duration_to_seconds, web::error::AxumResult, AsyncBuildQueue, Config,
+    InstanceMetrics, ServiceMetrics,
 };
 use anyhow::{Context as _, Result};
 use axum::{
@@ -10,20 +10,18 @@ use axum::{
     response::IntoResponse,
 };
 use prometheus::{proto::MetricFamily, Encoder, TextEncoder};
-use std::{borrow::Cow, sync::Arc, time::Instant};
+use std::{borrow::Cow, future::Future, sync::Arc, time::Instant};
 
-async fn fetch_and_render_metrics(
-    fetch_metrics: impl Fn() -> Result<Vec<MetricFamily>> + Send + 'static,
-) -> AxumResult<impl IntoResponse> {
-    let buffer = spawn_blocking(move || {
-        let metrics_families = fetch_metrics()?;
-        let mut buffer = Vec::new();
-        TextEncoder::new()
-            .encode(&metrics_families, &mut buffer)
-            .context("error encoding metrics")?;
-        Ok(buffer)
-    })
-    .await?;
+async fn fetch_and_render_metrics<Fut>(fetch_metrics: Fut) -> AxumResult<impl IntoResponse>
+where
+    Fut: Future<Output = Result<Vec<MetricFamily>>> + Send + 'static,
+{
+    let metrics_families = fetch_metrics.await?;
+
+    let mut buffer = Vec::new();
+    TextEncoder::new()
+        .encode(&metrics_families, &mut buffer)
+        .context("error encoding metrics")?;
 
     Ok((
         StatusCode::OK,
@@ -37,12 +35,12 @@ pub(super) async fn metrics_handler(
     Extension(config): Extension<Arc<Config>>,
     Extension(instance_metrics): Extension<Arc<InstanceMetrics>>,
     Extension(service_metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<BuildQueue>>,
+    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(move || {
+    fetch_and_render_metrics(async move {
         let mut families = Vec::new();
         families.extend_from_slice(&instance_metrics.gather(&pool)?);
-        families.extend_from_slice(&service_metrics.gather(&pool, &queue, &config)?);
+        families.extend_from_slice(&service_metrics.gather(&pool, &queue, &config).await?);
         Ok(families)
     })
     .await
@@ -52,16 +50,16 @@ pub(super) async fn service_metrics_handler(
     Extension(pool): Extension<Pool>,
     Extension(config): Extension<Arc<Config>>,
     Extension(metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<BuildQueue>>,
+    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
 ) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(move || metrics.gather(&pool, &queue, &config)).await
+    fetch_and_render_metrics(async move { metrics.gather(&pool, &queue, &config).await }).await
 }
 
 pub(super) async fn instance_metrics_handler(
     Extension(pool): Extension<Pool>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
 ) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(move || metrics.gather(&pool)).await
+    fetch_and_render_metrics(async move { metrics.gather(&pool) }).await
 }
 
 /// Request recorder middleware

@@ -402,7 +402,7 @@ fn apply_middleware(
     let has_templates = template_data.is_some();
     let runtime = context.runtime()?;
     let async_storage = runtime.block_on(context.async_storage())?;
-    let build_queue = context.build_queue()?;
+    let build_queue = runtime.block_on(context.async_build_queue())?;
 
     Ok(router.layer(
         ServiceBuilder::new()

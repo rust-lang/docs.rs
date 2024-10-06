@@ -3,7 +3,8 @@ use crate::db::Pool;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::{
-    AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi, ServiceMetrics, Storage,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi,
+    ServiceMetrics, Storage,
 };
 use axum::async_trait;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use tokio::runtime::Runtime;
 #[async_trait]
 pub trait Context {
     fn config(&self) -> Result<Arc<Config>>;
+    async fn async_build_queue(&self) -> Result<Arc<AsyncBuildQueue>>;
     fn build_queue(&self) -> Result<Arc<BuildQueue>>;
     fn storage(&self) -> Result<Arc<Storage>>;
     async fn async_storage(&self) -> Result<Arc<AsyncStorage>>;

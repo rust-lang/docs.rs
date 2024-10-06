@@ -3,7 +3,7 @@
 use crate::{
     build_queue::QueuedCrate,
     cdn, impl_axum_webpage,
-    utils::{report_error, retry_async, spawn_blocking},
+    utils::{report_error, retry_async},
     web::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
@@ -12,7 +12,7 @@ use crate::{
         page::templates::filters,
         ReqVersion,
     },
-    BuildQueue, Config, InstanceMetrics,
+    AsyncBuildQueue, Config, InstanceMetrics,
 };
 use anyhow::{anyhow, bail, Context as _, Result};
 use axum::{
@@ -790,7 +790,7 @@ struct BuildQueuePage {
 impl_axum_webpage! { BuildQueuePage }
 
 pub(crate) async fn build_queue_handler(
-    Extension(build_queue): Extension<Arc<BuildQueue>>,
+    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
     let mut active_cdn_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
@@ -806,7 +806,7 @@ pub(crate) async fn build_queue_handler(
     // reverse the list, so the oldest comes first
     active_cdn_deployments.reverse();
 
-    let mut queue = spawn_blocking(move || build_queue.queued_crates()).await?;
+    let mut queue = build_queue.queued_crates().await?;
     for krate in queue.iter_mut() {
         // The priority here is inverted: in the database if a crate has a higher priority it
         // will be built after everything else, which is counter-intuitive for people not
