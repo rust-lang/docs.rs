@@ -203,28 +203,28 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{assert_success, wrapper};
-    use reqwest::StatusCode;
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use axum::http::StatusCode;
 
     #[test]
     fn sitemap_index() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/sitemap.xml", web)
+        async_wrapper(|env| async move {
+            let app = env.web_app().await;
+            app.assert_success("/sitemap.xml").await
         })
     }
 
     #[test]
     fn sitemap_invalid_letters() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             // everything not length=1 and ascii-lowercase should fail
             for invalid_letter in &["1", "aa", "A", ""] {
                 println!("trying to fail letter {invalid_letter}");
                 assert_eq!(
                     web.get(&format!("/-/sitemap/{invalid_letter}/sitemap.xml"))
-                        .send()?
+                        .await?
                         .status(),
                     StatusCode::NOT_FOUND
                 );
@@ -235,36 +235,41 @@ mod tests {
 
     #[test]
     fn sitemap_letter() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             // letter-sitemaps always work, even without crates & releases
             for letter in 'a'..='z' {
-                assert_success(&format!("/-/sitemap/{letter}/sitemap.xml"), web)?;
+                web.assert_success(&format!("/-/sitemap/{letter}/sitemap.xml"))
+                    .await?;
             }
 
-            env.fake_release().name("some_random_crate").create()?;
-            env.fake_release()
+            env.async_fake_release()
+                .await
+                .name("some_random_crate")
+                .create_async()
+                .await?;
+            env.async_fake_release()
+                .await
                 .name("some_random_crate_that_failed")
                 .build_result_failed()
-                .create()?;
+                .create_async()
+                .await?;
 
             // these fake crates appear only in the `s` sitemap
-            let response = web.get("/-/sitemap/s/sitemap.xml").send()?;
+            let response = web.get("/-/sitemap/s/sitemap.xml").await?;
             assert!(response.status().is_success());
 
-            let content = response.text()?;
+            let content = response.text().await;
             assert!(content.contains("some_random_crate"));
             assert!(!(content.contains("some_random_crate_that_failed")));
 
             // and not in the others
             for letter in ('a'..='z').filter(|&c| c != 's') {
-                let response = web
-                    .get(&format!("/-/sitemap/{letter}/sitemap.xml"))
-                    .send()?;
+                let response = web.get(&format!("/-/sitemap/{letter}/sitemap.xml")).await?;
 
                 assert!(response.status().is_success());
-                assert!(!(response.text()?.contains("some_random_crate")));
+                assert!(!(response.text().await.contains("some_random_crate")));
             }
 
             Ok(())
@@ -273,19 +278,21 @@ mod tests {
 
     #[test]
     fn sitemap_max_age() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             use chrono::{TimeZone, Utc};
-            env.fake_release()
+            env.async_fake_release()
+                .await
                 .name("some_random_crate")
                 .release_time(Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap())
-                .create()?;
+                .create_async()
+                .await?;
 
-            let response = web.get("/-/sitemap/s/sitemap.xml").send()?;
+            let response = web.get("/-/sitemap/s/sitemap.xml").await?;
             assert!(response.status().is_success());
 
-            let content = response.text()?;
+            let content = response.text().await;
             assert!(content.contains("2022-08-28T00:00:00+00:00"));
             Ok(())
         })
@@ -293,8 +300,8 @@ mod tests {
 
     #[test]
     fn about_page() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
             for file in std::fs::read_dir("templates/core/about")? {
                 use std::ffi::OsStr;
 
@@ -306,17 +313,19 @@ mod tests {
                 }
                 let filename = file_path.file_stem().unwrap().to_str().unwrap();
                 let path = format!("/about/{filename}");
-                assert_success(&path, web)?;
+                web.assert_success(&path).await?;
             }
-            assert_success("/about", web)
+            web.assert_success("/about").await
         })
     }
 
     #[test]
     fn robots_txt() {
-        wrapper(|env| {
-            let web = env.frontend();
-            assert_success("/robots.txt", web)
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
+            web.assert_redirect("/robots.txt", "/-/static/robots.txt")
+                .await?;
+            Ok(())
         })
     }
 }

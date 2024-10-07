@@ -914,6 +914,10 @@ impl Context for BinContext {
         };
     }
 
+    async fn async_pool(&self) -> Result<Pool> {
+        self.pool()
+    }
+
     fn pool(&self) -> Result<Pool> {
         Ok(self
             .pool

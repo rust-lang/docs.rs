@@ -393,16 +393,16 @@ async fn set_sentry_transaction_name_from_axum_route(
     next.run(request).await
 }
 
-fn apply_middleware(
+async fn apply_middleware(
     router: AxumRouter,
     context: &dyn Context,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let config = context.config()?;
     let has_templates = template_data.is_some();
-    let runtime = context.runtime()?;
-    let async_storage = runtime.block_on(context.async_storage())?;
-    let build_queue = runtime.block_on(context.async_build_queue())?;
+
+    let async_storage = context.async_storage().await?;
+    let build_queue = context.async_build_queue().await?;
 
     Ok(router.layer(
         ServiceBuilder::new()
@@ -419,12 +419,11 @@ fn apply_middleware(
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
             .layer(option_layer(config.request_timeout.map(TimeoutLayer::new)))
-            .layer(Extension(context.pool()?))
+            .layer(Extension(context.async_pool().await?))
             .layer(Extension(build_queue))
             .layer(Extension(context.service_metrics()?))
             .layer(Extension(context.instance_metrics()?))
             .layer(Extension(context.config()?))
-            .layer(Extension(context.storage()?))
             .layer(Extension(async_storage))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
@@ -435,15 +434,15 @@ fn apply_middleware(
     ))
 }
 
-pub(crate) fn build_axum_app(
+pub(crate) async fn build_axum_app(
     context: &dyn Context,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
-    apply_middleware(routes::build_axum_routes(), context, Some(template_data))
+    apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
 }
 
-pub(crate) fn build_metrics_axum_app(context: &dyn Context) -> Result<AxumRouter, Error> {
-    apply_middleware(routes::build_metric_routes(), context, None)
+pub(crate) async fn build_metrics_axum_app(context: &dyn Context) -> Result<AxumRouter, Error> {
+    apply_middleware(routes::build_metric_routes(), context, None).await
 }
 
 pub fn start_background_metrics_webserver(
@@ -458,8 +457,10 @@ pub fn start_background_metrics_webserver(
         axum_addr.port()
     );
 
-    let metrics_axum_app = build_metrics_axum_app(context)?.into_make_service();
     let runtime = context.runtime()?;
+    let metrics_axum_app = runtime
+        .block_on(build_metrics_axum_app(context))?
+        .into_make_service();
 
     runtime.spawn(async move {
         match tokio::net::TcpListener::bind(axum_addr)
@@ -501,8 +502,10 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Resu
     context.storage()?;
     context.repository_stats_updater()?;
 
-    let app = build_axum_app(context, template_data)?.into_make_service();
     context.runtime()?.block_on(async {
+        let app = build_axum_app(context, template_data)
+            .await?
+            .into_make_service();
         let listener = tokio::net::TcpListener::bind(axum_addr)
             .await
             .context("error binding socket for metrics web server")?;

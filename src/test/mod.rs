@@ -12,9 +12,10 @@ use crate::{
     ServiceMetrics,
 };
 use anyhow::Context as _;
-use axum::async_trait;
+use axum::{async_trait, body::Body, http::Request, response::Response as AxumResponse, Router};
 use fn_error_context::context;
 use futures_util::{stream::TryStreamExt, FutureExt};
+use http_body_util::BodyExt; // for `collect`
 use once_cell::sync::OnceCell;
 use reqwest::{
     blocking::{Client, ClientBuilder, RequestBuilder, Response},
@@ -27,6 +28,7 @@ use std::{
 };
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::oneshot::Sender;
+use tower::ServiceExt;
 use tracing::{debug, error, instrument, trace};
 
 #[track_caller]
@@ -126,7 +128,6 @@ pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
     assert!(status.is_success(), "failed to GET {path}: {status}");
     Ok(())
 }
-
 /// Make sure that a URL returns a status code between 200-299,
 /// also check the cache-control headers.
 pub(crate) fn assert_success_cached(
@@ -257,6 +258,96 @@ pub(crate) fn assert_redirect_cached(
     }
 
     Ok(redirect_response)
+}
+
+pub(crate) trait AxumResponseTestExt {
+    async fn text(self) -> String;
+}
+
+impl AxumResponseTestExt for axum::response::Response {
+    async fn text(self) -> String {
+        String::from_utf8_lossy(&self.into_body().collect().await.unwrap().to_bytes()).to_string()
+    }
+}
+
+pub(crate) trait AxumRouterTestExt {
+    async fn assert_success(&self, path: &str) -> Result<()>;
+    async fn get(&self, path: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_common(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse>;
+    async fn assert_redirect(&self, path: &str, expected_target: &str) -> Result<AxumResponse>;
+}
+
+impl AxumRouterTestExt for axum::Router {
+    /// Make sure that a URL returns a status code between 200-299
+    async fn assert_success(&self, path: &str) -> Result<()> {
+        let response = self
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?;
+
+        let status = response.status();
+        assert!(status.is_success(), "failed to GET {path}: {status}");
+        Ok(())
+    }
+    /// simple `get` method
+    async fn get(&self, path: &str) -> Result<AxumResponse> {
+        Ok(self
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn assert_redirect_common(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse> {
+        let response = self.get(path).await?;
+        let status = response.status();
+        if !status.is_redirection() {
+            anyhow::bail!("non-redirect from GET {path}: {status}");
+        }
+
+        let redirect_target = response
+            .headers()
+            .get("Location")
+            .context("missing 'Location' header")?
+            .to_str()
+            .context("non-ASCII redirect")?;
+
+        // FIXME: not sure we need this
+        // if !expected_target.starts_with("http") {
+        //     // TODO: Should be able to use Url::make_relative,
+        //     // but https://github.com/servo/rust-url/issues/766
+        //     let base = format!("http://{}", web.server_addr());
+        //     redirect_target = redirect_target
+        //         .strip_prefix(&base)
+        //         .unwrap_or(redirect_target);
+        // }
+
+        if redirect_target != expected_target {
+            anyhow::bail!("got redirect to {redirect_target}");
+        }
+
+        Ok(response)
+    }
+
+    #[context("expected redirect from {path} to {expected_target}")]
+    async fn assert_redirect(&self, path: &str, expected_target: &str) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+
+        let response = self.get(expected_target).await?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to GET {expected_target}: {status}");
+        }
+
+        Ok(redirect_response)
+    }
 }
 
 pub(crate) struct TestEnvironment {
@@ -534,6 +625,13 @@ impl TestEnvironment {
         self.runtime().block_on(self.async_fake_release())
     }
 
+    pub(crate) async fn web_app(&self) -> Router {
+        let template_data = Arc::new(TemplateData::new(1).unwrap());
+        build_axum_app(self, template_data)
+            .await
+            .expect("could not build axum app")
+    }
+
     pub(crate) async fn async_fake_release(&self) -> fakes::FakeRelease {
         fakes::FakeRelease::new(
             self.async_db().await,
@@ -567,6 +665,10 @@ impl Context for TestEnvironment {
 
     async fn cdn(&self) -> Result<Arc<CdnBackend>> {
         Ok(TestEnvironment::cdn(self).await)
+    }
+
+    async fn async_pool(&self) -> Result<Pool> {
+        Ok(self.async_db().await.pool())
     }
 
     fn pool(&self) -> Result<Pool> {
@@ -734,10 +836,12 @@ impl TestFrontend {
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
         debug!("building axum app");
-        let axum_app = build_axum_app(context, template_data).expect("could not build axum app");
+        let runtime = context.runtime().unwrap();
+        let axum_app = runtime
+            .block_on(build_axum_app(context, template_data))
+            .expect("could not build axum app");
 
         let handle = thread::spawn({
-            let runtime = context.runtime().unwrap();
             move || {
                 runtime.block_on(async {
                     axum::serve(axum_listener, axum_app.into_make_service())

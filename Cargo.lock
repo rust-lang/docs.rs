@@ -1679,6 +1679,7 @@ dependencies = [
  "hostname",
  "http 0.2.12",
  "http 1.1.0",
+ "http-body-util",
  "humantime",
  "hyper 1.4.1",
  "indoc",
