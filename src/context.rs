@@ -19,6 +19,7 @@ pub trait Context {
     async fn async_storage(&self) -> Result<Arc<AsyncStorage>>;
     async fn cdn(&self) -> Result<Arc<CdnBackend>>;
     fn pool(&self) -> Result<Pool>;
+    async fn async_pool(&self) -> Result<Pool>;
     fn service_metrics(&self) -> Result<Arc<ServiceMetrics>>;
     fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>>;
     fn index(&self) -> Result<Arc<Index>>;

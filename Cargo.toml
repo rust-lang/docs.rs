@@ -113,10 +113,12 @@ procfs = "0.15.1"
 criterion = "0.5.1"
 kuchikiki = "0.8"
 http02 = { version = "0.2.11", package = "http"}
+http-body-util = "0.1.0"
 rand = "0.8"
 mockito = "1.0.2"
 test-case = "3.0.0"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
+tower = { version = "0.5.1", features = ["util"] }
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.60.0"
