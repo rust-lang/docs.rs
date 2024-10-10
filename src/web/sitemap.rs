@@ -5,7 +5,7 @@ use crate::{
     web::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        page::templates::filters,
+        page::templates::{filters, RenderBrands, RenderSolid},
         AxumErrorPage,
     },
     Config,

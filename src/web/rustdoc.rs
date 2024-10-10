@@ -14,7 +14,7 @@ use crate::{
         extractors::{DbConnection, Path},
         file::File,
         match_version,
-        page::templates::filters,
+        page::templates::{filters, RenderRegular, RenderSolid},
         page::TemplateData,
         MetaData, ReqVersion,
     },

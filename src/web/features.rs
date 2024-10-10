@@ -7,7 +7,9 @@ use crate::{
         extractors::{DbConnection, Path},
         filters,
         headers::CanonicalUrl,
-        match_version, MetaData, ReqVersion,
+        match_version,
+        page::templates::{RenderRegular, RenderSolid},
+        MetaData, ReqVersion,
     },
 };
 use anyhow::anyhow;

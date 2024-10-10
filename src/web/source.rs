@@ -4,8 +4,13 @@ use crate::{
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
-        cache::CachePolicy, error::AxumNope, extractors::Path, file::File as DbFile, filters,
-        headers::CanonicalUrl, MetaData, ReqVersion,
+        cache::CachePolicy,
+        error::AxumNope,
+        extractors::Path,
+        file::File as DbFile,
+        headers::CanonicalUrl,
+        page::templates::{filters, RenderBrands, RenderRegular, RenderSolid},
+        MetaData, ReqVersion,
     },
     AsyncStorage,
 };

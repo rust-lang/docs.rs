@@ -200,33 +200,6 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn fas<T: font_awesome_as_a_crate::Solid>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
-    pub fn far<T: font_awesome_as_a_crate::Regular>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
-    pub fn fab<T: font_awesome_as_a_crate::Brands>(
-        value: T,
-        fw: bool,
-        spin: bool,
-        extra: &str,
-    ) -> rinja::Result<Safe<String>> {
-        super::render_icon(value.icon_str(), fw, spin, extra)
-    }
-
     pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
         let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
         Ok(Safe(format!(
@@ -255,27 +228,57 @@ pub mod filters {
     }
 }
 
-fn render_icon(
-    icon_str: &str,
+pub trait RenderSolid {
+    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+}
+
+impl<T: font_awesome_as_a_crate::Solid> RenderSolid for T {
+    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+        render("fa-solid", self.icon_name(), fw, spin, extra)
+    }
+}
+
+pub trait RenderRegular {
+    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+}
+
+impl<T: font_awesome_as_a_crate::Regular> RenderRegular for T {
+    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+        render("fa-regular", self.icon_name(), fw, spin, extra)
+    }
+}
+
+pub trait RenderBrands {
+    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+}
+
+impl<T: font_awesome_as_a_crate::Brands> RenderBrands for T {
+    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+        render("fa-brands", self.icon_name(), fw, spin, extra)
+    }
+}
+
+fn render(
+    icon_kind: &str,
+    css_class: &str,
     fw: bool,
     spin: bool,
     extra: &str,
-) -> rinja::Result<rinja::filters::Safe<String>> {
-    let mut classes = vec!["fa-svg"];
+) -> rinja::filters::Safe<String> {
+    let mut classes = Vec::new();
     if fw {
-        classes.push("fa-svg-fw");
+        classes.push("fa-fw");
     }
     if spin {
-        classes.push("fa-svg-spin");
+        classes.push("fa-spin");
     }
     if !extra.is_empty() {
         classes.push(extra);
     }
     let icon = format!(
-        "\
-<span class=\"{class}\" aria-hidden=\"true\">{icon_str}</span>",
-        class = classes.join(" "),
+        "<span class=\"fa {icon_kind} fa-{css_class} {classes}\" aria-hidden=\"true\"></span>",
+        classes = classes.join(" "),
     );
 
-    Ok(rinja::filters::Safe(icon))
+    rinja::filters::Safe(icon)
 }

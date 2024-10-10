@@ -13,7 +13,7 @@ pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
 pub use self::web::{start_background_metrics_webserver, start_web_server};
 
-pub(crate) use font_awesome_as_a_crate as f_a;
+pub use font_awesome_as_a_crate::icons;
 
 mod build_queue;
 pub mod cdn;
