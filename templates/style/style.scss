@@ -925,19 +925,3 @@ ul.pure-menu-list {
     overflow: scroll;
     width: 100%;
 }
-
-.svg-clipboard {
-    --svg-clipboard: url(/-/static/clipboard.svg);
-    -webkit-mask: var(--svg-clipboard) no-repeat center;
-    mask: var(--svg-clipboard) no-repeat center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    display: inline-block;
-    background-color: currentColor;
-    width: 1em;
-    height: 1em;
-    /* pull icon about one stroke width into the descenders */
-    margin-bottom: -0.1em;
-    width: 1.25em;
-    text-align: center;
-}
