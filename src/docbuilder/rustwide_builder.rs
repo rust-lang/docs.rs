@@ -507,14 +507,14 @@ impl RustwideBuilder {
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
                             .args(&["generate-lockfile"])
-                            .run()?;
+                            .run_capture()?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
                             .args(&["fetch", "--locked"])
-                            .run()?;
+                            .run_capture()?;
                     }
                     res =
                         self.execute_build(default_target, true, build, &limits, &metadata, false)?;
