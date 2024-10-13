@@ -123,6 +123,7 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
                 let mut conn = pool.get_async().await?;
                 if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
                     cdn::handle_queued_invalidation_requests(
+                        &config,
                         &cdn,
                         &metrics,
                         &mut conn,
@@ -133,6 +134,7 @@ pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Err
                 }
                 if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
                     cdn::handle_queued_invalidation_requests(
+                        &config,
                         &cdn,
                         &metrics,
                         &mut conn,
