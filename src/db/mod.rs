@@ -19,6 +19,7 @@ mod add_package;
 pub mod blacklist;
 pub mod delete;
 pub(crate) mod file;
+pub(crate) mod mimes;
 mod overrides;
 mod pool;
 pub(crate) mod types;
