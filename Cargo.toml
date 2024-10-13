@@ -41,7 +41,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "1.0.26"
-comrak = { version = "0.28.0", default-features = false }
+comrak = { version = "0.29.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -53,7 +53,7 @@ path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.22"
 strum = { version = "0.26.1", features = ["derive"] }
-lol_html = "1.0.0"
+lol_html = "2.0.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "6.0.0"
 string_cache = "0.8.0"
@@ -86,7 +86,7 @@ axum-extra = { version = "0.9.1", features = ["typed-header"] }
 hyper = { version = "1.1.0", default-features = false }
 tower = "0.5.1"
 tower-service = "0.3.2"
-tower-http = { version = "0.5.0", features = ["fs", "trace", "timeout", "catch-panic"] }
+tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
 percent-encoding = "2.2.0"
 
