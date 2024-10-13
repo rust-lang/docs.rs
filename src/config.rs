@@ -90,6 +90,11 @@ pub struct Config {
 
     pub(crate) cdn_backend: CdnKind,
 
+    /// The maximum age of a queued invalidation request before it is
+    /// considered too old and we fall back to a full purge of the
+    /// distributions.
+    pub(crate) cdn_max_queued_age: Duration,
+
     // CloudFront distribution ID for the web server.
     // Will be used for invalidation-requests.
     pub cloudfront_distribution_id_web: Option<String>,
@@ -201,6 +206,7 @@ impl Config {
             cache_invalidatable_responses: env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?,
 
             cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
+            cdn_max_queued_age: Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?),
 
             cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
             cloudfront_distribution_id_static: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?,
