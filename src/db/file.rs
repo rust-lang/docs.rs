@@ -8,7 +8,10 @@
 //! However, postgres is still available for testing and backwards compatibility.
 
 use crate::error::Result;
-use crate::storage::{AsyncStorage, CompressionAlgorithm};
+use crate::{
+    db::mimes,
+    storage::{AsyncStorage, CompressionAlgorithm},
+};
 use mime::Mime;
 use serde_json::Value;
 use std::ffi::OsStr;
@@ -25,28 +28,30 @@ pub struct FileEntry {
 
 impl FileEntry {
     pub(crate) fn mime(&self) -> Mime {
-        detect_mime(&self.path).parse().unwrap()
+        detect_mime(&self.path)
     }
 }
 
-pub(crate) fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
+pub(crate) fn detect_mime(file_path: impl AsRef<Path>) -> Mime {
     let mime = mime_guess::from_path(file_path.as_ref())
-        .first_raw()
-        .unwrap_or("text/plain");
-    match mime {
+        .first()
+        .unwrap_or(mime::TEXT_PLAIN);
+
+    match mime.as_ref() {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.as_ref().extension().and_then(OsStr::to_str) {
-                Some("md") => "text/markdown",
-                Some("rs") => "text/rust",
-                Some("markdown") => "text/markdown",
-                Some("css") => "text/css",
-                Some("toml") => "text/toml",
-                Some("js") => "application/javascript",
-                Some("json") => "application/json",
+                Some("md") => mimes::TEXT_MARKDOWN.clone(),
+                Some("rs") => mimes::TEXT_RUST.clone(),
+                Some("markdown") => mimes::TEXT_MARKDOWN.clone(),
+                Some("css") => mime::TEXT_CSS,
+                Some("toml") => mimes::TEXT_TOML.clone(),
+                Some("js") => mime::TEXT_JAVASCRIPT,
+                Some("json") => mime::APPLICATION_JSON,
                 _ => mime,
             }
         }
-        "image/svg" => "image/svg+xml",
+        "image/svg" => mime::IMAGE_SVG,
+
         _ => mime,
     }
 }

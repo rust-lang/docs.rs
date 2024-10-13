@@ -136,7 +136,10 @@ impl DatabaseBackend {
         });
         Ok(Blob {
             path: result.path,
-            mime: result.mime,
+            mime: result
+                .mime
+                .parse()
+                .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated: result.date_updated,
             content: result.content.unwrap_or_default(),
             compression,
@@ -154,7 +157,7 @@ impl DatabaseBackend {
                  ON CONFLICT (path) DO UPDATE
                     SET mime = EXCLUDED.mime, content = EXCLUDED.content, compression = EXCLUDED.compression",
                 &blob.path,
-                &blob.mime,
+                &blob.mime.to_string(),
                 &blob.content,
                 compression,
             )

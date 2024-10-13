@@ -9,7 +9,7 @@ use self::s3::S3Backend;
 use crate::{
     db::{
         file::{detect_mime, FileEntry},
-        Pool,
+        mimes, Pool,
     },
     error::Result,
     utils::spawn_blocking,
@@ -19,6 +19,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
 use futures_util::stream::BoxStream;
+use mime::Mime;
 use path_slash::PathExt;
 use std::iter;
 use std::{
@@ -41,7 +42,7 @@ pub(crate) struct PathNotFoundError;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
     pub(crate) path: String,
-    pub(crate) mime: String,
+    pub(crate) mime: Mime,
     pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
     pub(crate) compression: Option<CompressionAlgorithm>,
@@ -378,7 +379,7 @@ impl AsyncStorage {
 
         Ok(Blob {
             path: format!("{archive_path}/{path}"),
-            mime: detect_mime(path).into(),
+            mime: detect_mime(path),
             date_updated: blob.date_updated,
             content: blob.content,
             compression: None,
@@ -460,14 +461,14 @@ impl AsyncStorage {
         self.store_inner(vec![
             Blob {
                 path: archive_path.to_string(),
-                mime: "application/zip".to_owned(),
+                mime: mimes::APPLICATION_ZIP.clone(),
                 content: zip_content,
                 compression: None,
                 date_updated: Utc::now(),
             },
             Blob {
                 path: remote_index_path,
-                mime: "application/octet-stream".to_owned(),
+                mime: mime::APPLICATION_OCTET_STREAM,
                 content: compressed_index_content,
                 compression: Some(alg),
                 date_updated: Utc::now(),
@@ -512,7 +513,7 @@ impl AsyncStorage {
                         path: file_path,
                         size: file_size,
                     };
-                    let mime = file_info.mime().to_string();
+                    let mime = file_info.mime();
                     file_paths.push(file_info);
 
                     blobs.push(Blob {
@@ -877,7 +878,7 @@ mod backend_tests {
         assert!(!storage.exists("path/to/file.txt").unwrap());
         let blob = Blob {
             path: "path/to/file.txt".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: "Hello world!".into(),
             compression: None,
@@ -893,7 +894,7 @@ mod backend_tests {
 
         storage.store_blobs(vec![Blob {
             path: path.into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -920,7 +921,7 @@ mod backend_tests {
         let path: &str = "foo/bar.txt";
         let blob = Blob {
             path: path.into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -955,7 +956,7 @@ mod backend_tests {
     fn test_get_range(storage: &Storage) -> Result<()> {
         let blob = Blob {
             path: "foo/bar.txt".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -995,7 +996,7 @@ mod backend_tests {
                 .iter()
                 .map(|&filename| Blob {
                     path: filename.into(),
-                    mime: "text/plain".into(),
+                    mime: mime::TEXT_PLAIN,
                     date_updated: Utc::now(),
                     compression: None,
                     content: b"test content\n".to_vec(),
@@ -1036,14 +1037,14 @@ mod backend_tests {
 
         let small_blob = Blob {
             path: "small-blob.bin".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: vec![0; MAX_SIZE],
             compression: None,
         };
         let big_blob = Blob {
             path: "big-blob.bin".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: vec![0; MAX_SIZE * 2],
             compression: None,
@@ -1078,7 +1079,7 @@ mod backend_tests {
             .iter()
             .map(|&path| Blob {
                 path: path.into(),
-                mime: "text/plain".into(),
+                mime: mime::TEXT_PLAIN,
                 date_updated: Utc::now(),
                 compression: None,
                 content: b"Hello world!\n".to_vec(),
@@ -1221,7 +1222,7 @@ mod backend_tests {
             .map(|i| {
                 let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
                 Blob {
-                    mime: "text/rust".into(),
+                    mime: mimes::TEXT_RUST.clone(),
                     content,
                     path: format!("{i}.rs"),
                     date_updated: now,
@@ -1286,7 +1287,7 @@ mod backend_tests {
                     path: (*path).to_string(),
                     content: b"foo\n".to_vec(),
                     compression: None,
-                    mime: "text/plain".into(),
+                    mime: mime::TEXT_PLAIN,
                     date_updated: Utc::now(),
                 })
                 .collect(),

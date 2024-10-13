@@ -15,7 +15,6 @@ use axum::{
     },
     response::{IntoResponse, Response as AxumResponse},
 };
-use mime::Mime;
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
@@ -39,16 +38,10 @@ impl File {
 
 impl IntoResponse for File {
     fn into_response(self) -> AxumResponse {
-        let content_type: Mime = self
-            .0
-            .mime
-            .parse::<Mime>()
-            .unwrap_or(mime::APPLICATION_OCTET_STREAM);
-
         (
             StatusCode::OK,
             [
-                (CONTENT_TYPE, content_type.as_ref()),
+                (CONTENT_TYPE, self.0.mime.as_ref()),
                 (
                     LAST_MODIFIED,
                     &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
