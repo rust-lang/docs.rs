@@ -1,0 +1,3 @@
+ALTER TABLE queue 
+    ALTER COLUMN name TYPE TEXT,
+    ALTER COLUMN version TYPE TEXT;

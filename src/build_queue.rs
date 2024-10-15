@@ -1155,4 +1155,40 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn test_add_long_name() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            let name: String = "krate".repeat(100);
+
+            queue.add_crate(&name, "0.0.1", 0, None)?;
+
+            queue.process_next_crate(|krate| {
+                assert_eq!(name, krate.name);
+                Ok(BuildPackageSummary::default())
+            })?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_add_long_version() {
+        crate::test::wrapper(|env| {
+            let queue = env.build_queue();
+
+            let version: String = "version".repeat(100);
+
+            queue.add_crate("krate", &version, 0, None)?;
+
+            queue.process_next_crate(|krate| {
+                assert_eq!(version, krate.version);
+                Ok(BuildPackageSummary::default())
+            })?;
+
+            Ok(())
+        })
+    }
 }
