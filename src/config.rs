@@ -1,5 +1,6 @@
 use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::NaiveDate;
 use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
 use tracing::trace;
 use url::Url;
@@ -113,6 +114,10 @@ pub struct Config {
     pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
     pub(crate) disable_memory_limit: bool,
+
+    // automatic rebuild configuration
+    pub(crate) max_queued_rebuilds: Option<u16>,
+    pub(crate) rebuild_up_to_date: Option<NaiveDate>,
 }
 
 impl Config {
@@ -230,6 +235,8 @@ impl Config {
                 "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
                 86400,
             )?),
+            max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
+            rebuild_up_to_date: maybe_env("DOCSRS_REBUILD_UP_TO_DATE")?,
         })
     }
 }

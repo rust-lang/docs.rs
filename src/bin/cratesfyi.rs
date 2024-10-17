@@ -155,6 +155,8 @@ enum CommandLine {
         repository_stats_updater: Toggle,
         #[arg(long = "cdn-invalidator", default_value = "enabled", value_enum)]
         cdn_invalidator: Toggle,
+        #[arg(long = "queue-rebuilds", default_value = "enabled", value_enum)]
+        queue_rebuilds: Toggle,
     },
 
     StartBuildServer {
@@ -192,12 +194,16 @@ impl CommandLine {
                 metric_server_socket_addr,
                 repository_stats_updater,
                 cdn_invalidator,
+                queue_rebuilds,
             } => {
                 if repository_stats_updater == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
                 }
                 if cdn_invalidator == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_cdn_invalidator(&ctx)?;
+                }
+                if queue_rebuilds == Toggle::Enabled {
+                    docs_rs::utils::daemon::start_background_queue_rebuild(&ctx)?;
                 }
 
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
