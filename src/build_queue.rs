@@ -8,15 +8,13 @@ use crate::{cdn, BuildPackageSummary};
 use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
 use anyhow::Context as _;
 use fn_error_context::context;
-use futures_util::stream::TryStreamExt;
+use futures_util::{stream::TryStreamExt, StreamExt};
 use sqlx::Connection as _;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
-// Threshold priority to decide whether a crate will in the rebuild-queue-list.
-// If crate is in the rebuild-queue-list it won't in the build-queue-list.
 pub(crate) const REBUILD_PRIORITY: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
@@ -656,11 +654,190 @@ impl BuildQueue {
     }
 }
 
+/// Queue rebuilds as configured.
+///
+/// The idea is to rebuild:
+/// * the latest release of each crate
+/// * when the nightly version is older than our configured threshold
+/// * and there was a successful build for that release, that included documentation.
+/// * starting with the oldest nightly versions.
+/// * also checking if there is already a build queued.
+///
+/// This might exclude releases from rebuilds that
+/// * previously failed but would succeed with a newer nightly version
+/// * previously failed but would succeed just with a retry.
+#[instrument(skip_all)]
+pub async fn queue_rebuilds(
+    conn: &mut sqlx::PgConnection,
+    config: &Config,
+    build_queue: &AsyncBuildQueue,
+) -> Result<()> {
+    let already_queued_rebuilds = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM queue WHERE priority >= $1"#,
+        REBUILD_PRIORITY
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+
+    let rebuilds_to_queue = config
+        .max_queued_rebuilds
+        .expect("config.max_queued_rebuilds not set") as i64
+        - already_queued_rebuilds;
+
+    if rebuilds_to_queue <= 0 {
+        info!("not queueing rebuilds; queue limit reached");
+        return Ok(());
+    }
+
+    let mut results = sqlx::query!(
+        "SELECT i.* FROM (
+             SELECT
+                 c.name,
+                 r.version,
+                 max(b.rustc_nightly_date) as rustc_nightly_date
+
+             FROM crates AS c
+             INNER JOIN releases AS r ON c.latest_version_id = r.id
+             INNER JOIN builds AS b ON r.id = b.rid
+
+             WHERE
+                 r.rustdoc_status = TRUE
+
+             GROUP BY c.name, r.version
+         ) as i
+         WHERE i.rustc_nightly_date < $1
+         ORDER BY i.rustc_nightly_date ASC
+         LIMIT $2",
+        config
+            .rebuild_up_to_date
+            .expect("config.rebuild_up_to_date not set"),
+        rebuilds_to_queue,
+    )
+    .fetch(&mut *conn);
+
+    while let Some(row) = results.next().await {
+        let row = row?;
+
+        if !build_queue
+            .has_build_queued(&row.name, &row.version)
+            .await?
+        {
+            info!("queueing rebuild for {} {}...", &row.name, &row.version);
+            build_queue
+                .add_crate(&row.name, &row.version, REBUILD_PRIORITY, None)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::test::FakeBuild;
+
     use super::*;
-    use chrono::Utc;
+    use chrono::{NaiveDate, Utc};
     use std::time::Duration;
+
+    #[test]
+    fn test_dont_rebuild_when_new() {
+        crate::test::async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.max_queued_rebuilds = Some(100);
+                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+            });
+
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .create_async()
+                .await?;
+
+            let build_queue = env.async_build_queue().await;
+            assert!(build_queue.queued_crates().await?.is_empty());
+
+            let mut conn = env.async_db().await.async_conn().await;
+            queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
+
+            assert!(build_queue.queued_crates().await?.is_empty());
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_rebuild_when_old() {
+        crate::test::async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.max_queued_rebuilds = Some(100);
+                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
+            });
+
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .create_async()
+                .await?;
+
+            let build_queue = env.async_build_queue().await;
+            assert!(build_queue.queued_crates().await?.is_empty());
+
+            let mut conn = env.async_db().await.async_conn().await;
+            queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
+
+            let queue = build_queue.queued_crates().await?;
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue[0].name, "foo");
+            assert_eq!(queue[0].version, "0.1.0");
+            assert_eq!(queue[0].priority, REBUILD_PRIORITY);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_dont_rebuild_when_full() {
+        crate::test::async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.max_queued_rebuilds = Some(1);
+                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
+            });
+
+            let build_queue = env.async_build_queue().await;
+            build_queue
+                .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
+                .await?;
+            build_queue
+                .add_crate("foo2", "0.1.0", REBUILD_PRIORITY, None)
+                .await?;
+
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .create_async()
+                .await?;
+
+            let build_queue = env.async_build_queue().await;
+            assert_eq!(build_queue.queued_crates().await?.len(), 2);
+
+            let mut conn = env.async_db().await.async_conn().await;
+            queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
+
+            assert_eq!(build_queue.queued_crates().await?.len(), 2);
+
+            Ok(())
+        })
+    }
 
     #[test]
     fn test_add_duplicate_doesnt_fail_last_priority_wins() {

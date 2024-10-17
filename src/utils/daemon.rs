@@ -3,7 +3,7 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    cdn,
+    cdn, queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
     AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
@@ -84,6 +84,35 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
             let updater = updater.clone();
             async move {
                 updater.update_all_crates().await?;
+                Ok(())
+            }
+        },
+    );
+    Ok(())
+}
+
+pub fn start_background_queue_rebuild(context: &dyn Context) -> Result<(), Error> {
+    let runtime = context.runtime()?;
+    let pool = context.pool()?;
+    let config = context.config()?;
+    let build_queue = runtime.block_on(context.async_build_queue())?;
+
+    if config.max_queued_rebuilds.is_none() || config.rebuild_up_to_date.is_none() {
+        info!("rebuild config incomplete, skipping rebuild queueing");
+        return Ok(());
+    }
+
+    async_cron(
+        &runtime,
+        "background queue rebuilder",
+        Duration::from_secs(60 * 60),
+        move || {
+            let pool = pool.clone();
+            let build_queue = build_queue.clone();
+            let config = config.clone();
+            async move {
+                let mut conn = pool.get_async().await?;
+                queue_rebuilds(&mut conn, &config, &build_queue).await?;
                 Ok(())
             }
         },
@@ -183,6 +212,7 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
 
     start_background_repository_stats_updater(&*context)?;
     start_background_cdn_invalidator(&*context)?;
+    start_background_queue_rebuild(&*context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.
