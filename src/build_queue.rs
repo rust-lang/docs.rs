@@ -15,6 +15,8 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info};
 
+pub(crate) const REBUILD_PRIORITY: i32 = 20;
+
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
     #[serde(skip)]

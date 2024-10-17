@@ -1,7 +1,7 @@
 //! Releases web handlers
 
 use crate::{
-    build_queue::QueuedCrate,
+    build_queue::{QueuedCrate, REBUILD_PRIORITY},
     cdn, impl_axum_webpage,
     utils::{report_error, retry_async},
     web::{
@@ -782,16 +782,24 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
+    rebuild_queue: Vec<QueuedCrate>,
     active_cdn_deployments: Vec<String>,
     in_progress_builds: Vec<(String, String)>,
     csp_nonce: String,
+    expand_rebuild_queue: bool,
 }
 
 impl_axum_webpage! { BuildQueuePage }
 
+#[derive(Deserialize)]
+pub(crate) struct BuildQueueParams {
+    expand: Option<String>,
+}
+
 pub(crate) async fn build_queue_handler(
     Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
+    Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
     let mut active_cdn_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
         .await?
@@ -823,6 +831,7 @@ pub(crate) async fn build_queue_handler(
     .map(|rec| (rec.name, rec.version))
     .collect();
 
+    let mut rebuild_queue = Vec::new();
     let queue: Vec<QueuedCrate> = build_queue
         .queued_crates()
         .await?
@@ -834,10 +843,14 @@ pub(crate) async fn build_queue_handler(
             })
         })
         .map(|mut krate| {
-            // The priority here is inverted: in the database if a crate has a higher priority it
-            // will be built after everything else, which is counter-intuitive for people not
-            // familiar with docs.rs's inner workings.
-            krate.priority = -krate.priority;
+            if krate.priority >= REBUILD_PRIORITY {
+                rebuild_queue.push(krate.clone());
+            } else {
+                // The priority here is inverted: in the database if a crate has a higher priority it
+                // will be built after everything else, which is counter-intuitive for people not
+                // familiar with docs.rs's inner workings.
+                krate.priority = -krate.priority;
+            }
 
             krate
         })
@@ -846,9 +859,11 @@ pub(crate) async fn build_queue_handler(
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
         queue,
+        rebuild_queue,
         active_cdn_deployments,
         in_progress_builds,
         csp_nonce: String::new(),
+        expand_rebuild_queue: params.expand.is_some(),
     })
 }
 
