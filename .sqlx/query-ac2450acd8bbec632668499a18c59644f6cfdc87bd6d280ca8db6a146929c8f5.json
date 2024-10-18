@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE builds\n         SET\n             rustc_version = $1,\n             docsrs_version = $2,\n             build_status = $3,\n             build_server = $4,\n             errors = $5,\n             documentation_size = $6,\n             build_finished = NOW()\n         WHERE\n            id = $7\n         RETURNING rid",
+  "query": "UPDATE builds\n         SET\n             rustc_version = $1,\n             docsrs_version = $2,\n             build_status = $3,\n             build_server = $4,\n             errors = $5,\n             documentation_size = $6,\n             rustc_nightly_date = $7,\n             build_finished = NOW()\n         WHERE\n            id = $8\n         RETURNING rid",
   "describe": {
     "columns": [
       {
@@ -28,6 +28,7 @@
         "Text",
         "Text",
         "Int8",
+        "Date",
         "Int4"
       ]
     },
@@ -35,5 +36,5 @@
       false
     ]
   },
-  "hash": "f9151734057f3e6562b1a56d1665ad3707b0ca37bbfca2d75e6e05b350dade04"
+  "hash": "ac2450acd8bbec632668499a18c59644f6cfdc87bd6d280ca8db6a146929c8f5"
 }
