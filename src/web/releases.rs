@@ -181,7 +181,7 @@ async fn get_search_results(
 
     let url = config
         .registry_api_host
-        .join(&format!("/api/v1/crates{query_params}"))?;
+        .join(&format!("api/v1/crates{query_params}"))?;
     debug!("fetching search results from {}", url);
 
     // extract the query from the query args.
