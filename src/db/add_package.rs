@@ -4,7 +4,7 @@ use crate::{
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::MetadataPackage,
+    utils::{rustc_version::parse_rustc_date, MetadataPackage},
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::Context;
@@ -17,7 +17,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use tracing::{debug, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 /// Adds a package into database.
 ///
@@ -244,6 +244,17 @@ pub(crate) async fn finish_build(
     debug!("updating build after finishing");
     let hostname = hostname::get()?;
 
+    let rustc_date = match parse_rustc_date(rustc_version) {
+        Ok(date) => Some(date),
+        Err(err) => {
+            error!(
+                "Failed to parse date from rustc version \"{}\": {:?}",
+                rustc_version, err
+            );
+            None
+        }
+    };
+
     let release_id = sqlx::query_scalar!(
         "UPDATE builds
          SET
@@ -252,15 +263,17 @@ pub(crate) async fn finish_build(
              build_status = $3,
              build_server = $4,
              errors = $5,
+             rustc_nightly_date = $6,
              build_time = NOW()
          WHERE
-            id = $6
+            id = $7
          RETURNING rid",
         rustc_version,
         docsrs_version,
         build_status as BuildStatus,
         hostname.to_str().unwrap_or(""),
         errors,
+        rustc_date,
         build_id,
     )
     .fetch_one(&mut *conn)
@@ -606,6 +619,7 @@ mod test {
     use crate::registry_api::OwnerKind;
     use crate::test::*;
     use crate::utils::CargoMetadata;
+    use chrono::NaiveDate;
     use test_case::test_case;
 
     #[test]
@@ -641,7 +655,55 @@ mod test {
     }
 
     #[test]
-    fn test_finish_build_success() {
+    fn test_finish_build_success_valid_rustc_date() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+            let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+
+            finish_build(
+                &mut conn,
+                build_id,
+                "rustc 1.84.0-nightly (e7c0d2750 2024-10-15)",
+                "docsrs_version",
+                BuildStatus::Success,
+                None,
+            )
+            .await?;
+
+            let row = sqlx::query!(
+                r#"SELECT
+                rustc_version,
+                docsrs_version,
+                build_status as "build_status: BuildStatus",
+                errors,
+                rustc_nightly_date
+                FROM builds
+                WHERE id = $1"#,
+                build_id
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+
+            assert_eq!(
+                row.rustc_version,
+                Some("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)".into())
+            );
+            assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
+            assert_eq!(row.build_status, BuildStatus::Success);
+            assert_eq!(
+                row.rustc_nightly_date,
+                Some(NaiveDate::from_ymd_opt(2024, 10, 15).unwrap())
+            );
+            assert!(row.errors.is_none());
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_finish_build_success_invalid_rustc_date() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
@@ -663,7 +725,8 @@ mod test {
                 rustc_version,
                 docsrs_version,
                 build_status as "build_status: BuildStatus",
-                errors
+                errors,
+                rustc_nightly_date
                 FROM builds
                 WHERE id = $1"#,
                 build_id
@@ -674,6 +737,7 @@ mod test {
             assert_eq!(row.rustc_version, Some("rustc_version".into()));
             assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
             assert_eq!(row.build_status, BuildStatus::Success);
+            assert!(row.rustc_nightly_date.is_none());
             assert!(row.errors.is_none());
 
             Ok(())

@@ -21,7 +21,7 @@ pub mod daemon;
 mod html;
 mod queue;
 pub(crate) mod queue_builder;
-mod rustc_version;
+pub(crate) mod rustc_version;
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
